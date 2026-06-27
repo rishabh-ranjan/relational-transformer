@@ -375,6 +375,11 @@ def main(
             ):
                 metrics = evaluate(net)
                 if save_ckpt_dir is not None:
+                    # RT_SAVE_ALL_STEPS=1 -> snapshot every eval step (steps=N.pt) so a caller can
+                    # post-hoc select by a metric other than the val-R2/AUC used here (e.g. val-NMAE
+                    # for regression). Off by default (preserves original behaviour).
+                    if os.environ.get("RT_SAVE_ALL_STEPS") == "1":
+                        checkpoint()
                     for (db_name, table_name), metric in metrics["val"].items():
                         # Eval metric is always higher is better (auc, r2)
                         best_metric = best_val_metrics.get(
