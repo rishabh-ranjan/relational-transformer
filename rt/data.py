@@ -136,6 +136,7 @@ class RelationalDataset(Dataset):
         out["is_targets"] = out["is_targets"].view(-1, self.seq_len)
         out["is_task_nodes"] = out["is_task_nodes"].view(-1, self.seq_len)
         out["is_padding"] = out["is_padding"].view(-1, self.seq_len)
+        out["timestamps"] = out["timestamps"].view(-1, self.seq_len)
         out["table_name_idxs"] = out["table_name_idxs"].view(-1, self.seq_len)
         out["col_name_idxs"] = out["col_name_idxs"].view(-1, self.seq_len)
         out["class_value_idxs"] = out["class_value_idxs"].view(-1, self.seq_len)

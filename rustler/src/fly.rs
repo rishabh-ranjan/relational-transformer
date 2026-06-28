@@ -40,6 +40,7 @@ struct Vecs {
     is_targets: Vec<bool>,
     is_task_nodes: Vec<bool>,
     is_padding: Vec<bool>,
+    timestamps: Vec<i32>,
     true_batch_size: usize,
 }
 
@@ -59,6 +60,7 @@ struct Slices<'a> {
     is_targets: &'a mut [bool],
     is_task_nodes: &'a mut [bool],
     is_padding: &'a mut [bool],
+    timestamps: &'a mut [i32],
 }
 
 impl Vecs {
@@ -80,6 +82,7 @@ impl Vecs {
             is_targets: vec![false; l],
             is_task_nodes: vec![false; l],
             is_padding: vec![true; l],
+            timestamps: vec![i32::MIN; l],
             true_batch_size,
         }
     }
@@ -101,6 +104,7 @@ impl Vecs {
             self.is_targets.chunks_exact_mut(seq_len),
             self.is_task_nodes.chunks_exact_mut(seq_len),
             self.is_padding.chunks_exact_mut(seq_len),
+            self.timestamps.chunks_exact_mut(seq_len),
         )
         .map(
             |(
@@ -119,6 +123,7 @@ impl Vecs {
                 is_targets,
                 is_task_nodes,
                 is_padding,
+                timestamps,
             )| Slices {
                 node_idxs,
                 f2p_nbr_idxs,
@@ -135,6 +140,7 @@ impl Vecs {
                 is_targets,
                 is_task_nodes,
                 is_padding,
+                timestamps,
             },
         )
     }
@@ -198,6 +204,9 @@ impl Vecs {
                 .into_py_any(py)
                 .unwrap(),
             ("is_padding", PyArray1::from_vec(py, self.is_padding))
+                .into_py_any(py)
+                .unwrap(),
+            ("timestamps", PyArray1::from_vec(py, self.timestamps))
                 .into_py_any(py)
                 .unwrap(),
             ("true_batch_size", self.true_batch_size)
@@ -498,6 +507,10 @@ impl Sampler {
                 slices.is_task_nodes[seq_i] =
                     node.is_task_node || (node.col_name_idxs[cell_i] == target_column);
                 slices.is_padding[seq_i] = false;
+                slices.timestamps[seq_i] = match node.timestamp.as_ref() {
+                    Some(ts) => (*ts).into(),
+                    None => i32::MIN,
+                };
 
                 seq_i += 1;
                 if seq_i >= self.seq_len {
