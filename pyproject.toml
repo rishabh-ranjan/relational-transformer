@@ -1,7 +1,7 @@
 [project]
 name = "rt"
-requires-python = "==3.12"
-version = "0.1.0"
+version = "2.0.0"
+dependencies = ["tabicl>=2.1.1,<3"]
 
 [build-system]
 build-backend = "hatchling.build"
@@ -11,24 +11,53 @@ requires = ["hatchling"]
 channels = ["conda-forge"]
 platforms = ["linux-64"]
 
+[tool.pixi.dependencies]
+python = "*"
+rust = "*"
+maturin = "*"
+uv = "*"
+matplotlib = ">=3.11.0,<4"
+
 [tool.pixi.pypi-dependencies]
 rt = { path = ".", editable = true }
-sentence_transformers = "*"
-torch = "==2.6.0"
-wandb = "*"
-einops = "*"
-strictfire = "*"
-maturin = { version = "*", extras = ["patchelf"] }
+torch = "*"
+safetensors = "*"
+sentence-transformers = "*"
+huggingface-hub = "*"
+numpy = "*"
 ml_dtypes = "*"
 orjson = "*"
-ipykernel = "*"
-scikit-learn = "<1.6.0"
-polars = "*"
+strictfire = "*"
+fire = "*"
+tyro = "*"
 maturin_import_hook = "*"
-matplotlib = "*"
+einops = "*"
+scikit-learn = "<1.6.0"
+pandas = "*"
+pyarrow = "*"
+lazy_loader = "*"
+tqdm = "*"
+wandb = "*"
+xgboost = "*"
+# pinned until the relbench-hf branch (HF Hub data loading) lands in a relbench release
+relbench = { git = "https://github.com/snap-stanford/relbench.git", rev = "6e4a3a3d271f981b7f61e2ecbb6fd1c0f1cd3eeb" }
 
-[tool.pixi.dependencies]
-rust = "*"
-pygraphviz = "*"
-uv = "*"
-
+[tool.pixi.tasks]
+# Standalone preprocessor binary (polars + manifest reader; no FAISS).
+build-pre = "cargo build --release --features pre --manifest-path rustler/Cargo.toml"
+# Sampler Python extension (FAISS-free). The opt-in FAISS vector-db Sampler is
+# built manually: `maturin develop --release -m rustler/Cargo.toml --features vecdb`
+# (that path additionally needs cmake + a BLAS to build FAISS).
+build-sampler = "maturin develop --uv --release -m rustler/Cargo.toml"
+# Preprocess one dataset: download (HF or local) -> rustler -> embeddings.
+preprocess = { cmd = "python scripts/preprocess.py one", depends-on = ["build-pre"] }
+# Preprocess many datasets from a HuggingFace collection repo.
+preprocess-many = { cmd = "python scripts/preprocess.py many", depends-on = ["build-pre"] }
+# Upload an already-preprocessed dataset directory to a HuggingFace repo.
+upload = "python scripts/preprocess.py upload"
+# Context visualizer (serves an HTTP UI over preprocessed data).
+ctx-viz = { cmd = "python scripts/ctx_viz.py", depends-on = ["build-sampler"] }
+pretrain = { cmd = "torchrun --standalone --nproc-per-node=auto scripts/pretrain.py", depends-on = ["build-sampler"] }
+# eval is single-process (one GPU) so per-item rows stay in task-table order.
+eval = { cmd = "python scripts/eval.py", depends-on = ["build-sampler"] }
+baseline = { cmd = "python scripts/baseline.py", depends-on = ["build-sampler"] }
