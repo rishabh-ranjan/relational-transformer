@@ -30,6 +30,8 @@ from rt.pre import resolve_repo
 CONFIG_FILE = "config.json"
 MODEL_FILE = "model.safetensors"
 LEGACY_MODEL_FILE = "model.pt"
+WEIGHT_SUFFIXES = (".safetensors", ".pt")
+MODEL_DIM_KEYS = ("num_blocks", "d_model", "d_text", "num_heads", "d_ff")
 
 
 def save_model(state_dict, path, metadata: dict | None = None) -> None:
@@ -74,6 +76,27 @@ def resolve_checkpoint(spec, *, revision: str | None = None) -> tuple[dict, Path
         return config, p
     if p.is_dir():
         d = p
+    elif str(spec).endswith(WEIGHT_SUFFIXES):
+        # ``org/repo/<file>.pt`` -- a single weights file inside a Hub repo that
+        # holds many checkpoints (e.g. ``stanford-star/rt-plurel``). The repo's
+        # ``config.json`` (next to the file, else at the repo root) supplies the
+        # model dims.
+        from huggingface_hub import hf_hub_download
+        from huggingface_hub.errors import EntryNotFoundError
+
+        repo_id, filename = resolve_repo(spec)
+        model_path = Path(hf_hub_download(repo_id, filename, revision=revision))
+        config = {}
+        parent = str(Path(filename).parent)
+        candidates = [CONFIG_FILE] if parent == "." else [f"{parent}/{CONFIG_FILE}", CONFIG_FILE]
+        for cfg_name in candidates:
+            try:
+                cfg = hf_hub_download(repo_id, cfg_name, revision=revision)
+            except EntryNotFoundError:
+                continue
+            config = json.loads(Path(cfg).read_text())
+            break
+        return config, model_path
     else:
         from huggingface_hub import snapshot_download
 
@@ -109,13 +132,20 @@ def load_rt_model(
     from rt.model import RelationalTransformer
 
     config, model_path = resolve_checkpoint(spec, revision=revision)
-    m = {**config.get("model", {}), **(model_kwargs or {})}
-    missing = [k for k in ("num_blocks", "d_model", "d_text", "num_heads", "d_ff") if k not in m]
+    # Model dims live under config["model"]; older release configs (e.g.
+    # ``stanford-star/rt-plurel``) carry them flat at the top level.
+    flat = {k: config[k] for k in MODEL_DIM_KEYS if k in config}
+    m = {**flat, **config.get("model", {}), **(model_kwargs or {})}
+    missing = [k for k in MODEL_DIM_KEYS if k not in m]
     if missing:
         raise ValueError(
             f"checkpoint {spec!r} is missing model dims {missing}; provide a "
             f"config.json or pass model_kwargs."
         )
+    state_dict = _adapt_state_dict(load_model(model_path))
+    # Pre-RT-J checkpoints have no attention gate (wg): run them with the
+    # legacy attention math they were trained with.
+    legacy_attn = not any(k.endswith(".wg.weight") for k in state_dict)
     net = RelationalTransformer(
         num_blocks=m["num_blocks"],
         d_model=m["d_model"],
@@ -124,6 +154,29 @@ def load_rt_model(
         d_ff=m["d_ff"],
         compile=compile,
         materialize_attn_masks=m.get("materialize_attn_masks", True),
+        legacy_attn=legacy_attn,
     )
-    net.load_state_dict(load_model(model_path))
+    net.load_state_dict(state_dict)
     return net.to(device), config
+
+
+def _adapt_state_dict(state_dict):
+    """Rename pre-RT-J RMSNorm parameters (``<norm>.weight`` -> ``<norm>.scale``).
+
+    Older checkpoints used ``nn.RMSNorm`` whose parameter is called ``weight``;
+    :class:`rt.model.RMSNorm` calls it ``scale``. Only norm parameters are
+    renamed; ``nn.Linear`` weights keep their names. No-op on new checkpoints.
+    """
+    def is_norm(key: str) -> bool:
+        mod = key.rsplit(".", 2)
+        return (
+            "norms." in key
+            or "norm_dict." in key
+            or key.startswith("norm_out.")
+            or (len(mod) >= 2 and mod[-2] in ("q_norm", "k_norm"))
+        )
+
+    return {
+        (k[: -len(".weight")] + ".scale" if k.endswith(".weight") and is_norm(k) else k): v
+        for k, v in state_dict.items()
+    }

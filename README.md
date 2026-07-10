@@ -22,6 +22,9 @@ notebook](examples/byod/colab.ipynb)
 predicts on a general database (which could be your own!)
 with a released RT-J checkpoint
 end-to-end.
+The same flow as plain scripts — with any released checkpoint
+(RT-J or PluRel) picked straight from the Hugging Face Hub — is in
+[examples/inference](examples/inference/README.md).
 
 ### Install locally
 

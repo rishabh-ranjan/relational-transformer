@@ -8,7 +8,11 @@ fine-tuning — RT predicts zero-shot from the context it is given.
 A checkpoint is a local path or a Hub model repo such as
 `stanford-star/rt-j/classification`; its `config.json` records whether it is a
 classifier (`clf`) or regressor (`reg`), so eval automatically restricts to the
-matching tasks.
+matching tasks. A single weights file inside a multi-checkpoint Hub repo also
+works — e.g. `stanford-star/rt-plurel/cntd-pretrain_rel-f1_driver-top3.pt` —
+and pre-RT-J checkpoints (RT, PluRel) automatically run with the legacy
+attention math they were trained with. PluRel checkpoints were trained at
+context size 1024, so pass `--ctx-size 1024` when evaluating them.
 
 ## Prerequisite: preprocessed data
 

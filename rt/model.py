@@ -30,15 +30,18 @@ class MaskedAttention(nn.Module):
         self,
         d_model,
         num_heads,
+        legacy_attn=False,
     ):
         super().__init__()
         self.num_heads = num_heads
         self.head_dim = d_model // self.num_heads
+        # legacy_attn reproduces the pre-RT-J attention (RT / rt-plurel
+        # checkpoints): plain 1/sqrt(d) softmax scaling, no learned per-head
+        # scale, no log(kv_size) length scaling, no output gate.
+        self.legacy_attn = legacy_attn
 
         self.q_norm = RMSNorm(self.head_dim, eps=1e-6)
         self.k_norm = RMSNorm(self.head_dim, eps=1e-6)
-
-        self.scale = nn.Parameter(torch.ones(1, num_heads, 1, 1))
 
         self.wq = nn.Linear(d_model, d_model, bias=False)
         self.wk = nn.Linear(d_model, d_model, bias=False)
@@ -46,8 +49,10 @@ class MaskedAttention(nn.Module):
         self.wo = nn.Linear(d_model, d_model, bias=False)
         nn.init.zeros_(self.wo.weight)
 
-        self.wg = nn.Linear(d_model, d_model, bias=False)
-        nn.init.zeros_(self.wg.weight)
+        if not legacy_attn:
+            self.scale = nn.Parameter(torch.ones(1, num_heads, 1, 1))
+            self.wg = nn.Linear(d_model, d_model, bias=False)
+            nn.init.zeros_(self.wg.weight)
 
     def forward(self, x, block_mask, kv_sizes):
         q = self.wq(x)
@@ -61,24 +66,29 @@ class MaskedAttention(nn.Module):
         q = self.q_norm(q)
         k = self.k_norm(k)
 
-        # clamp_min(1) so kv_size=0 (queries with all-masked keys) gives
-        # log(1)=0 instead of log(1e-6)=-13.8. flex_attention already
-        # zeros the output for fully-masked queries; this just removes
-        # the wrong-sign numerical hazard on q for those rows. Has no
-        # effect when kv_size >= 1.
-        q = q * self.scale * torch.log(
-            rearrange(kv_sizes.clamp_min(1.0), "b s 1 -> b 1 s 1")
-        )
+        if not self.legacy_attn:
+            # clamp_min(1) so kv_size=0 (queries with all-masked keys) gives
+            # log(1)=0 instead of log(1e-6)=-13.8. flex_attention already
+            # zeros the output for fully-masked queries; this just removes
+            # the wrong-sign numerical hazard on q for those rows. Has no
+            # effect when kv_size >= 1.
+            q = q * self.scale * torch.log(
+                rearrange(kv_sizes.clamp_min(1.0), "b s 1 -> b 1 s 1")
+            )
 
         v = v.to(q.dtype)
 
         attn_out = flex_attention(
-            q, k, v, block_mask=block_mask, scale=1.0 / self.head_dim
+            q, k, v, block_mask=block_mask,
+            scale=(
+                self.head_dim**-0.5 if self.legacy_attn else 1.0 / self.head_dim
+            ),
         )
         attn_out = rearrange(attn_out, "b h s d -> b s (h d)")
 
-        gate = 2 * torch.sigmoid(self.wg(x))
-        attn_out = gate * attn_out
+        if not self.legacy_attn:
+            gate = 2 * torch.sigmoid(self.wg(x))
+            attn_out = gate * attn_out
 
         output = self.wo(attn_out)
         return output
@@ -103,6 +113,7 @@ class RelationalBlock(nn.Module):
         d_model,
         num_heads,
         d_ff,
+        legacy_attn=False,
     ):
         super().__init__()
         self.attn_types = ["col", "feat", "nbr"]
@@ -116,7 +127,7 @@ class RelationalBlock(nn.Module):
         self.attns = nn.ModuleDict()
 
         for attn_type in self.attn_types:
-            self.attns[attn_type] = MaskedAttention(d_model, num_heads)
+            self.attns[attn_type] = MaskedAttention(d_model, num_heads, legacy_attn)
 
         self.ffn = FFN(d_model, d_ff)
 
@@ -240,6 +251,7 @@ class RelationalTransformer(nn.Module):
         d_ff,
         compile,
         materialize_attn_masks,
+        legacy_attn=False,
     ):
         super().__init__()
         self.materialize_attn_masks = materialize_attn_masks
@@ -276,7 +288,10 @@ class RelationalTransformer(nn.Module):
             }
         )
         self.blocks = nn.ModuleList(
-            [RelationalBlock(d_model, num_heads, d_ff) for i in range(num_blocks)]
+            [
+                RelationalBlock(d_model, num_heads, d_ff, legacy_attn)
+                for i in range(num_blocks)
+            ]
         )
         self.norm_out = RMSNorm(d_model, eps=1e-6)
         self.d_model = d_model

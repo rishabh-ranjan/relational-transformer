@@ -12,7 +12,9 @@ channels = ["conda-forge"]
 platforms = ["linux-64"]
 
 [tool.pixi.dependencies]
-python = "*"
+# 3.12 only: strictfire imports the stdlib `pipes` module, removed in 3.13
+# (PEP 594); a fresh solve on newer Python breaks at import. Tested on 3.12.
+python = "3.12.*"
 rust = "*"
 maturin = "*"
 uv = "*"
