@@ -118,7 +118,8 @@ class SQLFeaturizer(Featurizer):
                 con.execute("SET preserve_insertion_order=false")
                 con.execute("SET threads=4")
                 rb_dataset = get_dataset(ds, download=True)
-                rb_db = rb_dataset.get_db()
+                # this allows up-to-date rows in the context window, which matters for rel-f1
+                rb_db = rb_dataset.get_db(upto_test_timestamp=False)
                 for tbl_name, tbl in rb_db.table_dict.items():
                     con.register(tbl_name, tbl.df)
                 connections[ds] = con

@@ -42,6 +42,7 @@ class RDBLearnFeaturizer(Featurizer):
         import time
 
         import fastdfs
+        import relbench.base
         from fastdfs import DFSConfig
         from rdblearn.config import RDBLearnConfig
         from rdblearn.datasets import RDBDataset
@@ -85,7 +86,16 @@ class RDBLearnFeaturizer(Featurizer):
 
             # rdblearn expects bare dataset name (e.g. "rel-avito")
             rdb_name = db_name.removeprefix("relbench/")
+            # fastdfs's RelBenchAdapter calls get_db() with no args; we need
+            # the full db (not truncated at the test timestamp), so patch it
+            # just for this call.
+            # this allows up-to-date rows in the context window, which matters for rel-f1
+            _orig_get_db = relbench.base.Dataset.get_db
+            relbench.base.Dataset.get_db = lambda self, *args, **kwargs: _orig_get_db(
+                self, upto_test_timestamp=False
+            )
             dataset = RDBDataset.from_relbench(rdb_name)
+            relbench.base.Dataset.get_db = _orig_get_db
             table_info = load_table_info(db_name, pre_dir)
 
             # Find the rdblearn task by name (matches our table_name).
