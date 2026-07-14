@@ -1,8 +1,8 @@
 """Step 3 — Predict and score.
 
 Downloads the pretrained checkpoint named in ``config.CHECKPOINT`` from the
-Hugging Face Hub (any released RT checkpoint works — RT-J variants, PluRel ``.pt``
-files, or a local training run), preprocesses the dataset prepared in steps 1-2
+Hugging Face Hub (any released RT checkpoint works — an RT-J variant or a local
+training run), preprocesses the dataset prepared in steps 1-2
 into the model's tensor format (Rust sampler + text embeddings; one-time, cached
 afterwards), runs zero-shot inference over the test split, joins the predictions
 back to your labeled rows, and reports the metric (AUROC for classification, MAE
@@ -80,7 +80,7 @@ def main():
         if t.table_name == config.TASK["name"]
     ]
     assert tasks, f"task {config.TASK['name']!r} not found in {pre_dir}"
-    ctx_size = cfg.get("ctx_len", 8192)  # PluRel checkpoints were trained at 1024
+    ctx_size = cfg.get("ctx_len", 8192)
     evaluator = build_evaluator(
         tasks, str(pre_dir),
         embedding_model=cfg.get("embedding_model", "all-MiniLM-L12-v2"),

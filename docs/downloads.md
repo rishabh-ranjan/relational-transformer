@@ -25,9 +25,6 @@ pixi run hf download stanford-star/relbench-preprocessed --repo-type dataset
 
 # RT-J checkpoints (classifier under classification/, regressor under regression/)
 pixi run hf download stanford-star/rt-j --repo-type model
-
-# PluRel checkpoints (synthetic-pretrained + per-RelBench-db continued-pretrained/finetuned)
-pixi run hf download stanford-star/rt-plurel --repo-type model
 ```
 
 These download into the shared HuggingFace cache (`~/.cache/huggingface/hub`,

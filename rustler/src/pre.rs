@@ -190,19 +190,19 @@ pub struct Cli {
     /// Local dataset directory in relbench-3.0.0 layout: a `manifest.yaml`
     /// next to `db/<table>.parquet` (and optionally `tasks/<task>/`).
     #[arg(long)]
-    pub dataset_dir: String,
+    dataset_dir: String,
     /// Output root. Preprocessed data is written to `<out_dir>/<dataset name>`.
     #[arg(long)]
-    pub out_dir: String,
+    out_dir: String,
     /// Ingest only the database tables; skip `tasks/`.
     #[arg(long, default_value_t = false)]
-    pub skip_tasks: bool,
+    skip_tasks: bool,
     /// Keep database tables out of the node vector (task nodes only).
     #[arg(long, default_value_t = false)]
-    pub skip_db: bool,
+    skip_db: bool,
     /// Provenance recorded in `meta.json` (e.g. the source HF dataset spec).
     #[arg(long)]
-    pub source: Option<String>,
+    source: Option<String>,
 }
 
 /// One parquet file to ingest, with relational metadata resolved from the
