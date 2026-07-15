@@ -4,8 +4,8 @@ A released checkpoint is a directory (a local folder or a Hub model repo
 ``org/repo[/subdir]``) holding:
 
 * ``model.safetensors`` -- the weights, a flat ``state_dict`` stored with
-  :func:`safetensors.torch.save_file` (the format ``scripts/pretrain.py``
-  writes); and
+  :func:`safetensors.torch.save_file` (the format ``scripts/pretrain.py`` writes
+  and ``scripts/release_checkpoints.py`` packages); and
 * ``config.json``       -- the model dims + the text-embedding model used, so a
   loader needs no out-of-band knowledge.
 
@@ -22,6 +22,7 @@ A local path always wins, so iterating locally never triggers a download.
 
 from __future__ import annotations
 
+import os
 import json
 from pathlib import Path
 
@@ -123,7 +124,12 @@ def load_rt_model(
         num_heads=m["num_heads"],
         d_ff=m["d_ff"],
         compile=compile,
-        materialize_attn_masks=m.get("materialize_attn_masks", True),
+        # materialized masks are O(ctx^2) memory; RT_MATERIALIZE_ATTN_MASKS=0
+        # forces the flex-attention path for long-ctx (>=16k) inference.
+        materialize_attn_masks=(
+            False if os.environ.get("RT_MATERIALIZE_ATTN_MASKS", "") == "0"
+            else m.get("materialize_attn_masks", True)
+        ),
     )
     net.load_state_dict(load_model(model_path))
     return net.to(device), config
