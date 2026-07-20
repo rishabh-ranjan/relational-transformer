@@ -4,8 +4,8 @@ A released checkpoint is a directory (a local folder or a Hub model repo
 ``org/repo[/subdir]``) holding:
 
 * ``model.safetensors`` -- the weights, a flat ``state_dict`` stored with
-  :func:`safetensors.torch.save_file` (the format ``scripts/pretrain.py`` writes
-  and ``scripts/release_checkpoints.py`` packages); and
+  :func:`safetensors.torch.save_file` (the format ``scripts/pretrain.py``
+  writes); and
 * ``config.json``       -- the model dims + the text-embedding model used, so a
   loader needs no out-of-band knowledge.
 
@@ -22,15 +22,24 @@ A local path always wins, so iterating locally never triggers a download.
 
 from __future__ import annotations
 
-import os
 import json
+from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
 
 from rt.pre import resolve_repo
 
+try:
+    _RT_VERSION = version("relational-transformer")
+except PackageNotFoundError:  # running from a source tree without an install
+    _RT_VERSION = None
+
+# huggingface_hub user-agent so Hub downloads are attributed to this library.
+_HF_UA = {"library_name": "relational-transformer", "library_version": _RT_VERSION}
+
 CONFIG_FILE = "config.json"
 MODEL_FILE = "model.safetensors"
 LEGACY_MODEL_FILE = "model.pt"
+MODEL_DIM_KEYS = ("num_blocks", "d_model", "d_text", "num_heads", "d_ff")
 
 
 def save_model(state_dict, path, metadata: dict | None = None) -> None:
@@ -59,14 +68,18 @@ def load_model(path):
     return load_file(str(path))
 
 
-def resolve_checkpoint(spec, *, revision: str | None = None) -> tuple[dict, Path]:
+def resolve_checkpoint(
+    spec, *, revision: str | None = None, subfolder: str | None = None
+) -> tuple[dict, Path]:
     """Return ``(config, model_path)`` for a local or Hub checkpoint.
 
     ``spec`` may be: a local weights file (``model.safetensors`` or legacy
     ``model.pt``; config from a sibling ``config.json`` if present), a local
-    directory, or a Hub ``org/repo[/subdir]``. Within a directory, an explicit
-    ``config["checkpoint_file"]`` wins, else ``model.safetensors`` is preferred
-    over a legacy ``model.pt``.
+    directory, or a Hub ``org/repo[/subdir]``. ``subfolder`` selects a
+    sub-directory within the repo/directory (the HuggingFace-idiomatic way to
+    pick a checkpoint; equivalent to appending it to ``spec``). Within a
+    directory, an explicit ``config["checkpoint_file"]`` wins, else
+    ``model.safetensors`` is preferred over a legacy ``model.pt``.
     """
     p = Path(spec).expanduser()
     if p.is_file():
@@ -74,15 +87,17 @@ def resolve_checkpoint(spec, *, revision: str | None = None) -> tuple[dict, Path
         config = json.loads(cfg_path.read_text()) if cfg_path.exists() else {}
         return config, p
     if p.is_dir():
-        d = p
+        d = p / subfolder if subfolder else p
     else:
         from huggingface_hub import snapshot_download
 
         repo_id, subdir = resolve_repo(spec)
+        subdir = "/".join(part for part in (subdir, subfolder) if part)
         local = snapshot_download(
             repo_id=repo_id,
             revision=revision,
             allow_patterns=[f"{subdir}/*"] if subdir else None,
+            **_HF_UA,
         )
         d = Path(local) / subdir if subdir else Path(local)
     config = json.loads((d / CONFIG_FILE).read_text())
@@ -99,37 +114,25 @@ def load_rt_model(
     device: str = "cpu",
     compile: bool = False,
     revision: str | None = None,
+    subfolder: str | None = None,
     model_kwargs: dict | None = None,
 ):
     """Resolve a checkpoint, build the RelationalTransformer, load its weights.
 
-    Returns ``(model, config)``. ``model_kwargs`` overrides/fills model dims when
-    a checkpoint has no ``config.json`` (e.g. a raw internal ckpt during dev).
-    Loads safetensors when present and falls back to legacy ``.pt`` pickles.
+    Returns ``(model, config)``. Thin backward-compatible wrapper around
+    :meth:`rt.model.RelationalTransformer.from_pretrained` (the HuggingFace-style
+    entry point, which returns just the model with ``config`` attached as
+    ``model.config``). ``model_kwargs`` overrides/fills model dims when a
+    checkpoint has no ``config.json`` (e.g. a raw internal ckpt during dev).
     """
     from rt.model import RelationalTransformer
 
-    config, model_path = resolve_checkpoint(spec, revision=revision)
-    m = {**config.get("model", {}), **(model_kwargs or {})}
-    missing = [k for k in ("num_blocks", "d_model", "d_text", "num_heads", "d_ff") if k not in m]
-    if missing:
-        raise ValueError(
-            f"checkpoint {spec!r} is missing model dims {missing}; provide a "
-            f"config.json or pass model_kwargs."
-        )
-    net = RelationalTransformer(
-        num_blocks=m["num_blocks"],
-        d_model=m["d_model"],
-        d_text=m["d_text"],
-        num_heads=m["num_heads"],
-        d_ff=m["d_ff"],
+    model = RelationalTransformer.from_pretrained(
+        spec,
+        device=device,
         compile=compile,
-        # materialized masks are O(ctx^2) memory; RT_MATERIALIZE_ATTN_MASKS=0
-        # forces the flex-attention path for long-ctx (>=16k) inference.
-        materialize_attn_masks=(
-            False if os.environ.get("RT_MATERIALIZE_ATTN_MASKS", "") == "0"
-            else m.get("materialize_attn_masks", True)
-        ),
+        revision=revision,
+        subfolder=subfolder,
+        **(model_kwargs or {}),
     )
-    net.load_state_dict(load_model(model_path))
-    return net.to(device), config
+    return model, model.config

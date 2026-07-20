@@ -36,3 +36,9 @@ examples/byod/make_duckdb.py
 
 # inference example: everything it writes (labels, dataset, preprocessed tensors)
 examples/inference/out/
+
+# local-only build/publish helpers + staged dist artifacts (not committed)
+local/
+
+# maturin develop builds the extension in-place into the source tree
+src/rt/_rustler*.so

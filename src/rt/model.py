@@ -1,3 +1,4 @@
+import os
 from functools import partial
 
 import torch
@@ -38,14 +39,13 @@ class MaskedAttention(nn.Module):
         self.q_norm = RMSNorm(self.head_dim, eps=1e-6)
         self.k_norm = RMSNorm(self.head_dim, eps=1e-6)
 
-        self.scale = nn.Parameter(torch.ones(1, num_heads, 1, 1))
-
         self.wq = nn.Linear(d_model, d_model, bias=False)
         self.wk = nn.Linear(d_model, d_model, bias=False)
         self.wv = nn.Linear(d_model, d_model, bias=False)
         self.wo = nn.Linear(d_model, d_model, bias=False)
         nn.init.zeros_(self.wo.weight)
 
+        self.scale = nn.Parameter(torch.ones(1, num_heads, 1, 1))
         self.wg = nn.Linear(d_model, d_model, bias=False)
         nn.init.zeros_(self.wg.weight)
 
@@ -66,14 +66,20 @@ class MaskedAttention(nn.Module):
         # zeros the output for fully-masked queries; this just removes
         # the wrong-sign numerical hazard on q for those rows. Has no
         # effect when kv_size >= 1.
-        q = q * self.scale * torch.log(
-            rearrange(kv_sizes.clamp_min(1.0), "b s 1 -> b 1 s 1")
+        q = (
+            q
+            * self.scale
+            * torch.log(rearrange(kv_sizes.clamp_min(1.0), "b s 1 -> b 1 s 1"))
         )
 
         v = v.to(q.dtype)
 
         attn_out = flex_attention(
-            q, k, v, block_mask=block_mask, scale=1.0 / self.head_dim
+            q,
+            k,
+            v,
+            block_mask=block_mask,
+            scale=1.0 / self.head_dim,
         )
         attn_out = rearrange(attn_out, "b h s d -> b s (h d)")
 
@@ -288,6 +294,68 @@ class RelationalTransformer(nn.Module):
 
         if compile:
             self.forward = torch.compile(self.forward, dynamic=False)
+
+    @classmethod
+    def from_pretrained(
+        cls,
+        model_id_or_path,
+        *,
+        device: str = "cpu",
+        compile: bool = False,
+        revision: str | None = None,
+        subfolder: str | None = None,
+        **model_kwargs,
+    ):
+        """Load a pretrained RT model from a local path *or* the HuggingFace Hub.
+
+        ``model_id_or_path`` may be a Hub repo (``org/repo[/subdir]``), a local
+        checkpoint directory, or a local weights file; a sibling ``config.json``
+        supplies the model dims and the text-embedding model. A Hub reference is
+        downloaded and cached on demand; a local path is used as-is and never
+        triggers a download. ``subfolder`` selects a sub-directory within the
+        repo/directory (the HuggingFace-idiomatic way to pick one of several
+        checkpoints; equivalent to appending it to ``model_id_or_path``). Extra
+        keyword args fill/override model dims for checkpoints that ship without a
+        ``config.json``.
+
+        Returns the model, moved to ``device``, with its resolved ``config`` dict
+        attached as ``model.config``.
+
+            model = RelationalTransformer.from_pretrained("stanford-star/rt-j", subfolder="classification")
+            model = RelationalTransformer.from_pretrained("stanford-star/rt-j/classification")
+            model = RelationalTransformer.from_pretrained("/path/to/checkpoint")
+        """
+        from rt.checkpoints import MODEL_DIM_KEYS, load_model, resolve_checkpoint
+
+        config, model_path = resolve_checkpoint(
+            model_id_or_path, revision=revision, subfolder=subfolder
+        )
+        m = {**config.get("model", {}), **model_kwargs}
+        missing = [k for k in MODEL_DIM_KEYS if k not in m]
+        if missing:
+            raise ValueError(
+                f"checkpoint {model_id_or_path!r} is missing model dims {missing}; "
+                f"provide a config.json or pass them as keyword args."
+            )
+        state_dict = load_model(model_path)
+        model = cls(
+            num_blocks=m["num_blocks"],
+            d_model=m["d_model"],
+            d_text=m["d_text"],
+            num_heads=m["num_heads"],
+            d_ff=m["d_ff"],
+            compile=compile,
+            # materialized masks are O(ctx^2) memory; RT_MATERIALIZE_ATTN_MASKS=0
+            # forces the flex-attention path for long-ctx (>=16k) inference.
+            materialize_attn_masks=(
+                False
+                if os.environ.get("RT_MATERIALIZE_ATTN_MASKS", "") == "0"
+                else m.get("materialize_attn_masks", True)
+            ),
+        )
+        model.load_state_dict(state_dict)
+        model.config = config
+        return model.to(device)
 
     def forward(self, batch, return_embeddings):
         node_idxs = batch["node_idxs"]

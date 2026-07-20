@@ -38,6 +38,7 @@ classifier) and writes per-row predictions to
 a Hub spec or a local path; `rt.checkpoints.load_rt_model` resolves either:
 
 ```bash
+# RT-J (default): 86M params, trained on the Join at ctx 8192
 pixi run python examples/inference/3_predict.py --checkpoint stanford-star/rt-j/classification
 ```
 
