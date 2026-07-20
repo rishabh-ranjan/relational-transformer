@@ -1,5 +1,5 @@
-"""Standard eval driver shared by training (rt/main.py), offline SWA
-(rt/swa.py), and grid eval (rt/eval_grid.py).
+"""Standard eval driver used by training (scripts/pretrain.py) and eval
+(scripts/eval.py).
 
 Owns: per-task DataLoaders (built once at construction), prefetch
 iterators, per-batch forward + DDP gather, per-task metric computation,

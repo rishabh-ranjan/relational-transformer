@@ -40,9 +40,7 @@ class Task:
     db_name: str
     table_name: str
     target_column: str
-    # "clf" | "reg". Defaults to unset for tasks built only to sample context
-    # (e.g. scripts/ctx_viz.py), a path that never consults the task type.
-    task_type: str = ""
+    task_type: str  # "clf" | "reg"
     split: str = ""  # "train" | "val" | "test"
     leakage_columns: tuple[str, ...] = ()
 

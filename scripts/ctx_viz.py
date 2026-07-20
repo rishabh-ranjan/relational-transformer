@@ -135,6 +135,8 @@ def _get_or_build_dataset(
                 db_name=db_name,
                 table_name=table_name,
                 target_column=target_column,
+                # unused: context sampling never consults the task type.
+                task_type="clf",
                 split=split,
                 leakage_columns=tuple(columns_to_drop),
             )
