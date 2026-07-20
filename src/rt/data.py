@@ -135,18 +135,9 @@ class RustlerDataset:
         vector_db_path: str | None,
         train_only_fallback: bool,
     ):
-        # Accept either rt.tasks.Task dataclasses or the legacy 5-tuples
-        # (db_name, table_name, target_column, split, columns_to_drop).
-        tasks = [
-            t
-            if isinstance(t, tuple)
-            else (t.db_name, t.table_name, t.target_column, t.split, t.leakage_columns)
-            for t in tasks
-        ]
-
         # `pre_dir` may be a local path or a HuggingFace repo spec; resolve to a
         # local root, downloading only the files needed for these databases.
-        pre_dir = resolve_pre_dir(pre_dir, [t[0] for t in tasks], embedding_model)
+        pre_dir = resolve_pre_dir(pre_dir, [t.db_name for t in tasks], embedding_model)
         if vector_db_path is not None:
             vector_db_path = str(Path(vector_db_path).expanduser())
 
@@ -155,7 +146,12 @@ class RustlerDataset:
         drop_column_indices = []
         skipped_tasks = []
 
-        for db_name, table_name, target_column, split, columns_to_drop in tasks:
+        for task in tasks:
+            db_name = task.db_name
+            table_name = task.table_name
+            target_column = task.target_column
+            split = task.split
+            columns_to_drop = task.leakage_columns
             try:
                 if split == "train":
                     split = "Train"

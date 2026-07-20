@@ -1,5 +1,5 @@
-"""Standard eval driver shared by training (rt/main.py), offline SWA
-(rt/swa.py), and grid eval (rt/eval_grid.py).
+"""Standard eval driver used by training (scripts/pretrain.py) and eval
+(scripts/eval.py).
 
 Owns: per-task DataLoaders (built once at construction), prefetch
 iterators, per-batch forward + DDP gather, per-task metric computation,
@@ -112,15 +112,7 @@ class Evaluator:
 
         for eval_task in self.tasks:
             rustler_dataset = RustlerDataset(
-                tasks=[
-                    (
-                        eval_task.db_name,
-                        eval_task.table_name,
-                        eval_task.target_column,
-                        eval_task.split,
-                        eval_task.leakage_columns,
-                    )
-                ],
+                tasks=[eval_task],
                 pre_dir=pre_dir,
                 global_rank=global_rank,
                 local_rank=local_rank,

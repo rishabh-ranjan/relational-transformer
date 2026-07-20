@@ -32,6 +32,7 @@ import numpy as np
 
 from rt.data import MAX_F2P_NBRS, RustlerDataset, get_column_index
 from rt.pre import resolve_pre_dir, resolve_repo
+from rt.tasks import Task
 
 SEM_TYPE_NAMES = ["number", "text", "datetime", "boolean"]
 INT_MIN = np.iinfo(np.int32).min  # rustler uses i32::MIN as missing-timestamp sentinel
@@ -129,7 +130,17 @@ def _get_or_build_dataset(
     bfs_widths = [bfs_width]
 
     ds = RustlerDataset(
-        tasks=[(db_name, table_name, target_column, split, list(columns_to_drop))],
+        tasks=[
+            Task(
+                db_name=db_name,
+                table_name=table_name,
+                target_column=target_column,
+                # unused: context sampling never consults the task type.
+                task_type="clf",
+                split=split,
+                leakage_columns=tuple(columns_to_drop),
+            )
+        ],
         pre_dir=pre_root,
         global_rank=0,
         local_rank=0,

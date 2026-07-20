@@ -9,10 +9,10 @@ A released checkpoint is a directory (a local folder or a Hub model repo
 * ``config.json``       -- the model dims + the text-embedding model used, so a
   loader needs no out-of-band knowledge.
 
-For backward compatibility, legacy ``model.pt`` checkpoints (a
-``{"model": state_dict}`` pickle, the older release/training format) still load:
-if no ``.safetensors`` is found, or ``config["checkpoint_file"]`` ends in
-``.pt``, the weights are read with ``torch.load(...)["model"]``.
+Model weights are always safetensors. The one ``torch.save`` pickle the codebase
+still writes is ``resume.pt``, which is training state (optimizer, scheduler,
+SWA, step) rather than a model, is internal to a run, and holds non-tensor
+objects safetensors cannot store.
 
 This mirrors :mod:`rt.pre`'s local-or-Hub *data* resolver, so a checkpoint
 reference like ``stanford-star/rt-j/classification`` "just works" (downloaded and cached
@@ -38,7 +38,6 @@ _HF_UA = {"library_name": "relational-transformer", "library_version": _RT_VERSI
 
 CONFIG_FILE = "config.json"
 MODEL_FILE = "model.safetensors"
-LEGACY_MODEL_FILE = "model.pt"
 MODEL_DIM_KEYS = ("num_blocks", "d_model", "d_text", "num_heads", "d_ff")
 
 
@@ -55,14 +54,7 @@ def save_model(state_dict, path, metadata: dict | None = None) -> None:
 
 
 def load_model(path):
-    """Load a flat tensor ``state_dict`` from a ``.safetensors`` (or legacy
-    ``.pt``) checkpoint at ``path``."""
-    path = Path(path)
-    if path.suffix == ".pt":
-        import torch
-
-        ckpt = torch.load(path, map_location="cpu")
-        return ckpt["model"] if isinstance(ckpt, dict) and "model" in ckpt else ckpt
+    """Load a flat tensor ``state_dict`` from a ``.safetensors`` checkpoint."""
     from safetensors.torch import load_file
 
     return load_file(str(path))
@@ -73,13 +65,12 @@ def resolve_checkpoint(
 ) -> tuple[dict, Path]:
     """Return ``(config, model_path)`` for a local or Hub checkpoint.
 
-    ``spec`` may be: a local weights file (``model.safetensors`` or legacy
-    ``model.pt``; config from a sibling ``config.json`` if present), a local
-    directory, or a Hub ``org/repo[/subdir]``. ``subfolder`` selects a
-    sub-directory within the repo/directory (the HuggingFace-idiomatic way to
-    pick a checkpoint; equivalent to appending it to ``spec``). Within a
-    directory, an explicit ``config["checkpoint_file"]`` wins, else
-    ``model.safetensors`` is preferred over a legacy ``model.pt``.
+    ``spec`` may be: a local weights file (``model.safetensors``; config from a
+    sibling ``config.json`` if present), a local directory, or a Hub
+    ``org/repo[/subdir]``. ``subfolder`` selects a sub-directory within the
+    repo/directory (the HuggingFace-idiomatic way to pick a checkpoint;
+    equivalent to appending it to ``spec``). Within a directory, an explicit
+    ``config["checkpoint_file"]`` wins, else ``model.safetensors``.
     """
     p = Path(spec).expanduser()
     if p.is_file():
@@ -101,11 +92,7 @@ def resolve_checkpoint(
         )
         d = Path(local) / subdir if subdir else Path(local)
     config = json.loads((d / CONFIG_FILE).read_text())
-    fname = config.get("checkpoint_file")
-    if fname is None:
-        # Prefer safetensors, fall back to a legacy .pt if that is all there is.
-        fname = MODEL_FILE if (d / MODEL_FILE).exists() else LEGACY_MODEL_FILE
-    return config, d / fname
+    return config, d / config.get("checkpoint_file", MODEL_FILE)
 
 
 def load_rt_model(
