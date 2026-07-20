@@ -2,8 +2,12 @@
 
 These tests exercise the *installed wheel* (the public `rt` API + the compiled
 `rt._rustler` engine), so run them against a built + installed package -- e.g.
-`local/test.sh`, or the CI `test` job. torch/polars-dependent tests skip
-cleanly when those aren't present.
+`local/test.sh`, or the CI `test` job.
+
+Every dependency these tests touch is declared -- torch is a hard dependency of
+the package, polars and pytest come from the `test` extra -- so they import
+plainly. A missing one is a broken environment and should fail at collection,
+not vanish into a skip.
 """
 
 from __future__ import annotations
@@ -27,7 +31,6 @@ def tiny_checkpoint(tmp_path, tiny_dims):
 
     Returns ``(checkpoint_dir, source_model)``.
     """
-    pytest.importorskip("torch")
     from rt import RelationalTransformer
     from rt.checkpoints import CONFIG_FILE, MODEL_FILE, save_model
 
@@ -53,7 +56,7 @@ def synthetic_dataset(tmp_path):
     into the entity table. Column dtypes cover the branches ``normalize_df``
     dispatches on -- string, int, float, bool, and datetime.
     """
-    pl = pytest.importorskip("polars")
+    import polars as pl
     import yaml
 
     n_users, n_events = 10, 18

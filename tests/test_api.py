@@ -4,12 +4,10 @@ from __future__ import annotations
 
 import json
 
-import pytest
+import torch
 
-torch = pytest.importorskip("torch")
-
-from rt import RelationalTransformer  # noqa: E402
-from rt.checkpoints import (  # noqa: E402
+from rt import RelationalTransformer
+from rt.checkpoints import (
     CONFIG_FILE,
     LEGACY_MODEL_FILE,
     MODEL_FILE,
