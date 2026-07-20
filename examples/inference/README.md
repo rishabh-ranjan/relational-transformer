@@ -1,8 +1,8 @@
 # Run a pretrained RT checkpoint on your own database
 
-Pick any released checkpoint from the [`stanford-star`](https://huggingface.co/stanford-star)
-Hugging Face org — RT-J or PluRel — and run it on your own database (DuckDB,
-Postgres, or MySQL) in three steps. (For the same flow as a notebook, see the
+Pick a released checkpoint from the [`stanford-star`](https://huggingface.co/stanford-star)
+Hugging Face org and run it on your own database (DuckDB, Postgres, or MySQL)
+in three steps. (For the same flow as a notebook, see the
 [BYOD Colab](../byod/colab.ipynb).)
 
 You edit exactly one file, [`config.py`](config.py), then run three scripts in order:
@@ -29,30 +29,23 @@ pixi run python examples/inference/3_predict.py            # add --device cpu if
 ```
 
 Step 3 prints the AUROC on the held-out month (~0.81 with the default RT-J
-classifier, ~0.73 with the PluRel checkpoint below) and writes per-row
-predictions to `examples/inference/out/customer-churn_predictions.parquet`.
+classifier) and writes per-row predictions to
+`examples/inference/out/customer-churn_predictions.parquet`.
 
 ## Pick a checkpoint
 
 `config.CHECKPOINT` (or `3_predict.py --checkpoint ...`) takes any RT checkpoint —
-a Hub spec or a local path; `rt.checkpoints.load_rt_model` resolves either, and
-runs older-architecture checkpoints (RT, PluRel) with the attention math they were
-trained with:
+a Hub spec or a local path; `rt.checkpoints.load_rt_model` resolves either:
 
 ```bash
 # RT-J (default): 86M params, trained on the Join at ctx 8192
 pixi run python examples/inference/3_predict.py --checkpoint stanford-star/rt-j/classification
-
-# PluRel: 19M params, pretrained on synthetic databases at ctx 1024
-pixi run python examples/inference/3_predict.py \
-  --checkpoint stanford-star/rt-plurel/synthetic-pretrain_rdb_1024_size_4b.pt
 ```
 
-Classification tasks need a classifier checkpoint (`rt-j/classification`, any
-PluRel checkpoint) and regression tasks a regressor (`rt-j/regression`, any PluRel
-checkpoint) — PluRel checkpoints carry both heads. Browse
-[huggingface.co/stanford-star](https://huggingface.co/stanford-star) for the full
-list, including PluRel checkpoints continued-pretrained per RelBench database.
+Classification tasks need a classifier checkpoint (`rt-j/classification`) and
+regression tasks a regressor (`rt-j/regression`). Browse
+[huggingface.co/stanford-star](https://huggingface.co/stanford-star) for all
+released checkpoints.
 
 ## Point it at your own database
 

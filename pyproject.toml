@@ -27,7 +27,7 @@ dependencies = [
 # declared here (PyPI forbids URL deps) -- install it manually:
 #   pip install "git+https://github.com/snap-stanford/relbench.git@<rev>"
 eval = ["scikit-learn<1.6.0"]
-test = ["pytest", "pyarrow", "plurel"]
+test = ["pytest", "pyarrow"]
 
 [tool.maturin]
 python-source = "src"
@@ -71,7 +71,6 @@ scikit-learn = "<1.6.0"
 pandas = "*"
 pyarrow = "*"
 pytest = "*"
-plurel = "*"
 lazy_loader = "*"
 tqdm = "*"
 wandb = "*"

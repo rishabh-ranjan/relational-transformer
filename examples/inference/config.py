@@ -65,11 +65,9 @@ TASK = {
 # Any RT checkpoint on the Hugging Face Hub (or a local path) works here —
 # `rt.checkpoints.load_rt_model` resolves all of these:
 #
-#   "stanford-star/rt-j/classification"                        # RT-J classifier
-#   "stanford-star/rt-j/regression"                            # RT-J regressor
-#   "stanford-star/rt-plurel/synthetic-pretrain_rdb_1024_size_4b.pt"   # PluRel
-#   "stanford-star/rt-plurel/cntd-pretrain_rel-f1_driver-top3.pt"      # PluRel, cntd-pretrained
-#   "~/ckpts/my-run/best_clf.safetensors"                      # your own training run
+#   "stanford-star/rt-j/classification"       # RT-J classifier
+#   "stanford-star/rt-j/regression"           # RT-J regressor
+#   "~/ckpts/my-run/best_clf.safetensors"     # your own training run
 #
 # Browse https://huggingface.co/stanford-star for all released checkpoints.
 CHECKPOINT = "stanford-star/rt-j/classification"

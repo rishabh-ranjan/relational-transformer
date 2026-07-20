@@ -39,7 +39,6 @@ _HF_UA = {"library_name": "relational-transformer", "library_version": _RT_VERSI
 CONFIG_FILE = "config.json"
 MODEL_FILE = "model.safetensors"
 LEGACY_MODEL_FILE = "model.pt"
-WEIGHT_SUFFIXES = (".safetensors", ".pt")
 MODEL_DIM_KEYS = ("num_blocks", "d_model", "d_text", "num_heads", "d_ff")
 
 
@@ -89,33 +88,6 @@ def resolve_checkpoint(
         return config, p
     if p.is_dir():
         d = p / subfolder if subfolder else p
-    elif str(spec).endswith(WEIGHT_SUFFIXES):
-        # ``org/repo/<file>.pt`` -- a single weights file inside a Hub repo that
-        # holds many checkpoints (e.g. ``stanford-star/rt-plurel``). The repo's
-        # ``config.json`` (next to the file, else at the repo root) supplies the
-        # model dims.
-        from huggingface_hub import hf_hub_download
-        from huggingface_hub.errors import EntryNotFoundError
-
-        repo_id, filename = resolve_repo(spec)
-        if subfolder:
-            filename = f"{subfolder}/{filename}"
-        model_path = Path(
-            hf_hub_download(repo_id, filename, revision=revision, **_HF_UA)
-        )
-        config = {}
-        parent = str(Path(filename).parent)
-        candidates = (
-            [CONFIG_FILE] if parent == "." else [f"{parent}/{CONFIG_FILE}", CONFIG_FILE]
-        )
-        for cfg_name in candidates:
-            try:
-                cfg = hf_hub_download(repo_id, cfg_name, revision=revision, **_HF_UA)
-            except EntryNotFoundError:
-                continue
-            config = json.loads(Path(cfg).read_text())
-            break
-        return config, model_path
     else:
         from huggingface_hub import snapshot_download
 
@@ -164,30 +136,3 @@ def load_rt_model(
         **(model_kwargs or {}),
     )
     return model, model.config
-
-
-def _adapt_state_dict(state_dict):
-    """Rename pre-RT-J RMSNorm parameters (``<norm>.weight`` -> ``<norm>.scale``).
-
-    Older checkpoints used ``nn.RMSNorm`` whose parameter is called ``weight``;
-    :class:`rt.model.RMSNorm` calls it ``scale``. Only norm parameters are
-    renamed; ``nn.Linear`` weights keep their names. No-op on new checkpoints.
-    """
-
-    def is_norm(key: str) -> bool:
-        mod = key.rsplit(".", 2)
-        return (
-            "norms." in key
-            or "norm_dict." in key
-            or key.startswith("norm_out.")
-            or (len(mod) >= 2 and mod[-2] in ("q_norm", "k_norm"))
-        )
-
-    return {
-        (
-            k[: -len(".weight")] + ".scale"
-            if k.endswith(".weight") and is_norm(k)
-            else k
-        ): v
-        for k, v in state_dict.items()
-    }

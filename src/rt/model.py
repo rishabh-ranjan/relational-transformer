@@ -1,3 +1,4 @@
+import os
 from functools import partial
 
 import torch
@@ -30,15 +31,10 @@ class MaskedAttention(nn.Module):
         self,
         d_model,
         num_heads,
-        legacy_attn=False,
     ):
         super().__init__()
         self.num_heads = num_heads
         self.head_dim = d_model // self.num_heads
-        # legacy_attn reproduces the pre-RT-J attention (RT / rt-plurel
-        # checkpoints): plain 1/sqrt(d) softmax scaling, no learned per-head
-        # scale, no log(kv_size) length scaling, no output gate.
-        self.legacy_attn = legacy_attn
 
         self.q_norm = RMSNorm(self.head_dim, eps=1e-6)
         self.k_norm = RMSNorm(self.head_dim, eps=1e-6)
@@ -49,10 +45,9 @@ class MaskedAttention(nn.Module):
         self.wo = nn.Linear(d_model, d_model, bias=False)
         nn.init.zeros_(self.wo.weight)
 
-        if not legacy_attn:
-            self.scale = nn.Parameter(torch.ones(1, num_heads, 1, 1))
-            self.wg = nn.Linear(d_model, d_model, bias=False)
-            nn.init.zeros_(self.wg.weight)
+        self.scale = nn.Parameter(torch.ones(1, num_heads, 1, 1))
+        self.wg = nn.Linear(d_model, d_model, bias=False)
+        nn.init.zeros_(self.wg.weight)
 
     def forward(self, x, block_mask, kv_sizes):
         q = self.wq(x)
@@ -66,17 +61,16 @@ class MaskedAttention(nn.Module):
         q = self.q_norm(q)
         k = self.k_norm(k)
 
-        if not self.legacy_attn:
-            # clamp_min(1) so kv_size=0 (queries with all-masked keys) gives
-            # log(1)=0 instead of log(1e-6)=-13.8. flex_attention already
-            # zeros the output for fully-masked queries; this just removes
-            # the wrong-sign numerical hazard on q for those rows. Has no
-            # effect when kv_size >= 1.
-            q = (
-                q
-                * self.scale
-                * torch.log(rearrange(kv_sizes.clamp_min(1.0), "b s 1 -> b 1 s 1"))
-            )
+        # clamp_min(1) so kv_size=0 (queries with all-masked keys) gives
+        # log(1)=0 instead of log(1e-6)=-13.8. flex_attention already
+        # zeros the output for fully-masked queries; this just removes
+        # the wrong-sign numerical hazard on q for those rows. Has no
+        # effect when kv_size >= 1.
+        q = (
+            q
+            * self.scale
+            * torch.log(rearrange(kv_sizes.clamp_min(1.0), "b s 1 -> b 1 s 1"))
+        )
 
         v = v.to(q.dtype)
 
@@ -85,13 +79,12 @@ class MaskedAttention(nn.Module):
             k,
             v,
             block_mask=block_mask,
-            scale=(self.head_dim**-0.5 if self.legacy_attn else 1.0 / self.head_dim),
+            scale=1.0 / self.head_dim,
         )
         attn_out = rearrange(attn_out, "b h s d -> b s (h d)")
 
-        if not self.legacy_attn:
-            gate = 2 * torch.sigmoid(self.wg(x))
-            attn_out = gate * attn_out
+        gate = 2 * torch.sigmoid(self.wg(x))
+        attn_out = gate * attn_out
 
         output = self.wo(attn_out)
         return output
@@ -116,7 +109,6 @@ class RelationalBlock(nn.Module):
         d_model,
         num_heads,
         d_ff,
-        legacy_attn=False,
     ):
         super().__init__()
         self.attn_types = ["col", "feat", "nbr"]
@@ -130,7 +122,7 @@ class RelationalBlock(nn.Module):
         self.attns = nn.ModuleDict()
 
         for attn_type in self.attn_types:
-            self.attns[attn_type] = MaskedAttention(d_model, num_heads, legacy_attn)
+            self.attns[attn_type] = MaskedAttention(d_model, num_heads)
 
         self.ffn = FFN(d_model, d_ff)
 
@@ -254,7 +246,6 @@ class RelationalTransformer(nn.Module):
         d_ff,
         compile,
         materialize_attn_masks,
-        legacy_attn=False,
     ):
         super().__init__()
         self.materialize_attn_masks = materialize_attn_masks
@@ -291,10 +282,7 @@ class RelationalTransformer(nn.Module):
             }
         )
         self.blocks = nn.ModuleList(
-            [
-                RelationalBlock(d_model, num_heads, d_ff, legacy_attn)
-                for i in range(num_blocks)
-            ]
+            [RelationalBlock(d_model, num_heads, d_ff) for i in range(num_blocks)]
         )
         self.norm_out = RMSNorm(d_model, eps=1e-6)
         self.d_model = d_model
@@ -337,30 +325,19 @@ class RelationalTransformer(nn.Module):
             model = RelationalTransformer.from_pretrained("stanford-star/rt-j/classification")
             model = RelationalTransformer.from_pretrained("/path/to/checkpoint")
         """
-        from rt.checkpoints import (
-            MODEL_DIM_KEYS,
-            _adapt_state_dict,
-            load_model,
-            resolve_checkpoint,
-        )
+        from rt.checkpoints import MODEL_DIM_KEYS, load_model, resolve_checkpoint
 
         config, model_path = resolve_checkpoint(
             model_id_or_path, revision=revision, subfolder=subfolder
         )
-        # Model dims live under config["model"]; older release configs (e.g.
-        # ``stanford-star/rt-plurel``) carry them flat at the top level.
-        flat = {k: config[k] for k in MODEL_DIM_KEYS if k in config}
-        m = {**flat, **config.get("model", {}), **model_kwargs}
+        m = {**config.get("model", {}), **model_kwargs}
         missing = [k for k in MODEL_DIM_KEYS if k not in m]
         if missing:
             raise ValueError(
                 f"checkpoint {model_id_or_path!r} is missing model dims {missing}; "
                 f"provide a config.json or pass them as keyword args."
             )
-        state_dict = _adapt_state_dict(load_model(model_path))
-        # Pre-RT-J checkpoints have no attention gate (wg): run them with the
-        # legacy attention math they were trained with.
-        legacy_attn = not any(k.endswith(".wg.weight") for k in state_dict)
+        state_dict = load_model(model_path)
         model = cls(
             num_blocks=m["num_blocks"],
             d_model=m["d_model"],
@@ -368,8 +345,13 @@ class RelationalTransformer(nn.Module):
             num_heads=m["num_heads"],
             d_ff=m["d_ff"],
             compile=compile,
-            materialize_attn_masks=m.get("materialize_attn_masks", True),
-            legacy_attn=legacy_attn,
+            # materialized masks are O(ctx^2) memory; RT_MATERIALIZE_ATTN_MASKS=0
+            # forces the flex-attention path for long-ctx (>=16k) inference.
+            materialize_attn_masks=(
+                False
+                if os.environ.get("RT_MATERIALIZE_ATTN_MASKS", "") == "0"
+                else m.get("materialize_attn_masks", True)
+            ),
         )
         model.load_state_dict(state_dict)
         model.config = config

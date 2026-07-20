@@ -8,7 +8,7 @@ zero-shot to new databases, tasks, and schemas.
 | Paper | Venue | Implementation |
 |---|---|---|
 | [Relational Transformer: Toward Zero-Shot Foundation Models for Relational Data](https://arxiv.org/abs/2510.06377) | ICLR 2026 | [`rt-v1`](https://github.com/stanford-star/relational-transformer/tree/rt-v1) |
-| [PluRel: Synthetic Data unlocks Scaling Laws for Relational Foundation Models](https://arxiv.org/abs/2602.04029) | ICML 2026 | [`main`](https://github.com/stanford-star/relational-transformer) |
+| [PluRel: Synthetic Data unlocks Scaling Laws for Relational Foundation Models](https://arxiv.org/abs/2602.04029) | ICML 2026 | [`stanford-star/plurel`](https://github.com/stanford-star/plurel) |
 | RT-J: Large-Scale Pretraining of Relational Transformers for Context-Efficient Predictions | In progress | [`main`](https://github.com/stanford-star/relational-transformer) |
 
 ## Installation
@@ -24,7 +24,7 @@ pip install "git+https://github.com/stanford-star/relational-transformer.git"
 ## Quickstart
 
 The quickest way to try a released checkpoint is on a RelBench
-database already preprocessed into RT's tensor format on the Hub. The example below predicts whether an F1 driver fails to finish a race (`driver-dnf`) with a released RT-J checkpoint (a PluRel `.pt` from [`stanford-star/rt-plurel`](https://huggingface.co/stanford-star/rt-plurel) works too):
+database already preprocessed into RT's tensor format on the Hub. The example below predicts whether an F1 driver fails to finish a race (`driver-dnf`) with a released RT-J checkpoint:
 
 ```python
 import os
@@ -52,7 +52,7 @@ pre_dir = snapshot_download(
     allow_patterns="rel-f1/*",
 )
 
-# 2. load a pretrained checkpoint (RT-J here; a PluRel .pt works too)
+# 2. load a pretrained checkpoint (RT-J here)
 model = RelationalTransformer.from_pretrained(
     "stanford-star/rt-j/classification", device=device
 ).to(torch.bfloat16)
@@ -94,8 +94,8 @@ prediction task, and infer with a released checkpoint:
   ([open in Colab](https://colab.research.google.com/github/stanford-star/relational-transformer/blob/main/examples/byod/colab.ipynb))
   runs the whole flow end-to-end on your database (or the bundled demo).
 - **Local scripts**: [examples/inference](examples/inference/README.md) runs the
-  same from a DuckDB, Postgres, or MySQL database, with any RT-J or PluRel
-  checkpoint from the Hugging Face Hub.
+  same from a DuckDB, Postgres, or MySQL database, with any RT-J checkpoint
+  from the Hugging Face Hub.
 
 ## Development
 
