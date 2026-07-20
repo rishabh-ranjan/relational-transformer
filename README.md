@@ -60,7 +60,6 @@ cfg = model.config
 
 # 3. build an evaluator for one task and predict zero-shot for 5 test rows.
 #    the evaluator samples each row's context from the preprocessed DB;
-#    the same path runs on your own database, any task.
 tasks = [
     t for t in tasks_from_preprocessed(pre_dir, splits=("test",), dbs=["rel-f1"])
     if t.table_name == "driver-dnf"
@@ -108,14 +107,12 @@ cd relational-transformer
 pixi run test        # or pretrain, eval, preprocess, ...
 ```
 
-Every task first runs `build-sampler` (`maturin develop`), an editable install of
-`rt`, so edits to `src/rt/` take effect live and `import rt` just works.
 
 ## Documentation
 
 | Guide | Description |
 |---|---|
-| [Downloads](docs/downloads.md) | Bulk-download raw data, preprocessed data, and checkpoints from our HuggingFace org |
+| [Downloads](docs/downloads.md) | Bulk-download raw data, preprocessed data, and checkpoints from HuggingFace |
 | [Preprocess](docs/preprocess.md) | Convert RelBench-format databases into RT's on-disk format |
 | [Inference](docs/inference.md) | Run a trained checkpoint; evaluate, engineer, tune, and ensemble contexts |
 | [Pretrain](docs/pretrain.md) | Train RT from scratch, single-GPU to multi-node |
