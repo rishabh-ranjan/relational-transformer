@@ -7,7 +7,7 @@ Two pieces, used independently:
   dict; updates are in-place ``lerp_`` with alpha derived from
   ``momentum`` and the current update count.
 
-- ``run_swa``: offline driver. Loads ``steps=*.pt`` ckpts from
+- ``run_swa``: offline driver. Loads ``steps=*.safetensors`` ckpts from
   ``cfg.load_ckpt_dir`` in latest→earliest order, accumulates an
   equal-weight running average, and evaluates every
   ``eval_freq`` ckpts (and at the end) on a fixed eval recipe
@@ -29,6 +29,7 @@ import torch
 import torch.distributed as dist
 from tqdm.auto import tqdm
 
+from rt.checkpoints import load_model, save_model
 from rt.config import LoggerConfig, ModelConfig
 from rt.evaluator import Evaluator, fmt_duration
 from rt.model import RelationalTransformer
@@ -133,7 +134,7 @@ class SwaState:
 class SwaConfig:
     """All knobs for one offline SWA averaging run.
 
-    The driver iterates the live (non-``swa_*``) ``steps=*.pt`` ckpts
+    The driver iterates the live (non-``swa_*``) ``steps=*.safetensors`` ckpts
     in ``load_ckpt_dir`` from latest→earliest, accumulating an
     equal-weight running average. Every ``eval_freq`` ckpts
     (and at the end), evaluates on the eval ``recipe`` with the fixed
@@ -141,7 +142,7 @@ class SwaConfig:
 
     ``start_step`` pins the iteration's starting (latest) ckpt: when
     not None, ckpts with ``step > start_step`` are dropped before
-    iteration, so accumulation begins at ``steps={start_step}.pt``.
+    iteration, so accumulation begins at ``steps={start_step}.safetensors``.
     Use this to reproduce the SWA average that training logged at a
     specific step. ``start_step`` must match an existing live ckpt.
     When None, accumulation starts from the latest live ckpt.
@@ -179,14 +180,14 @@ class SwaConfig:
 
 
 def _discover_live_ckpts(ckpt_dir: Path) -> list[Path]:
-    """Return ``steps=N.pt`` files in ``ckpt_dir``, sorted latest→earliest.
+    """Return ``steps=N.safetensors`` files in ``ckpt_dir``, sorted latest→earliest.
 
-    Strict prefix match on ``steps=`` so ``swa_steps=*.pt`` is excluded.
+    Strict prefix match on ``steps=`` so ``swa_steps=*.safetensors`` is excluded.
     """
     live = [
         p
         for p in ckpt_dir.iterdir()
-        if p.is_file() and p.name.startswith("steps=") and p.suffix == ".pt"
+        if p.is_file() and p.name.startswith("steps=") and p.suffix == ".safetensors"
     ]
     live.sort(key=lambda p: int(p.stem.split("=")[1]), reverse=True)
     return live
@@ -214,11 +215,11 @@ def run_swa(cfg: SwaConfig):
 
     ckpt_dir = Path(cfg.load_ckpt_dir).expanduser()
     live_ckpts = _discover_live_ckpts(ckpt_dir)
-    assert live_ckpts, f"no live ckpts (steps=*.pt) found in {ckpt_dir}"
+    assert live_ckpts, f"no live ckpts (steps=*.safetensors) found in {ckpt_dir}"
     if cfg.start_step is not None:
         all_steps = [int(p.stem.split("=")[1]) for p in live_ckpts]
         assert cfg.start_step in all_steps, (
-            f"start_step={cfg.start_step} has no matching steps=*.pt in"
+            f"start_step={cfg.start_step} has no matching steps=*.safetensors in"
             f" {ckpt_dir} (available: {sorted(all_steps)})"
         )
         live_ckpts = [
@@ -350,13 +351,13 @@ def run_swa(cfg: SwaConfig):
                 f" (step={ckpt_step:_})..."
             )
         load_tic = time.time()
-        ckpt = torch.load(ckpt_path, map_location="cpu")
         # Use load_state_dict so all model state (incl. any future buffers)
         # is restored, with strict-key checking. Then update swa from
         # eval_net's now-loaded parameters.
-        eval_net.load_state_dict(ckpt["model"])
+        state_dict = load_model(ckpt_path)
+        eval_net.load_state_dict(state_dict)
         swa.update(eval_net.named_parameters())
-        del ckpt
+        del state_dict
         if local_rank == 0:
             tqdm.write(
                 f"  ckpt loaded + averaged in"
@@ -384,8 +385,9 @@ def run_swa(cfg: SwaConfig):
             )
             if global_rank == 0:
                 if save_ckpt_dir_ is not None:
-                    save_ckpt_path = save_ckpt_dir_ / f"swa_n={swa.n}.pt"
-                    torch.save({"model": eval_net.state_dict()}, save_ckpt_path)
+                    save_ckpt_path = save_ckpt_dir_ / f"swa_n={swa.n}.safetensors"
+                    save_model(eval_net.state_dict(), save_ckpt_path,
+                               metadata={"swa_n": swa.n})
                     print(f"saved SWA checkpoint to {save_ckpt_path}", flush=True)
         ckpt_pbar.update(1)
     ckpt_pbar.close()
