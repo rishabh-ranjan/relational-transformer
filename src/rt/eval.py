@@ -63,6 +63,25 @@ def main(cfg: Config) -> None:
         model_task_type = config.get("task_type")
         print(f"loaded {config.get('name', checkpoint)} "
               f"(task_type={model_task_type}, embed={embedding_model}) on {device}")
+        # The checkpoint's own config drives model construction; cfg.model dims
+        # are ignored here. Warn when they disagree so a stale CLI default is
+        # visible rather than silently shadowed.
+        ckpt_model = config.get("model", {})
+        mismatches = [
+            f"{k}: config={v} checkpoint={ckpt_model[k]}"
+            for k, v in (("num_blocks", cfg.model.num_blocks),
+                         ("d_model", cfg.model.d_model),
+                         ("d_text", cfg.model.d_text),
+                         ("num_heads", cfg.model.num_heads),
+                         ("d_ff", cfg.model.d_ff))
+            if k in ckpt_model and ckpt_model[k] != v
+        ]
+        if cfg.model.embedding_model != embedding_model:
+            mismatches.append(f"embedding_model: config={cfg.model.embedding_model} "
+                              f"checkpoint={embedding_model}")
+        if mismatches:
+            print("warning: model config ignored for checkpoint eval; differs from "
+                  "the checkpoint's own config: " + "; ".join(mismatches), flush=True)
 
     # Effective task-type filter: the model's own kind (an RT checkpoint is clf-
     # or reg-only) intersected with the configured eval.task_type restriction.
