@@ -13,7 +13,6 @@ rt.config.Rel2TabModelConfig = Rel2TabModelConfig
 
 def default_config() -> Config:
     return Config(
-        profile=False,
         logger=LoggerConfig(
             project="rt-verify",
             wandb_run_name=None,
@@ -50,18 +49,13 @@ def default_config() -> Config:
             grad_norm_max=1.0,
             total_bs=1024,
             total_steps=100_001,
-            decay_steps=0,
             swa_momentum=0.9995,
-            swa_loss_freq=200,
             seed=0,
-            save_ckpt_root_dir=None,
             bool_as_num=True,
-            load_optimizer_state=False,
             skip_text_cols=False,
             mmap_populate=True,
             balance_labels=[False],
             timeout_per_item=10.0,
-            in_order=True,
             vector_db_path=None,
             out_dir=tyro.MISSING,
             resume_save_mins=20.0,
@@ -79,7 +73,6 @@ def default_config() -> Config:
             walk_length=20,
             prefer_latest=True,
             freq=2000,
-            pow2=False,
             items_per_task=1024,
             ctx_sizes=[4096, 8192],
             bool_as_num=True,

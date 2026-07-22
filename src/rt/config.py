@@ -43,18 +43,13 @@ class TrainConfig:
     grad_norm_max: float
     total_bs: int
     total_steps: int
-    decay_steps: int
     swa_momentum: float
-    swa_loss_freq: int
     seed: int
-    save_ckpt_root_dir: str | None
     bool_as_num: bool
-    load_optimizer_state: bool
     skip_text_cols: bool
     mmap_populate: bool
     balance_labels: list[bool]
     timeout_per_item: float
-    in_order: bool
     # When set, Tier 1 same-table seed selection switches from random
     # walks to FAISS-similarity lookups. Layout is
     # `<vector_db_path>/<db>/<table>.index` and
@@ -90,7 +85,6 @@ class EvalConfig:
     walk_length: int
     prefer_latest: bool
     freq: int | None
-    pow2: bool
     items_per_task: int
     ctx_sizes: list[int]
     bool_as_num: bool
@@ -136,4 +130,3 @@ class Config:
     train: TrainConfig | EvalOnlyConfig
     eval: EvalConfig
     logger: LoggerConfig
-    profile: bool

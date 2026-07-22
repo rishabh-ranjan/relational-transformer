@@ -12,7 +12,6 @@ rt.config.Rel2TabModelConfig = Rel2TabModelConfig
 
 def default_config() -> Config:
     return Config(
-        profile=False,
         logger=LoggerConfig(project="rt", wandb_run_name=None, wandb_disabled=True),
         model=ModelConfig(
             embedding_model="all-MiniLM-L12-v2",
@@ -38,7 +37,6 @@ def default_config() -> Config:
             walk_length=20,
             prefer_latest=True,
             freq=None,
-            pow2=False,
             items_per_task=10_000_000,
             ctx_sizes=[8192],  # was --ctx-size; only the first entry is used
             bool_as_num=False,
