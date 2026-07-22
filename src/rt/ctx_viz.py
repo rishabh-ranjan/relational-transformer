@@ -14,7 +14,6 @@ on the fly so iterating in the UI is fast.
 
 from __future__ import annotations
 
-import argparse
 import errno
 import json
 import socket
@@ -22,6 +21,7 @@ import sys
 import threading
 import traceback
 from collections import OrderedDict
+from dataclasses import dataclass
 from functools import lru_cache
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -960,47 +960,42 @@ def _bind_with_fallback(host: str, port: int, max_tries: int) -> CtxVizServer:
         raise (last_err or e)
 
 
-def main():
-    parser = argparse.ArgumentParser(description=__doc__)
-    # Bind to all interfaces by default so a browser on a laptop can hit a
-    # remote workstation directly (e.g. http://<remote-host>:8765).
-    # If you'd rather keep it local-only, pass `--host 127.0.0.1`.
-    parser.add_argument("--host", default="0.0.0.0")
-    parser.add_argument("--port", type=int, default=8765)
-    parser.add_argument(
-        "--pre-root",
-        default=str(DEFAULT_PRE_ROOT),
-        help="directory containing your pre-processed datasets",
-    )
-    parser.add_argument(
-        "--quiet",
-        action="store_true",
-        help="suppress per-request HTTP logs",
-    )
-    parser.add_argument(
-        "--no-port-fallback",
-        action="store_true",
-        help="fail loudly if --port is unavailable instead of trying nearby ports",
-    )
-    args = parser.parse_args()
+@dataclass
+class Config:
+    """Context visualization server."""
 
-    pre_root = Path(args.pre_root).expanduser()
-    if args.no_port_fallback:
-        server = CtxVizServer((args.host, args.port), CtxVizHandler)
+    host: str
+    """Interface to bind. 0.0.0.0 binds all interfaces so a browser on a
+    laptop can hit a remote workstation directly; pass 127.0.0.1 for
+    local-only."""
+    port: int
+    """Port to bind."""
+    pre_root: str
+    """Directory containing your pre-processed datasets."""
+    quiet: bool
+    """Suppress per-request HTTP logs."""
+    port_fallback: bool
+    """Fail loudly if --port is unavailable instead of trying nearby ports."""
+
+
+def main(cfg: Config):
+    pre_root = Path(cfg.pre_root).expanduser()
+    if not cfg.port_fallback:
+        server = CtxVizServer((cfg.host, cfg.port), CtxVizHandler)
     else:
-        server = _bind_with_fallback(args.host, args.port, max_tries=20)
+        server = _bind_with_fallback(cfg.host, cfg.port, max_tries=20)
     server.pre_root = pre_root  # type: ignore[attr-defined]
-    server.root_arg = args.pre_root  # raw spec: local dir or HF repo
-    server.quiet = args.quiet  # type: ignore[attr-defined]
+    server.root_arg = cfg.pre_root  # raw spec: local dir or HF repo
+    server.quiet = cfg.quiet  # type: ignore[attr-defined]
 
     actual_port = server.server_address[1]
-    if actual_port != args.port:
+    if actual_port != cfg.port:
         print(
-            f"\n  \033[33m[note]\033[0m port {args.port} was taken; using {actual_port}",
+            f"\n  \033[33m[note]\033[0m port {cfg.port} was taken; using {actual_port}",
             flush=True,
         )
-    print(f"\n  ctx-viz running on {args.host}:{actual_port}", flush=True)
-    if args.host in ("0.0.0.0", "::"):
+    print(f"\n  ctx-viz running on {cfg.host}:{actual_port}", flush=True)
+    if cfg.host in ("0.0.0.0", "::"):
         fqdn = socket.getfqdn()
         print(
             f"    local:   \033[1;36mhttp://127.0.0.1:{actual_port}\033[0m",
@@ -1012,7 +1007,7 @@ def main():
         )
     else:
         print(
-            f"    open:    \033[1;36mhttp://{args.host}:{actual_port}\033[0m",
+            f"    open:    \033[1;36mhttp://{cfg.host}:{actual_port}\033[0m",
             flush=True,
         )
     print(f"  pre-root: {pre_root}\n", flush=True)

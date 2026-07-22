@@ -16,12 +16,12 @@ Needs a high RLIMIT_MEMLOCK (e.g. `ulimit -l unlimited` / slurm
 --propagate=MEMLOCK) to lock the full mixture.
 """
 
-import argparse
 import ctypes
 import ctypes.util
 import os
 import signal
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from dataclasses import dataclass
 
 from tqdm import tqdm
 
@@ -75,31 +75,35 @@ def _included_dbs(include_dbs_file: str | None) -> set[str] | None:
         }
 
 
-def main() -> None:
-    ap = argparse.ArgumentParser()
-    ap.add_argument("--pre-dir", required=True)
-    ap.add_argument("--include-dbs-file", default=None,
-                    help="restrict to the dbs in this file (e.g. docs/recipe_rt_j.txt); "
-                         "without it, every preprocessed db under --pre-dir is locked.")
-    ap.add_argument("--embedding-model-ref", default="all-MiniLM-L12-v2")
-    ap.add_argument("--workers", type=int, default=32,
-                    help="parallel mlock workers; /dfs scales with concurrency "
-                         "(measured ~244MB/s single-stream vs ~1.2GB/s at 8+ parallel), "
-                         "so more workers saturate it faster.")
-    args = ap.parse_args()
+@dataclass
+class MlockConfig:
+    pre_dir: str
 
-    tasks = pretrain_tasks(args.pre_dir)
+    include_dbs_file: str | None
+    """restrict to the dbs in this file (e.g. docs/recipe_rt_j.txt); without
+    it, every preprocessed db under --pre-dir is locked."""
+
+    embedding_model_ref: str
+
+    workers: int
+    """parallel mlock workers; /dfs scales with concurrency (measured
+    ~244MB/s single-stream vs ~1.2GB/s at 8+ parallel), so more workers
+    saturate it faster."""
+
+
+def main(cfg: MlockConfig) -> None:
+    tasks = pretrain_tasks(cfg.pre_dir)
     db_names = sorted({t.db_name for t in tasks})
-    include = _included_dbs(args.include_dbs_file)
+    include = _included_dbs(cfg.include_dbs_file)
     if include is not None:
         db_names = [d for d in db_names if d in include]
     print(f"mlock: {len(db_names)} unique dbs", flush=True)
 
     def db_paths(db: str) -> list[str]:
-        base = os.path.join(args.pre_dir, db)
+        base = os.path.join(cfg.pre_dir, db)
         return [
             os.path.join(base, "nodes.rkyv"),
-            os.path.join(base, f"text_emb_{args.embedding_model_ref}.bin"),
+            os.path.join(base, f"text_emb_{cfg.embedding_model_ref}.bin"),
             os.path.join(base, "p2f_adj.rkyv"),
         ]
 
@@ -158,7 +162,7 @@ def main() -> None:
     t0 = time.time()
     pbar = tqdm(total=total_size, unit="B", unit_scale=True, unit_divisor=1024)
     pbar.set_postfix_str(f"footprint={fmt_size(total_footprint)}")
-    with ThreadPoolExecutor(max_workers=args.workers) as ex:
+    with ThreadPoolExecutor(max_workers=cfg.workers) as ex:
         futures = [ex.submit(lock_db, db) for db in pending]
         for fut in as_completed(futures):
             db, n, err = fut.result()
@@ -201,6 +205,3 @@ def main() -> None:
     signal.signal(signal.SIGTERM, _fast_exit)
     signal.pause()
 
-
-if __name__ == "__main__":
-    main()

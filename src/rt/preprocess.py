@@ -13,11 +13,11 @@ and consumed from there.
 
 Subcommands::
 
-    preprocess.py one   --dataset <spec> --out-dir <dir> [--upload-repo <repo>] ...
-    preprocess.py many  --repo <hf repo> --out-dir <dir> [--shard i --num-shards N] ...
-    preprocess.py list  --repo <hf repo>
-    preprocess.py upload --pre-dir <dir>/<name> --repo <repo>      # one dataset
-    preprocess.py upload --pre-dir <dir> --repo <repo> --bulk      # whole collection
+    python -m rt.cli.preprocess one   --dataset <spec> --out-dir <dir> [--upload-repo <repo>] ...
+    python -m rt.cli.preprocess many  --repo <hf repo> --out-dir <dir> [--shard i --num-shards N] ...
+    python -m rt.cli.preprocess list  --repo <hf repo>
+    python -m rt.cli.preprocess upload --pre-dir <dir>/<name> --repo <repo>          # one dataset
+    python -m rt.cli.preprocess upload --pre-dir <dir> --repo <repo> --bulk          # whole collection
 
 Recommended sharing workflow for a large collection (e.g. the 650-dataset Join):
 preprocess everything locally with ``many`` (skipping uploads), then push the whole
@@ -31,15 +31,13 @@ automatically by the ``preprocess`` pixi task).
 
 from __future__ import annotations
 
-import argparse
 import json
 import sys
+from dataclasses import dataclass
 from pathlib import Path
 
 from huggingface_hub import HfApi, hf_hub_download, snapshot_download
 
-DEFAULT_EMBEDDING_MODEL = "all-MiniLM-L12-v2"
-DEFAULT_BATCH_SIZE = 1024
 
 
 # --------------------------------------------------------------------------- #
@@ -216,13 +214,13 @@ def preprocess_one(
     spec: str,
     out_dir: Path,
     *,
-    embedding_model: str = DEFAULT_EMBEDDING_MODEL,
-    batch_size: int = DEFAULT_BATCH_SIZE,
-    skip_tasks: bool = False,
-    no_embed: bool = False,
-    upload_repo: str | None = None,
-    private: bool = True,
-    revision: str | None = None,
+    embedding_model: str,
+    batch_size: int,
+    skip_tasks: bool,
+    embed: bool = True,
+    upload_repo: str | None,
+    private: bool,
+    revision: str | None,
 ) -> Path:
     dataset_dir = resolve_dataset_dir(spec, revision=revision)
     name = dataset_name(dataset_dir)
@@ -230,7 +228,7 @@ def preprocess_one(
     print(f"=== preprocessing {name} ({spec}) -> {pre_dataset_dir} ===", flush=True)
 
     run_rustler_pre(dataset_dir, out_dir, source=spec, skip_tasks=skip_tasks)
-    if not no_embed:
+    if embed:
         d_text = embed_dataset(pre_dataset_dir, embedding_model, batch_size)
         update_meta_with_embeddings(pre_dataset_dir, embedding_model, d_text)
     if upload_repo:
@@ -255,104 +253,148 @@ def list_datasets(repo: str, revision: str | None = None) -> list[str]:
 
 
 # --------------------------------------------------------------------------- #
-# CLI
+# Configs (defaults live only in rt.cli.preprocess)
 # --------------------------------------------------------------------------- #
-def _add_common(p: argparse.ArgumentParser) -> None:
-    p.add_argument("--out-dir", required=True, help="preprocessed-data output root")
-    p.add_argument("--embedding-model", default=DEFAULT_EMBEDDING_MODEL)
-    p.add_argument("--batch-size", type=int, default=DEFAULT_BATCH_SIZE)
-    p.add_argument("--skip-tasks", action="store_true", help="ingest db tables only")
-    p.add_argument("--no-embed", action="store_true", help="skip text embeddings")
-    p.add_argument("--upload-repo", default=None, help="Hub repo to upload result to")
-    p.add_argument("--public", action="store_true", help="make uploaded repo public")
-    p.add_argument("--revision", default=None)
+@dataclass
+class OneConfig:
+    """Preprocess a single dataset."""
+
+    dataset: str
+    """Local path or org/repo[/subdir]."""
+    out_dir: str
+    """Preprocessed-data output root."""
+    embedding_model: str
+    """Sentence-transformers model for text embeddings."""
+    batch_size: int
+    """Embedding batch size."""
+    skip_tasks: bool
+    """Ingest db tables only."""
+    embed: bool
+    """Skip text embeddings."""
+    upload_repo: str | None
+    """Hub repo to upload result to."""
+    public: bool
+    """Make uploaded repo public."""
+    revision: str | None
+    """Hub revision to download."""
 
 
-def main() -> None:
-    parser = argparse.ArgumentParser(description=__doc__,
-                                     formatter_class=argparse.RawDescriptionHelpFormatter)
-    sub = parser.add_subparsers(dest="cmd", required=True)
+@dataclass
+class ManyConfig:
+    """Preprocess all datasets in a collection repo."""
 
-    p_one = sub.add_parser("one", help="preprocess a single dataset")
-    p_one.add_argument("--dataset", required=True, help="local path or org/repo[/subdir]")
-    _add_common(p_one)
-
-    p_many = sub.add_parser("many", help="preprocess all datasets in a collection repo")
-    p_many.add_argument("--repo", required=True, help="Hub collection repo, e.g. stanford-star/the-join")
-    p_many.add_argument("--shard", type=int, default=0, help="this shard index")
-    p_many.add_argument("--num-shards", type=int, default=1, help="total shards (for slurm arrays)")
-    p_many.add_argument("--skip-existing", action="store_true",
-                        help="skip datasets whose output meta.json already exists")
-    _add_common(p_many)
-
-    p_list = sub.add_parser("list", help="list dataset specs in a collection repo")
-    p_list.add_argument("--repo", required=True)
-    p_list.add_argument("--revision", default=None)
-
-    p_up = sub.add_parser("upload", help="upload an already-preprocessed dataset dir")
-    p_up.add_argument("--pre-dir", required=True,
-                      help="path to <out_dir>/<name>, or the whole <out_dir> with --bulk")
-    p_up.add_argument("--repo", required=True)
-    p_up.add_argument("--public", action="store_true")
-    p_up.add_argument("--bulk", action="store_true",
-                      help="upload the whole out-dir (all datasets) in one resumable "
-                           "upload_large_folder pass -- recommended for big collections")
-
-    args = parser.parse_args()
-
-    if args.cmd == "list":
-        for spec in list_datasets(args.repo, revision=args.revision):
-            print(spec)
-        return
-
-    if args.cmd == "upload":
-        pre_dir = Path(args.pre_dir).expanduser()
-        if args.bulk:
-            bulk_upload(pre_dir, args.repo, private=not args.public)
-        else:
-            upload_dataset(pre_dir, args.repo, private=not args.public)
-        return
-
-    if args.cmd == "one":
-        preprocess_one(
-            args.dataset, Path(args.out_dir).expanduser(),
-            embedding_model=args.embedding_model, batch_size=args.batch_size,
-            skip_tasks=args.skip_tasks, no_embed=args.no_embed,
-            upload_repo=args.upload_repo, private=not args.public, revision=args.revision,
-        )
-        return
-
-    if args.cmd == "many":
-        specs = list_datasets(args.repo, revision=args.revision)
-        shard = specs[args.shard :: args.num_shards]
-        print(f"shard {args.shard}/{args.num_shards}: {len(shard)} of {len(specs)} datasets",
-              flush=True)
-        out_dir = Path(args.out_dir).expanduser()
-        failures = []
-        for i, spec in enumerate(shard):
-            name = spec.rsplit("/", 1)[-1]
-            if args.skip_existing and _embeddings_done(out_dir / name):
-                print(f"[{i + 1}/{len(shard)}] skip existing {name}", flush=True)
-                continue
-            print(f"[{i + 1}/{len(shard)}] {spec}", flush=True)
-            try:
-                preprocess_one(
-                    spec, out_dir,
-                    embedding_model=args.embedding_model, batch_size=args.batch_size,
-                    skip_tasks=args.skip_tasks, no_embed=args.no_embed,
-                    upload_repo=args.upload_repo, private=not args.public,
-                    revision=args.revision,
-                )
-            except Exception as e:  # one bad dataset shouldn't sink the shard
-                print(f"  FAILED {spec}: {type(e).__name__}: {e}", file=sys.stderr, flush=True)
-                failures.append(spec)
-        if failures:
-            print(f"\n{len(failures)} failure(s):", file=sys.stderr)
-            for s in failures:
-                print(f"  {s}", file=sys.stderr)
-            sys.exit(1)
-        return
+    repo: str
+    """Hub collection repo, e.g. stanford-star/the-join."""
+    out_dir: str
+    """Preprocessed-data output root."""
+    shard: int
+    """This shard index."""
+    num_shards: int
+    """Total shards (for slurm arrays)."""
+    skip_existing: bool
+    """Skip datasets whose output meta.json already exists."""
+    embedding_model: str
+    """Sentence-transformers model for text embeddings."""
+    batch_size: int
+    """Embedding batch size."""
+    skip_tasks: bool
+    """Ingest db tables only."""
+    embed: bool
+    """Skip text embeddings."""
+    upload_repo: str | None
+    """Hub repo to upload result to."""
+    public: bool
+    """Make uploaded repo public."""
+    revision: str | None
+    """Hub revision to download."""
 
 
-if __name__ == "__main__":
-    main()
+@dataclass
+class ListConfig:
+    """List dataset specs in a collection repo."""
+
+    repo: str
+    """Hub collection repo."""
+    revision: str | None
+    """Hub revision to list."""
+
+
+@dataclass
+class UploadConfig:
+    """Upload an already-preprocessed dataset dir."""
+
+    pre_dir: str
+    """Path to <out_dir>/<name>, or the whole <out_dir> with --bulk."""
+    repo: str
+    """Hub repo to upload to."""
+    public: bool
+    """Make uploaded repo public."""
+    bulk: bool
+    """Upload the whole out-dir (all datasets) in one resumable
+    upload_large_folder pass -- recommended for big collections."""
+
+
+def run_one(cfg: OneConfig) -> None:
+    preprocess_one(
+        cfg.dataset, Path(cfg.out_dir).expanduser(),
+        embedding_model=cfg.embedding_model, batch_size=cfg.batch_size,
+        skip_tasks=cfg.skip_tasks, embed=cfg.embed,
+        upload_repo=cfg.upload_repo, private=not cfg.public, revision=cfg.revision,
+    )
+
+
+def run_many(cfg: ManyConfig) -> None:
+    specs = list_datasets(cfg.repo, revision=cfg.revision)
+    shard = specs[cfg.shard :: cfg.num_shards]
+    print(f"shard {cfg.shard}/{cfg.num_shards}: {len(shard)} of {len(specs)} datasets",
+          flush=True)
+    out_dir = Path(cfg.out_dir).expanduser()
+    failures = []
+    for i, spec in enumerate(shard):
+        name = spec.rsplit("/", 1)[-1]
+        if cfg.skip_existing and _embeddings_done(out_dir / name):
+            print(f"[{i + 1}/{len(shard)}] skip existing {name}", flush=True)
+            continue
+        print(f"[{i + 1}/{len(shard)}] {spec}", flush=True)
+        try:
+            preprocess_one(
+                spec, out_dir,
+                embedding_model=cfg.embedding_model, batch_size=cfg.batch_size,
+                skip_tasks=cfg.skip_tasks, embed=cfg.embed,
+                upload_repo=cfg.upload_repo, private=not cfg.public,
+                revision=cfg.revision,
+            )
+        except Exception as e:  # one bad dataset shouldn't sink the shard
+            print(f"  FAILED {spec}: {type(e).__name__}: {e}", file=sys.stderr, flush=True)
+            failures.append(spec)
+    if failures:
+        print(f"\n{len(failures)} failure(s):", file=sys.stderr)
+        for s in failures:
+            print(f"  {s}", file=sys.stderr)
+        sys.exit(1)
+
+
+def run_list(cfg: ListConfig) -> None:
+    for spec in list_datasets(cfg.repo, revision=cfg.revision):
+        print(spec)
+
+
+def run_upload(cfg: UploadConfig) -> None:
+    pre_dir = Path(cfg.pre_dir).expanduser()
+    if cfg.bulk:
+        bulk_upload(pre_dir, cfg.repo, private=not cfg.public)
+    else:
+        upload_dataset(pre_dir, cfg.repo, private=not cfg.public)
+
+
+def main(cfg: OneConfig | ManyConfig | ListConfig | UploadConfig) -> None:
+    if isinstance(cfg, OneConfig):
+        run_one(cfg)
+    elif isinstance(cfg, ManyConfig):
+        run_many(cfg)
+    elif isinstance(cfg, ListConfig):
+        run_list(cfg)
+    elif isinstance(cfg, UploadConfig):
+        run_upload(cfg)
+    else:
+        raise TypeError(f"unknown config type: {type(cfg).__name__}")

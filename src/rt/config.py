@@ -45,7 +45,6 @@ class TrainConfig:
     total_steps: int
     decay_steps: int
     swa_momentum: float
-
     swa_loss_freq: int
     seed: int
     save_ckpt_root_dir: str | None
@@ -62,6 +61,15 @@ class TrainConfig:
     # `<vector_db_path>/<db>/<table>_vectors.bin`. When None, behavior
     # is unchanged (random walk + same-table fallback).
     vector_db_path: str | None
+    # Output directory for checkpoints, resume.pt, config.json, val metrics.
+    out_dir: str
+    # Also write resume.pt every this many minutes of wall-clock
+    # (preemption resilience), on top of the eval-freq save.
+    resume_save_mins: float
+    # Restrict the pretraining mixture to the databases listed in this
+    # file (one db name per line; '#' comments and blank lines ignored).
+    # None = use every preprocessed db under pre_dir.
+    include_dbs_file: str | None
 
 
 @dataclass
@@ -95,6 +103,24 @@ class EvalConfig:
     context_seed: int
     # See TrainConfig.vector_db_path.
     vector_db_path: str | None
+    # --- standalone evaluation (rt.eval / rt.baseline CLIs) ---
+    # simple: one context config on the test split; ensemble: tune context
+    # config per task on val, then average predictions over ensemble_size
+    # context seeds on test.
+    mode: str
+    # restrict to these tasks; each entry is a 'db' (all its tasks) or
+    # 'db/task-table' (one task), e.g. rel-f1/driver-top3. None = all tasks.
+    tasks: list[str] | None
+    # (ensemble mode) candidate 'local_ctx_size,bfs_width' configs.
+    grid: list[str]
+    # (ensemble mode) number of context seeds to average on test.
+    ensemble_size: int
+    # output directory for prediction CSVs (a RelBench submission dir).
+    out_dir: str
+    # skip writing per-item prediction CSVs.
+    write_csv: bool
+    # (rt.baseline) restrict tasks by type: clf | reg | both.
+    task_type: str
 
 
 @dataclass

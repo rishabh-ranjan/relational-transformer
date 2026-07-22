@@ -26,7 +26,7 @@ Single-node multi-GPU and multi-node (preemptible queue) both run under
 
 from __future__ import annotations
 
-import argparse
+import dataclasses
 import json
 import os
 import random
@@ -43,6 +43,7 @@ from torch import optim
 from torch.utils.data import DataLoader
 
 from rt.checkpoints import save_model
+from rt.config import Config
 from rt.data import TrainDataset
 from rt.model import RelationalTransformer
 from rt.muon import Muon
@@ -119,99 +120,26 @@ def eval_avg_metrics(evaluator, nets_with_prefix, ctx_sizes, reg_metric):
     }
 
 
-def main() -> None:
-    ap = argparse.ArgumentParser(description=__doc__,
-                                 formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--pre-dir", required=True, help="pretraining data (local or Hub)")
-    ap.add_argument("--val-pre-dir", default=None,
-                    help="validation data (RelBench-preprocessed); default = --pre-dir")
-    ap.add_argument("--out-dir", required=True)
-    ap.add_argument("--embedding-model", default=EMBEDDING_MODEL)
-    ap.add_argument("--total-steps", type=int, default=100_001)
-    ap.add_argument("--eval-freq", type=int, default=2000)
-    ap.add_argument("--resume-save-mins", type=float, default=20.0,
-                    help="also write resume.pt every this many minutes of wall-clock "
-                         "(preemption resilience), on top of the eval-freq save.")
-    ap.add_argument("--eval-num-workers", type=int, default=1,
-                    help="eval context-build workers per rank; 1 can deadlock the "
-                         "DDP eval collective at large world sizes")
-    ap.add_argument("--eval-items-per-task", type=int, default=1024)
-    ap.add_argument("--ctx-sizes", type=int, nargs="+", default=[1024, 2048, 4096, 8192],
-                    help="training context sizes; each item samples one uniformly "
-                         "(matches the released run's [1024,2048,4096,8192]).")
-    ap.add_argument("--eval-ctx-sizes", type=int, nargs="+", default=[4096, 8192],
-                    help="evaluation context sizes; metrics are averaged over them "
-                         "(matches the released run's [4096,8192]).")
-    ap.add_argument("--local-ctx-sizes", type=int, nargs="+", default=[512, 1024, 2048])
-    ap.add_argument("--bfs-widths", type=int, nargs="+", default=[16, 32, 64, 128])
-    ap.add_argument("--num-walks", type=int, default=10_000)
-    ap.add_argument("--walk-length", type=int, default=20)
-    ap.add_argument("--tokens-per-gpu", type=int, default=2**17)
-    ap.add_argument("--total-bs", type=int, default=1024)
-    ap.add_argument("--items-per-task", type=int, default=100_000)
-    ap.add_argument("--mmap-populate", action=argparse.BooleanOptionalAction, default=True,
-                    help="pre-fault every preprocessed mmap into the page cache at "
-                         "Sampler construction ('loading databases'). ON by default --"
-                         "this is the standard, GPU-fed path: without it the sampler "
-                         "cold-faults the (~1TB) mixture from shared storage per item and "
-                         "starves the GPUs (thousands of context-build timeouts, ~0 "
-                         "steps). Needs the data to fit in the node's RAM (the launcher "
-                         "requests a full node). Pass --no-mmap-populate ONLY for the "
-                         "optional fast-iteration workflow where rt.mlock_recipe "
-                         "holds the data resident across restarts.")
-    ap.add_argument("--timeout-per-item", type=float, default=10.0,
-                    help="per-item context-build timeout (s); matches the released "
-                         "run's wandb config. mmap_populate (default on) is what keeps "
-                         "the GPUs fed -- raising this is not a substitute for it.")
-    ap.add_argument("--lr", type=float, default=5e-4)
-    ap.add_argument("--wd", type=float, default=0.1)
-    ap.add_argument("--warmup-steps", type=int, default=2000)
-    ap.add_argument("--grad-norm-max", type=float, default=1.0)
-    ap.add_argument("--swa-momentum", type=float, default=0.9995)
-    ap.add_argument("--seed", type=int, default=0)
-    ap.add_argument("--num-workers", type=int, default=16)
-    ap.add_argument("--reg-metric", default="mae", choices=["mae", "r2"])
-    ap.add_argument("--no-compile", action="store_true")
-    ap.add_argument("--num-blocks", type=int, default=DEFAULTS["num_blocks"])
-    ap.add_argument("--d-model", type=int, default=DEFAULTS["d_model"])
-    ap.add_argument("--num-heads", type=int, default=DEFAULTS["num_heads"])
-    ap.add_argument("--d-ff", type=int, default=DEFAULTS["d_ff"])
-    ap.add_argument("--d-text", type=int, default=DEFAULTS["d_text"])
-    ap.add_argument("--wandb", action="store_true",
-                    help="enable Weights & Biases logging (off by default; the "
-                         "release stays wandb-free unless requested)")
-    ap.add_argument("--wandb-project", default="rt-verify")
-    ap.add_argument("--wandb-name", default=None,
-                    help="wandb run name AND id; with resume='allow' a "
-                         "preemption requeue continues the same run")
-    ap.add_argument("--include-dbs-file", default=None,
-                    help="restrict the pretraining mixture to the databases listed "
-                         "in this file (one db name per line; '#' comments and blank "
-                         "lines ignored). Use docs/recipe_rt_j.txt to reproduce the "
-                         "curated mixture the released RT-J checkpoints were trained "
-                         "on. Without it, every preprocessed db under --pre-dir is "
-                         "used.")
-    args = ap.parse_args()
-
+def main(cfg: Config) -> None:
     device, rank, local_rank, world_size, ddp = setup_dist()
     is_main = rank == 0
 
-    use_wandb = args.wandb and is_main
+    use_wandb = (not cfg.logger.wandb_disabled) and is_main
     if use_wandb:
         import wandb
-        wandb.init(project=args.wandb_project, name=args.wandb_name,
-                   id=args.wandb_name, resume="allow", config=vars(args))
-    seed_everything(args.seed + rank)
-    out_dir = Path(args.out_dir).expanduser()
+        wandb.init(project=cfg.logger.project, name=cfg.logger.wandb_run_name,
+                   id=cfg.logger.wandb_run_name, resume="allow", config=dataclasses.asdict(cfg))
+    seed_everything(cfg.train.seed + rank)
+    out_dir = Path(cfg.train.out_dir).expanduser()
     if is_main:
         out_dir.mkdir(parents=True, exist_ok=True)
-    compile = not args.no_compile
+    compile = cfg.model.compile
 
     def build_net():
         return RelationalTransformer(
-            num_blocks=args.num_blocks, d_model=args.d_model, d_text=args.d_text,
-            num_heads=args.num_heads, d_ff=args.d_ff, compile=compile,
-            materialize_attn_masks=True,
+            num_blocks=cfg.model.num_blocks, d_model=cfg.model.d_model, d_text=cfg.model.d_text,
+            num_heads=cfg.model.num_heads, d_ff=cfg.model.d_ff, compile=compile,
+            materialize_attn_masks=cfg.model.materialize_attn_masks,
         ).to(device).to(torch.bfloat16)
 
     # ---- model / optim / swa ----
@@ -222,17 +150,17 @@ def main() -> None:
     muon_params = [p for p in net.parameters() if p.ndim == 2]
     other_params = [p for p in net.parameters() if p.ndim != 2]
     opts = [
-        Muon(muon_params, lr=args.lr, momentum=0.95, weight_decay=args.wd,
+        Muon(muon_params, lr=cfg.train.lr, momentum=0.95, weight_decay=cfg.train.wd,
              adjust_lr_fn="match_rms_adamw", ns_steps=5, compile=compile),
-        optim.AdamW(other_params, lr=args.lr, weight_decay=0.0, betas=(0.9, 0.999),
+        optim.AdamW(other_params, lr=cfg.train.lr, weight_decay=0.0, betas=(0.9, 0.999),
                     eps=1e-8, fused=device.startswith("cuda")),
     ]
 
     def lr_lambda(step):
-        return (step + 1) / args.warmup_steps if step < args.warmup_steps else 1.0
+        return (step + 1) / cfg.train.warmup_steps if step < cfg.train.warmup_steps else 1.0
 
     scheds = [optim.lr_scheduler.LambdaLR(o, lr_lambda) for o in opts]
-    swa = SwaState(raw_net.named_parameters(), momentum=args.swa_momentum)
+    swa = SwaState(raw_net.named_parameters(), momentum=cfg.train.swa_momentum)
     swa_net = build_net()
 
     # best (kind, step, value) trackers, persisted across resumes
@@ -270,10 +198,10 @@ def main() -> None:
         )
 
     # ---- data: re-seed by resumed step so the stream does not replay ----
-    data_seed = args.seed + SEED_STRIDE * start_step
-    train_tasks = get_tasks("pretrain", args.pre_dir)
-    if args.include_dbs_file:
-        with open(args.include_dbs_file) as f:
+    data_seed = cfg.train.seed + SEED_STRIDE * start_step
+    train_tasks = get_tasks(cfg.train.recipe, cfg.train.pre_dir)
+    if cfg.train.include_dbs_file:
+        with open(cfg.train.include_dbs_file) as f:
             include_dbs = {
                 ln.strip() for ln in f
                 if ln.strip() and not ln.lstrip().startswith("#")
@@ -284,7 +212,7 @@ def main() -> None:
         missing = sorted(include_dbs - kept_dbs)
         if is_main:
             print(
-                f"include-dbs filter ({args.include_dbs_file}): kept "
+                f"include-dbs filter ({cfg.train.include_dbs_file}): kept "
                 f"{len(train_tasks)}/{before} tasks across {len(kept_dbs)} dbs "
                 f"(requested {len(include_dbs)})",
                 flush=True,
@@ -296,21 +224,21 @@ def main() -> None:
                     flush=True,
                 )
     if is_main:
-        print(f"pretraining on {len(train_tasks)} tasks from {args.pre_dir}", flush=True)
+        print(f"pretraining on {len(train_tasks)} tasks from {cfg.train.pre_dir}", flush=True)
     train_ds = TrainDataset(
-        tasks=train_tasks, pre_dir=args.pre_dir, train_ctx_sizes=args.ctx_sizes,
-        train_tokens_per_gpu=args.tokens_per_gpu, total_bs=args.total_bs,
+        tasks=train_tasks, pre_dir=cfg.train.pre_dir, train_ctx_sizes=cfg.train.ctx_sizes,
+        train_tokens_per_gpu=cfg.train.tokens_per_gpu, total_bs=cfg.train.total_bs,
         global_rank=rank, local_rank=local_rank, world_size=world_size,
-        local_ctx_sizes=args.local_ctx_sizes, bfs_widths=args.bfs_widths,
-        num_walks=args.num_walks, walk_length=args.walk_length, prefer_latest=[True],
-        mask_prob_max=0.0, embedding_model=args.embedding_model, d_text=args.d_text,
-        seed=data_seed, items_per_task=args.items_per_task, mask_prob_max_shared=None,
-        bool_as_num=True, skip_text_cols=False, mmap_populate=args.mmap_populate,
-        balance_labels=[False], timeout_per_item=args.timeout_per_item, ablate_schema_semantics=False,
-        vector_db_path=None, train_only_fallback=False,
+        local_ctx_sizes=cfg.train.local_ctx_sizes, bfs_widths=cfg.train.bfs_widths,
+        num_walks=cfg.train.num_walks, walk_length=cfg.train.walk_length, prefer_latest=cfg.train.prefer_latest,
+        mask_prob_max=cfg.train.mask_prob_max, embedding_model=cfg.model.embedding_model, d_text=cfg.model.d_text,
+        seed=data_seed, items_per_task=cfg.train.items_per_task, mask_prob_max_shared=None,
+        bool_as_num=cfg.train.bool_as_num, skip_text_cols=cfg.train.skip_text_cols, mmap_populate=cfg.train.mmap_populate,
+        balance_labels=cfg.train.balance_labels, timeout_per_item=cfg.train.timeout_per_item, ablate_schema_semantics=False,
+        vector_db_path=cfg.train.vector_db_path, train_only_fallback=False,
     )
-    loader = DataLoader(train_ds, batch_size=None, num_workers=args.num_workers,
-                        prefetch_factor=2 if args.num_workers else None, pin_memory=True)
+    loader = DataLoader(train_ds, batch_size=None, num_workers=cfg.train.num_workers,
+                        prefetch_factor=cfg.train.prefetch_factor if cfg.train.num_workers else None, pin_memory=True)
     # Per ctx size, train_bs = tokens_per_gpu // ctx and grad_accum makes the
     # global batch exactly total_bs. With multiple ctx sizes the dataloader
     # yields a *list* of grad_accum microbatches per optimizer step (one shared
@@ -318,44 +246,47 @@ def main() -> None:
     # time. Validate total_bs splits exactly for every ctx size, mirroring
     # TrainDataset.__iter__: when world_size*train_bs would exceed total_bs the
     # per-gpu batch shrinks to total_bs/world_size with grad_accum=1.
-    multi_ctx = len(args.ctx_sizes) > 1
-    for c in args.ctx_sizes:
-        tb = max(1, args.tokens_per_gpu // c)
-        if args.total_bs < world_size * tb:
-            assert args.total_bs % world_size == 0, (
-                f"total_bs={args.total_bs} not divisible by world_size={world_size}"
+    multi_ctx = len(cfg.train.ctx_sizes) > 1
+    for c in cfg.train.ctx_sizes:
+        tb = max(1, cfg.train.tokens_per_gpu // c)
+        if cfg.train.total_bs < world_size * tb:
+            assert cfg.train.total_bs % world_size == 0, (
+                f"total_bs={cfg.train.total_bs} not divisible by world_size={world_size}"
                 f" for ctx_size={c}"
             )
         else:
-            assert args.total_bs % (world_size * tb) == 0, (
-                f"total_bs={args.total_bs} must be divisible by world_size*train_bs="
+            assert cfg.train.total_bs % (world_size * tb) == 0, (
+                f"total_bs={cfg.train.total_bs} must be divisible by world_size*train_bs="
                 f"{world_size * tb} for ctx_size={c} (world_size={world_size}); "
-                f"pick a GPU count dividing total_bs/train_bs={args.total_bs // tb}"
+                f"pick a GPU count dividing total_bs/train_bs={cfg.train.total_bs // tb}"
             )
     # grad_accum for the single-ctx loop; multi-ctx derives it from the yielded
     # list length each step.
-    train_bs = max(1, args.tokens_per_gpu // max(args.ctx_sizes))
-    if args.total_bs < world_size * train_bs:
-        train_bs = max(1, args.total_bs // world_size)
+    train_bs = max(1, cfg.train.tokens_per_gpu // max(cfg.train.ctx_sizes))
+    if cfg.train.total_bs < world_size * train_bs:
+        train_bs = max(1, cfg.train.total_bs // world_size)
         grad_accum = 1
     else:
-        grad_accum = args.total_bs // (world_size * train_bs)
+        grad_accum = cfg.train.total_bs // (world_size * train_bs)
 
     # ---- evaluator (built once) ----
-    val_pre_dir = args.val_pre_dir or args.pre_dir
-    val_tasks = get_tasks("relbench_eval_val", val_pre_dir)
+    val_tasks = get_tasks(cfg.eval.recipe, cfg.eval.pre_dir)
     from rt.evaluator import Evaluator
 
     evaluator = Evaluator(
-        tasks=val_tasks, pre_dir=val_pre_dir,
-        eval_bs=max(1, args.tokens_per_gpu // max(args.eval_ctx_sizes)),
-        ctx_sizes=args.eval_ctx_sizes, items_per_task=args.eval_items_per_task,
-        num_workers=args.eval_num_workers, prefetch_factor=2,
-        persistent_workers=False, local_ctx_size=256, bfs_width=32, num_walks=args.num_walks,
-        walk_length=args.walk_length, prefer_latest=True, bool_as_num=True, skip_text_cols=False,
-        mmap_populate=args.mmap_populate, balance_labels=False, ablate_schema_semantics=False,
-        embedding_model=args.embedding_model, d_text=args.d_text, shuffle_seed=0, context_seed=0,
-        vector_db_path=None, train_only_fallback=False, global_rank=rank, local_rank=local_rank,
+        tasks=val_tasks, pre_dir=cfg.eval.pre_dir,
+        eval_bs=max(1, cfg.eval.tokens_per_gpu // max(cfg.eval.ctx_sizes)),
+        ctx_sizes=cfg.eval.ctx_sizes, items_per_task=cfg.eval.items_per_task,
+        num_workers=cfg.eval.num_workers, prefetch_factor=cfg.eval.prefetch_factor,
+        persistent_workers=False, local_ctx_size=cfg.eval.local_ctx_size,
+        bfs_width=cfg.eval.bfs_width, num_walks=cfg.eval.num_walks,
+        walk_length=cfg.eval.walk_length, prefer_latest=cfg.eval.prefer_latest,
+        bool_as_num=cfg.eval.bool_as_num, skip_text_cols=cfg.eval.skip_text_cols,
+        mmap_populate=cfg.eval.mmap_populate, balance_labels=cfg.eval.balance_labels,
+        ablate_schema_semantics=cfg.eval.ablate_schema_semantics,
+        embedding_model=cfg.model.embedding_model, d_text=cfg.model.d_text,
+        shuffle_seed=cfg.eval.shuffle_seed, context_seed=cfg.eval.context_seed,
+        vector_db_path=cfg.eval.vector_db_path, train_only_fallback=False, global_rank=rank, local_rank=local_rank,
         world_size=world_size, ddp=ddp, device=device,
     ) if val_tasks else None
 
@@ -370,11 +301,12 @@ def main() -> None:
 
     if is_main:
         (out_dir / "config.json").write_text(json.dumps({
-            "embedding_model": args.embedding_model, "d_text": args.d_text,
+            "embedding_model": cfg.model.embedding_model, "d_text": cfg.model.d_text,
             "checkpoint_file": "model.safetensors",
-            "model": {"num_blocks": args.num_blocks, "d_model": args.d_model,
-                      "d_text": args.d_text, "num_heads": args.num_heads,
-                      "d_ff": args.d_ff, "materialize_attn_masks": True},
+            "model": {"num_blocks": cfg.model.num_blocks, "d_model": cfg.model.d_model,
+                      "d_text": cfg.model.d_text, "num_heads": cfg.model.num_heads,
+                      "d_ff": cfg.model.d_ff,
+                      "materialize_attn_masks": cfg.model.materialize_attn_masks},
         }, indent=2) + "\n")
 
     def save_resume(step):
@@ -411,7 +343,7 @@ def main() -> None:
                 cur = best[tt]
                 if cur is None or better(v, cur["value"]) == v:
                     best[tt] = {"kind": kind, "step": step, "value": v,
-                                "metric": "auc" if tt == "clf" else args.reg_metric}
+                                "metric": "auc" if tt == "clf" else cfg.eval.reg_metric}
 
     def run_eval(step):
         if evaluator is None:
@@ -420,7 +352,7 @@ def main() -> None:
         if swa.n > 0:
             swa.sync_to(swa_net.named_parameters())
             nets.append((swa_net, "swa_"))
-        metrics = eval_avg_metrics(evaluator, nets, args.eval_ctx_sizes, args.reg_metric)
+        metrics = eval_avg_metrics(evaluator, nets, cfg.eval.ctx_sizes, cfg.eval.reg_metric)
         consider(metrics, step)
         if is_main:
             with open(out_dir / "val_metrics.jsonl", "a") as f:
@@ -429,7 +361,7 @@ def main() -> None:
                 if prefix in metrics:
                     m = metrics[prefix]
                     print(f"  [eval step={step} {label}] clf_auc={m['clf']} "
-                          f"{args.reg_metric}={m['reg']}", flush=True)
+                          f"{cfg.eval.reg_metric}={m['reg']}", flush=True)
             if use_wandb:
                 wandb.log({
                     f"val/{('swa_' if p else '')}{tt}": metrics[p][tt]
@@ -455,8 +387,8 @@ def main() -> None:
     # loses at most that much progress. The save is atomic (tmp+rename) and rank
     # 0 only; we don't count it in sec/step (step_t0 is reset after).
     last_resume_t = time.perf_counter()
-    while step < args.total_steps:
-        if step % args.eval_freq == 0:
+    while step < cfg.train.total_steps:
+        if cfg.eval.freq and step % cfg.eval.freq == 0:
             run_eval(step)
             checkpoint(step)
             save_resume(step)
@@ -495,7 +427,7 @@ def main() -> None:
             total_loss += loss.item()
 
         norm = torch.nn.utils.get_total_norm([p.grad for p in raw_net.parameters() if p.grad is not None])
-        torch.nn.utils.clip_grads_with_norm_(raw_net.parameters(), args.grad_norm_max, norm)
+        torch.nn.utils.clip_grads_with_norm_(raw_net.parameters(), cfg.train.grad_norm_max, norm)
         for o in opts:
             o.step()
         for o in opts:
@@ -521,13 +453,13 @@ def main() -> None:
         # Time-based resume checkpoint (preemption resilience), independent of
         # the eval_freq save. All ranks evaluate the same wall-clock condition;
         # save_resume itself only writes on rank 0.
-        if time.perf_counter() - last_resume_t >= args.resume_save_mins * 60:
+        if time.perf_counter() - last_resume_t >= cfg.train.resume_save_mins * 60:
             save_resume(step)
             last_resume_t = time.perf_counter()
             step_t0 = time.perf_counter()  # don't count the save in sec/step
             if is_main:
                 print(f"resume.pt saved at step {step} "
-                      f"(every {args.resume_save_mins} min)", flush=True)
+                      f"(every {cfg.train.resume_save_mins} min)", flush=True)
 
         if should_stop():
             if is_main:
@@ -557,7 +489,3 @@ def main() -> None:
         print(f"(load with rt.checkpoints.load_rt_model('{out_dir}/best_clf.safetensors'))", flush=True)
     if ddp:
         dist.destroy_process_group()
-
-
-if __name__ == "__main__":
-    main()

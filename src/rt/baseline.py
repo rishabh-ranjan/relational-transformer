@@ -17,11 +17,11 @@ pick the HP set with --xgb-features).
 
 from __future__ import annotations
 
-import argparse
-
 import torch
 
+from rt.config import Config
 from rt.recipes import get_tasks
+from rt.rel2tab.config import Rel2TabModelConfig
 
 EMBEDDING_MODEL = "all-MiniLM-L12-v2"
 D_TEXT = 384
@@ -71,63 +71,30 @@ def make_predictor(name: str, alpha_clf: float, alpha_reg: float, xgb_features: 
     raise ValueError(f"unknown predictor {name!r}")
 
 
-def main() -> None:
-    ap = argparse.ArgumentParser(description=__doc__,
-                                 formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--featurizer", default="entity", choices=["global", "entity", "rt"])
-    ap.add_argument("--predictor", default="ridge",
-                    choices=["mean", "linear", "ridge", "xgboost"])
-    ap.add_argument("--pre-dir", required=True, help="preprocessed RelBench (local or Hub)")
-    ap.add_argument("--recipe", default="relbench_eval_test")
-    ap.add_argument("--task-type", default="both", choices=["clf", "reg", "both"])
-    ap.add_argument("--rt-ckpt", default=None, help="checkpoint for --featurizer rt")
-    ap.add_argument("--out-dir", default="baseline_out")
-    ap.add_argument("--ctx-size", type=int, default=8192)
-    ap.add_argument("--local-ctx-size", type=int, default=256)
-    ap.add_argument("--bfs-width", type=int, default=32)
-    ap.add_argument("--num-walks", type=int, default=10_000)
-    ap.add_argument("--items-per-task", type=int, default=10_000_000,
-                    help="cap on items per task (default covers the full split)")
-    ap.add_argument("--num-workers", type=int, default=2)
-    ap.add_argument("--alpha-clf", type=float, default=10.0)
-    ap.add_argument("--alpha-reg", type=float, default=100.0)
-    ap.add_argument("--xgb-features", default="sql_features",
-                    choices=["sql_features", "rdblearn_features"],
-                    help="which val-tuned XGBoost HP set to use (--predictor xgboost)")
-    ap.add_argument("--reg-metric", default="mae", choices=["mae", "r2"])
-    ap.add_argument("--no-csv", action="store_true")
-    args = ap.parse_args()
-
+def main(cfg: Config) -> None:
+    ev_cfg = cfg.eval
+    model_cfg = cfg.model
+    assert isinstance(model_cfg, Rel2TabModelConfig), "model must be a Rel2TabModelConfig"
     device = "cuda" if torch.cuda.is_available() else "cpu"
 
-    from rt.rel2tab.config import Rel2TabModelConfig
+    model = model_cfg.build(device)
+    print(f"baseline: {type(model_cfg.featurizer).__name__} + "
+          f"{type(model_cfg.predictor).__name__} on {device}")
 
-    cfg = Rel2TabModelConfig(
-        featurizer=make_featurizer(args.featurizer, args.rt_ckpt, args.pre_dir, args.recipe),
-        predictor=make_predictor(args.predictor, args.alpha_clf, args.alpha_reg,
-                                 args.xgb_features),
-        featurize_batch_size=4096, embedding_model=EMBEDDING_MODEL, d_text=D_TEXT,
-    )
-    model = cfg.build(device)
-    print(f"baseline: {args.featurizer} + {args.predictor} on {device}")
-
-    tasks = get_tasks(args.recipe, args.pre_dir)
-    if args.task_type != "both":
-        tasks = [t for t in tasks if t.task_type == args.task_type]
+    tasks = get_tasks(ev_cfg.recipe, ev_cfg.pre_dir)
+    if ev_cfg.task_type != "both":
+        tasks = [t for t in tasks if t.task_type == ev_cfg.task_type]
     if not tasks:
-        raise SystemExit(f"no tasks found in {args.pre_dir}")
+        raise SystemExit(f"no tasks found in {ev_cfg.pre_dir}")
 
     from rt.eval_utils import build_evaluator, run_and_report
 
     ev = build_evaluator(
-        tasks, args.pre_dir, embedding_model=EMBEDDING_MODEL, d_text=D_TEXT, device=device,
-        ctx_size=args.ctx_size, local_ctx_size=args.local_ctx_size, bfs_width=args.bfs_width,
-        num_walks=args.num_walks, items_per_task=args.items_per_task, num_workers=args.num_workers,
+        tasks, ev_cfg.pre_dir, embedding_model=model_cfg.embedding_model, d_text=model_cfg.d_text, device=device,
+        ctx_size=ev_cfg.ctx_sizes[0], local_ctx_size=ev_cfg.local_ctx_size, bfs_width=ev_cfg.bfs_width,
+        num_walks=ev_cfg.num_walks, items_per_task=ev_cfg.items_per_task, num_workers=ev_cfg.num_workers,
     )
-    run_and_report(model, tasks, args.pre_dir, ctx_size=args.ctx_size,
-                   reg_metric=args.reg_metric, out_dir=args.out_dir, no_csv=args.no_csv,
-                   evaluator=ev, embedding_model=EMBEDDING_MODEL)
+    run_and_report(model, tasks, ev_cfg.pre_dir, ctx_size=ev_cfg.ctx_sizes[0],
+                   reg_metric=ev_cfg.reg_metric, out_dir=ev_cfg.out_dir, no_csv=not ev_cfg.write_csv,
+                   evaluator=ev, embedding_model=model_cfg.embedding_model)
 
-
-if __name__ == "__main__":
-    main()
