@@ -23,7 +23,7 @@ class ModelConfig:
 class TrainConfig:
     db_task_list: list[tuple[str, str]] | str
     """(db, task) pairs, a local JSON file of pairs, or a Hub path like
-    stanford-star/the-join/db-task-lists/all.json (only that file downloads)."""
+    stanford-star/the-join/db-task-lists/forecast.json (only that file downloads)."""
     pre_dir: str
     tokens_per_gpu: int
     num_workers: int

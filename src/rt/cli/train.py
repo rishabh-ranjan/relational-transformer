@@ -32,7 +32,7 @@ def default_config() -> Config:
             load_ckpt_path=None,
         ),
         train=TrainConfig(
-            db_task_list="stanford-star/the-join/db-task-lists/all.json",
+            db_task_list="stanford-star/the-join/db-task-lists/forecast.json",
             pre_dir="stanford-star/the-join-preprocessed",
             tokens_per_gpu=2**17,
             num_workers=16,

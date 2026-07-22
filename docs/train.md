@@ -23,7 +23,7 @@ The released RT-J data:
 - `--val-pre-dir stanford-star/relbench-preprocessed`
 
 The task mixture is given by `--train.db-task-list` — `(db, task)` pairs as a
-local JSON file or a Hub path. `stanford-star/the-join/db-task-lists/all.json`
+local JSON file or a Hub path. `stanford-star/the-join/db-task-lists/forecast.json`
 (default) is every task in the Join; `.../rt-j.json` is the curated RT-J
 mixture.
 
