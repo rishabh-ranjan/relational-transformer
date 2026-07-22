@@ -25,7 +25,7 @@ def default_config() -> Config:
         ),
         train=TrainConfig(
             recipe="pretrain",
-            pre_dir=tyro.MISSING,
+            pre_dir="stanford-star/the-join-preprocessed",
             tokens_per_gpu=2**17,
             num_workers=16,
             prefetch_factor=2,
@@ -51,7 +51,7 @@ def default_config() -> Config:
             balance_labels=[False],
             timeout_per_item=10.0,
             vector_db_path=None,
-            out_dir=tyro.MISSING,
+            out_dir="~/ckpts/run1",
             resume_save_mins=20.0,
             include_dbs_file=None,
         ),

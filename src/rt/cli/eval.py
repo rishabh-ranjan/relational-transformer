@@ -17,12 +17,12 @@ def default_config() -> Config:
             d_ff=2048,
             compile=False,
             materialize_attn_masks=False,
-            load_ckpt_path=tyro.MISSING,
+            load_ckpt_path="stanford-star/rt-j/classification",
         ),
         train=EvalOnlyConfig(),
         eval=EvalConfig(
             recipe="relbench_eval_test",
-            pre_dir=tyro.MISSING,
+            pre_dir="stanford-star/relbench-preprocessed",
             tokens_per_gpu=2**18,  # 2**19 overflows RT-J eval kernel @ctx=8192
             num_workers=2,
             prefetch_factor=2,

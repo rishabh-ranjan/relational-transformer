@@ -15,8 +15,8 @@ from rt.preprocess import (
 
 def default_one() -> OneConfig:
     return OneConfig(
-        dataset=tyro.MISSING,
-        out_dir=tyro.MISSING,
+        dataset="stanford-star/relbench/rel-f1",
+        out_dir="~/scratch/pre",
         embedding_model="all-MiniLM-L12-v2",
         batch_size=1024,
         skip_tasks=False,
@@ -29,8 +29,8 @@ def default_one() -> OneConfig:
 
 def default_many() -> ManyConfig:
     return ManyConfig(
-        repo=tyro.MISSING,
-        out_dir=tyro.MISSING,
+        repo="stanford-star/the-join",
+        out_dir="~/scratch/the-join-pre",
         shard=0,
         num_shards=1,
         skip_existing=False,
@@ -45,12 +45,12 @@ def default_many() -> ManyConfig:
 
 
 def default_list() -> ListConfig:
-    return ListConfig(repo=tyro.MISSING, revision=None)
+    return ListConfig(repo="stanford-star/the-join", revision=None)
 
 
 def default_upload() -> UploadConfig:
     return UploadConfig(
-        pre_dir=tyro.MISSING,
+        pre_dir="~/scratch/pre",
         repo=tyro.MISSING,
         public=False,
         bulk=False,

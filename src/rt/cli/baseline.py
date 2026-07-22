@@ -48,7 +48,7 @@ class BaselineArgs:
 
 def default_args() -> BaselineArgs:
     return BaselineArgs(
-        pre_dir=tyro.MISSING,
+        pre_dir="stanford-star/relbench-preprocessed",
         featurizer="entity",
         predictor="ridge",
         rt_ckpt=None,
