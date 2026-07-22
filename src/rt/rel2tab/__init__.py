@@ -1,5 +1,5 @@
-from rt.rel2tab.featurizer import Featurizer
-from rt.rel2tab.predictor import Predictor
+from rt.rel2tab.featurizers import Featurizer
+from rt.rel2tab.predictors import Predictor
 from rt.rel2tab.model import Rel2TabModel
 from rt.rel2tab.config import Rel2TabModelConfig, FeaturizerConfig, PredictorConfig
 from rt.rel2tab.featurizers import (
