@@ -333,6 +333,7 @@ unsafe impl Send for VectorDbEntry {}
 unsafe impl Sync for VectorDbEntry {}
 
 struct Dataset {
+    db_name: String,
     mmap: Mmap,
     text_mmap: Mmap,
     p2f_adj_mmap: Mmap,
@@ -909,6 +910,7 @@ impl Sampler {
         (
             db_name.to_owned(),
             Dataset {
+                db_name: db_name.to_string(),
                 mmap,
                 text_mmap,
                 p2f_adj_mmap,
@@ -1770,6 +1772,25 @@ impl Sampler {
         seed_node_idx: i32,
         bfs_depth: i32,
     ) {
+        // Missing values must not reach the model: `pre` skips Null/NaN cells
+        // at emission, so a NaN here means the preprocessed data predates that
+        // guard. Ignore the cell (same semantics as `pre`) and warn once per
+        // (db, column) so the culprit data can be located and re-preprocessed.
+        let value_is_nan = match &node.sem_types[cell_i] {
+            ArchivedSemType::Number => f32::from(node.number_values[cell_i]).is_nan(),
+            ArchivedSemType::DateTime => f32::from(node.datetime_values[cell_i]).is_nan(),
+            ArchivedSemType::Boolean => f32::from(node.boolean_values[cell_i]).is_nan(),
+            ArchivedSemType::Text => false, // text uses index, not float
+        };
+        if value_is_nan {
+            warn_nan_cell(
+                &dataset.db_name,
+                node.col_name_idxs[cell_i].into(),
+                node.node_idx.into(),
+            );
+            return;
+        }
+
         slices.node_idxs[*seq_i] = node.node_idx.into();
 
         assert!(node.f2p_nbr_idxs.len() <= MAX_F2P_NBRS);
@@ -1801,21 +1822,9 @@ impl Sampler {
         slices.datetime_values[*seq_i] = bf16::from_f32(node.datetime_values[cell_i].into());
         slices.boolean_values[*seq_i] = bf16::from_f32(node.boolean_values[cell_i].into());
 
-        // A cell's value is NaN when the underlying data is missing.
-        // Never mark such cells as targets — they have no valid label.
-        let value_is_nan = {
-            let sem = &node.sem_types[cell_i];
-            match sem {
-                ArchivedSemType::Number => f32::from(node.number_values[cell_i]).is_nan(),
-                ArchivedSemType::DateTime => f32::from(node.datetime_values[cell_i]).is_nan(),
-                ArchivedSemType::Boolean => f32::from(node.boolean_values[cell_i]).is_nan(),
-                ArchivedSemType::Text => false, // text uses index, not float
-            }
-        };
-
-        slices.is_targets[*seq_i] = if value_is_nan {
-            false
-        } else if node.node_idx == target_node_idx && node.col_name_idxs[cell_i] == target_column {
+        slices.is_targets[*seq_i] = if node.node_idx == target_node_idx
+            && node.col_name_idxs[cell_i] == target_column
+        {
             true
         } else {
             rng.random::<f64>() < mask_prob
@@ -2271,6 +2280,24 @@ fn get_p2f_edges(dataset: &Dataset, idx: i32) -> &ArchivedVec<ArchivedEdge> {
     let bytes = &dataset.p2f_adj_mmap[..];
     let p2f_adj = unsafe { rkyv::access_unchecked::<ArchivedAdj>(bytes) };
     &p2f_adj.adj[idx as usize]
+}
+
+/// Warn (once per (db, column)) about a NaN cell in preprocessed data. Current
+/// `pre` never emits NaN cells; seeing one means the data was preprocessed by
+/// an older version and should be re-preprocessed.
+fn warn_nan_cell(db_name: &str, col_name_idx: i32, node_idx: i32) {
+    use std::collections::HashSet;
+    use std::sync::Mutex;
+    static SEEN: Mutex<Option<HashSet<(String, i32)>>> = Mutex::new(None);
+    let mut guard = SEEN.lock().unwrap();
+    let seen = guard.get_or_insert_with(HashSet::new);
+    if seen.insert((db_name.to_string(), col_name_idx)) {
+        eprintln!(
+            "\x1b[31mwarning: NaN cell in preprocessed data (ignored): \
+             db={db_name} col_name_idx={col_name_idx} node_idx={node_idx}; \
+             stale preprocessing -- re-run `pre` on this db\x1b[0m"
+        );
+    }
 }
 
 fn get_text_emb(dataset: &Dataset, idx: i32, d_text: usize) -> &[bf16] {
