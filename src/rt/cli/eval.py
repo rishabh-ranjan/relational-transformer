@@ -17,12 +17,12 @@ def default_config() -> Config:
             d_ff=2048,
             compile=False,
             materialize_attn_masks=False,
-            load_ckpt_path=tyro.MISSING,  # was --checkpoint (required)
+            load_ckpt_path=tyro.MISSING,
         ),
         train=EvalOnlyConfig(),
         eval=EvalConfig(
             recipe="relbench_eval_test",
-            pre_dir=tyro.MISSING,  # was --pre-dir (required)
+            pre_dir=tyro.MISSING,
             tokens_per_gpu=2**18,  # 2**19 overflows RT-J eval kernel @ctx=8192
             num_workers=2,
             prefetch_factor=2,
@@ -33,7 +33,7 @@ def default_config() -> Config:
             prefer_latest=True,
             freq=None,
             items_per_task=10_000_000,
-            ctx_sizes=[8192],  # was --ctx-size; only the first entry is used
+            ctx_sizes=[8192],  # only the first entry is used
             bool_as_num=False,
             skip_text_cols=False,
             mmap_populate=False,

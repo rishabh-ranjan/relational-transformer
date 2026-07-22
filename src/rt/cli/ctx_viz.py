@@ -2,14 +2,14 @@
 
 import tyro
 
-from rt.ctx_viz import DEFAULT_PRE_ROOT, Config, main
+from rt.ctx_viz import Config, main
 
 
 def default_config() -> Config:
     return Config(
         host="0.0.0.0",
         port=8765,
-        pre_root=str(DEFAULT_PRE_ROOT),
+        pre_root="pre",
         quiet=False,
         port_fallback=True,
     )

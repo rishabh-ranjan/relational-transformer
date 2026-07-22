@@ -37,7 +37,6 @@ from rt.tasks import Task
 SEM_TYPE_NAMES = ["number", "text", "datetime", "boolean"]
 INT_MIN = np.iinfo(np.int32).min  # rustler uses i32::MIN as missing-timestamp sentinel
 
-DEFAULT_PRE_ROOT = Path("pre")
 
 
 # ---------------------------------------------------------------------------
@@ -588,7 +587,7 @@ def _list_pre_roots(top_root: Path) -> list[str]:
 
     A pre-root is a directory containing one or more dataset directories,
     each with a `nodes.rkyv` file. We also include `top_root` itself if it
-    has an immediate dataset (e.g., when DEFAULT_PRE_ROOT *is* the root).
+    has an immediate dataset (e.g., when the pre root *is* a dataset dir).
     """
     roots: list[str] = []
     if not top_root.exists():

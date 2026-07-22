@@ -13,16 +13,12 @@ from rt.preprocess import (
     main,
 )
 
-DEFAULT_EMBEDDING_MODEL = "all-MiniLM-L12-v2"
-DEFAULT_BATCH_SIZE = 1024
-
-
 def default_one() -> OneConfig:
     return OneConfig(
         dataset=tyro.MISSING,
         out_dir=tyro.MISSING,
-        embedding_model=DEFAULT_EMBEDDING_MODEL,
-        batch_size=DEFAULT_BATCH_SIZE,
+        embedding_model="all-MiniLM-L12-v2",
+        batch_size=1024,
         skip_tasks=False,
         embed=True,
         upload_repo=None,
@@ -38,8 +34,8 @@ def default_many() -> ManyConfig:
         shard=0,
         num_shards=1,
         skip_existing=False,
-        embedding_model=DEFAULT_EMBEDDING_MODEL,
-        batch_size=DEFAULT_BATCH_SIZE,
+        embedding_model="all-MiniLM-L12-v2",
+        batch_size=1024,
         skip_tasks=False,
         embed=True,
         upload_repo=None,

@@ -51,8 +51,6 @@ from rt.recipes import get_tasks
 from rt.swa import SwaState
 
 # Released model dims (RT-J). Override via CLI for a different size.
-DEFAULTS = dict(num_blocks=12, d_model=512, num_heads=8, d_ff=2048, d_text=384)
-EMBEDDING_MODEL = "all-MiniLM-L12-v2"
 # Re-seed offset applied per resumed step so a resumed stream does not replay.
 SEED_STRIDE = 1_000_003
 
