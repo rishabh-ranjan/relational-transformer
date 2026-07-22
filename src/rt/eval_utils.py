@@ -227,8 +227,8 @@ def run_ensemble(model, pre_dir, val_tasks, test_tasks, *, grid, ensemble_size, 
                  reg_metric, out_dir, no_csv, **eval_kwargs):
     """Context-tuned + ensembled evaluation.
 
-    Tune: for each task, pick the (local_ctx_size, bfs_width) in ``grid`` with the
-    best *validation* metric. Ensemble: on test, run that config with
+    Tune: for each task, pick the (local_ctx_size, bfs_width, prefer_latest) in
+    ``grid`` with the best *validation* metric. Ensemble: on test, run that config with
     ``ensemble_size`` context seeds and average the per-item predictions, then
     score the averaged submission through relbench's evaluator.
     """
@@ -241,9 +241,9 @@ def run_ensemble(model, pre_dir, val_tasks, test_tasks, *, grid, ensemble_size, 
     # ---- tune on val: best context config per task ----
     best = {}  # (db, table) -> {"cfg", "value", "task_type"}
     for cfg in grid:
-        lcs, bw = cfg
+        lcs, bw, pl = cfg
         ev = build_evaluator(val_tasks, pre_dir, ctx_size=ctx_size, local_ctx_size=lcs,
-                             bfs_width=bw, **eval_kwargs)
+                             bfs_width=bw, prefer_latest=pl, **eval_kwargs)
         for task, _c, labels, preds_by_prefix, _nl in ev.evaluate_raw([(model, "")], [ctx_size]):
             _, v = metric_for(task.task_type, labels, preds_by_prefix[""], reg_metric)
             key = (task.db_name, task.table_name)
@@ -263,11 +263,12 @@ def run_ensemble(model, pre_dir, val_tasks, test_tasks, *, grid, ensemble_size, 
     results = {}
     print(f"\n{'task':40} {'cfg':14} {'metric':8} {'value':>9} {'n':>7}  {'align':>11}")
     for cfg, tasks in groups.items():
-        lcs, bw = cfg
+        lcs, bw, pl = cfg
         acc = {}  # key -> [labels, sum_preds, task, node_idxs]
         for seed in range(ensemble_size):
             ev = build_evaluator(tasks, pre_dir, ctx_size=ctx_size, local_ctx_size=lcs,
-                                 bfs_width=bw, context_seed=seed, **eval_kwargs)
+                                 bfs_width=bw, prefer_latest=pl, context_seed=seed,
+                                 **eval_kwargs)
             for task, _c, labels, preds_by_prefix, _nl, node_idxs in ev.evaluate_raw(
                 [(model, "")], [ctx_size], with_node_idxs=True
             ):

@@ -67,14 +67,13 @@ def main(cfg: Config) -> None:
         embedding_model=embedding_model, d_text=d_text, device=device,
         num_walks=ev_cfg.num_walks, walk_length=ev_cfg.walk_length,
         tokens_per_gpu=ev_cfg.tokens_per_gpu, items_per_task=ev_cfg.items_per_task,
-        num_workers=ev_cfg.num_workers,
-        prefer_latest=ev_cfg.prefer_latest, shuffle_seed=ev_cfg.shuffle_seed,
+        num_workers=ev_cfg.num_workers, shuffle_seed=ev_cfg.shuffle_seed,
     )
+    grid = ev_cfg.lcs_bw_pl_grid
 
-    if ev_cfg.mode == "ensemble":
+    if len(grid) > 1 or ev_cfg.ensemble_size > 1:
         from rt.eval_utils import run_ensemble
 
-        grid = [tuple(int(x) for x in g.split(",")) for g in ev_cfg.grid]
         val_tasks = selected(of_kind(get_tasks("relbench_eval_val", ev_cfg.pre_dir)))
         test_tasks = selected(of_kind(get_tasks("relbench_eval_test", ev_cfg.pre_dir)))
         if not test_tasks:
@@ -90,8 +89,9 @@ def main(cfg: Config) -> None:
     tasks = selected(of_kind(get_tasks(ev_cfg.recipe, ev_cfg.pre_dir)))
     if not tasks:
         raise SystemExit(f"no {task_type} tasks found in {ev_cfg.pre_dir}")
+    lcs, bw, pl = grid[0]
     ev = build_evaluator(tasks, ev_cfg.pre_dir, ctx_size=ctx_size,
-                         local_ctx_size=ev_cfg.local_ctx_size, bfs_width=ev_cfg.bfs_width,
+                         local_ctx_size=lcs, bfs_width=bw, prefer_latest=pl,
                          **eval_kwargs)
     run_and_report(net, tasks, ev_cfg.pre_dir, ctx_size=ctx_size,
                    reg_metric=ev_cfg.reg_metric, out_dir=ev_cfg.out_dir, no_csv=not ev_cfg.write_csv,

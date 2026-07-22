@@ -93,25 +93,20 @@ def eval_avg_metrics(evaluator, nets_with_prefix, ctx_sizes, reg_metric):
     evaluate_raw yield is one (task, ctx_size) slice, so passing the full
     ctx-size list means the mean spans all of them.
     """
-    import sklearn.metrics as M
+    from rt.eval_utils import metric_for
 
     acc = {p: {"clf": [], "reg": []} for _, p in nets_with_prefix}
     for task, _ctx, labels, preds_by_prefix, _nl in evaluator.evaluate_raw(
         nets_with_prefix, ctx_sizes
     ):
         for _, prefix in nets_with_prefix:
-            preds = preds_by_prefix[prefix]
             try:
-                if task.task_type == "reg":
-                    v = (M.r2_score if reg_metric == "r2" else M.mean_absolute_error)(
-                        labels, preds
-                    )
-                else:
-                    v = M.roc_auc_score((labels > 0).astype(int), preds)
+                _, v = metric_for(task.task_type, labels, preds_by_prefix[prefix],
+                                  reg_metric)
             except ValueError:
                 # e.g. a single-class slice -> ROC AUC undefined; skip this task.
                 continue
-            acc[prefix][task.task_type].append(float(v))
+            acc[prefix][task.task_type].append(v)
     return {
         p: {k: (float(np.mean(vs)) if vs else None) for k, vs in d.items()}
         for p, d in acc.items()
@@ -276,9 +271,9 @@ def main(cfg: Config) -> None:
         eval_bs=max(1, cfg.eval.tokens_per_gpu // max(cfg.eval.ctx_sizes)),
         ctx_sizes=cfg.eval.ctx_sizes, items_per_task=cfg.eval.items_per_task,
         num_workers=cfg.eval.num_workers, prefetch_factor=cfg.eval.prefetch_factor,
-        persistent_workers=False, local_ctx_size=cfg.eval.local_ctx_size,
-        bfs_width=cfg.eval.bfs_width, num_walks=cfg.eval.num_walks,
-        walk_length=cfg.eval.walk_length, prefer_latest=cfg.eval.prefer_latest,
+        persistent_workers=False, local_ctx_size=cfg.eval.lcs_bw_pl_grid[0][0],
+        bfs_width=cfg.eval.lcs_bw_pl_grid[0][1], num_walks=cfg.eval.num_walks,
+        walk_length=cfg.eval.walk_length, prefer_latest=cfg.eval.lcs_bw_pl_grid[0][2],
         bool_as_num=cfg.eval.bool_as_num, skip_text_cols=cfg.eval.skip_text_cols,
         mmap_populate=cfg.eval.mmap_populate, balance_labels=cfg.eval.balance_labels,
         ablate_schema_semantics=cfg.eval.ablate_schema_semantics,

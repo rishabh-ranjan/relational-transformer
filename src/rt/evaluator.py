@@ -31,7 +31,6 @@ from tqdm.auto import tqdm
 from rt.data import EvalDataset, RustlerDataset
 
 wandb = lazy.load("wandb")
-sklearn = lazy.load("sklearn")
 
 
 def fmt_duration(secs):
@@ -505,24 +504,21 @@ class Evaluator:
                 )
 
             for prefix, preds_np in preds_by_prefix_np.items():
+                from rt.eval_utils import metric_for
+
                 if eval_task.task_type == "reg":
                     metric_name = reg_metric
-                    if reg_metric == "mae":
-                        metric = sklearn.metrics.mean_absolute_error(
-                            labels_np, preds_np
-                        )
-                    elif reg_metric == "r2":
-                        metric = sklearn.metrics.r2_score(labels_np, preds_np)
+                    _, metric = metric_for("reg", labels_np, preds_np, reg_metric)
                     all_reg_scores[prefix][(eval_ctx_size, eval_task.split)].append(
                         metric
                     )
                     metric_str = f"{metric:<6.4f}"
                 elif eval_task.task_type == "clf":
                     metric_name = "auc"
-                    labels_int = [int(x > 0) for x in labels_np]
                     try:
-                        metric = sklearn.metrics.roc_auc_score(labels_int, preds_np)
+                        _, metric = metric_for("clf", labels_np, preds_np)
                     except Exception as e:
+                        labels_int = [int(x > 0) for x in labels_np]
                         n_classes = len(set(labels_int))
                         n_nan_labels = int(np.isnan(labels_np).sum())
                         n_nan_preds = int(np.isnan(preds_np).sum())

@@ -71,11 +71,8 @@ class EvalConfig:
     tokens_per_gpu: int
     num_workers: int
     prefetch_factor: int
-    local_ctx_size: int
-    bfs_width: int
     num_walks: int
     walk_length: int
-    prefer_latest: bool
     freq: int | None
     items_per_task: int
     ctx_sizes: list[int]
@@ -90,16 +87,15 @@ class EvalConfig:
     # See TrainConfig.vector_db_path.
     vector_db_path: str | None
     # --- standalone evaluation (rt.eval) ---
-    # simple: one context config on the test split; ensemble: tune context
-    # config per task on val, then average predictions over ensemble_size
-    # context seeds on test.
-    mode: str
     # restrict to these tasks; each entry is a 'db' (all its tasks) or
     # 'db/task-table' (one task), e.g. rel-f1/driver-top3. None = all tasks.
     tasks: list[str] | None
-    # (ensemble mode) candidate 'local_ctx_size,bfs_width' configs.
-    grid: list[str]
-    # (ensemble mode) number of context seeds to average on test.
+    # Candidate (local_ctx_size, bfs_width, prefer_latest) context configs.
+    # A single entry is used directly; multiple entries are tuned per task on
+    # the validation split. In-loop training eval uses the first entry.
+    lcs_bw_pl_grid: list[tuple[int, int, bool]]
+    # Number of context seeds whose test predictions are averaged; 1 = no
+    # ensembling. Grid tuning and/or ensembling engage the val-tuned test path.
     ensemble_size: int
     # output directory for prediction CSVs (a RelBench submission dir).
     out_dir: str
