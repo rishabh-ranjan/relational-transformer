@@ -262,26 +262,35 @@ def main(cfg: Config) -> None:
     else:
         grad_accum = cfg.train.total_bs // (world_size * train_bs)
 
-    # ---- evaluator (built once) ----
+    # ---- evaluators (built once; one per context config in the eval grid) ----
+    # The first grid entry is the primary config: its metrics keep the untagged
+    # wandb keys and drive best-checkpoint tracking. Extra entries are evaluated
+    # alongside it under a "lcs<l>-bw<b>-pl<p>_" tag. All evaluators share the
+    # underlying mmap'd data (page cache), so extra entries cost eval compute
+    # only, nothing between eval points.
     val_tasks = get_tasks(cfg.eval.recipe, cfg.eval.pre_dir)
     from rt.evaluator import Evaluator
 
-    evaluator = Evaluator(
-        tasks=val_tasks, pre_dir=cfg.eval.pre_dir,
-        eval_bs=max(1, cfg.eval.tokens_per_gpu // max(cfg.eval.ctx_sizes)),
-        ctx_sizes=cfg.eval.ctx_sizes, items_per_task=cfg.eval.items_per_task,
-        num_workers=cfg.eval.num_workers, prefetch_factor=cfg.eval.prefetch_factor,
-        persistent_workers=False, local_ctx_size=cfg.eval.lcs_bw_pl_grid[0][0],
-        bfs_width=cfg.eval.lcs_bw_pl_grid[0][1], num_walks=cfg.eval.num_walks,
-        walk_length=cfg.eval.walk_length, prefer_latest=cfg.eval.lcs_bw_pl_grid[0][2],
-        bool_as_num=cfg.eval.bool_as_num, skip_text_cols=cfg.eval.skip_text_cols,
-        mmap_populate=cfg.eval.mmap_populate, balance_labels=cfg.eval.balance_labels,
-        ablate_schema_semantics=cfg.eval.ablate_schema_semantics,
-        embedding_model=cfg.model.embedding_model, d_text=cfg.model.d_text,
-        shuffle_seed=cfg.eval.shuffle_seed, context_seed=cfg.eval.context_seed,
-        vector_db_path=cfg.eval.vector_db_path, train_only_fallback=False, global_rank=rank, local_rank=local_rank,
-        world_size=world_size, ddp=ddp, device=device,
-    ) if val_tasks else None
+    evaluators = [
+        (f"lcs{lcs}-bw{bw}-pl{int(pl)}_" if i else "", Evaluator(
+            tasks=val_tasks, pre_dir=cfg.eval.pre_dir,
+            eval_bs=max(1, cfg.eval.tokens_per_gpu // max(cfg.eval.ctx_sizes)),
+            ctx_sizes=cfg.eval.ctx_sizes, items_per_task=cfg.eval.items_per_task,
+            num_workers=cfg.eval.num_workers, prefetch_factor=cfg.eval.prefetch_factor,
+            persistent_workers=False, local_ctx_size=lcs,
+            bfs_width=bw, num_walks=cfg.eval.num_walks,
+            walk_length=cfg.eval.walk_length, prefer_latest=pl,
+            bool_as_num=cfg.eval.bool_as_num, skip_text_cols=cfg.eval.skip_text_cols,
+            mmap_populate=cfg.eval.mmap_populate, balance_labels=cfg.eval.balance_labels,
+            ablate_schema_semantics=cfg.eval.ablate_schema_semantics,
+            embedding_model=cfg.model.embedding_model, d_text=cfg.model.d_text,
+            shuffle_seed=cfg.eval.shuffle_seed, context_seed=cfg.eval.context_seed,
+            vector_db_path=cfg.eval.vector_db_path, train_only_fallback=False,
+            global_rank=rank, local_rank=local_rank,
+            world_size=world_size, ddp=ddp, device=device,
+        ))
+        for i, (lcs, bw, pl) in enumerate(cfg.eval.lcs_bw_pl_grid)
+    ] if val_tasks else []
 
     # ---- preemption: SIGTERM/SIGUSR1 -> save + exit (cooperatively across ranks) ----
     preempt = {"flag": False}
@@ -339,25 +348,29 @@ def main(cfg: Config) -> None:
                                 "metric": "auc" if tt == "clf" else cfg.eval.reg_metric}
 
     def run_eval(step):
-        if evaluator is None:
+        if not evaluators:
             return
         nets = [(raw_net, "")]
         if swa.n > 0:
             swa.sync_to(swa_net.named_parameters())
             nets.append((swa_net, "swa_"))
-        metrics = eval_avg_metrics(evaluator, nets, cfg.eval.ctx_sizes, cfg.eval.reg_metric)
+        metrics = {}
+        for tag, evaluator in evaluators:
+            tagged_nets = [(n, tag + p) for n, p in nets]
+            metrics.update(eval_avg_metrics(evaluator, tagged_nets,
+                                            cfg.eval.ctx_sizes, cfg.eval.reg_metric))
+        # Best-checkpoint tracking follows the primary (untagged) grid entry.
         consider(metrics, step)
         if is_main:
             with open(out_dir / "val_metrics.jsonl", "a") as f:
                 f.write(json.dumps({"step": step, "swa_n": swa.n, "metrics": metrics}) + "\n")
-            for prefix, label in [("", "live"), ("swa_", "swa")]:
-                if prefix in metrics:
-                    m = metrics[prefix]
-                    print(f"  [eval step={step} {label}] clf_auc={m['clf']} "
-                          f"{cfg.eval.reg_metric}={m['reg']}", flush=True)
+            for prefix, m in metrics.items():
+                label = prefix.rstrip("_") or "live"
+                print(f"  [eval step={step} {label}] clf_auc={m['clf']} "
+                      f"{cfg.eval.reg_metric}={m['reg']}", flush=True)
             if use_wandb:
                 wandb.log({
-                    f"val/{('swa_' if p else '')}{tt}": metrics[p][tt]
+                    f"val/{p}{tt}": metrics[p][tt]
                     for p in metrics for tt in metrics[p]
                     if metrics[p][tt] is not None
                 }, step=step)
