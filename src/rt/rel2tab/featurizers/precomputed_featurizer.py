@@ -36,7 +36,7 @@ class PrecomputedFeaturizer(Featurizer):
     """
 
     def __init__(self, pre_dir, eval_splits, features_subdir):
-        from rt.tasks import eval_tasks
+        from rt.data import eval_tasks
 
         # (db, table) -> (features_tensor, min_offset)
         self._features: dict[tuple[str, str], tuple[torch.Tensor, int]] = {}

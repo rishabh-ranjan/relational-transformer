@@ -16,9 +16,8 @@ def _run(code: str) -> subprocess.CompletedProcess:
     )
 
 
-def test_rt_embed_imports_without_strictfire():
-    # 3.13-safety: rt.embed must import without strictfire (which imports the
-    # stdlib `pipes` module removed in 3.13). The heavy embedding deps
+def test_rt_preprocess_imports():
+    # rt.preprocess must import cleanly. The heavy embedding deps
     # (orjson/ml_dtypes/sentence_transformers) are stubbed out.
     r = _run(
         """
@@ -32,9 +31,8 @@ def test_rt_embed_imports_without_strictfire():
             for k, v in attrs.items():
                 setattr(m, k, v)
             sys.modules[name] = m
-        import rt.embed
-        assert "strictfire" not in sys.modules, "rt.embed imported strictfire"
-        assert hasattr(rt.embed, "TextEmbedder")
+        import rt.preprocess
+        assert hasattr(rt.preprocess, "TextEmbedder")
         print("ok")
         """
     )

@@ -78,7 +78,7 @@ class SQLFeaturizer(Featurizer):
     """
 
     def __init__(self, pre_dir, eval_splits, db):
-        from rt.tasks import eval_tasks
+        from rt.data import eval_tasks
 
         pre_dir = str(Path(pre_dir).expanduser())
 

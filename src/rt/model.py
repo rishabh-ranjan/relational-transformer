@@ -325,7 +325,6 @@ class RelationalTransformer(nn.Module):
             model = RelationalTransformer.from_pretrained("stanford-star/rt-j/classification")
             model = RelationalTransformer.from_pretrained("/path/to/checkpoint")
         """
-        from rt.checkpoints import MODEL_DIM_KEYS, load_model, resolve_checkpoint
 
         config, model_path = resolve_checkpoint(
             model_id_or_path, revision=revision, subfolder=subfolder
@@ -569,3 +568,109 @@ class RelationalTransformer(nn.Module):
             yhat = yhat_dict[val_key].squeeze(-1)  # (B, S)
             preds[ctx_size] = (yhat * sorted_is_targets.to(yhat.dtype)).sum(dim=1).cpu()
         return preds
+
+
+# -------------------------------------------------------------------------- #
+# Checkpoint IO (save/load, local or Hub)
+# -------------------------------------------------------------------------- #
+import json
+from importlib.metadata import PackageNotFoundError, version
+from pathlib import Path
+
+from rt.data import resolve_repo
+
+try:
+    _RT_VERSION = version("relational-transformer")
+except PackageNotFoundError:  # running from a source tree without an install
+    _RT_VERSION = None
+
+# huggingface_hub user-agent so Hub downloads are attributed to this library.
+_HF_UA = {"library_name": "relational-transformer", "library_version": _RT_VERSION}
+
+CONFIG_FILE = "config.json"
+MODEL_FILE = "model.safetensors"
+MODEL_DIM_KEYS = ("num_blocks", "d_model", "d_text", "num_heads", "d_ff")
+
+
+def save_model(state_dict, path, metadata: dict | None = None) -> None:
+    """Save a flat tensor ``state_dict`` to ``path`` as safetensors.
+
+    ``metadata`` (e.g. ``{"step": 1000}``) is coerced to a str→str header, as
+    safetensors metadata only holds strings.
+    """
+    from safetensors.torch import save_file
+
+    meta = {str(k): str(v) for k, v in (metadata or {}).items()}
+    save_file(state_dict, str(path), metadata=meta or None)
+
+
+def load_model(path):
+    """Load a flat tensor ``state_dict`` from a ``.safetensors`` checkpoint."""
+    from safetensors.torch import load_file
+
+    return load_file(str(path))
+
+
+def resolve_checkpoint(
+    spec, *, revision: str | None = None, subfolder: str | None = None
+) -> tuple[dict, Path]:
+    """Return ``(config, model_path)`` for a local or Hub checkpoint.
+
+    ``spec`` may be: a local weights file (``model.safetensors``; config from a
+    sibling ``config.json`` if present), a local directory, or a Hub
+    ``org/repo[/subdir]``. ``subfolder`` selects a sub-directory within the
+    repo/directory (the HuggingFace-idiomatic way to pick a checkpoint;
+    equivalent to appending it to ``spec``). Within a directory, an explicit
+    ``config["checkpoint_file"]`` wins, else ``model.safetensors``.
+    """
+    p = Path(spec).expanduser()
+    if p.is_file():
+        cfg_path = p.with_name(CONFIG_FILE)
+        config = json.loads(cfg_path.read_text()) if cfg_path.exists() else {}
+        return config, p
+    if p.is_dir():
+        d = p / subfolder if subfolder else p
+    else:
+        from huggingface_hub import snapshot_download
+
+        repo_id, subdir = resolve_repo(spec)
+        subdir = "/".join(part for part in (subdir, subfolder) if part)
+        local = snapshot_download(
+            repo_id=repo_id,
+            revision=revision,
+            allow_patterns=[f"{subdir}/*"] if subdir else None,
+            **_HF_UA,
+        )
+        d = Path(local) / subdir if subdir else Path(local)
+    config = json.loads((d / CONFIG_FILE).read_text())
+    return config, d / config.get("checkpoint_file", MODEL_FILE)
+
+
+def load_rt_model(
+    spec,
+    *,
+    device: str = "cpu",
+    compile: bool = False,
+    revision: str | None = None,
+    subfolder: str | None = None,
+    model_kwargs: dict | None = None,
+):
+    """Resolve a checkpoint, build the RelationalTransformer, load its weights.
+
+    Returns ``(model, config)``. Thin backward-compatible wrapper around
+    :meth:`rt.model.RelationalTransformer.from_pretrained` (the HuggingFace-style
+    entry point, which returns just the model with ``config`` attached as
+    ``model.config``). ``model_kwargs`` overrides/fills model dims when a
+    checkpoint has no ``config.json`` (e.g. a raw internal ckpt during dev).
+    """
+    from rt.model import RelationalTransformer
+
+    model = RelationalTransformer.from_pretrained(
+        spec,
+        device=device,
+        compile=compile,
+        revision=revision,
+        subfolder=subfolder,
+        **(model_kwargs or {}),
+    )
+    return model, model.config

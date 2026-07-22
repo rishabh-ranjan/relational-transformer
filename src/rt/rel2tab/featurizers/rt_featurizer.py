@@ -102,7 +102,7 @@ class RTFeaturizer(Featurizer, nn.Module):
             materialize_attn_masks=materialize_attn_masks,
         )
         if load_ckpt_path is not None:
-            from rt.checkpoints import load_model
+            from rt.model import load_model
 
             raw = load_model(Path(load_ckpt_path).expanduser())
             state_dict = {k.removeprefix("_orig_mod."): v for k, v in raw.items()}
@@ -112,7 +112,7 @@ class RTFeaturizer(Featurizer, nn.Module):
         self.rt_model.eval()
 
         from rt.data import RustlerDataset
-        from rt.tasks import eval_tasks
+        from rt.data import eval_tasks
 
         all_tasks = eval_tasks(pre_dir, splits=tuple(eval_splits))
         if db is not None:

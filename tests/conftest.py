@@ -32,7 +32,7 @@ def tiny_checkpoint(tmp_path, tiny_dims):
     Returns ``(checkpoint_dir, source_model)``.
     """
     from rt import RelationalTransformer
-    from rt.checkpoints import CONFIG_FILE, MODEL_FILE, save_model
+    from rt.model import CONFIG_FILE, MODEL_FILE, save_model
 
     src = RelationalTransformer(
         **tiny_dims, compile=False, materialize_attn_masks=True

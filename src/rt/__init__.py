@@ -7,7 +7,7 @@
     model = RelationalTransformer.from_pretrained("/path/to/checkpoint")
 
 Lower-level helpers (load_rt_model, resolve_checkpoint, save_model) live in
-:mod:`rt.checkpoints`.
+:mod:`rt.model`.
 """
 
 from importlib.metadata import PackageNotFoundError, version

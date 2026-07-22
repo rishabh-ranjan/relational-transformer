@@ -46,7 +46,7 @@ class RDBLearnFeaturizer(Featurizer):
         from rdblearn.config import RDBLearnConfig
         from rdblearn.datasets import RDBDataset
         from rdblearn.estimator import RDBLearnEstimator
-        from rt.tasks import eval_tasks
+        from rt.data import eval_tasks
         from sklearn.impute import SimpleImputer
         from sklearn.linear_model import LogisticRegression, Ridge
         from sklearn.pipeline import make_pipeline

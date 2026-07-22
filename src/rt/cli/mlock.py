@@ -10,7 +10,7 @@ optional convenience for fast debug iterations; needs a high RLIMIT_MEMLOCK
 
 import tyro
 
-from rt.mlock import MlockConfig, main
+from rt.data import MlockConfig, mlock_main as main
 
 
 def default_config() -> MlockConfig:

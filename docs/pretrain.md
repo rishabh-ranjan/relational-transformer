@@ -98,7 +98,7 @@ every `--resume-save-mins` minutes (default 20) bounds lost progress.
 By default each run re-populates the preprocessed data into RAM at startup. When
 iterating on training code, that reload is wasted work on every restart. Lock the
 data into the page cache **once** with a long-lived holder
-(`rt.mlock`), then train with `--no-mmap-populate` so reads hit the
+(`rt.cli.mlock`), then train with `--no-mmap-populate` so reads hit the
 locked cache:
 
 ```bash
@@ -109,7 +109,7 @@ pixi run pretrain --pre-dir <PRE_DIR> --out-dir ~/ckpts/run1 --no-mmap-populate
 ```
 
 This is purely a convenience for repeated local runs; it is **not required**.
-(`mlock.py` needs a high `RLIMIT_MEMLOCK` — e.g. `ulimit -l unlimited` or
+(`mlock` needs a high `RLIMIT_MEMLOCK` — e.g. `ulimit -l unlimited` or
 slurm `--propagate=MEMLOCK` — to lock the full mixture.)
 
 ## Loading checkpoints
@@ -118,7 +118,7 @@ A trained run's `best_clf.safetensors` / `best_reg.safetensors` (+ the run's
 `config.json`) load directly:
 
 ```python
-from rt.checkpoints import load_rt_model
+from rt.model import load_rt_model
 model, config = load_rt_model("~/ckpts/run1/best_clf.safetensors", device="cuda")
 ```
 

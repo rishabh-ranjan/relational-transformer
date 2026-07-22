@@ -7,7 +7,7 @@ import json
 import torch
 
 from rt import RelationalTransformer
-from rt.checkpoints import (
+from rt.model import (
     CONFIG_FILE,
     MODEL_FILE,
     load_rt_model,

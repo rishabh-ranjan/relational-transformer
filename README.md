@@ -37,7 +37,7 @@ from huggingface_hub import snapshot_download
 
 from rt import RelationalTransformer
 from rt.eval import build_evaluator
-from rt.tasks import tasks_from_preprocessed
+from rt.data import eval_tasks
 
 device = (
     "cuda" if torch.cuda.is_available()

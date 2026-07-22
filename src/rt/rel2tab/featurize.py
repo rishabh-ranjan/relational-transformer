@@ -88,7 +88,7 @@ def _build_featurizer(cfg, db, device):
 
 def _featurize_db(featurizer_cfg, db, out_subdir, featurize_batch_size, local_rank):
     """Process all tables for a single db. Runs in a worker process."""
-    from rt.tasks import eval_tasks
+    from rt.data import eval_tasks
 
     from rt.rel2tab.featurizer import (
         get_table_splits,
@@ -181,7 +181,7 @@ def _worker(args):
 
 
 def main(cfg: FeaturizeConfig):
-    from rt.tasks import eval_tasks
+    from rt.data import eval_tasks
 
     if dist.is_initialized():
         global_rank = dist.get_rank()
