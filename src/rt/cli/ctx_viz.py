@@ -9,7 +9,7 @@ def default_config() -> Config:
     return Config(
         host="0.0.0.0",
         port=8765,
-        pre_root="pre",
+        pre_root="stanford-star/relbench-preprocessed",
         quiet=False,
         port_fallback=True,
     )
