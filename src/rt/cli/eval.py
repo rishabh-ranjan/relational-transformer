@@ -39,7 +39,7 @@ def default_config() -> Config:
             walk_length=20,
             freq=None,
             items_per_task=10_000_000,
-            ctx_sizes=[8192],  # only the first entry is used
+            ctx_sizes=[8192],
             bool_as_num=False,
             skip_text_cols=False,
             mmap_populate=False,

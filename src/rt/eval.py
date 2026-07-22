@@ -30,6 +30,10 @@ from rt.recipes import get_tasks
 
 def main(cfg: Config) -> None:
     ev_cfg = cfg.eval
+    assert len(ev_cfg.ctx_sizes) == 1, (
+        "standalone eval writes one submission per run and needs exactly one "
+        "ctx size; multi-size ctx_sizes is an in-loop training-eval feature"
+    )
     ctx_size = ev_cfg.ctx_sizes[0]
     device = "cuda" if torch.cuda.is_available() else "cpu"
 
