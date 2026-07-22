@@ -134,9 +134,6 @@ Tuning (on validation) and ensembling (on test) engage automatically whenever
 the grid has more than one entry or `--eval.ensemble-size` exceeds 1: pick the
 best context config per task, then average that config over the seeds.
 
-For tabular comparisons through this same eval path, see
-[baselines.md](baselines.md).
-
 ## Optional: FAISS vector-DB sampler
 
 The default sampler is FAISS-free. The opt-in FAISS vector-db sampler (for

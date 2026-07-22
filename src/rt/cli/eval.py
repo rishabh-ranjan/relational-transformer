@@ -1,4 +1,4 @@
-"""Evaluate an RT checkpoint (or rel2tab baseline config) on the RelBench tasks.
+"""Evaluate an RT checkpoint on the RelBench tasks.
 
 Loads --model.load-ckpt-path (local dir/file or Hub repo such as
 stanford-star/rt-j/classification), evaluates every RelBench task of the

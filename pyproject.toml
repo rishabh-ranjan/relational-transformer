@@ -29,9 +29,6 @@ dependencies = [
 # declared here (PyPI forbids URL deps) -- install it manually:
 #   pip install "git+https://github.com/snap-stanford/relbench.git@<rev>"
 eval = ["scikit-learn<1.6.0"]
-# rel2tab tabular baselines (rt.cli.baseline); tabicl/tabpfn/rdblearn extras are
-# research-only and not published -- install manually if needed.
-baseline = ["scikit-learn<1.6.0", "xgboost", "pandas", "duckdb"]
 # wandb logging for rt.cli.train (off by default).
 train = ["wandb"]
 test = ["pytest", "polars"]
@@ -96,5 +93,4 @@ upload = "python -m rt.cli.preprocess upload"
 train = { cmd = "torchrun --standalone --nproc-per-node=auto -m rt.cli.train", depends-on = ["build-sampler"] }
 # eval is single-process (one GPU) so per-item rows stay in task-table order.
 eval = { cmd = "python -m rt.cli.eval", depends-on = ["build-sampler"] }
-baseline = { cmd = "python -m rt.cli.baseline", depends-on = ["build-sampler"] }
 test = { cmd = "pytest", depends-on = ["build-sampler"] }

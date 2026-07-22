@@ -25,46 +25,37 @@ def main(cfg: Config) -> None:
     ctx_size = ev_cfg.ctx_sizes[0]
     device = "cuda" if torch.cuda.is_available() else "cpu"
 
-    if isinstance(cfg.model, Rel2TabModelConfig):
-        # rel2tab tabular baseline: (featurizer, predictor) through the same
-        # eval path as RT.
-        net = cfg.model.build(device)
-        embedding_model = cfg.model.embedding_model
-        d_text = cfg.model.d_text
-        print(f"baseline: {type(cfg.model.featurizer).__name__} + "
-              f"{type(cfg.model.predictor).__name__} on {device}")
-    else:
-        checkpoint = cfg.model.load_ckpt_path
-        assert checkpoint is not None, "model.load_ckpt_path is required"
-        net, config = load_rt_model(checkpoint, device=device, compile=False)
-        net = net.to(torch.bfloat16)
-        embedding_model = config["embedding_model"]
-        d_text = config["d_text"]
-        print(f"loaded {config.get('name', checkpoint)} "
-              f"(embed={embedding_model}) on {device}")
-        if config.get("task_type") in ("clf", "reg"):
-            print(f"warning: this checkpoint was selected/trained for "
-                  f"task_type={config['task_type']}; it will be evaluated on "
-                  f"both clf and reg tasks", flush=True)
-        # The checkpoint's own config drives model construction; cfg.model dims
-        # are ignored here. Warn when they disagree so a stale CLI default is
-        # visible rather than silently shadowed.
-        ckpt_model = config.get("model", {})
-        mismatches = [
-            f"{k}: config={v} checkpoint={ckpt_model[k]}"
-            for k, v in (("num_blocks", cfg.model.num_blocks),
-                         ("d_model", cfg.model.d_model),
-                         ("d_text", cfg.model.d_text),
-                         ("num_heads", cfg.model.num_heads),
-                         ("d_ff", cfg.model.d_ff))
-            if k in ckpt_model and ckpt_model[k] != v
-        ]
-        if cfg.model.embedding_model != embedding_model:
-            mismatches.append(f"embedding_model: config={cfg.model.embedding_model} "
-                              f"checkpoint={embedding_model}")
-        if mismatches:
-            print("warning: model config ignored for checkpoint eval; differs from "
-                  "the checkpoint's own config: " + "; ".join(mismatches), flush=True)
+    checkpoint = cfg.model.load_ckpt_path
+    assert checkpoint is not None, "model.load_ckpt_path is required"
+    net, config = load_rt_model(checkpoint, device=device, compile=False)
+    net = net.to(torch.bfloat16)
+    embedding_model = config["embedding_model"]
+    d_text = config["d_text"]
+    print(f"loaded {config.get('name', checkpoint)} "
+          f"(embed={embedding_model}) on {device}")
+    if config.get("task_type") in ("clf", "reg"):
+        print(f"warning: this checkpoint was selected/trained for "
+              f"task_type={config['task_type']}; it will be evaluated on "
+              f"both clf and reg tasks", flush=True)
+    # The checkpoint's own config drives model construction; cfg.model dims
+    # are ignored here. Warn when they disagree so a stale CLI default is
+    # visible rather than silently shadowed.
+    ckpt_model = config.get("model", {})
+    mismatches = [
+        f"{k}: config={v} checkpoint={ckpt_model[k]}"
+        for k, v in (("num_blocks", cfg.model.num_blocks),
+                     ("d_model", cfg.model.d_model),
+                     ("d_text", cfg.model.d_text),
+                     ("num_heads", cfg.model.num_heads),
+                     ("d_ff", cfg.model.d_ff))
+        if k in ckpt_model and ckpt_model[k] != v
+    ]
+    if cfg.model.embedding_model != embedding_model:
+        mismatches.append(f"embedding_model: config={cfg.model.embedding_model} "
+                          f"checkpoint={embedding_model}")
+    if mismatches:
+        print("warning: model config ignored for checkpoint eval; differs from "
+              "the checkpoint's own config: " + "; ".join(mismatches), flush=True)
 
 
     eval_kwargs = dict(
@@ -96,7 +87,7 @@ def main(cfg: Config) -> None:
                      **eval_kwargs)
         return
 
-        tasks = get_tasks(ev_cfg.pre_dir, ev_cfg.db_task_list, tuple(ev_cfg.splits))
+    tasks = get_tasks(ev_cfg.pre_dir, ev_cfg.db_task_list, tuple(ev_cfg.splits))
     if not tasks:
         raise SystemExit(f"no tasks found in {ev_cfg.pre_dir}")
     lcs, bw, pl = grid[0]
