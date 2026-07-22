@@ -83,24 +83,13 @@ def main(cfg: Config) -> None:
             print("warning: model config ignored for checkpoint eval; differs from "
                   "the checkpoint's own config: " + "; ".join(mismatches), flush=True)
 
-    # Effective task-type filter: the model's own kind (an RT checkpoint is clf-
-    # or reg-only) intersected with the configured eval.task_type restriction.
-    kinds = {"clf", "reg"}
-    if model_task_type in kinds:
-        kinds &= {model_task_type}
-    if ev_cfg.task_type != "both":
-        kinds &= {ev_cfg.task_type}
+    # An RT checkpoint is clf- or reg-only (its config says which); baselines
+    # handle both task types.
+    kinds = {model_task_type} if model_task_type in ("clf", "reg") else {"clf", "reg"}
     task_type = "/".join(sorted(kinds))  # for error messages
 
     def of_kind(tasks):
         return [t for t in tasks if t.task_type in kinds]
-
-    sel = set(ev_cfg.tasks) if ev_cfg.tasks else None
-
-    def selected(tasks):
-        if sel is None:
-            return tasks
-        return [t for t in tasks if t.db_name in sel or f"{t.db_name}/{t.table_name}" in sel]
 
     eval_kwargs = dict(
         embedding_model=embedding_model, d_text=d_text, device=device,
@@ -121,8 +110,8 @@ def main(cfg: Config) -> None:
             "eval.context_seed only applies to single-config runs"
         )
 
-        val_tasks = selected(of_kind(eval_tasks(ev_cfg.pre_dir, splits=("val",))))
-        test_tasks = selected(of_kind(eval_tasks(ev_cfg.pre_dir, splits=("test",))))
+        val_tasks = of_kind((eval_tasks(ev_cfg.pre_dir, splits=("val",))))
+        test_tasks = of_kind((eval_tasks(ev_cfg.pre_dir, splits=("test",))))
         if not test_tasks:
             raise SystemExit(f"no {task_type} tasks found in {ev_cfg.pre_dir}")
         run_ensemble(net, ev_cfg.pre_dir, val_tasks, test_tasks, grid=grid,
@@ -131,7 +120,7 @@ def main(cfg: Config) -> None:
                      **eval_kwargs)
         return
 
-        tasks = selected(of_kind(eval_tasks(ev_cfg.pre_dir, splits=tuple(ev_cfg.splits))))
+        tasks = of_kind((eval_tasks(ev_cfg.pre_dir, splits=tuple(ev_cfg.splits))))
     if not tasks:
         raise SystemExit(f"no {task_type} tasks found in {ev_cfg.pre_dir}")
     lcs, bw, pl = grid[0]

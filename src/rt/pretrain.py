@@ -118,8 +118,6 @@ def main(cfg: Config) -> None:
         "in-loop eval does not ensemble; use rt.cli.eval on a saved checkpoint "
         "for eval.ensemble_size > 1"
     )
-    assert cfg.eval.tasks is None, "in-loop eval evaluates the full eval task set"
-    assert cfg.eval.task_type == "both", "in-loop eval evaluates both task types"
     assert not cfg.eval.write_csv and not cfg.eval.out_dir, (
         "in-loop eval computes metrics only; submission CSVs come from rt.cli.eval"
     )

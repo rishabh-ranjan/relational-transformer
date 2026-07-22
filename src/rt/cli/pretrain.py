@@ -82,12 +82,10 @@ def default_config() -> Config:
             shuffle_seed=0,
             context_seed=0,
             vector_db_path=None,
-            tasks=None,
             lcs_bw_pl_grid=[(256, 32, True)],
             ensemble_size=1,
             out_dir="",
             write_csv=False,
-            task_type="both",
         ),
     )
 

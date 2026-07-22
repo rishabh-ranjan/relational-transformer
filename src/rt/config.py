@@ -87,9 +87,6 @@ class EvalConfig:
     # See TrainConfig.vector_db_path.
     vector_db_path: str | None
     # --- standalone evaluation (rt.eval) ---
-    # restrict to these tasks; each entry is a 'db' (all its tasks) or
-    # 'db/task-table' (one task), e.g. rel-f1/driver-top3. None = all tasks.
-    tasks: list[str] | None
     # Candidate (local_ctx_size, bfs_width, prefer_latest) context configs.
     # A single entry is used directly; multiple entries are tuned per task on
     # the validation split. In-loop training eval uses the first entry.
@@ -101,8 +98,6 @@ class EvalConfig:
     out_dir: str
     # skip writing per-item prediction CSVs.
     write_csv: bool
-    # restrict tasks by type (baselines): clf | reg | both.
-    task_type: str
 
 
 @dataclass
