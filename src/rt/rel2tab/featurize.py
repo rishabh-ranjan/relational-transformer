@@ -31,12 +31,12 @@ import numpy as np
 import torch
 import torch.distributed as dist
 
-from rt.rel2tab.featurizers import (
+from rt.rel2tab.featurizers.rdblearn_featurizer import (
     RDBLearnFeaturizer,
     RDBLearnFeaturizerConfig,
 )
-from rt.rel2tab.featurizers import RTFeaturizer, RTFeaturizerConfig
-from rt.rel2tab.featurizers import SQLFeaturizer, SQLFeaturizerConfig
+from rt.rel2tab.featurizers.rt_featurizer import RTFeaturizer, RTFeaturizerConfig
+from rt.rel2tab.featurizers.sql_featurizer import SQLFeaturizer, SQLFeaturizerConfig
 
 
 @dataclass

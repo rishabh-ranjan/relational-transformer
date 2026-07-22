@@ -10,37 +10,37 @@ Registry maps (dataset_short, task_name) -> {
 }
 """
 
-from rt.rel2tab.sql_queries.rel_trial import (
+from rt.rel2tab.featurizers.sql_queries.rel_trial import (
     STUDY_OUTCOME_SQL,
     STUDY_ADVERSE_SQL,
     SITE_SUCCESS_SQL,
 )
-from rt.rel2tab.sql_queries.rel_avito import (
+from rt.rel2tab.featurizers.sql_queries.rel_avito import (
     AD_CTR_SQL,
     USER_VISITS_SQL,
     USER_CLICKS_SQL,
 )
-from rt.rel2tab.sql_queries.rel_f1 import (
+from rt.rel2tab.featurizers.sql_queries.rel_f1 import (
     DRIVER_POSITION_SQL,
     DRIVER_DNF_SQL,
     DRIVER_TOP3_SQL,
 )
-from rt.rel2tab.sql_queries.rel_hm import (
+from rt.rel2tab.featurizers.sql_queries.rel_hm import (
     USER_CHURN_SQL as HM_USER_CHURN_SQL,
     ITEM_SALES_SQL,
 )
-from rt.rel2tab.sql_queries.rel_stack import (
+from rt.rel2tab.featurizers.sql_queries.rel_stack import (
     USER_ENGAGEMENT_SQL,
     POST_VOTES_SQL,
     USER_BADGE_SQL,
 )
-from rt.rel2tab.sql_queries.rel_amazon import (
+from rt.rel2tab.featurizers.sql_queries.rel_amazon import (
     USER_CHURN_SQL as AMAZON_USER_CHURN_SQL,
     USER_LTV_SQL,
     ITEM_CHURN_SQL,
     ITEM_LTV_SQL,
 )
-from rt.rel2tab.sql_queries.rel_event import (
+from rt.rel2tab.featurizers.sql_queries.rel_event import (
     USER_ATTENDANCE_SQL,
     USER_REPEAT_SQL,
     USER_IGNORE_SQL,

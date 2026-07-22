@@ -1,570 +1,69 @@
-"""rel2tab predictors: fit on in-context labels, predict the target rows."""
+"""Batched TabICL predictor.
 
-from __future__ import annotations
+Speeds up TabICL inference by stacking many independent (X_train, y_train,
+X_test) triplets into a single TabICL forward pass at the GPU tensor level.
+The existing TabICL sklearn wrapper batches only ensemble views of the *same*
+dataset; this class batches *different* datasets together by exploiting the
+``(B, T, H)`` batch dimension that TabICL natively supports.
 
-from abc import ABC, abstractmethod
-from dataclasses import dataclass
-import numpy as np
+Real workloads have many distinct ``train_size`` values per ``predict_batch``
+call (the entity-aware featurizers filter to per-target subsets, so almost
+every item has a unique row count).  Profiling on the smoke_test eval shows
+~86 distinct sizes per call across ~112 items, so grouping by exact
+``train_size`` collapses to groups of size 1.  We instead bucket each item
+to ``bin_size = next_pow2(max(train_size, min_bin_size))`` and pad shorter
+items up to ``bin_size`` with a real **key-padding mask** so padded rows
+never appear as keys in any attention layer that the test row sees:
+
+  * In TabICL's ICL transformer, the test query attends to all train
+    positions (the first ``train_size`` of the sequence).  We mask padded
+    train positions out of those keys.
+  * In TabICL's column-wise embedding, every induced-self-attention block's
+    stage-1 has inducing points attending to train positions to compute
+    distribution-aware embeddings.  We mask the same padded positions there
+    so they don't bias the column statistics.
+  * Row-wise interaction processes each row independently across columns,
+    so padded rows never appear as keys for real rows; no mask needed there.
+
+The mask is installed via a thread-local that the patched
+``MultiheadAttentionBlock.forward`` reads.  When the thread-local is unset
+(any caller outside this predictor) the patched function is a pass-through,
+so this does not affect other code that uses tabicl in the same process.
+
+Items are first checked for trivial cases (no train data, all-identical
+features, single-class labels) and short-circuited.  The remaining items are
+grouped by ``(task_type, bin_size, num_classes, num_features)`` and each
+group is then run through TabICL in chunks of ``max_batch_size``.
+Per-task feature scaling is a simple z-score; regression labels are also
+z-scored and inverse-scaled afterwards.  The per-task ensemble-view
+preprocessing of TabICLClassifier / TabICLRegressor (8 normalizations × class
+shuffles) is intentionally skipped to keep the path purely batched.
+
+Set ``TABICL_BATCHED_PROFILE_PATH=/path/to/file.jsonl`` to log per-call
+``(n_train, task_type, n_features)`` triples for offline analysis.
+"""
+
 import json
+import math
 import os
 import threading
-from concurrent.futures import ThreadPoolExecutor
-from typing import Literal
-import math
 from collections import defaultdict
 from contextlib import contextmanager
+from dataclasses import dataclass
+
+import numpy as np
 import torch
-import importlib as _importlib  # noqa: E402
-import sys as _sys  # noqa: E402
 
+from rt.rel2tab.predictor import Predictor
 
-# -------------------------------------------------------------------------- #
-# predictor
-# -------------------------------------------------------------------------- #
-class Predictor(ABC):
-    """Maps train rows and a test-row feature into a single scalar prediction.
-
-    Called once per (batch-item, context-size) after the featurizer has
-    selected/transformed the visible rows.
-    """
-
-    @abstractmethod
-    def predict(self, train_features, train_labels, test_features, task_type):
-        """Produce a prediction for one target row.
-
-        Args:
-            train_features: (num_train, d_feat) Tensor, or None if the
-                featurizer does not produce features.
-            train_labels: 1-D float Tensor of train labels (may be empty).
-            test_features: (d_feat,) Tensor, or None.
-            task_type: "clf" for binary classification, "reg" for regression.
-
-        Returns:
-            Scalar float: probability in [0, 1] for clf, real value for reg.
-            Convention when no train data is available: 0.5 for clf, 0.0 for reg.
-        """
-
-
-# -------------------------------------------------------------------------- #
-# mean_predictor
-# -------------------------------------------------------------------------- #
-@dataclass
-class MeanPredictorConfig:
-    """Config for MeanPredictor (no fields needed)."""
-
-    def build(self):
-        return MeanPredictor()
-
-
-class MeanPredictor(Predictor):
-    """Predict the mean of training labels (ignores features)."""
-
-    def predict(self, train_features, train_labels, test_features, task_type):
-        if len(train_labels) == 0:
-            return 0.5 if task_type == "clf" else 0.0
-        return train_labels.mean().item()
-
-
-# -------------------------------------------------------------------------- #
-# linear_predictor
-# -------------------------------------------------------------------------- #
-@dataclass
-class LinearPredictorConfig:
-    """Config for LinearPredictor (no fields needed)."""
-
-    def build(self):
-        return LinearPredictor()
-
-
-class LinearPredictor(Predictor):
-    """Fit an sklearn linear (regression) or logistic (classification) model."""
-
-    def predict(self, train_features, train_labels, test_features, task_type):
-        from sklearn.linear_model import LinearRegression, LogisticRegression
-
-        if train_features is None or len(train_labels) < 2:
-            return 0.5 if task_type == "clf" else 0.0
-
-        X_train = train_features.float().cpu().numpy()
-        y_train = train_labels.float().cpu().numpy()
-        X_test = test_features.float().cpu().numpy().reshape(1, -1)
-
-        if task_type == "clf":
-            y_int = (y_train > 0).astype(int)
-            if len(np.unique(y_int)) < 2:
-                return float(y_int[0])
-            model = LogisticRegression(max_iter=200, solver="lbfgs")
-            model.fit(X_train, y_int)
-            return float(model.predict_proba(X_test)[0, 1])
-        else:
-            model = LinearRegression()
-            model.fit(X_train, y_train)
-            return float(model.predict(X_test)[0])
-
-
-# -------------------------------------------------------------------------- #
-# ridge_predictor: Ridge predictor — regularized linear model for few-shot tabular prediction.
-# -------------------------------------------------------------------------- #
-@dataclass
-class RidgePredictorConfig:
-    alpha_clf: float
-    alpha_reg: float
-
-    def build(self):
-        return RidgePredictor(alpha_clf=self.alpha_clf, alpha_reg=self.alpha_reg)
-
-
-class RidgePredictor(Predictor):
-    """Fit a regularized linear model per prediction."""
-
-    def __init__(self, alpha_clf, alpha_reg):
-        self.alpha_clf = alpha_clf
-        self.alpha_reg = alpha_reg
-
-    def predict(self, train_features, train_labels, test_features, task_type):
-        from sklearn.linear_model import Ridge, LogisticRegression
-
-        if train_features is None or len(train_labels) < 2:
-            return 0.5 if task_type == "clf" else 0.0
-
-        X_train = train_features.float().cpu().numpy()
-        y_train = train_labels.float().cpu().numpy()
-        X_test = test_features.float().cpu().numpy().reshape(1, -1)
-
-        # Standardize features to prevent numerical blowup
-        mean = X_train.mean(axis=0)
-        std = X_train.std(axis=0)
-        std[std == 0] = 1.0
-        X_train = (X_train - mean) / std
-        X_test = (X_test - mean) / std
-
-        if task_type == "clf":
-            y_int = (y_train > 0).astype(int)
-            if len(np.unique(y_int)) < 2:
-                return float(y_int[0])
-            model = LogisticRegression(
-                C=1.0 / max(self.alpha_clf, 1e-8),
-                max_iter=500,
-                solver="lbfgs",
-            )
-            model.fit(X_train, y_int)
-            return float(model.predict_proba(X_test)[0, 1])
-        else:
-            model = Ridge(alpha=self.alpha_reg)
-            model.fit(X_train, y_train)
-            return float(model.predict(X_test)[0])
-
-
-# -------------------------------------------------------------------------- #
-# lgbm_predictor: LightGBM predictor for the rel2tab pipeline.
-# -------------------------------------------------------------------------- #
-@dataclass
-class LGBMPredictorConfig:
-    n_estimators: int
-    num_leaves: int
-    learning_rate: float
-    min_child_samples: int
-    reg_lambda: float
-
-    def build(self):
-        return LGBMPredictor(
-            n_estimators=self.n_estimators,
-            num_leaves=self.num_leaves,
-            learning_rate=self.learning_rate,
-            min_child_samples=self.min_child_samples,
-            reg_lambda=self.reg_lambda,
-        )
-
-
-class LGBMPredictor(Predictor):
-    """Fit a LightGBM model per prediction."""
-
-    def __init__(
-        self,
-        n_estimators,
-        num_leaves,
-        learning_rate,
-        min_child_samples,
-        reg_lambda,
-    ):
-        self.params = dict(
-            n_estimators=n_estimators,
-            num_leaves=num_leaves,
-            learning_rate=learning_rate,
-            min_child_samples=min_child_samples,
-            reg_lambda=reg_lambda,
-            verbose=-1,
-        )
-
-    def predict(self, train_features, train_labels, test_features, task_type):
-        from lightgbm import LGBMClassifier, LGBMRegressor
-
-        if train_features is None or len(train_labels) < 2:
-            return 0.5 if task_type == "clf" else 0.0
-
-        X_train = train_features.float().cpu().numpy()
-        y_train = train_labels.float().cpu().numpy()
-        X_test = test_features.float().cpu().numpy().reshape(1, -1)
-
-        if task_type == "clf":
-            y_int = (y_train > 0).astype(int)
-            if len(np.unique(y_int)) < 2:
-                return float(y_int[0])
-            model = LGBMClassifier(**self.params)
-            model.fit(X_train, y_int)
-            return float(model.predict_proba(X_test)[0, 1])
-        else:
-            model = LGBMRegressor(**self.params)
-            model.fit(X_train, y_train)
-            return float(model.predict(X_test)[0])
-
-
-# -------------------------------------------------------------------------- #
-# xgboost_predictor: XGBoost predictor for the rel2tab pipeline.
-# -------------------------------------------------------------------------- #
-@dataclass
-class XGBoostHP:
-    """One global hyperparameter set (used for either clf or reg).
-
-    Args:
-        n_estimators: max boosting rounds (upper bound when early stopping on).
-        max_depth: tree depth.  2-4 is the sweet spot for <=400 rows.
-        learning_rate: shrinkage.  Smaller is steadier; pairs with more rounds.
-        min_child_weight: min sum of instance weight (hessian) per leaf —
-            higher = stronger regularization (fewer, larger leaves).
-        subsample: row subsampling per tree (stochastic regularization).
-        colsample_bytree: column subsampling per tree.  Important for the
-            high-dim RDBLearn rel-event features (~450 cols, few rows).
-        reg_lambda: L2 penalty on leaf weights.
-        reg_alpha: L1 penalty on leaf weights.
-        early_stopping_frac: if > 0, hold out this fraction of the in-context
-            labels (stratified for clf) to early-stop on n_estimators.
-    """
-
-    n_estimators: int
-    max_depth: int
-    learning_rate: float
-    min_child_weight: float
-    subsample: float
-    colsample_bytree: float
-    reg_lambda: float
-    reg_alpha: float
-    early_stopping_frac: float
-
-    def xgb_params(self, n_jobs):
-        return dict(
-            n_estimators=self.n_estimators,
-            max_depth=self.max_depth,
-            learning_rate=self.learning_rate,
-            min_child_weight=self.min_child_weight,
-            subsample=self.subsample,
-            colsample_bytree=self.colsample_bytree,
-            reg_lambda=self.reg_lambda,
-            reg_alpha=self.reg_alpha,
-            tree_method="hist",
-            n_jobs=n_jobs,
-            verbosity=0,
-        )
-
-
-@dataclass
-class XGBoostPredictorConfig:
-    """Config for XGBoostPredictor.
-
-    Carries two global HP sets — ``clf`` and ``reg`` — analogous to the Ridge
-    predictor's ``alpha_clf`` / ``alpha_reg`` split.
-
-    Args:
-        clf: HP set for classification tasks.
-        reg: HP set for regression tasks.
-        n_jobs: XGBoost threads per fit.  Kept to 1 because the outer per-item
-            loop is what we parallelize across (via SLURM/DDP workers);
-            per-fit threading on tiny data mostly adds overhead.
-    """
-
-    clf: XGBoostHP
-    reg: XGBoostHP
-    n_jobs: int
-
-    def build(self):
-        return XGBoostPredictor(clf=self.clf, reg=self.reg, n_jobs=self.n_jobs)
-
-
-class XGBoostPredictor(Predictor):
-    """Fit an XGBoost model per prediction (separate clf / reg HP sets)."""
-
-    def __init__(self, clf, reg, n_jobs):
-        self.clf_hp = clf
-        self.reg_hp = reg
-        self.n_jobs = n_jobs
-
-    def predict(self, train_features, train_labels, test_features, task_type):
-        from xgboost import XGBClassifier, XGBRegressor
-
-        if train_features is None or len(train_labels) < 2:
-            return 0.5 if task_type == "clf" else 0.0
-
-        X_train = train_features.float().cpu().numpy()
-        y_train = train_labels.float().cpu().numpy()
-        X_test = test_features.float().cpu().numpy().reshape(1, -1)
-
-        if task_type == "clf":
-            hp = self.clf_hp
-            y_int = (y_train > 0).astype(int)
-            if len(np.unique(y_int)) < 2:
-                return float(y_int[0])
-            # scale_pos_weight = (#neg / #pos) to counter class imbalance.
-            n_pos = int(y_int.sum())
-            n_neg = int(len(y_int) - n_pos)
-            spw = (n_neg / n_pos) if n_pos > 0 else 1.0
-            model = XGBClassifier(
-                **hp.xgb_params(self.n_jobs),
-                objective="binary:logistic",
-                eval_metric="logloss",
-                scale_pos_weight=spw,
-            )
-            self._fit(model, X_train, y_int, hp.early_stopping_frac, stratify=True)
-            return float(model.predict_proba(X_test)[0, 1])
-        else:
-            hp = self.reg_hp
-            model = XGBRegressor(
-                **hp.xgb_params(self.n_jobs),
-                objective="reg:squarederror",
-                eval_metric="mae",
-            )
-            self._fit(model, X_train, y_train, hp.early_stopping_frac, stratify=False)
-            return float(model.predict(X_test)[0])
-
-    def _fit(self, model, X, y, frac, stratify):
-        """Fit with optional early stopping on a held-out slice of X.
-
-        When ``frac == 0``, a plain fixed-round fit is used.
-        """
-        n = len(y)
-        # Need enough rows on both sides for a meaningful holdout; also require
-        # both classes present in train+val for clf.
-        n_val = int(round(frac * n)) if frac > 0 else 0
-        if n_val < 1 or (n - n_val) < 2:
-            model.set_params(early_stopping_rounds=None)
-            model.fit(X, y)
-            return
-
-        rng = np.random.RandomState(0)
-        if stratify and len(np.unique(y)) == 2:
-            idx_val = []
-            for cls in (0, 1):
-                cls_idx = np.where(y == cls)[0]
-                k = max(1, int(round(frac * len(cls_idx))))
-                k = min(k, len(cls_idx) - 1) if len(cls_idx) > 1 else 0
-                if k > 0:
-                    idx_val.extend(rng.choice(cls_idx, size=k, replace=False).tolist())
-            idx_val = np.array(sorted(idx_val), dtype=int)
-        else:
-            perm = rng.permutation(n)
-            idx_val = perm[:n_val]
-
-        if len(idx_val) < 1 or (n - len(idx_val)) < 2:
-            model.set_params(early_stopping_rounds=None)
-            model.fit(X, y)
-            return
-
-        mask = np.ones(n, dtype=bool)
-        mask[idx_val] = False
-        X_tr, y_tr = X[mask], y[mask]
-        X_va, y_va = X[~mask], y[~mask]
-        # Degenerate clf holdout (single class on either side): skip ES.
-        if stratify and (len(np.unique(y_tr)) < 2 or len(np.unique(y_va)) < 2):
-            model.set_params(early_stopping_rounds=None)
-            model.fit(X, y)
-            return
-
-        model.set_params(early_stopping_rounds=20)
-        model.fit(X_tr, y_tr, eval_set=[(X_va, y_va)], verbose=False)
-
-
-# -------------------------------------------------------------------------- #
-# xgboost_tuned: Tuned global XGBoost hyperparameter sets for the precomputed-feature
-# -------------------------------------------------------------------------- #
-# Optional runtime override: if env var XGB_TUNED_JSON points to a JSON file,
-# read tuned clf/reg HP sets from it. Lets a single job tune then eval with the
-# just-found winners without a source edit/commit. JSON schema:
-#   {"sql_features": {"clf": {<XGBoostHP fields>}, "reg": {...}},
-#    "rdblearn_features": {"clf": {...}, "reg": {...}}}
-_OVERRIDE_ENV = "XGB_TUNED_JSON"
-
-# ===================== SQL features (val-tuned) =====================
-SQL_TUNED_CLF = XGBoostHP(
-    n_estimators=200,
-    max_depth=3,
-    learning_rate=0.05,
-    min_child_weight=5.0,
-    subsample=0.8,
-    colsample_bytree=0.8,
-    reg_lambda=5.0,
-    reg_alpha=0.0,
-    early_stopping_frac=0.0,
-)
-SQL_TUNED_REG = XGBoostHP(
-    n_estimators=200,
-    max_depth=3,
-    learning_rate=0.05,
-    min_child_weight=5.0,
-    subsample=0.8,
-    colsample_bytree=0.8,
-    reg_lambda=5.0,
-    reg_alpha=0.0,
-    early_stopping_frac=0.0,
-)
-
-# =================== RDBLearn features (val-tuned) ===================
-RDBLEARN_TUNED_CLF = XGBoostHP(
-    n_estimators=200,
-    max_depth=3,
-    learning_rate=0.05,
-    min_child_weight=5.0,
-    subsample=0.8,
-    colsample_bytree=0.8,
-    reg_lambda=5.0,
-    reg_alpha=0.0,
-    early_stopping_frac=0.0,
-)
-RDBLEARN_TUNED_REG = XGBoostHP(
-    n_estimators=200,
-    max_depth=3,
-    learning_rate=0.05,
-    min_child_weight=5.0,
-    subsample=0.8,
-    colsample_bytree=0.8,
-    reg_lambda=5.0,
-    reg_alpha=0.0,
-    early_stopping_frac=0.0,
-)
-
-
-def tuned_xgboost_config(features_subdir):
-    """Return the val-tuned XGBoostPredictorConfig for a feature set.
-
-    ``features_subdir`` is "sql_features" or "rdblearn_features".
-    """
-    override_path = os.environ.get(_OVERRIDE_ENV)
-    if override_path and os.path.exists(override_path):
-        with open(override_path) as f:
-            blob = json.load(f)
-        if features_subdir in blob:
-            entry = blob[features_subdir]
-            clf = XGBoostHP(**entry["clf"])
-            reg = XGBoostHP(**entry["reg"])
-            return XGBoostPredictorConfig(clf=clf, reg=reg, n_jobs=1)
-
-    if features_subdir == "sql_features":
-        clf, reg = SQL_TUNED_CLF, SQL_TUNED_REG
-    elif features_subdir == "rdblearn_features":
-        clf, reg = RDBLEARN_TUNED_CLF, RDBLEARN_TUNED_REG
-    else:
-        raise ValueError(
-            f"No tuned XGBoost config for features_subdir={features_subdir!r}"
-        )
-    return XGBoostPredictorConfig(clf=clf, reg=reg, n_jobs=1)
-
-
-# -------------------------------------------------------------------------- #
-# tab_predictor
-# -------------------------------------------------------------------------- #
-@dataclass
-class TabPredictorConfig:
-    """Config for TabPredictor (unified TabICL/TabPFN)."""
-
-    model: Literal["tabicl", "tabpfn"]
-    num_workers: int
-
-    def build(self):
-        return TabPredictor(model=self.model, num_workers=self.num_workers)
-
-
-class TabPredictor(Predictor):
-    """Fit a tabular foundation model on train features and predict for test row.
-
-    Supports TabICL and TabPFN via the ``model`` argument. Uses thread-local
-    model instances for concurrent prediction via ``predict_batch``.
-    """
-
-    def __init__(self, model, num_workers):
-        import torch
-
-        self.model = model
-        self.num_workers = num_workers
-        self._device = f"cuda:{torch.cuda.current_device()}"
-        self._local = threading.local()
-
-    def _get_thread_models(self):
-        """Return thread-local (clf, reg) pair, creating them if needed."""
-        if not hasattr(self._local, "clf"):
-            if self.model == "tabicl":
-                from tabicl import TabICLClassifier, TabICLRegressor
-
-                self._local.clf = TabICLClassifier(device=self._device, use_amp=False)
-                self._local.reg = TabICLRegressor(device=self._device, use_amp=False)
-            elif self.model == "tabpfn":
-                from tabpfn import TabPFNClassifier, TabPFNRegressor
-
-                self._local.clf = TabPFNClassifier(device=self._device)
-                self._local.reg = TabPFNRegressor(device=self._device)
-        return self._local.clf, self._local.reg
-
-    def _predict_one(self, train_features, train_labels, test_features, task_type):
-        """Single prediction using thread-local models."""
-        if train_features is None or len(train_labels) < 2:
-            return 0.5 if task_type == "clf" else 0.0
-
-        X_train = train_features.float().cpu().numpy()
-        y_train = train_labels.float().cpu().numpy()
-        X_test = test_features.float().cpu().numpy().reshape(1, -1)
-
-        if np.all(X_train == X_train[0]):
-            return float(y_train.mean())
-
-        clf, reg = self._get_thread_models()
-
-        if task_type == "clf":
-            y_int = (y_train > 0).astype(int)
-            if len(np.unique(y_int)) < 2:
-                return float(y_int[0])
-            clf.fit(X_train, y_int)
-            return float(clf.predict_proba(X_test)[0, 1])
-        else:
-            reg.fit(X_train, y_train)
-            return float(reg.predict(X_test)[0])
-
-    def predict(self, train_features, train_labels, test_features, task_type):
-        return self._predict_one(train_features, train_labels, test_features, task_type)
-
-    def predict_batch(self, work_items):
-        """Predict many items concurrently using thread-local model copies.
-
-        Args:
-            work_items: list of (train_features, train_labels, test_features,
-                task_type) tuples.
-
-        Returns:
-            list of scalar float predictions, one per work item.
-        """
-        with ThreadPoolExecutor(max_workers=self.num_workers) as pool:
-            futures = [
-                pool.submit(self._predict_one, tf, tl, xf, tt)
-                for tf, tl, xf, tt in work_items
-            ]
-            return [f.result() for f in futures]
-
-
-# -------------------------------------------------------------------------- #
-# tabicl_batched_predictor: Batched TabICL predictor.
-# -------------------------------------------------------------------------- #
 # --- tabicl module-path compatibility shim -----------------------------------
 # The attention patch + TabICL imports below use ``tabicl.model.*``. Some
 # installed tabicl builds (e.g. the 2.1.1 wheel pinned in pixi.lock) expose the
 # internals under ``tabicl._model`` instead (identical submodules: attention,
 # layers, ssmax, tabicl). Alias the public path to the private one when only the
 # latter exists so the patched imports resolve regardless of wheel layout.
+import importlib as _importlib  # noqa: E402
+import sys as _sys  # noqa: E402
 
 try:  # pragma: no cover - import-time environment shim
     _importlib.import_module("tabicl.model")
@@ -1309,24 +808,3 @@ class TabICLBatchedPredictor(Predictor):
                         results[out_idx] = float(pred_np[j])
 
         return results
-
-
-# -------------------------------------------------------------------------- #
-# identity_predictor: Identity predictor — returns the test feature directly as the prediction.
-# -------------------------------------------------------------------------- #
-@dataclass
-class IdentityPredictorConfig:
-    def build(self):
-        return IdentityPredictor()
-
-
-class IdentityPredictor(Predictor):
-    """Return ``test_features[0]`` as the prediction.
-
-    Falls back to 0.5 (clf) or 0.0 (reg) when test features are unavailable.
-    """
-
-    def predict(self, train_features, train_labels, test_features, task_type):
-        if test_features is not None and len(test_features) > 0:
-            return test_features[0].item()
-        return 0.5 if task_type == "clf" else 0.0

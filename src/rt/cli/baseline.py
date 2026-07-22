@@ -108,7 +108,7 @@ def make_predictor(b: BaselineConfig):
     if b.predictor == "xgboost":
         # Global val-tuned HP set (shared across tasks within each task type).
         # XGB_TUNED_JSON overrides the baked-in winners; see xgboost_tuned.py.
-        from rt.rel2tab.predictors import tuned_xgboost_config
+        from rt.rel2tab.predictors.xgboost_tuned import tuned_xgboost_config
 
         return tuned_xgboost_config(b.xgb_features)
     raise ValueError(f"unknown predictor {b.predictor!r}")
