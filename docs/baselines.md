@@ -8,7 +8,7 @@ predictor, and the result is scored with RelBench's own leaderboard evaluator.
 
 ```bash
 pixi run baseline --featurizer entity --predictor ridge \
-  --pre-dir stanford-star/relbench-preprocessed --out-dir baseline_out
+  --eval.pre-dir stanford-star/relbench-preprocessed --eval.out-dir baseline_out
 ```
 
 - **Featurizers** (`--featurizer`): `global`, `entity`, `rt` (RT embeddings —
