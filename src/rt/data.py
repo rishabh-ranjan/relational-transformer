@@ -30,8 +30,8 @@ from rt.rustler import Sampler
 
 # Files rustler's Sampler and rt.data read for each preprocessed dataset.
 # `text.json` (the raw string vocabulary) is fetched only on demand -- it is not
-# needed for training, only for tools like ctx_viz that resolve cells back to
-# their original strings.
+# needed for training, only for tooling that resolves cells back to their
+# original strings.
 CORE_FILES = (
     "meta.json",
     "nodes.rkyv",

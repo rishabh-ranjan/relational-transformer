@@ -88,8 +88,6 @@ preprocess = { cmd = "python -m rt.cli.preprocess one", depends-on = ["build-sam
 preprocess-many = { cmd = "python -m rt.cli.preprocess many", depends-on = ["build-sampler"] }
 # Upload an already-preprocessed dataset directory to a HuggingFace repo.
 upload = "python -m rt.cli.preprocess upload"
-# Context visualizer (serves an HTTP UI over preprocessed data).
-ctx-viz = { cmd = "python -m rt.cli.ctx_viz", depends-on = ["build-sampler"] }
 pretrain = { cmd = "torchrun --standalone --nproc-per-node=auto -m rt.cli.pretrain", depends-on = ["build-sampler"] }
 # eval is single-process (one GPU) so per-item rows stay in task-table order.
 eval = { cmd = "python -m rt.cli.eval", depends-on = ["build-sampler"] }
