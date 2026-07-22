@@ -10,6 +10,14 @@ from pathlib import Path
 
 from rt.data.resolve import list_datasets, read_meta
 
+# relbench task_type -> RT task_type. Only node-level clf/reg tasks are modeled;
+# link_prediction (recommendation) tasks are skipped.
+_TASK_TYPE = {"binary_classification": "clf", "regression": "reg"}
+
+# autocomplete: which sem-type becomes which task. Text/DateTime are not targets.
+_SEM_TASK_TYPE = {"Boolean": "clf", "Number": "reg"}
+
+
 @dataclass(frozen=True)
 class Task:
     db_name: str
