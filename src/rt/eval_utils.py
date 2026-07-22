@@ -164,7 +164,10 @@ def _emit_and_score(out_dir: Path, task, pre_dir: str, embedding_model: str,
 def build_evaluator(tasks, pre_dir, *, embedding_model, d_text, device, ctx_size=8192,
                     local_ctx_size=256, bfs_width=32, num_walks=10_000, walk_length=20,
                     tokens_per_gpu=2**18, items_per_task=None, num_workers=2, context_seed=0,
-                    prefer_latest=True, shuffle_seed=0, mmap_populate=True):
+                    prefer_latest=True, shuffle_seed=0, mmap_populate=True,
+                    prefetch_factor=2, bool_as_num=True, skip_text_cols=False,
+                    balance_labels=False, ablate_schema_semantics=False,
+                    vector_db_path=None):
     from rt.evaluator import Evaluator
 
     # mmap_populate=True by default: pre-fault the eval data into RAM so the
@@ -178,12 +181,12 @@ def build_evaluator(tasks, pre_dir, *, embedding_model, d_text, device, ctx_size
     return Evaluator(
         tasks=tasks, pre_dir=pre_dir, eval_bs=max(1, tokens_per_gpu // ctx_size),
         ctx_sizes=[ctx_size], items_per_task=items_per_task, num_workers=num_workers,
-        prefetch_factor=2, persistent_workers=False, local_ctx_size=local_ctx_size,
+        prefetch_factor=prefetch_factor, persistent_workers=False, local_ctx_size=local_ctx_size,
         bfs_width=bfs_width, num_walks=num_walks, walk_length=walk_length,
-        prefer_latest=prefer_latest, bool_as_num=True, skip_text_cols=False,
-        mmap_populate=mmap_populate, balance_labels=False,
-        ablate_schema_semantics=False, embedding_model=embedding_model, d_text=d_text,
-        shuffle_seed=shuffle_seed, context_seed=context_seed, vector_db_path=None,
+        prefer_latest=prefer_latest, bool_as_num=bool_as_num, skip_text_cols=skip_text_cols,
+        mmap_populate=mmap_populate, balance_labels=balance_labels,
+        ablate_schema_semantics=ablate_schema_semantics, embedding_model=embedding_model, d_text=d_text,
+        shuffle_seed=shuffle_seed, context_seed=context_seed, vector_db_path=vector_db_path,
         train_only_fallback=False,
         global_rank=0, local_rank=0, world_size=1, ddp=False, device=device,
     )

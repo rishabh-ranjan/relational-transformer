@@ -345,6 +345,10 @@ def run_one(cfg: OneConfig) -> None:
 
 def run_many(cfg: ManyConfig) -> None:
     specs = list_datasets(cfg.repo, revision=cfg.revision)
+    assert 0 <= cfg.shard < cfg.num_shards, (
+        f"shard must be in [0, num_shards); got shard={cfg.shard} "
+        f"num_shards={cfg.num_shards}"
+    )
     shard = specs[cfg.shard :: cfg.num_shards]
     print(f"shard {cfg.shard}/{cfg.num_shards}: {len(shard)} of {len(specs)} datasets",
           flush=True)

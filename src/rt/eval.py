@@ -30,6 +30,8 @@ from rt.recipes import get_tasks
 
 def main(cfg: Config) -> None:
     ev_cfg = cfg.eval
+    assert cfg.logger.wandb_disabled, "standalone eval does not log to wandb"
+    assert ev_cfg.freq is None, "eval.freq is an in-loop training knob"
     assert len(ev_cfg.ctx_sizes) == 1, (
         "standalone eval writes one submission per run and needs exactly one "
         "ctx size; multi-size ctx_sizes is an in-loop training-eval feature"
@@ -72,11 +74,21 @@ def main(cfg: Config) -> None:
         num_walks=ev_cfg.num_walks, walk_length=ev_cfg.walk_length,
         tokens_per_gpu=ev_cfg.tokens_per_gpu, items_per_task=ev_cfg.items_per_task,
         num_workers=ev_cfg.num_workers, shuffle_seed=ev_cfg.shuffle_seed,
+        prefetch_factor=ev_cfg.prefetch_factor, bool_as_num=ev_cfg.bool_as_num,
+        skip_text_cols=ev_cfg.skip_text_cols, mmap_populate=ev_cfg.mmap_populate,
+        balance_labels=ev_cfg.balance_labels,
+        ablate_schema_semantics=ev_cfg.ablate_schema_semantics,
+        vector_db_path=ev_cfg.vector_db_path,
     )
     grid = ev_cfg.lcs_bw_pl_grid
 
     if len(grid) > 1 or ev_cfg.ensemble_size > 1:
         from rt.eval_utils import run_ensemble
+
+        assert ev_cfg.context_seed == 0, (
+            "ensembling sweeps context seeds 0..ensemble_size-1; a fixed "
+            "eval.context_seed only applies to single-config runs"
+        )
 
         val_tasks = selected(of_kind(get_tasks("relbench_eval_val", ev_cfg.pre_dir)))
         test_tasks = selected(of_kind(get_tasks("relbench_eval_test", ev_cfg.pre_dir)))
@@ -96,7 +108,7 @@ def main(cfg: Config) -> None:
     lcs, bw, pl = grid[0]
     ev = build_evaluator(tasks, ev_cfg.pre_dir, ctx_size=ctx_size,
                          local_ctx_size=lcs, bfs_width=bw, prefer_latest=pl,
-                         **eval_kwargs)
+                         context_seed=ev_cfg.context_seed, **eval_kwargs)
     run_and_report(net, tasks, ev_cfg.pre_dir, ctx_size=ctx_size,
                    reg_metric=ev_cfg.reg_metric, out_dir=ev_cfg.out_dir, no_csv=not ev_cfg.write_csv,
                    evaluator=ev, embedding_model=embedding_model)

@@ -118,6 +118,15 @@ def main(cfg: Config) -> None:
         "in-loop eval does not ensemble; use rt.cli.eval on a saved checkpoint "
         "for eval.ensemble_size > 1"
     )
+    assert cfg.model.load_ckpt_path is None, (
+        "pretraining initializes fresh and resumes only from <out_dir>/resume.pt; "
+        "model.load_ckpt_path is an eval knob"
+    )
+    assert cfg.eval.tasks is None, "in-loop eval evaluates the full eval recipe"
+    assert cfg.eval.task_type == "both", "in-loop eval evaluates both task types"
+    assert not cfg.eval.write_csv and not cfg.eval.out_dir, (
+        "in-loop eval computes metrics only; submission CSVs come from rt.cli.eval"
+    )
     device, rank, local_rank, world_size, ddp = setup_dist()
     is_main = rank == 0
 
