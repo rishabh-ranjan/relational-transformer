@@ -22,8 +22,7 @@ The released RT-J data:
 - `--pre-dir stanford-star/the-join-preprocessed`
 - `--val-pre-dir stanford-star/relbench-preprocessed`
 
-To reproduce the curated RT-J mixture exactly, add `--include-dbs-file
-rt/recipe_rt_j.txt` (otherwise every preprocessed db under `--pre-dir` is used).
+To reproduce the curated RT-J mixture exactly, add `--include-dbs-file docs/rt_j_dbs.txt` (otherwise every preprocessed db under `--pre-dir` is used).
 
 ## Single-GPU training
 
@@ -99,18 +98,18 @@ every `--resume-save-mins` minutes (default 20) bounds lost progress.
 By default each run re-populates the preprocessed data into RAM at startup. When
 iterating on training code, that reload is wasted work on every restart. Lock the
 data into the page cache **once** with a long-lived holder
-(`rt.mlock_recipe`), then train with `--no-mmap-populate` so reads hit the
+(`rt.mlock`), then train with `--no-mmap-populate` so reads hit the
 locked cache:
 
 ```bash
 # terminal 1: hold the data resident (Ctrl-C to release)
-pixi run python -m rt.cli.mlock_recipe --pre-dir <PRE_DIR> --workers 32
+pixi run python -m rt.cli.mlock --pre-dir <PRE_DIR> --workers 32
 # terminal 2 (same node): train without re-populating
 pixi run pretrain --pre-dir <PRE_DIR> --out-dir ~/ckpts/run1 --no-mmap-populate
 ```
 
 This is purely a convenience for repeated local runs; it is **not required**.
-(`mlock_recipe.py` needs a high `RLIMIT_MEMLOCK` — e.g. `ulimit -l unlimited` or
+(`mlock.py` needs a high `RLIMIT_MEMLOCK` — e.g. `ulimit -l unlimited` or
 slurm `--propagate=MEMLOCK` — to lock the full mixture.)
 
 ## Loading checkpoints

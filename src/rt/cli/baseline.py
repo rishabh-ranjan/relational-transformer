@@ -42,7 +42,7 @@ def default_config() -> BaselineConfig:
         alpha_reg=100.0,
         xgb_features="sql_features",
         eval=EvalConfig(
-            recipe="relbench_eval_test",
+            splits=["test"],
             pre_dir="stanford-star/relbench-preprocessed",
             tokens_per_gpu=2**18,
             num_workers=2,
@@ -88,7 +88,7 @@ def make_featurizer(b: BaselineConfig):
             num_blocks=12, d_model=512, num_heads=8, d_ff=2048,
             compile=False, materialize_attn_masks=True,
             load_ckpt_path=b.rt_ckpt, ctx_size=256, bfs_width=32,
-            eval_recipe=b.eval.recipe, pre_dir=b.eval.pre_dir,
+            eval_splits=b.eval.splits, pre_dir=b.eval.pre_dir,
             shuffle_seed=0, context_seed=0, vector_db_path=None,
         )
     raise ValueError(f"unknown featurizer {b.featurizer!r}")

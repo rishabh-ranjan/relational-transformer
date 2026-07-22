@@ -198,7 +198,7 @@ class Evaluator:
         rustler assigns a task row the node index ``node_idx_offset + r``
         (``r`` the 0-based row index in the relbench task-table parquet),
         ``node_idx - node_idx_offset`` recovers the exact parquet row, which
-        is how :mod:`rt.eval_utils` keys predictions back to the relbench
+        is how :mod:`rt.eval` keys predictions back to the relbench
         ``(entity_col, time_col)`` for a leaderboard submission (eval row
         order is *not* the parquet row order, so a positional join is wrong).
 
@@ -504,7 +504,7 @@ class Evaluator:
                 )
 
             for prefix, preds_np in preds_by_prefix_np.items():
-                from rt.eval_utils import metric_for
+                from rt.eval import metric_for
 
                 if eval_task.task_type == "reg":
                     metric_name = reg_metric
@@ -561,7 +561,7 @@ class Evaluator:
                 for split in self.eval_splits:
                     for eval_ctx_size in eval_ctx_sizes_to_use:
                         def _avg(xs):
-                            # Single-task-type recipes (per-task fine-tuning)
+                            # Single-task-type task sets (per-task fine-tuning)
                             # have no scores for the other type.
                             return sum(xs) / len(xs) if xs else float("nan")
 

@@ -32,7 +32,6 @@ def default_config() -> Config:
             load_ckpt_path=None,
         ),
         train=TrainConfig(
-            recipe="pretrain",
             pre_dir="stanford-star/the-join-preprocessed",
             tokens_per_gpu=2**17,
             num_workers=16,
@@ -64,7 +63,7 @@ def default_config() -> Config:
             include_dbs_file=None,
         ),
         eval=EvalConfig(
-            recipe="relbench_eval_val",
+            splits=["val"],
             pre_dir="stanford-star/relbench-preprocessed",
             tokens_per_gpu=2**17,
             num_workers=1,

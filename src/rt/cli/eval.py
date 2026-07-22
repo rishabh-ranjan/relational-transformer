@@ -30,7 +30,7 @@ def default_config() -> Config:
         ),
         train=None,
         eval=EvalConfig(
-            recipe="relbench_eval_test",
+            splits=["test"],
             pre_dir="stanford-star/relbench-preprocessed",
             tokens_per_gpu=2**18,  # 2**19 overflows RT-J eval kernel @ctx=8192
             num_workers=2,

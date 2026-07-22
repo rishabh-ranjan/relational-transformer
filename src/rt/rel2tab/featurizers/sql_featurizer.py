@@ -31,16 +31,16 @@ class SQLFeaturizerConfig:
 
     Args:
         pre_dir: Directory containing preprocessed table_info.json files.
-        eval_recipe: Recipe name to determine which tasks to load data for.
+        eval_splits: task splits to load data for.
     """
 
     pre_dir: str
-    eval_recipe: str
+    eval_splits: list[str]
 
     def build(self, device):
         return SQLFeaturizer(
             pre_dir=self.pre_dir,
-            eval_recipe=self.eval_recipe,
+            eval_splits=self.eval_splits,
             db=None,
         )
 
@@ -77,8 +77,8 @@ class SQLFeaturizer(Featurizer):
     foreign-key entity, falling back to all train rows if no matches.
     """
 
-    def __init__(self, pre_dir, eval_recipe, db):
-        from rt.recipes import get_tasks
+    def __init__(self, pre_dir, eval_splits, db):
+        from rt.tasks import eval_tasks
 
         pre_dir = str(Path(pre_dir).expanduser())
 
@@ -88,7 +88,7 @@ class SQLFeaturizer(Featurizer):
         # (rt_db_name, rt_table_name) -> (features_tensor, min_offset)
         self._features: dict[tuple[str, str], tuple[torch.Tensor, int]] = {}
 
-        all_tasks = get_tasks(eval_recipe, pre_dir)
+        all_tasks = eval_tasks(pre_dir, splits=tuple(eval_splits))
         if db is not None:
             all_tasks = [t for t in all_tasks if db in t.db_name]
 

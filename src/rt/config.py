@@ -21,7 +21,6 @@ class ModelConfig:
 
 @dataclass
 class TrainConfig:
-    recipe: str
     pre_dir: str
     tokens_per_gpu: int
     num_workers: int
@@ -66,7 +65,8 @@ class TrainConfig:
 
 @dataclass
 class EvalConfig:
-    recipe: str
+    # which task splits to evaluate, e.g. ["test"] or ["val", "test"]
+    splits: list[str]
     pre_dir: str
     tokens_per_gpu: int
     num_workers: int

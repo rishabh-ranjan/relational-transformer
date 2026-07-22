@@ -47,7 +47,7 @@ from rt.config import Config
 from rt.data import TrainDataset
 from rt.model import RelationalTransformer
 from rt.muon import Muon
-from rt.recipes import get_tasks
+from rt.tasks import eval_tasks, pretrain_tasks
 from rt.swa import SwaState
 
 # Released model dims (RT-J). Override via CLI for a different size.
@@ -93,7 +93,7 @@ def eval_avg_metrics(evaluator, nets_with_prefix, ctx_sizes, reg_metric):
     evaluate_raw yield is one (task, ctx_size) slice, so passing the full
     ctx-size list means the mean spans all of them.
     """
-    from rt.eval_utils import metric_for
+    from rt.eval import metric_for
 
     acc = {p: {"clf": [], "reg": []} for _, p in nets_with_prefix}
     for task, _ctx, labels, preds_by_prefix, _nl in evaluator.evaluate_raw(
@@ -122,7 +122,7 @@ def main(cfg: Config) -> None:
         "pretraining initializes fresh and resumes only from <out_dir>/resume.pt; "
         "model.load_ckpt_path is an eval knob"
     )
-    assert cfg.eval.tasks is None, "in-loop eval evaluates the full eval recipe"
+    assert cfg.eval.tasks is None, "in-loop eval evaluates the full eval task set"
     assert cfg.eval.task_type == "both", "in-loop eval evaluates both task types"
     assert not cfg.eval.write_csv and not cfg.eval.out_dir, (
         "in-loop eval computes metrics only; submission CSVs come from rt.cli.eval"
@@ -205,7 +205,7 @@ def main(cfg: Config) -> None:
 
     # ---- data: re-seed by resumed step so the stream does not replay ----
     data_seed = cfg.train.seed + SEED_STRIDE * start_step
-    train_tasks = get_tasks(cfg.train.recipe, cfg.train.pre_dir)
+    train_tasks = pretrain_tasks(cfg.train.pre_dir)
     if cfg.train.include_dbs_file:
         with open(cfg.train.include_dbs_file) as f:
             include_dbs = {
@@ -281,7 +281,7 @@ def main(cfg: Config) -> None:
     # alongside it under a "lcs<l>-bw<b>-pl<p>_" tag. All evaluators share the
     # underlying mmap'd data (page cache), so extra entries cost eval compute
     # only, nothing between eval points.
-    val_tasks = get_tasks(cfg.eval.recipe, cfg.eval.pre_dir)
+    val_tasks = eval_tasks(cfg.eval.pre_dir, splits=tuple(cfg.eval.splits))
     from rt.evaluator import Evaluator
 
     evaluators = [

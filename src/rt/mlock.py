@@ -1,9 +1,9 @@
 """mlock all rustler-input files for the pretraining mixture; stay alive until
-signaled. Ported from the rt research repo's rt.mlock_recipe.
+signaled. Ported from the rt research repo's rt.mlock.
 
 Usage:
-    pixi run python -m rt.cli.mlock_recipe \
-        --pre-dir <pre_dir> [--include-dbs-file docs/recipe_rt_j.txt] \
+    pixi run python -m rt.cli.mlock \
+        --pre-dir <pre_dir> [--include-dbs-file docs/rt_j_dbs.txt] \
         [--embedding-model-ref all-MiniLM-L12-v2] [--workers 8]
 
 mmap+mlocks {pre_dir}/{db}/{nodes.rkyv, text_emb_<ref>.bin, p2f_adj.rkyv} for
@@ -80,7 +80,7 @@ class MlockConfig:
     pre_dir: str
 
     include_dbs_file: str | None
-    """restrict to the dbs in this file (e.g. docs/recipe_rt_j.txt); without
+    """restrict to the dbs in this file (e.g. docs/rt_j_dbs.txt); without
     it, every preprocessed db under --pre-dir is locked."""
 
     embedding_model_ref: str

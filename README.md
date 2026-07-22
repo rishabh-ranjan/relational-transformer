@@ -36,7 +36,7 @@ import torch
 from huggingface_hub import snapshot_download
 
 from rt import RelationalTransformer
-from rt.eval_utils import build_evaluator
+from rt.eval import build_evaluator
 from rt.tasks import tasks_from_preprocessed
 
 device = (

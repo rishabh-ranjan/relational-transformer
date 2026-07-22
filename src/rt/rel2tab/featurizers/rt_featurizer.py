@@ -30,7 +30,7 @@ class RTFeaturizerConfig:
     # Sampler params
     ctx_size: int
     bfs_width: int
-    eval_recipe: str
+    eval_splits: list[str]
     pre_dir: str
     shuffle_seed: int
     context_seed: int
@@ -49,7 +49,7 @@ class RTFeaturizerConfig:
             materialize_attn_masks=self.materialize_attn_masks,
             load_ckpt_path=self.load_ckpt_path,
             device=device,
-            eval_recipe=self.eval_recipe,
+            eval_splits=self.eval_splits,
             pre_dir=self.pre_dir,
             ctx_size=self.ctx_size,
             bfs_width=self.bfs_width,
@@ -79,7 +79,7 @@ class RTFeaturizer(Featurizer, nn.Module):
         materialize_attn_masks,
         load_ckpt_path,
         device,
-        eval_recipe,
+        eval_splits,
         pre_dir,
         ctx_size,
         bfs_width,
@@ -112,9 +112,9 @@ class RTFeaturizer(Featurizer, nn.Module):
         self.rt_model.eval()
 
         from rt.data import RustlerDataset
-        from rt.recipes import get_tasks
+        from rt.tasks import eval_tasks
 
-        all_tasks = get_tasks(eval_recipe, pre_dir)
+        all_tasks = eval_tasks(pre_dir, splits=tuple(eval_splits))
         if db is not None:
             all_tasks = [t for t in all_tasks if db in t.db_name]
 
