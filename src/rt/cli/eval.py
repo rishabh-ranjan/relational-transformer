@@ -1,3 +1,12 @@
+"""Evaluate an RT checkpoint (or rel2tab baseline config) on the RelBench tasks.
+
+Loads --model.load-ckpt-path (local dir/file or Hub repo such as
+stanford-star/rt-j/classification), evaluates every RelBench task of the
+checkpoint's kind (clf/reg) via RelBench's own leaderboard evaluator, and
+writes --eval.out-dir as a valid RelBench submission directory. Single-process,
+one GPU.
+"""
+
 import tyro
 
 from rt.config import Config, EvalConfig, LoggerConfig, ModelConfig
@@ -55,4 +64,4 @@ def default_config() -> Config:
 
 
 if __name__ == "__main__":
-    main(tyro.cli(Config, default=default_config()))
+    main(tyro.cli(Config, default=default_config(), description=__doc__))

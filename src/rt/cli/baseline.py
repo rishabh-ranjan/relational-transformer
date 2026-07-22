@@ -164,4 +164,4 @@ def build_config(a: BaselineArgs) -> Config:
 
 
 if __name__ == "__main__":
-    main(build_config(tyro.cli(BaselineArgs, default=default_args())))
+    main(build_config(tyro.cli(BaselineArgs, default=default_args(), description=__doc__)))

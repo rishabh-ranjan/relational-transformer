@@ -1,4 +1,8 @@
-"""CLI for rt.ctx_viz. All defaults live here; see rt.ctx_viz for logic."""
+"""Interactive web UI for inspecting rustler context/batch tensors.
+
+Serves an HTTP UI (default port 8765) over preprocessed data (--pre-root,
+local dir or Hub repo) for browsing sampled contexts token by token.
+"""
 
 import tyro
 
@@ -16,4 +20,4 @@ def default_config() -> Config:
 
 
 if __name__ == "__main__":
-    main(tyro.cli(Config, default=default_config()))
+    main(tyro.cli(Config, default=default_config(), description=__doc__))

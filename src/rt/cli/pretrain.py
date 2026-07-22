@@ -1,3 +1,11 @@
+"""Pretrain a Relational Transformer with Muon+AdamW under DDP.
+
+Streams training items from the preprocessed mixture at --train.pre-dir,
+periodically evaluates on --eval.pre-dir, and writes checkpoints plus a
+preemption-safe resume.pt to --train.out-dir (resume is automatic and
+GPU-count flexible). Launch with torchrun; see docs/pretrain.md.
+"""
+
 import tyro
 
 from rt.config import Config, EvalConfig, LoggerConfig, ModelConfig, TrainConfig
@@ -90,4 +98,4 @@ def default_config() -> Config:
 
 
 if __name__ == "__main__":
-    main(tyro.cli(tyro.conf.AvoidSubcommands[Config], default=default_config()))
+    main(tyro.cli(tyro.conf.AvoidSubcommands[Config], default=default_config(), description=__doc__))

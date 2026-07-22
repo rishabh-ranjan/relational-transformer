@@ -1,4 +1,10 @@
-"""CLI for rt.preprocess. All defaults live here; see rt.preprocess for logic."""
+"""Preprocess relbench-format datasets into rustler's on-disk training format.
+
+Subcommands: `one` (single dataset -> rustler preprocess -> text embeddings),
+`many` (shard a whole Hub collection repo), `upload` (push a preprocessed dir
+to the Hub), `list` (inspect a collection's dataset specs). Datasets are
+addressed as a local path or a Hub spec org/repo[/subdir].
+"""
 
 from typing import Union
 
@@ -65,4 +71,4 @@ Config = Union[
 ]
 
 if __name__ == "__main__":
-    main(tyro.cli(Config))
+    main(tyro.cli(Config, description=__doc__))
