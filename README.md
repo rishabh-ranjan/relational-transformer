@@ -37,7 +37,7 @@ from huggingface_hub import snapshot_download
 
 from rt import RelationalTransformer
 from rt.eval import build_evaluator
-from rt.data import eval_tasks
+from rt.data import get_tasks
 
 device = (
     "cuda" if torch.cuda.is_available()
@@ -60,10 +60,7 @@ cfg = model.config
 
 # 3. build an evaluator for one task and predict zero-shot for 5 test rows.
 #    the evaluator samples each row's context from the preprocessed DB;
-tasks = [
-    t for t in tasks_from_preprocessed(pre_dir, splits=("test",), dbs=["rel-f1"])
-    if t.table_name == "driver-dnf"
-]
+tasks = get_tasks(pre_dir, [("rel-f1", "driver-dnf")], ("test",))
 ev = build_evaluator(
     tasks, pre_dir,
     embedding_model=cfg["embedding_model"], d_text=cfg["d_text"],

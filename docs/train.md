@@ -22,7 +22,10 @@ The released RT-J data:
 - `--pre-dir stanford-star/the-join-preprocessed`
 - `--val-pre-dir stanford-star/relbench-preprocessed`
 
-To reproduce the curated RT-J mixture exactly, add `--include-dbs-file docs/rt_j_dbs.txt` (otherwise every preprocessed db under `--pre-dir` is used).
+The task mixture is given by `--train.db-task-list` — `(db, task)` pairs as a
+local JSON file or a Hub path. `stanford-star/the-join/db-task-lists/all.json`
+(default) is every task in the Join; `.../rt-j.json` is the curated RT-J
+mixture.
 
 ## Single-GPU training
 

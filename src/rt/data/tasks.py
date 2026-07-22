@@ -1,14 +1,26 @@
-"""Task enumeration straight from preprocessed data: forecast tasks (explicit
-time-split task tables) and autocomplete tasks (schema-derived masked-column
-prediction)."""
+"""Task resolution from an explicit db-task list.
+
+The set of tasks to train or evaluate on is always given explicitly as a
+``db_task_list``: a list of ``(db_name, task_name)`` pairs, a local path to a
+JSON file holding such a list, or a Hub path ``org/repo/path/to/list.json``
+(only that file is downloaded). ``task_name`` is either a forecast task-table
+name recorded in the db's ``meta.json`` or an autocomplete target spelled
+``"<table>/<column>"``. There is no enumerate-everything fallback: the list is
+the single source of truth for what runs.
+
+Curated lists ship on the Hub, e.g.
+``stanford-star/relbench/db-task-lists/forecast.json`` (the 21-task RelBench
+benchmark) and ``stanford-star/the-join/db-task-lists/{all,rt-j}.json`` (the
+pretraining mixtures).
+"""
 
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass
-from functools import cache
 from pathlib import Path
 
-from rt.data.resolve import list_datasets, read_meta
+from rt.data.resolve import read_meta, resolve_pre_dir, resolve_repo
 
 # relbench task_type -> RT task_type. Only node-level clf/reg tasks are modeled;
 # link_prediction (recommendation) tasks are skipped.
@@ -28,143 +40,93 @@ class Task:
     leakage_columns: tuple[str, ...] = ()
 
 
-@cache
-def _pkey_time_cols(pre_dir: str, db: str) -> frozenset[str]:
-    """Primary-key / time columns to exclude as autocomplete targets, read from
-    a ``manifest.yaml`` sitting next to the preprocessed db if one is present.
-    Keyed as ``"<col> of <table>"`` to match :func:`rustler.column_sem_types`.
+def resolve_db_task_list(db_task_list) -> list[tuple[str, str]]:
+    """Materialize a db_task_list into ``[(db_name, task_name), ...]``.
 
-    This is a redundant safety net, not a hard dependency: relbench-3.0.0
-    reindexes foreign *and* primary keys to row indices, and rustler ``pre``
-    emits no cell for those, so :func:`rustler.column_sem_types` already excludes
-    them; time columns surface as the ``DateTime`` sem-type, which is not a clf/
-    reg target. We therefore never fetch over the network (that would hang the
-    pretraining-task enumeration on compute nodes) -- only a local manifest is
-    consulted, and its absence is fine.
+    Accepts an in-memory list of pairs, a local JSON file path, or a Hub path
+    ``org/repo/path/to/list.json`` (downloads only that file).
     """
-    from pathlib import Path
+    if isinstance(db_task_list, str):
+        p = Path(db_task_list).expanduser()
+        if p.exists():
+            pairs = json.loads(p.read_text())
+        else:
+            from huggingface_hub import hf_hub_download
 
-    p = Path(pre_dir).expanduser()
-    manifest_path = p / db / "manifest.yaml"
-    if not manifest_path.exists():
-        return frozenset()
-    try:
-        import yaml
-
-        manifest = yaml.safe_load(manifest_path.read_text())
-        excl: set[str] = set()
-        for table, info in (manifest.get("tables") or {}).items():
-            for key in ("pkey", "time_col"):
-                col = info.get(key)
-                if col:
-                    excl.add(f"{col} of {table}")
-        return frozenset(excl)
-    except Exception:
-        return frozenset()
-
-
-def _autocomplete_tasks(pre_dir: str, db: str, splits, task_types) -> list[Task]:
-    """Schema-derived autocomplete tasks for one database.
-
-    Emitted at the ``train`` split only (autocomplete is a pretraining-only
-    signal; there is no held-out forecast horizon). The target column is masked
-    and predicted from the rest of its row's context, so no leakage columns are
-    needed.
-    """
-    if "train" not in splits:
-        return []
-    from rt.rustler import column_sem_types
-
-    sem = column_sem_types(pre_dir, db)
-    excluded = _pkey_time_cols(pre_dir, db)
-    out: list[Task] = []
-    for col_of_table, sem_type in sem.items():
-        tt = _SEM_TASK_TYPE.get(sem_type)
-        if tt is None or tt not in task_types or col_of_table in excluded:
-            continue
-        col, table = col_of_table.rsplit(" of ", 1)
-        out.append(Task(db, table, col, tt, "train"))
+            repo_id, filename = resolve_repo(db_task_list)
+            if not filename:
+                raise ValueError(
+                    f"{db_task_list!r}: expected a local file or a Hub path "
+                    f"'org/repo/path/to/list.json'"
+                )
+            local = hf_hub_download(repo_id, filename, repo_type="dataset")
+            pairs = json.loads(Path(local).read_text())
+    else:
+        pairs = db_task_list
+    out = []
+    for pair in pairs:
+        db, name = pair
+        out.append((str(db), str(name)))
     return out
 
 
-def tasks_from_preprocessed(
-    pre_dir: str,
-    *,
-    splits,
-    task_types=("clf", "reg"),
-    dbs=None,
-) -> list[Task]:
-    """Tasks across the preprocessed datasets under ``pre_dir`` for the given splits.
+def get_tasks(pre_dir, db_task_list, splits, *, embedding_model=None) -> list[Task]:
+    """Build full :class:`Task` objects for a db_task_list at the given splits.
 
-    A database with explicit forecast tasks (a non-empty ``meta.json`` ``tasks``
-    list) contributes those; a database without any (DB-tables-only, the common
-    ``the-join`` case) contributes schema-derived autocomplete tasks instead.
+    Forecast task names are looked up in each db's ``meta.json`` (target column,
+    task type, available splits). Autocomplete names (``"<table>/<column>"``)
+    are emitted at the ``train`` split only; their clf/reg type is read off the
+    preprocessed nodes via ``rustler.column_sem_types``, which requires the
+    db's core files locally (``embedding_model`` selects the text-embedding
+    file when ``pre_dir`` is a Hub repo and the data must be fetched -- the
+    same files training/eval need anyway).
     """
+    pairs = resolve_db_task_list(db_task_list)
+    by_db: dict[str, list[str]] = {}
+    for db, name in pairs:
+        by_db.setdefault(db, []).append(name)
+
     out: list[Task] = []
-    for db in dbs if dbs is not None else list_datasets(pre_dir):
+    for db, names in by_db.items():
         meta = read_meta(pre_dir, db)
-        explicit = [
-            t
+        explicit = {
+            t["name"]: t
             for t in meta.get("tasks", [])
             if _TASK_TYPE.get(t.get("task_type")) and t.get("target_col")
-        ]
-        if explicit:
-            for t in explicit:
+        }
+        sem = None
+        for name in names:
+            if name in explicit:
+                t = explicit[name]
                 tt = _TASK_TYPE[t["task_type"]]
-                if tt not in task_types:
-                    continue
                 for split in splits:
                     if split in t.get("splits", []):
-                        out.append(Task(db, t["name"], t["target_col"], tt, split))
-        else:
-            out.extend(_autocomplete_tasks(pre_dir, db, splits, task_types))
+                        out.append(Task(db, name, t["target_col"], tt, split))
+            elif "/" in name:
+                if "train" not in splits:
+                    continue  # autocomplete is a pretraining-only signal
+                table, col = name.split("/", 1)
+                if sem is None:
+                    from rt.rustler import column_sem_types
+
+                    if embedding_model is None:
+                        raise ValueError(
+                            f"resolving autocomplete task {db}/{name} needs "
+                            f"embedding_model to fetch the db's core files"
+                        )
+                    local = resolve_pre_dir(pre_dir, [db], embedding_model)
+                    sem = column_sem_types(local, db)
+                tt = _SEM_TASK_TYPE.get(sem.get(f"{col} of {table}"))
+                if tt is None:
+                    raise ValueError(
+                        f"{db}: autocomplete target {name!r} is not a "
+                        f"Boolean/Number column of the preprocessed data"
+                    )
+                out.append(Task(db, table, col, tt, "train"))
+            else:
+                raise ValueError(
+                    f"{db}: task {name!r} is neither a forecast task in "
+                    f"meta.json ({sorted(explicit)}) nor an autocomplete "
+                    f"'<table>/<column>' spec"
+                )
     return out
-
-
-def pretrain_tasks(pre_dir: str, *, dbs=None) -> list[Task]:
-    """Train-split tasks across every preprocessed dataset (the pretraining mixture)."""
-    return tasks_from_preprocessed(pre_dir, splits=("train",), dbs=dbs)
-
-
-# The curated RelBench evaluation benchmark used by the released runs: 12 clf +
-# 9 reg forecasting tasks (the "relbench_eval_w_event" set from the original
-# repo). We evaluate on exactly these, not every explicit relbench-pre task, so
-# the eval matches the released numbers and stays cheap (~21 vs ~34 tasks). Each
-# entry is (db, task_table, target_column, task_type).
-RELBENCH_EVAL_TASKS: tuple[tuple[str, str, str, str], ...] = (
-    # clf
-    ("rel-amazon", "user-churn", "churn", "clf"),
-    ("rel-hm", "user-churn", "churn", "clf"),
-    ("rel-stack", "user-badge", "WillGetBadge", "clf"),
-    ("rel-amazon", "item-churn", "churn", "clf"),
-    ("rel-stack", "user-engagement", "contribution", "clf"),
-    ("rel-avito", "user-visits", "num_click", "clf"),
-    ("rel-avito", "user-clicks", "num_click", "clf"),
-    ("rel-event", "user-ignore", "target", "clf"),
-    ("rel-trial", "study-outcome", "outcome", "clf"),
-    ("rel-f1", "driver-dnf", "did_not_finish", "clf"),
-    ("rel-event", "user-repeat", "target", "clf"),
-    ("rel-f1", "driver-top3", "qualifying", "clf"),
-    # reg
-    ("rel-hm", "item-sales", "sales", "reg"),
-    ("rel-amazon", "user-ltv", "ltv", "reg"),
-    ("rel-amazon", "item-ltv", "ltv", "reg"),
-    ("rel-stack", "post-votes", "popularity", "reg"),
-    ("rel-trial", "site-success", "success_rate", "reg"),
-    ("rel-trial", "study-adverse", "num_of_adverse_events", "reg"),
-    ("rel-event", "user-attendance", "target", "reg"),
-    ("rel-f1", "driver-position", "position", "reg"),
-    ("rel-avito", "ad-ctr", "num_click", "reg"),
-)
-
-
-def eval_tasks(pre_dir: str, *, splits=("val", "test"), dbs=None) -> list[Task]:
-    """The curated RelBench benchmark (:data:`RELBENCH_EVAL_TASKS`) at the given
-    splits -- exactly the 21 forecasting tasks the released runs evaluated on,
-    not an enumerate-all over the preprocessed eval datasets."""
-    return [
-        Task(db, table, col, tt, split)
-        for (db, table, col, tt) in RELBENCH_EVAL_TASKS
-        if dbs is None or db in dbs
-        for split in splits
-    ]

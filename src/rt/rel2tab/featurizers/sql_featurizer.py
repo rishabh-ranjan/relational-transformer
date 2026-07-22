@@ -31,12 +31,13 @@ class SQLFeaturizerConfig:
     """
 
     pre_dir: str
+    db_task_list: list[tuple[str, str]] | str
     eval_splits: list[str]
 
     def build(self, device):
         return SQLFeaturizer(
             pre_dir=self.pre_dir,
-            eval_splits=self.eval_splits,
+            db_task_list=self.db_task_list, eval_splits=self.eval_splits,
             db=None,
         )
 
@@ -73,13 +74,13 @@ class SQLFeaturizer(Featurizer):
     foreign-key entity, falling back to all train rows if no matches.
     """
 
-    def __init__(self, pre_dir, eval_splits, db):
+    def __init__(self, pre_dir, db_task_list, eval_splits, db):
         # Deferred: duckdb + relbench are heavy optional deps of this
         # featurizer only; the module must import without them.
         import duckdb
         from relbench.load import load_dataset, load_task
 
-        from rt.data import eval_tasks, read_meta
+        from rt.data import get_tasks, read_meta
 
         pre_dir = str(Path(pre_dir).expanduser())
 
@@ -89,7 +90,7 @@ class SQLFeaturizer(Featurizer):
         # (rt_db_name, rt_table_name) -> (features_tensor, min_offset)
         self._features: dict[tuple[str, str], tuple[torch.Tensor, int]] = {}
 
-        all_tasks = eval_tasks(pre_dir, splits=tuple(eval_splits))
+        all_tasks = get_tasks(pre_dir, db_task_list, tuple(eval_splits))
         if db is not None:
             all_tasks = [t for t in all_tasks if db in t.db_name]
 

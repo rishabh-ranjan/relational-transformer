@@ -16,13 +16,14 @@ class PrecomputedFeaturizerConfig:
     """
 
     pre_dir: str
+    db_task_list: list[tuple[str, str]] | str
     eval_splits: list[str]
     features_subdir: str
 
     def build(self, device):
         return PrecomputedFeaturizer(
             pre_dir=self.pre_dir,
-            eval_splits=self.eval_splits,
+            db_task_list=self.db_task_list, eval_splits=self.eval_splits,
             features_subdir=self.features_subdir,
         )
 
@@ -35,14 +36,14 @@ class PrecomputedFeaturizer(Featurizer):
     ``compute_features`` does a fast index lookup.
     """
 
-    def __init__(self, pre_dir, eval_splits, features_subdir):
-        from rt.data import eval_tasks
+    def __init__(self, pre_dir, db_task_list, eval_splits, features_subdir):
+        from rt.data import get_tasks
 
         # (db, table) -> (features_tensor, min_offset)
         self._features: dict[tuple[str, str], tuple[torch.Tensor, int]] = {}
 
         seen: set[tuple[str, str]] = set()
-        for task in eval_tasks(pre_dir, splits=tuple(eval_splits)):
+        for task in get_tasks(pre_dir, db_task_list, tuple(eval_splits)):
             key = (task.db_name, task.table_name)
             if key in seen:
                 continue

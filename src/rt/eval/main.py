@@ -8,7 +8,7 @@ from pathlib import Path
 import torch
 
 from rt.config import Config
-from rt.data import eval_tasks
+from rt.data import get_tasks
 from rt.eval.evaluator import Evaluator
 from rt.eval.metrics import metric_for
 from rt.eval.relbench import _emit_and_score
@@ -87,8 +87,8 @@ def main(cfg: Config) -> None:
             "eval.context_seed only applies to single-config runs"
         )
 
-        val_tasks = eval_tasks(ev_cfg.pre_dir, splits=("val",))
-        test_tasks = eval_tasks(ev_cfg.pre_dir, splits=("test",))
+        val_tasks = get_tasks(ev_cfg.pre_dir, ev_cfg.db_task_list, ("val",))
+        test_tasks = get_tasks(ev_cfg.pre_dir, ev_cfg.db_task_list, ("test",))
         if not test_tasks:
             raise SystemExit(f"no tasks found in {ev_cfg.pre_dir}")
         run_ensemble(net, ev_cfg.pre_dir, val_tasks, test_tasks, grid=grid,
@@ -97,7 +97,7 @@ def main(cfg: Config) -> None:
                      **eval_kwargs)
         return
 
-        tasks = eval_tasks(ev_cfg.pre_dir, splits=tuple(ev_cfg.splits))
+        tasks = get_tasks(ev_cfg.pre_dir, ev_cfg.db_task_list, tuple(ev_cfg.splits))
     if not tasks:
         raise SystemExit(f"no tasks found in {ev_cfg.pre_dir}")
     lcs, bw, pl = grid[0]

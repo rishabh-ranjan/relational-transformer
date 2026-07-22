@@ -15,6 +15,7 @@ class RDBLearnFeaturizerConfig:
     """
 
     pre_dir: str
+    db_task_list: list[tuple[str, str]] | str
     eval_splits: list[str]
     max_depth: int
     max_train_samples: int
@@ -22,7 +23,7 @@ class RDBLearnFeaturizerConfig:
     def build(self, device):
         return RDBLearnFeaturizer(
             pre_dir=self.pre_dir,
-            eval_splits=self.eval_splits,
+            db_task_list=self.db_task_list, eval_splits=self.eval_splits,
             max_depth=self.max_depth,
             max_train_samples=self.max_train_samples,
             db=None,
@@ -37,7 +38,7 @@ class RDBLearnFeaturizer(Featurizer):
     by node_idx.
     """
 
-    def __init__(self, pre_dir, eval_splits, max_depth, max_train_samples, db):
+    def __init__(self, pre_dir, db_task_list, eval_splits, max_depth, max_train_samples, db):
         import time
 
         import fastdfs
@@ -46,7 +47,7 @@ class RDBLearnFeaturizer(Featurizer):
         from rdblearn.config import RDBLearnConfig
         from rdblearn.datasets import RDBDataset
         from rdblearn.estimator import RDBLearnEstimator
-        from rt.data import eval_tasks
+        from rt.data import get_tasks
         from sklearn.impute import SimpleImputer
         from sklearn.linear_model import LogisticRegression, Ridge
         from sklearn.pipeline import make_pipeline
@@ -68,7 +69,7 @@ class RDBLearnFeaturizer(Featurizer):
             predict_batch_size=5000,
         )
 
-        all_tasks = eval_tasks(pre_dir, splits=tuple(eval_splits))
+        all_tasks = get_tasks(pre_dir, db_task_list, tuple(eval_splits))
         if db is not None:
             all_tasks = [t for t in all_tasks if db in t.db_name]
 

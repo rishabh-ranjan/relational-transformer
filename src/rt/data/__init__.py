@@ -20,4 +20,4 @@ from rt.data.resolve import (
     resolve_pre_dir,
     resolve_repo,
 )
-from rt.data.tasks import Task, eval_tasks, pretrain_tasks, tasks_from_preprocessed
+from rt.data.tasks import Task, get_tasks, resolve_db_task_list

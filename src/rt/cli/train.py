@@ -32,6 +32,7 @@ def default_config() -> Config:
             load_ckpt_path=None,
         ),
         train=TrainConfig(
+            db_task_list="stanford-star/the-join/db-task-lists/all.json",
             pre_dir="stanford-star/the-join-preprocessed",
             tokens_per_gpu=2**17,
             num_workers=16,
@@ -60,10 +61,11 @@ def default_config() -> Config:
             vector_db_path=None,
             out_dir="~/ckpts/run1",
             resume_save_mins=20.0,
-            include_dbs_file=None,
+
         ),
         eval=EvalConfig(
             splits=["val"],
+            db_task_list="stanford-star/relbench/db-task-lists/forecast.json",
             pre_dir="stanford-star/relbench-preprocessed",
             tokens_per_gpu=2**17,
             num_workers=1,

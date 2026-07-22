@@ -45,7 +45,7 @@ from torch import optim
 from torch.utils.data import DataLoader
 
 from rt.config import Config
-from rt.data import TrainDataset, eval_tasks, pretrain_tasks
+from rt.data import TrainDataset, get_tasks
 from rt.model import (
     RelationalTransformer,
     load_model,
@@ -214,30 +214,8 @@ def main(cfg: Config) -> None:
 
     # ---- data: re-seed by resumed step so the stream does not replay ----
     data_seed = cfg.train.seed + SEED_STRIDE * start_step
-    train_tasks = pretrain_tasks(cfg.train.pre_dir)
-    if cfg.train.include_dbs_file:
-        with open(cfg.train.include_dbs_file) as f:
-            include_dbs = {
-                ln.strip() for ln in f
-                if ln.strip() and not ln.lstrip().startswith("#")
-            }
-        before = len(train_tasks)
-        train_tasks = [t for t in train_tasks if t.db_name in include_dbs]
-        kept_dbs = {t.db_name for t in train_tasks}
-        missing = sorted(include_dbs - kept_dbs)
-        if is_main:
-            print(
-                f"include-dbs filter ({cfg.train.include_dbs_file}): kept "
-                f"{len(train_tasks)}/{before} tasks across {len(kept_dbs)} dbs "
-                f"(requested {len(include_dbs)})",
-                flush=True,
-            )
-            if missing:
-                print(
-                    f"  warning: {len(missing)} requested dbs not present under "
-                    f"--pre-dir, e.g. {missing[:5]}",
-                    flush=True,
-                )
+    train_tasks = get_tasks(cfg.train.pre_dir, cfg.train.db_task_list, ("train",),
+                            embedding_model=cfg.model.embedding_model)
     if is_main:
         print(f"pretraining on {len(train_tasks)} tasks from {cfg.train.pre_dir}", flush=True)
     train_ds = TrainDataset(
@@ -290,7 +268,8 @@ def main(cfg: Config) -> None:
     # alongside it under a "lcs<l>-bw<b>-pl<p>_" tag. All evaluators share the
     # underlying mmap'd data (page cache), so extra entries cost eval compute
     # only, nothing between eval points.
-    val_tasks = eval_tasks(cfg.eval.pre_dir, splits=tuple(cfg.eval.splits))
+    val_tasks = get_tasks(cfg.eval.pre_dir, cfg.eval.db_task_list,
+                          tuple(cfg.eval.splits))
     from rt.eval import Evaluator
 
     evaluators = [

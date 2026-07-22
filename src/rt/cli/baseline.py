@@ -43,6 +43,7 @@ def default_config() -> BaselineConfig:
         xgb_features="sql_features",
         eval=EvalConfig(
             splits=["test"],
+            db_task_list="stanford-star/relbench/db-task-lists/forecast.json",
             pre_dir="stanford-star/relbench-preprocessed",
             tokens_per_gpu=2**18,
             num_workers=2,

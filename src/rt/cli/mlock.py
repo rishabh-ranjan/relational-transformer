@@ -16,7 +16,7 @@ from rt.data import MlockConfig, mlock_main as main
 def default_config() -> MlockConfig:
     return MlockConfig(
         pre_dir="stanford-star/the-join-preprocessed",
-        include_dbs_file=None,
+        db_task_list="stanford-star/the-join/db-task-lists/rt-j.json",
         embedding_model_ref="all-MiniLM-L12-v2",
         workers=32,
     )

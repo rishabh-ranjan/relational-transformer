@@ -21,6 +21,9 @@ class ModelConfig:
 
 @dataclass
 class TrainConfig:
+    db_task_list: list[tuple[str, str]] | str
+    """(db, task) pairs, a local JSON file of pairs, or a Hub path like
+    stanford-star/the-join/db-task-lists/all.json (only that file downloads)."""
     pre_dir: str
     tokens_per_gpu: int
     num_workers: int
@@ -60,13 +63,15 @@ class TrainConfig:
     # Restrict the pretraining mixture to the databases listed in this
     # file (one db name per line; '#' comments and blank lines ignored).
     # None = use every preprocessed db under pre_dir.
-    include_dbs_file: str | None
 
 
 @dataclass
 class EvalConfig:
     # which task splits to evaluate, e.g. ["test"] or ["val", "test"]
     splits: list[str]
+    db_task_list: list[tuple[str, str]] | str
+    """(db, task) pairs, a local JSON file of pairs, or a Hub path like
+    stanford-star/relbench/db-task-lists/forecast.json."""
     pre_dir: str
     tokens_per_gpu: int
     num_workers: int

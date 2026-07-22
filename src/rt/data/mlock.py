@@ -14,7 +14,7 @@ from dataclasses import dataclass
 
 from tqdm import tqdm
 
-from rt.data.tasks import pretrain_tasks
+from rt.data.tasks import resolve_db_task_list
 
 _libc = ctypes.CDLL(ctypes.util.find_library("c"), use_errno=True)
 _libc.mmap.argtypes = [
@@ -52,24 +52,14 @@ def mlock_file(path: str) -> int:
     return size
 
 
-def _included_dbs(include_dbs_file: str | None) -> set[str] | None:
-    if not include_dbs_file:
-        return None
-    with open(include_dbs_file) as f:
-        return {
-            ln.strip()
-            for ln in f
-            if ln.strip() and not ln.lstrip().startswith("#")
-        }
-
-
 @dataclass
 class MlockConfig:
-    pre_dir: str
+    db_task_list: list[tuple[str, str]] | str
+    """(db, task) pairs, a local JSON file, or a Hub path like
+    stanford-star/the-join/db-task-lists/rt-j.json; the referenced dbs are
+    locked."""
 
-    include_dbs_file: str | None
-    """restrict to the dbs in this file (e.g. docs/rt_j_dbs.txt); without
-    it, every preprocessed db under --pre-dir is locked."""
+    pre_dir: str
 
     embedding_model_ref: str
 
@@ -80,11 +70,7 @@ class MlockConfig:
 
 
 def mlock_main(cfg: MlockConfig) -> None:
-    tasks = pretrain_tasks(cfg.pre_dir)
-    db_names = sorted({t.db_name for t in tasks})
-    include = _included_dbs(cfg.include_dbs_file)
-    if include is not None:
-        db_names = [d for d in db_names if d in include]
+    db_names = sorted({db for db, _ in resolve_db_task_list(cfg.db_task_list)})
     print(f"mlock: {len(db_names)} unique dbs", flush=True)
 
     def db_paths(db: str) -> list[str]:
