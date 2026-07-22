@@ -117,4 +117,3 @@ pixi run test        # or pretrain, eval, preprocess, ...
 | [Inference](docs/inference.md) | Run a trained checkpoint; evaluate, engineer, tune, and ensemble contexts |
 | [Pretrain](docs/pretrain.md) | Train RT from scratch, single-GPU to multi-node |
 | [Baselines](docs/baselines.md) | rel2tab tabular baselines through the same eval path |
-| [Context visualization](docs/context-visualization.md) | Inspect the contexts sampled for each row |

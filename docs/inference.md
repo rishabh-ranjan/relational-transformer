@@ -96,9 +96,7 @@ Larger `--local-ctx-size` / `--bfs-width` pull more relational neighborhood into
 each row's context (more signal, more tokens); `--ctx-size` caps the total.
 `--prefer-latest` controls *which* same-table neighbors win that budget — the
 most recent rows (default) or the most frequent. The best setting is
-task-dependent — which motivates tuning and ensembling below. To *see* the
-contexts a config produces, use the [context
-visualizer](context-visualization.md).
+task-dependent — which motivates tuning and ensembling below.
 
 `--shuffle-seed` (default 0) seeds the per-task subset selection and item
 shuffle. Fixing it while capping rows with `--items-per-task N` evaluates the
