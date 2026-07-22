@@ -12,9 +12,11 @@ import numpy as np
 import torch
 from torch.utils.data import Dataset, IterableDataset
 
-from rt.data.resolve import resolve_pre_dir
+from rt.data.resolve import get_column_index, resolve_pre_dir
 
 from rt.rustler import Sampler
+
+MAX_F2P_NBRS = 5  # See fly.rs L32
 
 SEM_TYPE_NUMBER = 0
 SEM_TYPE_BOOLEAN = 3

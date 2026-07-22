@@ -1,5 +1,5 @@
 """Standalone evaluation drivers: simple runs, context-tuned + ensembled runs,
-and the eval CLI entry (RT checkpoints and rel2tab baselines)."""
+and the eval CLI entry (RT checkpoints)."""
 
 from __future__ import annotations
 
@@ -13,7 +13,6 @@ from rt.eval.evaluator import Evaluator
 from rt.eval.metrics import metric_for
 from rt.eval.relbench import _emit_and_score
 from rt.model import load_rt_model
-from rt.rel2tab.config import Rel2TabModelConfig
 
 def main(cfg: Config) -> None:
     ev_cfg = cfg.eval

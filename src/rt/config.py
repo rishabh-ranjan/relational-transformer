@@ -1,9 +1,6 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-# rel2tab config modules are lazy-import-cheap: the heavy deps (sklearn,
-# xgboost, relbench, ...) are imported inside build()/fit(), not at module load.
-from rt.rel2tab.config import Rel2TabModelConfig
 
 
 @dataclass
@@ -114,7 +111,7 @@ class LoggerConfig:
 
 @dataclass
 class Config:
-    model: ModelConfig | Rel2TabModelConfig
+    model: ModelConfig
     train: TrainConfig | None
     eval: EvalConfig
     logger: LoggerConfig

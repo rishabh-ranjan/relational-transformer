@@ -486,7 +486,13 @@ class RelationalTransformer(nn.Module):
         )
 
         for i, t in enumerate(["number", "text", "datetime", "boolean"]):
-            # fill in nan values with 0s # FIXME: check rustler (ctu only)
+            # Legacy-data shim: current rustler `pre` never emits NaN cells
+            # (missing values produce no cell at all), but some published
+            # preprocessed dbs (e.g. CTU-sourced ones in the Join) were built
+            # with an older pre that did. Those cells arrive as NaN features
+            # and are mean-imputed here (values are z-scored, so 0 = train
+            # mean) -- the same treatment the released checkpoints saw in
+            # training. NaN cells are never targets (rustler guards labels).
             type_values[t] = torch.where(
                 torch.isnan(type_values[t]),
                 torch.zeros_like(type_values[t]),

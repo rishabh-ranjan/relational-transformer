@@ -157,8 +157,6 @@ try:
 except Exception:
     pass
 
-MAX_F2P_NBRS = 5  # See fly.rs L32
-
 
 @cache
 def _load_column_index(db_name: str, pre_dir: str) -> dict:
