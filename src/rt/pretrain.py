@@ -42,7 +42,7 @@ import torch.distributed as dist
 from torch import optim
 from torch.utils.data import DataLoader
 
-from rt.checkpoints import save_model
+from rt.checkpoints import load_model, resolve_checkpoint, save_model
 from rt.config import Config
 from rt.data import TrainDataset
 from rt.model import RelationalTransformer
@@ -118,10 +118,6 @@ def main(cfg: Config) -> None:
         "in-loop eval does not ensemble; use rt.cli.eval on a saved checkpoint "
         "for eval.ensemble_size > 1"
     )
-    assert cfg.model.load_ckpt_path is None, (
-        "pretraining initializes fresh and resumes only from <out_dir>/resume.pt; "
-        "model.load_ckpt_path is an eval knob"
-    )
     assert cfg.eval.tasks is None, "in-loop eval evaluates the full eval task set"
     assert cfg.eval.task_type == "both", "in-loop eval evaluates both task types"
     assert not cfg.eval.write_csv and not cfg.eval.out_dir, (
@@ -173,8 +169,18 @@ def main(cfg: Config) -> None:
     best = {"clf": None, "reg": None}
     start_step = 0
 
-    # ---- resume from preemption (GPU-count flexible: full model+opt per rank) ----
+    # ---- warm start (model weights only; optimizer/SWA/step start fresh) ----
+    # resume.pt takes precedence: a preempted warm-started run must continue,
+    # not restart from the warm-start weights.
     resume_path = out_dir / "resume.pt"
+    if cfg.model.load_ckpt_path is not None and not resume_path.exists():
+        _, ckpt_path = resolve_checkpoint(cfg.model.load_ckpt_path)
+        raw_net.load_state_dict(load_model(ckpt_path))
+        if is_main:
+            print(f"warm-started model weights from {cfg.model.load_ckpt_path}",
+                  flush=True)
+
+    # ---- resume from preemption (GPU-count flexible: full model+opt per rank) ----
     if resume_path.exists():
         ck = torch.load(resume_path, map_location="cpu")
         raw_net.load_state_dict(ck["model"])
