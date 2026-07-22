@@ -15,7 +15,6 @@ from typing import Optional
 import torch
 from torch.optim.optimizer import Optimizer
 
-from torch.optim.optimizer import Optimizer
 
 _DEFAULT_A = 3.4445
 _DEFAULT_B = -4.7750

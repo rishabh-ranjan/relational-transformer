@@ -408,7 +408,7 @@ class Evaluator:
                         yield out
 
     def evaluate(self, nets_with_prefix, eval_ctx_sizes_to_use, steps, reg_metric):
-        """Full main.py-style pass: per-task metrics, per-split avg
+        """Full in-loop eval pass: per-task metrics, per-split avg
         aggregation, stdout printing, wandb logging.
 
         ``nets_with_prefix``: list of ``(net, prefix_str)``. Prefixes

@@ -1,7 +1,7 @@
 # Pretrain
 
-Self-supervised pretraining of a Relational Transformer over every task in the
-preprocessed datasets at `--pre-dir` (the Join). Includes Muon+AdamW
+Self-supervised pretraining of a Relational Transformer over the tasks in
+`--train.db-task-list` (the Join). Includes Muon+AdamW
 optimization, stochastic weight averaging (SWA), periodic validation against
 RelBench, checkpointing, and automatic selection of the best clf / reg checkpoint
 by mean validation metric.
@@ -14,13 +14,13 @@ automatic under `torchrun`, and the run resumes automatically from
 
 ## Prerequisite: preprocessed data
 
-Pretraining takes a `--pre-dir` of preprocessed pretraining data (the Join) and a
-`--val-pre-dir` of preprocessed RelBench for validation — each a local path (see
-[preprocess.md](preprocess.md)) or a Hub repo, downloaded and cached on demand.
-The released RT-J data:
+Pretraining takes a `--train.pre-dir` of preprocessed pretraining data (the
+Join) and an `--eval.pre-dir` of preprocessed RelBench for validation — each a
+local path (see [preprocess.md](preprocess.md)) or a Hub repo, downloaded and
+cached on demand. The released RT-J data (the defaults):
 
-- `--pre-dir stanford-star/the-join-preprocessed`
-- `--val-pre-dir stanford-star/relbench-preprocessed`
+- `--train.pre-dir stanford-star/the-join-preprocessed`
+- `--eval.pre-dir stanford-star/relbench-preprocessed`
 
 The task mixture is given by `--train.db-task-list` — `(db, task)` pairs as a
 local JSON file or a Hub path. `stanford-star/the-join/db-task-lists/forecast.json`
@@ -29,14 +29,14 @@ mixture.
 
 ## Single-GPU training
 
-The `pretrain` task launches `torchrun --standalone --nproc-per-node=auto`, which
+The `train` task launches `torchrun --standalone --nproc-per-node=auto`, which
 uses every visible GPU. Pin it to one GPU for a single-GPU run:
 
 ```bash
 CUDA_VISIBLE_DEVICES=0 pixi run train \
-  --pre-dir stanford-star/the-join-preprocessed \
-  --val-pre-dir stanford-star/relbench-preprocessed \
-  --out-dir ~/ckpts/run1
+  --train.pre-dir stanford-star/the-join-preprocessed \
+  --eval.pre-dir stanford-star/relbench-preprocessed \
+  --train.out-dir ~/ckpts/run1
 ```
 
 ## Multi-GPU single-node training
@@ -47,14 +47,14 @@ on every rank, no sharding):
 
 ```bash
 pixi run train \
-  --pre-dir stanford-star/the-join-preprocessed \
-  --val-pre-dir stanford-star/relbench-preprocessed \
-  --out-dir ~/ckpts/run1
+  --train.pre-dir stanford-star/the-join-preprocessed \
+  --eval.pre-dir stanford-star/relbench-preprocessed \
+  --train.out-dir ~/ckpts/run1
 ```
 
 Give the process as much of the node's RAM as you can: by default each run
 populates the preprocessed mixture into the page cache at startup
-(`--mmap-populate`, on by default) so the GPUs are fed instead of cold-faulting
+(`--train.mmap-populate`, on by default) so the GPUs are fed instead of cold-faulting
 the (large) data from shared storage per item.
 
 ## Multi-node training
@@ -66,7 +66,7 @@ worker per GPU:
 # on every node (rank 0 on the head node):
 torchrun --nnodes=<N> --nproc-per-node=<GPUS> \
   --node-rank=<i> --master-addr=<head-node> --master-port=<port> \
-  -m rt.cli.train --pre-dir ... --val-pre-dir ... --out-dir ...
+  -m rt.cli.train --train.pre-dir ... --eval.pre-dir ... --train.out-dir ...
 ```
 
 Wrap this in your cluster's launcher (Slurm, k8s, ...). Hard-won notes for
@@ -94,21 +94,21 @@ writing that wrapper:
 run preempted on 4×8 GPUs can resume on a single 4-GPU node with the same
 `OUT_DIR` — the data stream is re-seeded by the resumed step, so nothing is
 replayed and determinism holds across the world-size change. A time-based dump
-every `--resume-save-mins` minutes (default 20) bounds lost progress.
+every `--train.resume-save-mins` minutes (default 20) bounds lost progress.
 
 ## Avoiding data loading during debug iterations
 
 By default each run re-populates the preprocessed data into RAM at startup. When
 iterating on training code, that reload is wasted work on every restart. Lock the
 data into the page cache **once** with a long-lived holder
-(`rt.cli.mlock`), then train with `--no-mmap-populate` so reads hit the
+(`rt.cli.mlock`), then train with `--no-train.mmap-populate` so reads hit the
 locked cache:
 
 ```bash
 # terminal 1: hold the data resident (Ctrl-C to release)
 pixi run python -m rt.cli.mlock --pre-dir <PRE_DIR> --workers 32
 # terminal 2 (same node): train without re-populating
-pixi run train --pre-dir <PRE_DIR> --out-dir ~/ckpts/run1 --no-mmap-populate
+pixi run train --train.pre-dir <PRE_DIR> --train.out-dir ~/ckpts/run1 --no-train.mmap-populate
 ```
 
 This is purely a convenience for repeated local runs; it is **not required**.

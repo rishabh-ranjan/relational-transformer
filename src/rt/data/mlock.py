@@ -4,11 +4,8 @@ from __future__ import annotations
 
 import ctypes
 import ctypes.util
-import mmap
 import os
 import signal
-import sys
-import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
 
@@ -64,9 +61,8 @@ class MlockConfig:
     embedding_model_ref: str
 
     workers: int
-    """parallel mlock workers; /dfs scales with concurrency (measured
-    ~244MB/s single-stream vs ~1.2GB/s at 8+ parallel), so more workers
-    saturate it faster."""
+    """parallel mlock workers; networked filesystems typically scale with
+    concurrency, so more workers populate the cache faster."""
 
 
 def mlock_main(cfg: MlockConfig) -> None:

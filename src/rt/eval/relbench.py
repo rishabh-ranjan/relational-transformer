@@ -10,7 +10,6 @@ from functools import cache
 from pathlib import Path
 
 from rt.data import read_meta, resolve_pre_dir
-from rt.eval.metrics import metric_for
 
 # --------------------------------------------------------------------------- #
 # RelBench submission: denormalize / sigmoid, key by node index, score.

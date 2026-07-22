@@ -86,12 +86,9 @@ print("driver-dnf probability:", [round(p, 3) for p in preds.tolist()])
 Point RT at your **own** database, define a
 prediction task, and infer with a released checkpoint:
 
-- **Colab, no setup**: the [fully worked notebook](examples/byod/colab.ipynb)
-  ([open in Colab](https://colab.research.google.com/github/stanford-star/relational-transformer/blob/main/examples/byod/colab.ipynb))
+- **Colab, no setup**: the [fully worked notebook](byod/colab.ipynb)
+  ([open in Colab](https://colab.research.google.com/github/stanford-star/relational-transformer/blob/main/byod/colab.ipynb))
   runs the whole flow end-to-end on your database (or the bundled demo).
-- **Local scripts**: [examples/inference](examples/inference/README.md) runs the
-  same from a DuckDB, Postgres, or MySQL database, with any RT-J checkpoint
-  from the Hugging Face Hub.
 
 ## Development
 
@@ -101,7 +98,7 @@ environment (Python, PyTorch + CUDA, Rust, and all dependencies), built on first
 ```bash
 git clone https://github.com/stanford-star/relational-transformer.git
 cd relational-transformer
-pixi run test        # or pretrain, eval, preprocess, ...
+pixi run test        # or train, eval, preprocess, ...
 ```
 
 

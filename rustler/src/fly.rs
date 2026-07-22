@@ -108,7 +108,7 @@ struct Vecs {
     // Visualization-only metadata: which seed node owns this cell's BFS
     // shell, and at what depth from that seed it was visited. -1 / 0 for
     // padding slots and the primary target cell respectively. Not consumed
-    // by the model — it's free side-info for tools like ctx_viz.
+    // by the model — it's free side-info for inspection tooling.
     seed_node_idxs: Vec<i32>,
     bfs_depths: Vec<i32>,
     // Per-slot validity mask (length = bs). `true` for real items, `false`

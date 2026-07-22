@@ -28,13 +28,11 @@ from __future__ import annotations
 
 import dataclasses
 import json
-import math
 import os
 import random
 import shutil
 import signal
 import time
-from collections import defaultdict
 from datetime import timedelta
 from pathlib import Path
 
@@ -493,6 +491,6 @@ def main(cfg: Config) -> None:
                 shutil.copyfile(src, out_dir / f"{label}.safetensors")
             print(f"\n{label}: {b['kind']} model at step {b['step']}, "
                   f"val {b['metric']}={b['value']:.4f}  ->  {label}.safetensors", flush=True)
-        print(f"(load with rt.checkpoints.load_rt_model('{out_dir}/best_clf.safetensors'))", flush=True)
+        print(f"(load with rt.model.load_rt_model('{out_dir}/best_clf.safetensors'))", flush=True)
     if ddp:
         dist.destroy_process_group()

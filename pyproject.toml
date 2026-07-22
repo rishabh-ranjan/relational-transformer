@@ -7,6 +7,7 @@ name = "relational-transformer"
 version = "1.1.0"
 description = "Relational Transformer (RT): a foundation model for relational data, bundling a native Rust data-processing engine (rt.rustler)."
 readme = "README.md"
+license = { file = "LICENSE" }
 requires-python = ">=3.12"
 dependencies = [
     "torch",
@@ -20,13 +21,19 @@ dependencies = [
     "lazy_loader",
     "tqdm",
     "pyyaml",
+    "tyro",
 ]
 
 [project.optional-dependencies]
-# `eval` (rt.eval_utils) also needs relbench, a git dependency that can't be
+# `eval` (rt.eval) also needs relbench, a git dependency that can't be
 # declared here (PyPI forbids URL deps) -- install it manually:
 #   pip install "git+https://github.com/snap-stanford/relbench.git@<rev>"
 eval = ["scikit-learn<1.6.0"]
+# rel2tab tabular baselines (rt.cli.baseline); tabicl/tabpfn/rdblearn extras are
+# research-only and not published -- install manually if needed.
+baseline = ["scikit-learn<1.6.0", "xgboost", "pandas", "duckdb"]
+# wandb logging for rt.cli.train (off by default).
+train = ["wandb"]
 test = ["pytest", "polars"]
 
 [tool.maturin]
@@ -35,7 +42,6 @@ manifest-path = "rustler/Cargo.toml"
 module-name = "rt.rustler"
 # `pre` bundles the polars preprocess pyfunction; FAISS (`vecdb`) stays source-only.
 features = ["pyo3/extension-module", "pre"]
-exclude = ["**/*.txt"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
@@ -60,7 +66,6 @@ huggingface-hub = "*"
 numpy = "*"
 ml_dtypes = "*"
 orjson = "*"
-fire = "*"
 tyro = "*"
 einops = "*"
 scikit-learn = "<1.6.0"
