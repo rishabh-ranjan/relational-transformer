@@ -1,4 +1,4 @@
-"""Shared evaluation engine for rt.eval and rt.baseline.
+"""Shared evaluation engine for rt.eval (RT checkpoints and rel2tab baselines).
 
 Builds an :class:`rt.evaluator.Evaluator` over a task list, runs single-process
 inference for a model that implements ``.predict(batch, ctx_sizes, device, task,

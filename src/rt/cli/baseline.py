@@ -5,7 +5,7 @@
 
 The (featurizer, predictor) pair is selected by name here and expanded into the
 full nested :class:`rt.config.Config` (all defaults live in this file); the
-shared eval path is :func:`rt.baseline.main`.
+shared eval path is :func:`rt.eval.main`.
 """
 
 from dataclasses import dataclass
@@ -13,8 +13,8 @@ from typing import Literal
 
 import tyro
 
-from rt.baseline import main
-from rt.config import Config, EvalConfig, EvalOnlyConfig, LoggerConfig
+from rt.eval import main
+from rt.config import Config, EvalConfig, LoggerConfig
 from rt.rel2tab.config import Rel2TabModelConfig
 
 
@@ -128,7 +128,7 @@ def build_config(a: BaselineArgs) -> Config:
             embedding_model="all-MiniLM-L12-v2",
             d_text=384,
         ),
-        train=EvalOnlyConfig(),
+        train=None,
         eval=EvalConfig(
             recipe=a.recipe,
             pre_dir=a.pre_dir,

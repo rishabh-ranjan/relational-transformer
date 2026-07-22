@@ -23,21 +23,35 @@ from __future__ import annotations
 import torch
 
 from rt.checkpoints import load_rt_model
+from rt.rel2tab.config import Rel2TabModelConfig
 from rt.config import Config
 from rt.recipes import get_tasks
 
 
 def main(cfg: Config) -> None:
     ev_cfg = cfg.eval
-    checkpoint = cfg.model.load_ckpt_path
-    assert checkpoint is not None, "model.load_ckpt_path is required"
     ctx_size = ev_cfg.ctx_sizes[0]
     device = "cuda" if torch.cuda.is_available() else "cpu"
-    net, config = load_rt_model(checkpoint, device=device, compile=False)
-    net = net.to(torch.bfloat16)
-    task_type = config.get("task_type")
-    print(f"loaded {config.get('name', checkpoint)} "
-          f"(task_type={task_type}, embed={config['embedding_model']}) on {device}")
+
+    if isinstance(cfg.model, Rel2TabModelConfig):
+        # rel2tab tabular baseline: (featurizer, predictor) through the same
+        # eval path as RT.
+        net = cfg.model.build(device)
+        embedding_model = cfg.model.embedding_model
+        d_text = cfg.model.d_text
+        task_type = None if ev_cfg.task_type == "both" else ev_cfg.task_type
+        print(f"baseline: {type(cfg.model.featurizer).__name__} + "
+              f"{type(cfg.model.predictor).__name__} on {device}")
+    else:
+        checkpoint = cfg.model.load_ckpt_path
+        assert checkpoint is not None, "model.load_ckpt_path is required"
+        net, config = load_rt_model(checkpoint, device=device, compile=False)
+        net = net.to(torch.bfloat16)
+        embedding_model = config["embedding_model"]
+        d_text = config["d_text"]
+        task_type = config.get("task_type")
+        print(f"loaded {config.get('name', checkpoint)} "
+              f"(task_type={task_type}, embed={embedding_model}) on {device}")
 
     def of_kind(tasks):
         return [t for t in tasks if t.task_type == task_type] if task_type in ("clf", "reg") else tasks
@@ -50,7 +64,7 @@ def main(cfg: Config) -> None:
         return [t for t in tasks if t.db_name in sel or f"{t.db_name}/{t.table_name}" in sel]
 
     eval_kwargs = dict(
-        embedding_model=config["embedding_model"], d_text=config["d_text"], device=device,
+        embedding_model=embedding_model, d_text=d_text, device=device,
         num_walks=ev_cfg.num_walks, walk_length=ev_cfg.walk_length,
         tokens_per_gpu=ev_cfg.tokens_per_gpu, items_per_task=ev_cfg.items_per_task,
         num_workers=ev_cfg.num_workers,
@@ -81,5 +95,5 @@ def main(cfg: Config) -> None:
                          **eval_kwargs)
     run_and_report(net, tasks, ev_cfg.pre_dir, ctx_size=ctx_size,
                    reg_metric=ev_cfg.reg_metric, out_dir=ev_cfg.out_dir, no_csv=not ev_cfg.write_csv,
-                   evaluator=ev, embedding_model=config["embedding_model"])
+                   evaluator=ev, embedding_model=embedding_model)
 

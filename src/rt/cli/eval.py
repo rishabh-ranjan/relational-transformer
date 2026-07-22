@@ -1,6 +1,6 @@
 import tyro
 
-from rt.config import Config, EvalConfig, EvalOnlyConfig, LoggerConfig, ModelConfig
+from rt.config import Config, EvalConfig, LoggerConfig, ModelConfig
 from rt.eval import main
 
 
@@ -19,7 +19,7 @@ def default_config() -> Config:
             materialize_attn_masks=False,
             load_ckpt_path="stanford-star/rt-j/classification",
         ),
-        train=EvalOnlyConfig(),
+        train=None,
         eval=EvalConfig(
             recipe="relbench_eval_test",
             pre_dir="stanford-star/relbench-preprocessed",

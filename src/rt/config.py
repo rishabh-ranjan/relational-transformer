@@ -65,11 +65,6 @@ class TrainConfig:
 
 
 @dataclass
-class EvalOnlyConfig:
-    pass
-
-
-@dataclass
 class EvalConfig:
     recipe: str
     pre_dir: str
@@ -94,7 +89,7 @@ class EvalConfig:
     context_seed: int
     # See TrainConfig.vector_db_path.
     vector_db_path: str | None
-    # --- standalone evaluation (rt.eval / rt.baseline CLIs) ---
+    # --- standalone evaluation (rt.eval) ---
     # simple: one context config on the test split; ensemble: tune context
     # config per task on val, then average predictions over ensemble_size
     # context seeds on test.
@@ -110,7 +105,7 @@ class EvalConfig:
     out_dir: str
     # skip writing per-item prediction CSVs.
     write_csv: bool
-    # (rt.baseline) restrict tasks by type: clf | reg | both.
+    # restrict tasks by type (baselines): clf | reg | both.
     task_type: str
 
 
@@ -124,6 +119,6 @@ class LoggerConfig:
 @dataclass
 class Config:
     model: ModelConfig | Rel2TabModelConfig
-    train: TrainConfig | EvalOnlyConfig
+    train: TrainConfig | None
     eval: EvalConfig
     logger: LoggerConfig
