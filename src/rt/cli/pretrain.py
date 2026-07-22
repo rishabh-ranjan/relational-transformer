@@ -1,14 +1,8 @@
 import tyro
 
-import rt.config
 from rt.config import Config, EvalConfig, LoggerConfig, ModelConfig, TrainConfig
 from rt.pretrain import main
-from rt.rel2tab.config import Rel2TabModelConfig
 
-# rt.config only imports Rel2TabModelConfig under TYPE_CHECKING (heavy deps);
-# tyro resolves the `ModelConfig | Rel2TabModelConfig` annotation at runtime,
-# so inject the real class into rt.config's namespace here.
-rt.config.Rel2TabModelConfig = Rel2TabModelConfig
 
 
 def default_config() -> Config:

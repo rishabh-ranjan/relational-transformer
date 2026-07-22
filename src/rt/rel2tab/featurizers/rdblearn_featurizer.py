@@ -1,7 +1,6 @@
 from dataclasses import dataclass
 
 import numpy as np
-import pandas as pd
 import torch
 
 from rt.rel2tab.featurizer import Featurizer
@@ -132,6 +131,8 @@ class RDBLearnFeaturizer(Featurizer):
             }
             ordered = sorted(splits_info.items(), key=lambda x: x[1]["node_idx_offset"])
             parts = [split_dfs[s].reset_index(drop=True) for s, _ in ordered]
+            import pandas as pd
+
             combined_df = pd.concat(parts, ignore_index=True)
 
             X = combined_df.drop(columns=[target_col])

@@ -1,12 +1,9 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import TYPE_CHECKING
-
-if TYPE_CHECKING:
-    # Type-only: rt.rel2tab pulls heavy deps, so
-    # `import rt.config` must not import it at runtime.
-    from rt.rel2tab.config import Rel2TabModelConfig
+# rel2tab config modules are lazy-import-cheap: the heavy deps (sklearn,
+# xgboost, relbench, ...) are imported inside build()/fit(), not at module load.
+from rt.rel2tab.config import Rel2TabModelConfig
 
 
 @dataclass

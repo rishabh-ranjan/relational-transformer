@@ -1,13 +1,8 @@
 import tyro
 
-import rt.config
 from rt.config import Config, EvalConfig, EvalOnlyConfig, LoggerConfig, ModelConfig
 from rt.eval import main
-from rt.rel2tab.config import Rel2TabModelConfig
 
-# Config.model's annotation references Rel2TabModelConfig only under
-# TYPE_CHECKING; make it resolvable at runtime for tyro.
-rt.config.Rel2TabModelConfig = Rel2TabModelConfig
 
 
 def default_config() -> Config:

@@ -1,15 +1,11 @@
 import tyro
 
-import rt.config
 from rt.baseline import EMBEDDING_MODEL, D_TEXT, main
 from rt.config import Config, EvalConfig, EvalOnlyConfig, LoggerConfig
 from rt.rel2tab.config import Rel2TabModelConfig
 from rt.rel2tab.featurizers import EntityFeaturizerConfig
 from rt.rel2tab.predictors import RidgePredictorConfig
 
-# Config.model's annotation references Rel2TabModelConfig only under
-# TYPE_CHECKING; make it resolvable at runtime for tyro.
-rt.config.Rel2TabModelConfig = Rel2TabModelConfig
 
 
 def default_config() -> Config:
