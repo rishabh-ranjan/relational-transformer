@@ -10,7 +10,7 @@ the single source of truth for what runs.
 
 Curated lists ship on the Hub, e.g.
 ``stanford-star/relbench/db-task-lists/forecast.json`` (the 21-task RelBench
-benchmark) and ``stanford-star/the-join/db-task-lists/{all,rt-j}.json`` (the
+benchmark) and ``stanford-star/the-join/db-task-lists/{forecast,rt-j}.json`` (the
 pretraining mixtures).
 """
 
