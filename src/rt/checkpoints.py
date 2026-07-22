@@ -4,7 +4,7 @@ A released checkpoint is a directory (a local folder or a Hub model repo
 ``org/repo[/subdir]``) holding:
 
 * ``model.safetensors`` -- the weights, a flat ``state_dict`` stored with
-  :func:`safetensors.torch.save_file` (the format ``scripts/pretrain.py``
+  :func:`safetensors.torch.save_file` (the format ``rt.pretrain``
   writes); and
 * ``config.json``       -- the model dims + the text-embedding model used, so a
   loader needs no out-of-band knowledge.

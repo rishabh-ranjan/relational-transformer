@@ -9,7 +9,7 @@ import numpy as np
 import torch
 from torch.utils.data import Dataset, IterableDataset
 
-from rt._rustler import Sampler
+from rt.rustler import Sampler
 from rt.pre import resolve_pre_dir
 
 # rustler's Sampler is an unpicklable Rust object, so any DataLoader over a

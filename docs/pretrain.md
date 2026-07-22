@@ -57,34 +57,36 @@ the (large) data from shared storage per item.
 
 ## Multi-node training
 
-Multi-node runs under Slurm via `scripts/slurm_pretrain.sh` (one `torchrun` per
-node). It is infrastructure-agnostic — pass your `--account` / `--partition` /
-`--qos` and the data/out paths as env vars; nothing cluster-specific is
-hardcoded. Use a **preemptible** queue (the launcher is preemption-safe via
-`--requeue`) and run from a clone on **shared** storage so every node sees the
-same repo + pixi manifest:
+Multi-node runs are plain `torchrun` — one launcher per node, each spawning one
+worker per GPU:
 
 ```bash
-# 4 nodes x 8 GPUs = 32, preemptible, logging to wandb
-PRE_DIR=stanford-star/the-join-preprocessed \
-VAL_PRE_DIR=stanford-star/relbench-preprocessed \
-OUT_DIR=$HOME/ckpts/rtj GPUS_PER_NODE=8 \
-WANDB_PROJECT=rt-pretrain WANDB_NAME=rtj \
-sbatch --nodes=4 --gres=gpu:a100:8 --exclusive \
-       --account=<acct> --partition=<preemptible> --qos=<preemptible-qos> \
-       scripts/slurm_pretrain.sh
+# on every node (rank 0 on the head node):
+torchrun --nnodes=<N> --nproc-per-node=<GPUS> \
+  --node-rank=<i> --master-addr=<head-node> --master-port=<port> \
+  -m rt.cli.pretrain --pre-dir ... --val-pre-dir ... --out-dir ...
 ```
 
-Single node is the same with `--nodes=1` (no preemptible queue needed). Knobs
-(env vars): `GPUS_PER_NODE`, `WANDB_PROJECT` / `WANDB_NAME` (omit for offline),
-`NCCL_IB_DISABLE=1` (force NCCL over TCP if your InfiniBand is unreliable),
-`EXTRA_ARGS` (forwarded to `pretrain.py`).
+Wrap this in your cluster's launcher (Slurm, k8s, ...). Hard-won notes for
+writing that wrapper:
 
-`--exclusive` is the portable way to give the job the node's full RAM (the
-preprocessed mixture is populated into the page cache); some schedulers instead
-require `--mem-per-gpu=<X>G` (and reject `--mem=0`). The launcher also pins the
-step to all node cores so the parallel data loading isn't CPU-starved, and uses a
-static rendezvous (fixed master addr/port) for robustness under load.
+- **Static rendezvous.** Pass a fixed `--master-addr`/`--master-port` (derive a
+  unique per-job port) rather than torchrun's dynamic c10d rendezvous — the
+  dynamic store has wedged large jobs under load.
+- **Full-node CPUs.** Give the training step every core on the node. Data
+  loading (the rustler sampler's parallel mmap-populate and per-item context
+  building) runs on rayon; a small cgroup CPU slice (e.g. Slurm's default
+  `--cpus-per-task`) starves it and bottlenecks the GPUs.
+- **Full-node RAM.** The preprocessed mixture is populated into the page cache;
+  request the whole node's memory (`--exclusive`, `--mem-per-gpu`, or
+  equivalent).
+- **Preemption is safe.** SIGTERM saves `$OUT_DIR/resume.pt` and exits;
+  relaunching with the same `OUT_DIR` resumes (Slurm: `--requeue` on a
+  preemptible queue).
+- **Shared storage for the clone.** Run from a repo checkout all nodes can
+  read; the pixi env itself builds node-locally.
+- **Flaky InfiniBand?** `NCCL_IB_DISABLE=1` forces NCCL over TCP — slower but
+  robust.
 
 **Resume** is automatic from `$OUT_DIR/resume.pt` and **GPU-count flexible**: a
 run preempted on 4×8 GPUs can resume on a single 4-GPU node with the same
@@ -97,12 +99,12 @@ every `--resume-save-mins` minutes (default 20) bounds lost progress.
 By default each run re-populates the preprocessed data into RAM at startup. When
 iterating on training code, that reload is wasted work on every restart. Lock the
 data into the page cache **once** with a long-lived holder
-(`scripts/mlock_recipe.py`), then train with `--no-mmap-populate` so reads hit the
+(`rt.mlock_recipe`), then train with `--no-mmap-populate` so reads hit the
 locked cache:
 
 ```bash
 # terminal 1: hold the data resident (Ctrl-C to release)
-pixi run python scripts/mlock_recipe.py --pre-dir <PRE_DIR> --workers 32
+pixi run python -m rt.cli.mlock_recipe --pre-dir <PRE_DIR> --workers 32
 # terminal 2 (same node): train without re-populating
 pixi run pretrain --pre-dir <PRE_DIR> --out-dir ~/ckpts/run1 --no-mmap-populate
 ```

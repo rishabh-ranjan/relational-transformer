@@ -1,7 +1,7 @@
 """SWA (stochastic weight averaging) state.
 
 ``SwaState`` is a small parameter-averaging container used by
-``scripts/pretrain.py`` for in-loop SWA over training params. Backed by an fp32
+``rt.pretrain`` for in-loop SWA over training params. Backed by an fp32
 dict; updates are in-place ``lerp_`` with alpha derived from ``momentum`` and
 the current update count.
 """
@@ -22,7 +22,7 @@ class SwaState:
       First update has ``alpha=1.0``, asymptotes to ``1-m`` as ``n``
       grows.
 
-    Used from training (``scripts/pretrain.py``: in-loop SWA over ``raw_net``
+    Used from training (``rt.pretrain``: in-loop SWA over ``raw_net``
     parameters).
     """
 

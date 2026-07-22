@@ -29,7 +29,7 @@ and push in one step).
 To preprocess a whole Hub collection (e.g. the 650-database [the Join](https://huggingface.co/datasets/stanford-star/the-join)):
 
 ```bash
-pixi run python scripts/preprocess.py list --repo stanford-star/the-join   # inspect specs
+pixi run python -m rt.cli.preprocess list --repo stanford-star/the-join   # inspect specs
 pixi run preprocess-many \
   --repo stanford-star/the-join --out-dir ~/scratch/the-join-pre \
   --shard 0 --num-shards 1 --skip-existing
@@ -37,7 +37,7 @@ pixi run preprocess-many \
 
 `--skip-existing` makes the pass resumable (datasets whose embeddings are already
 written are skipped). `--shard i --num-shards N` splits the collection across a
-preemptible Slurm array — see `scripts/slurm_preprocess.sh`.
+job array (e.g. a preemptible Slurm array with `--array=0-63` mapping the task id to `--shard`).
 
 ## Using preprocessed data (local or Hub — same interface)
 

@@ -1,5 +1,5 @@
-"""Standard eval driver used by training (scripts/pretrain.py) and eval
-(scripts/eval.py).
+"""Standard eval driver used by training (rt.pretrain) and eval
+(rt.eval).
 
 Owns: per-task DataLoaders (built once at construction), prefetch
 iterators, per-batch forward + DDP gather, per-task metric computation,

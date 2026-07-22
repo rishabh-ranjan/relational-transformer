@@ -1,4 +1,4 @@
-"""Shared evaluation engine for scripts/eval.py and scripts/baseline.py.
+"""Shared evaluation engine for rt.eval and rt.baseline.
 
 Builds an :class:`rt.evaluator.Evaluator` over a task list, runs single-process
 inference for a model that implements ``.predict(batch, ctx_sizes, device, task,

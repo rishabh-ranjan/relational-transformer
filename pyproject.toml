@@ -5,7 +5,7 @@ build-backend = "maturin"
 [project]
 name = "relational-transformer"
 version = "1.1.0"
-description = "Relational Transformer (RT): a foundation model for relational data, bundling a native Rust data-processing engine (rt._rustler)."
+description = "Relational Transformer (RT): a foundation model for relational data, bundling a native Rust data-processing engine (rt.rustler)."
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
@@ -32,7 +32,7 @@ test = ["pytest", "polars"]
 [tool.maturin]
 python-source = "src"
 manifest-path = "rustler/Cargo.toml"
-module-name = "rt._rustler"
+module-name = "rt.rustler"
 # `pre` bundles the polars preprocess pyfunction; FAISS (`vecdb`) stays source-only.
 features = ["pyo3/extension-module", "pre"]
 exclude = ["**/*.txt"]
@@ -81,20 +81,20 @@ relbench = { git = "https://github.com/snap-stanford/relbench.git", rev = "6e4a3
 [tool.pixi.tasks]
 # Standalone preprocessor binary (polars + manifest reader; no FAISS).
 build-pre = "cargo build --release --features pre --manifest-path rustler/Cargo.toml"
-# Build + editable-install the rt package and the rt._rustler extension from the
+# Build + editable-install the rt package and the rt.rustler extension from the
 # root maturin project (FAISS-free). The opt-in FAISS vector-db Sampler is built
 # manually: `maturin develop --release --features vecdb` (needs cmake + a BLAS).
 build-sampler = "maturin develop --uv --release"
 # Preprocess one dataset: download (HF or local) -> rustler -> embeddings.
-preprocess = { cmd = "python scripts/preprocess.py one", depends-on = ["build-sampler"] }
+preprocess = { cmd = "python -m rt.cli.preprocess one", depends-on = ["build-sampler"] }
 # Preprocess many datasets from a HuggingFace collection repo.
-preprocess-many = { cmd = "python scripts/preprocess.py many", depends-on = ["build-sampler"] }
+preprocess-many = { cmd = "python -m rt.cli.preprocess many", depends-on = ["build-sampler"] }
 # Upload an already-preprocessed dataset directory to a HuggingFace repo.
-upload = "python scripts/preprocess.py upload"
+upload = "python -m rt.cli.preprocess upload"
 # Context visualizer (serves an HTTP UI over preprocessed data).
-ctx-viz = { cmd = "python scripts/ctx_viz.py", depends-on = ["build-sampler"] }
-pretrain = { cmd = "torchrun --standalone --nproc-per-node=auto scripts/pretrain.py", depends-on = ["build-sampler"] }
+ctx-viz = { cmd = "python -m rt.cli.ctx_viz", depends-on = ["build-sampler"] }
+pretrain = { cmd = "torchrun --standalone --nproc-per-node=auto -m rt.cli.pretrain", depends-on = ["build-sampler"] }
 # eval is single-process (one GPU) so per-item rows stay in task-table order.
-eval = { cmd = "python scripts/eval.py", depends-on = ["build-sampler"] }
-baseline = { cmd = "python scripts/baseline.py", depends-on = ["build-sampler"] }
+eval = { cmd = "python -m rt.cli.eval", depends-on = ["build-sampler"] }
+baseline = { cmd = "python -m rt.cli.baseline", depends-on = ["build-sampler"] }
 test = { cmd = "pytest", depends-on = ["build-sampler"] }

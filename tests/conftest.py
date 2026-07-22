@@ -1,7 +1,7 @@
 """Shared fixtures for the relational-transformer test suite.
 
 These tests exercise the *installed wheel* (the public `rt` API + the compiled
-`rt._rustler` engine), so run them against a built + installed package -- e.g.
+`rt.rustler` engine), so run them against a built + installed package -- e.g.
 `local/test.sh`, or the CI `test` job.
 
 Every dependency these tests touch is declared -- torch is a hard dependency of

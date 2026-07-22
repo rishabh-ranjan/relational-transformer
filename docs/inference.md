@@ -32,7 +32,7 @@ the relational graph), the model does a single forward pass, and predictions are
 keyed back to each row by its seed node index. Eval is single-process (one GPU)
 so per-row predictions stay aligned regardless of eval row order.
 
-**Your own database (not RelBench).** `scripts/eval.py` is wired to the RelBench
+**Your own database (not RelBench).** `rt.eval` is wired to the RelBench
 benchmark, but the pieces compose directly for any database — prediction is just
 the model's forward over a sampled context. The [fully worked Colab
 notebook](../examples/byod/colab.ipynb) walks through it end-to-end (DuckDB

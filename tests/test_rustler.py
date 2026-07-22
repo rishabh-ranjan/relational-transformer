@@ -4,7 +4,7 @@ from __future__ import annotations
 
 
 def test_extension_symbols():
-    import rt._rustler as r
+    import rt.rustler as r
 
     assert hasattr(r, "Sampler")
     assert hasattr(r, "column_sem_types")
@@ -12,7 +12,7 @@ def test_extension_symbols():
 
 
 def test_preprocess_end_to_end(synthetic_dataset, tmp_path):
-    from rt._rustler import preprocess
+    from rt.rustler import preprocess
 
     out = tmp_path / "out"
     preprocess(str(synthetic_dataset), str(out), skip_tasks=True)

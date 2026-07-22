@@ -4,7 +4,7 @@ The ``pre_dir`` argument used throughout rt accepts either form, so the same cod
 path serves both:
 
 * a **local path** -- used directly. Preprocess your own data with rustler
-  (``scripts/preprocess.py``) and point ``pre_dir`` at the output; nothing needs
+  (``rt.preprocess``) and point ``pre_dir`` at the output; nothing needs
   to be uploaded anywhere.
 * a **HuggingFace dataset repo** ``org/repo[/subdir]`` -- the per-dataset files
   needed for the requested databases are downloaded into the HF cache on demand
