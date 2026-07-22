@@ -16,7 +16,8 @@ pixi run baseline --featurizer entity --predictor ridge \
 - **Predictors** (`--predictor`): `mean`, `linear`, `ridge`, `xgboost`.
 
 The `global`/`entity` featurizers with the `mean`/`linear`/`ridge` predictors
-need no GPU (only the `rt` featurizer runs a model). `--out-dir` is a valid
+need no GPU (only the `rt` featurizer runs a model). `--eval.out-dir` is a valid
 RelBench submission directory, scored and re-validatable exactly like RT's eval
-output. The context flags (`--ctx-size`, `--local-ctx-size`, `--bfs-width`, …)
-match `eval` — see [context engineering](inference.md#context-engineering).
+output. The `--eval.*` flags (context sizes, grid, task selection, …) are the
+same `EvalConfig` as `eval`'s — see
+[context engineering](inference.md#context-engineering).
