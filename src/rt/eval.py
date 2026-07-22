@@ -110,8 +110,8 @@ def main(cfg: Config) -> None:
             "eval.context_seed only applies to single-config runs"
         )
 
-        val_tasks = of_kind((eval_tasks(ev_cfg.pre_dir, splits=("val",))))
-        test_tasks = of_kind((eval_tasks(ev_cfg.pre_dir, splits=("test",))))
+        val_tasks = of_kind(eval_tasks(ev_cfg.pre_dir, splits=("val",)))
+        test_tasks = of_kind(eval_tasks(ev_cfg.pre_dir, splits=("test",)))
         if not test_tasks:
             raise SystemExit(f"no {task_type} tasks found in {ev_cfg.pre_dir}")
         run_ensemble(net, ev_cfg.pre_dir, val_tasks, test_tasks, grid=grid,
@@ -120,7 +120,7 @@ def main(cfg: Config) -> None:
                      **eval_kwargs)
         return
 
-        tasks = of_kind((eval_tasks(ev_cfg.pre_dir, splits=tuple(ev_cfg.splits))))
+        tasks = of_kind(eval_tasks(ev_cfg.pre_dir, splits=tuple(ev_cfg.splits)))
     if not tasks:
         raise SystemExit(f"no {task_type} tasks found in {ev_cfg.pre_dir}")
     lcs, bw, pl = grid[0]
