@@ -4,10 +4,19 @@ from pathlib import Path
 
 
 def load_table_info(db: str, pre_dir: str) -> dict:
-    """Load table metadata from ``pre_dir/db/table_info.json``."""
-    path = Path(pre_dir).expanduser() / db / "table_info.json"
-    with open(path) as f:
-        return json.load(f)
+    """Load table metadata from ``pre_dir/db/table_info.json`` (local or Hub)."""
+    p = Path(pre_dir).expanduser()
+    if p.exists():
+        return json.loads((p / db / "table_info.json").read_text())
+
+    from huggingface_hub import hf_hub_download
+
+    from rt.data import resolve_repo
+
+    repo_id, subdir = resolve_repo(pre_dir)
+    filename = f"{subdir}/{db}/table_info.json" if subdir else f"{db}/table_info.json"
+    path = hf_hub_download(repo_id=repo_id, filename=filename, repo_type="dataset")
+    return json.loads(Path(path).read_text())
 
 
 def get_table_splits(table_info: dict, table_name: str) -> dict[str, dict]:

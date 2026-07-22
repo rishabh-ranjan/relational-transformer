@@ -17,10 +17,6 @@ import numpy as np
 import pandas as pd
 import torch
 
-import duckdb
-from relbench.datasets import get_dataset
-from relbench.tasks import get_task
-
 from rt.rel2tab.featurizer import Featurizer, load_table_info
 from rt.rel2tab.featurizers.sql_queries import SQL_REGISTRY
 
@@ -78,7 +74,12 @@ class SQLFeaturizer(Featurizer):
     """
 
     def __init__(self, pre_dir, eval_splits, db):
-        from rt.data import eval_tasks
+        # Deferred: duckdb + relbench are heavy optional deps of this
+        # featurizer only; the module must import without them.
+        import duckdb
+        from relbench.load import load_dataset, load_task
+
+        from rt.data import eval_tasks, read_meta
 
         pre_dir = str(Path(pre_dir).expanduser())
 
@@ -100,6 +101,12 @@ class SQLFeaturizer(Featurizer):
             seen.add(key)
 
             ds = task.db_name.split("/")[-1]
+            source = read_meta(pre_dir, task.db_name).get("source")
+            if not source:
+                raise RuntimeError(
+                    f"{task.db_name}/meta.json has no 'source'; cannot locate "
+                    f"the relbench dataset"
+                )
             sql_key = (ds, task.table_name)
             if sql_key not in SQL_REGISTRY:
                 raise ValueError(
@@ -117,7 +124,7 @@ class SQLFeaturizer(Featurizer):
                 con = duckdb.connect()
                 con.execute("SET preserve_insertion_order=false")
                 con.execute("SET threads=4")
-                rb_dataset = get_dataset(ds, download=True)
+                rb_dataset = load_dataset(source)
                 # this allows up-to-date rows in the context window, which matters for rel-f1
                 rb_db = rb_dataset.get_db(upto_test_timestamp=False)
                 for tbl_name, tbl in rb_db.table_dict.items():
@@ -146,7 +153,7 @@ class SQLFeaturizer(Featurizer):
 
             min_offset = min(info["node_idx_offset"] for info in splits_info.values())
 
-            rb_task = get_task(ds, task.table_name, download=True)
+            rb_task = load_task(source, task.table_name)
             split_dfs = {
                 "train": rb_task.get_table("train").df,
                 "val": rb_task.get_table("val").df,
