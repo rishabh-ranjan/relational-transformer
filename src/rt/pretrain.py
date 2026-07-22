@@ -114,6 +114,10 @@ def eval_avg_metrics(evaluator, nets_with_prefix, ctx_sizes, reg_metric):
 
 
 def main(cfg: Config) -> None:
+    assert cfg.eval.ensemble_size == 1, (
+        "in-loop eval does not ensemble; use rt.cli.eval on a saved checkpoint "
+        "for eval.ensemble_size > 1"
+    )
     device, rank, local_rank, world_size, ddp = setup_dist()
     is_main = rank == 0
 
