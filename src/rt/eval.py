@@ -50,7 +50,6 @@ def main(cfg: Config) -> None:
         net = cfg.model.build(device)
         embedding_model = cfg.model.embedding_model
         d_text = cfg.model.d_text
-        model_task_type = None  # baselines handle both task types
         print(f"baseline: {type(cfg.model.featurizer).__name__} + "
               f"{type(cfg.model.predictor).__name__} on {device}")
     else:
@@ -60,9 +59,12 @@ def main(cfg: Config) -> None:
         net = net.to(torch.bfloat16)
         embedding_model = config["embedding_model"]
         d_text = config["d_text"]
-        model_task_type = config.get("task_type")
         print(f"loaded {config.get('name', checkpoint)} "
-              f"(task_type={model_task_type}, embed={embedding_model}) on {device}")
+              f"(embed={embedding_model}) on {device}")
+        if config.get("task_type") in ("clf", "reg"):
+            print(f"warning: this checkpoint was selected/trained for "
+                  f"task_type={config['task_type']}; it will be evaluated on "
+                  f"both clf and reg tasks", flush=True)
         # The checkpoint's own config drives model construction; cfg.model dims
         # are ignored here. Warn when they disagree so a stale CLI default is
         # visible rather than silently shadowed.
@@ -83,13 +85,6 @@ def main(cfg: Config) -> None:
             print("warning: model config ignored for checkpoint eval; differs from "
                   "the checkpoint's own config: " + "; ".join(mismatches), flush=True)
 
-    # An RT checkpoint is clf- or reg-only (its config says which); baselines
-    # handle both task types.
-    kinds = {model_task_type} if model_task_type in ("clf", "reg") else {"clf", "reg"}
-    task_type = "/".join(sorted(kinds))  # for error messages
-
-    def of_kind(tasks):
-        return [t for t in tasks if t.task_type in kinds]
 
     eval_kwargs = dict(
         embedding_model=embedding_model, d_text=d_text, device=device,
@@ -110,19 +105,19 @@ def main(cfg: Config) -> None:
             "eval.context_seed only applies to single-config runs"
         )
 
-        val_tasks = of_kind(eval_tasks(ev_cfg.pre_dir, splits=("val",)))
-        test_tasks = of_kind(eval_tasks(ev_cfg.pre_dir, splits=("test",)))
+        val_tasks = eval_tasks(ev_cfg.pre_dir, splits=("val",))
+        test_tasks = eval_tasks(ev_cfg.pre_dir, splits=("test",))
         if not test_tasks:
-            raise SystemExit(f"no {task_type} tasks found in {ev_cfg.pre_dir}")
+            raise SystemExit(f"no tasks found in {ev_cfg.pre_dir}")
         run_ensemble(net, ev_cfg.pre_dir, val_tasks, test_tasks, grid=grid,
                      ensemble_size=ev_cfg.ensemble_size, ctx_size=ctx_size,
                      reg_metric=ev_cfg.reg_metric, out_dir=ev_cfg.out_dir, no_csv=not ev_cfg.write_csv,
                      **eval_kwargs)
         return
 
-        tasks = of_kind(eval_tasks(ev_cfg.pre_dir, splits=tuple(ev_cfg.splits)))
+        tasks = eval_tasks(ev_cfg.pre_dir, splits=tuple(ev_cfg.splits))
     if not tasks:
-        raise SystemExit(f"no {task_type} tasks found in {ev_cfg.pre_dir}")
+        raise SystemExit(f"no tasks found in {ev_cfg.pre_dir}")
     lcs, bw, pl = grid[0]
     ev = build_evaluator(tasks, ev_cfg.pre_dir, ctx_size=ctx_size,
                          local_ctx_size=lcs, bfs_width=bw, prefer_latest=pl,
