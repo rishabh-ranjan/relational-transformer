@@ -115,5 +115,5 @@ pixi run test        # or pretrain, eval, preprocess, ...
 | [Downloads](docs/downloads.md) | Bulk-download raw data, preprocessed data, and checkpoints from HuggingFace |
 | [Preprocess](docs/preprocess.md) | Convert RelBench-format databases into RT's on-disk format |
 | [Inference](docs/inference.md) | Run a trained checkpoint; evaluate, engineer, tune, and ensemble contexts |
-| [Pretrain](docs/pretrain.md) | Train RT from scratch, single-GPU to multi-node |
+| [Pretrain](docs/train.md) | Train RT from scratch, single-GPU to multi-node |
 | [Baselines](docs/baselines.md) | rel2tab tabular baselines through the same eval path |

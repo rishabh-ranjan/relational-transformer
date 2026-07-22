@@ -42,7 +42,7 @@ job array (e.g. a preemptible Slurm array with `--array=0-63` mapping the task i
 ## Using preprocessed data (local or Hub — same interface)
 
 Everywhere a `pre_dir` is taken (see [inference](inference.md) and
-[pretrain](pretrain.md)), pass **either** a local path **or** a Hub repo: a local
+[pretrain](train.md)), pass **either** a local path **or** a Hub repo: a local
 path is used directly (and always wins, so iterating on freshly preprocessed data
 never triggers a download), a Hub repo is downloaded and cached on demand (only
 the files needed for the requested databases). So you never have to upload

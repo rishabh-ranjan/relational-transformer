@@ -3,13 +3,13 @@
 Streams training items from the preprocessed mixture at --train.pre-dir,
 periodically evaluates on --eval.pre-dir, and writes checkpoints plus a
 preemption-safe resume.pt to --train.out-dir (resume is automatic and
-GPU-count flexible). Launch with torchrun; see docs/pretrain.md.
+GPU-count flexible). Launch with torchrun; see docs/train.md.
 """
 
 import tyro
 
 from rt.config import Config, EvalConfig, LoggerConfig, ModelConfig, TrainConfig
-from rt.pretrain import main
+from rt.train import main
 
 
 

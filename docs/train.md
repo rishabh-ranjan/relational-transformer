@@ -30,7 +30,7 @@ The `pretrain` task launches `torchrun --standalone --nproc-per-node=auto`, whic
 uses every visible GPU. Pin it to one GPU for a single-GPU run:
 
 ```bash
-CUDA_VISIBLE_DEVICES=0 pixi run pretrain \
+CUDA_VISIBLE_DEVICES=0 pixi run train \
   --pre-dir stanford-star/the-join-preprocessed \
   --val-pre-dir stanford-star/relbench-preprocessed \
   --out-dir ~/ckpts/run1
@@ -43,7 +43,7 @@ on the node, and the model is replicated per GPU via DDP (full model + optimizer
 on every rank, no sharding):
 
 ```bash
-pixi run pretrain \
+pixi run train \
   --pre-dir stanford-star/the-join-preprocessed \
   --val-pre-dir stanford-star/relbench-preprocessed \
   --out-dir ~/ckpts/run1
@@ -63,7 +63,7 @@ worker per GPU:
 # on every node (rank 0 on the head node):
 torchrun --nnodes=<N> --nproc-per-node=<GPUS> \
   --node-rank=<i> --master-addr=<head-node> --master-port=<port> \
-  -m rt.cli.pretrain --pre-dir ... --val-pre-dir ... --out-dir ...
+  -m rt.cli.train --pre-dir ... --val-pre-dir ... --out-dir ...
 ```
 
 Wrap this in your cluster's launcher (Slurm, k8s, ...). Hard-won notes for
@@ -105,7 +105,7 @@ locked cache:
 # terminal 1: hold the data resident (Ctrl-C to release)
 pixi run python -m rt.cli.mlock --pre-dir <PRE_DIR> --workers 32
 # terminal 2 (same node): train without re-populating
-pixi run pretrain --pre-dir <PRE_DIR> --out-dir ~/ckpts/run1 --no-mmap-populate
+pixi run train --pre-dir <PRE_DIR> --out-dir ~/ckpts/run1 --no-mmap-populate
 ```
 
 This is purely a convenience for repeated local runs; it is **not required**.
