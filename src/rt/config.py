@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    # Type-only: rel2tab (repo-only, not in the wheel) pulls heavy deps, so
+    # Type-only: rt.rel2tab pulls heavy deps, so
     # `import rt.config` must not import it at runtime.
     from rt.rel2tab.config import Rel2TabModelConfig
 
