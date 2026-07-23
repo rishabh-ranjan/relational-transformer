@@ -27,11 +27,15 @@ class LegacyEvalConfig:
     pre_dir: str = "stanford-star/relbench-preprocessed"
     db_task_list: str = "stanford-star/relbench/db-task-lists/forecast.json"
     # published legacy eval context: the whole 1024-token context is one BFS
-    # neighborhood around the seed (local_ctx_size == ctx_size), width 256.
+    # neighborhood around the seed (local_ctx_size == ctx_size), width 256,
+    # no random-walk tier (num_walks=0) and no recency-sorted neighbors
+    # (prefer_latest=False), matching the original samplers.
     ctx_size: int = 1024
     local_ctx_size: int = 1024
+    num_walks: int = 0
+    walk_length: int = 0
     bfs_width: int = 256
-    prefer_latest: bool = True
+    prefer_latest: bool = False
     tokens_per_gpu: int = 2**17
     num_workers: int = 2
     # effectively the full test split.
@@ -66,6 +70,8 @@ def run_legacy_eval(cfg: LegacyEvalConfig, model_for_task) -> dict:
             local_ctx_size=cfg.local_ctx_size,
             bfs_width=cfg.bfs_width,
             prefer_latest=cfg.prefer_latest,
+            num_walks=cfg.num_walks,
+            walk_length=cfg.walk_length,
             tokens_per_gpu=cfg.tokens_per_gpu,
             items_per_task=cfg.items_per_task,
             num_workers=cfg.num_workers,
