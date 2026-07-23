@@ -167,13 +167,14 @@ all tasks); `--mode synth-real` uses the task-wise continued-pretraining
 checkpoints. All three are in-context: no checkpoint ever trained on the
 target task's database (v1, synth) or task (synth-real).
 
-By default these CLIs read `stanford-star/relbench-preprocessed/legacy`:
-RelBench re-preprocessed with `rt.cli.legacy.preprocess`, which applies the
-RT-v1-era boolean-typing rules (binary targets and a few db columns become a
-real Boolean semantic type instead of z-scored numbers) before the regular
-pipeline. With it, `bool_as_num=False` reads classification targets from the
-BCE-trained boolean head, matching the legacy models' training. Pass
-`--pre-dir stanford-star/relbench-preprocessed --bool-as-num` for the
-modern-typed data instead. Metrics reproduce the papers within noise except
-RT-v1 on rel-avito, which degrades for sampler-level reasons outside these
-configs.
+`stanford-star/relbench-preprocessed/legacy` holds RelBench re-preprocessed
+with `rt.cli.legacy.preprocess`, which applies the RT-v1-era boolean-typing
+rules (binary targets and a few db columns become a real Boolean semantic
+type instead of z-scored numbers) before the regular pipeline; with it,
+`--no-bool-as-num` reads classification targets from the BCE-trained boolean
+head, matching the legacy models' training. Each CLI defaults to its
+best-scoring configuration: `eval_plurel` reads the legacy data with the
+boolean head and the paper's bfs_width 128, while `eval_v1` reads the modern
+data with the number head (boolean typing helps some RT-v1 tasks but hurts
+more). Metrics reproduce the papers within noise except RT-v1 on rel-avito,
+which degrades for sampler-level reasons outside these configs.
