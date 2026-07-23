@@ -24,8 +24,13 @@ from rt.model.legacy._common import LEGACY_EMBEDDING_MODEL
 class LegacyEvalConfig:
     # output directory for prediction CSVs (a RelBench submission dir).
     out_dir: str
-    pre_dir: str = "stanford-star/relbench-preprocessed"
+    # legacy/ holds RelBench re-preprocessed with RT-v1 boolean typing
+    # (booleans are a real sem type instead of z-scored numbers).
+    pre_dir: str = "stanford-star/relbench-preprocessed/legacy"
     db_task_list: str = "stanford-star/relbench/db-task-lists/forecast.json"
+    # False reads clf targets from the boolean head (BCE-trained), matching
+    # the legacy models' training. Requires boolean-typed data (legacy/).
+    bool_as_num: bool = False
     # published legacy eval context: the whole 1024-token context is one BFS
     # neighborhood around the seed (local_ctx_size == ctx_size), width 256,
     # no random-walk tier (num_walks=0) and no recency-sorted neighbors
@@ -77,10 +82,7 @@ def run_legacy_eval(cfg: LegacyEvalConfig, model_for_task) -> dict:
             num_workers=cfg.num_workers,
             shuffle_seed=cfg.shuffle_seed,
             context_seed=cfg.context_seed,
-            # the current preprocessed data stores booleans as z-scored numbers
-            # (no boolean sem type survives), so the number head is the target
-            # reader — same as the non-legacy eval. AUROC is scale-invariant.
-            bool_as_num=True,
+            bool_as_num=cfg.bool_as_num,
         )
         for _task, _ctx, labels, preds_by_prefix, _nl, node_idxs in ev.evaluate_raw(
             [(model, "")], [cfg.ctx_size], with_node_idxs=True
