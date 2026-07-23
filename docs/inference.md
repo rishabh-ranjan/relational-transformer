@@ -167,7 +167,13 @@ all tasks); `--mode synth-real` uses the task-wise continued-pretraining
 checkpoints. All three are in-context: no checkpoint ever trained on the
 target task's database (v1, synth) or task (synth-real).
 
-Caveat: the current preprocessed data stores booleans as z-scored numbers and
-skips missing-value cells, both unlike the RT-v1-era pipeline; metrics
-reproduce the papers within noise except RT-v1 on rel-avito (missing-value
-heavy), which degrades.
+By default these CLIs read `stanford-star/relbench-preprocessed/legacy`:
+RelBench re-preprocessed with `rt.cli.legacy.preprocess`, which applies the
+RT-v1-era boolean-typing rules (binary targets and a few db columns become a
+real Boolean semantic type instead of z-scored numbers) before the regular
+pipeline. With it, `bool_as_num=False` reads classification targets from the
+BCE-trained boolean head, matching the legacy models' training. Pass
+`--pre-dir stanford-star/relbench-preprocessed --bool-as-num` for the
+modern-typed data instead. Metrics reproduce the papers within noise except
+RT-v1 on rel-avito, which degrades for sampler-level reasons outside these
+configs.
