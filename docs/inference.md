@@ -172,9 +172,8 @@ with `rt.cli.legacy.preprocess`, which applies the RT-v1-era boolean-typing
 rules (binary targets and a few db columns become a real Boolean semantic
 type instead of z-scored numbers) before the regular pipeline; with it,
 `--no-bool-as-num` reads classification targets from the BCE-trained boolean
-head, matching the legacy models' training. Each CLI defaults to its
-best-scoring configuration: `eval_plurel` reads the legacy data with the
-boolean head and the paper's bfs_width 128, while `eval_v1` reads the modern
-data with the number head (boolean typing helps some RT-v1 tasks but hurts
-more). Metrics reproduce the papers within noise except RT-v1 on rel-avito,
-which degrades for sampler-level reasons outside these configs.
+head, matching the legacy models' training. Both CLIs default to the legacy
+data with the boolean head; `eval_plurel` additionally defaults to the
+paper's bfs_width 128. Metrics reproduce the papers within noise except
+RT-v1 on rel-avito, which degrades for sampler-level reasons outside these
+configs.
