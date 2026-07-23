@@ -30,6 +30,9 @@ class Config(LegacyEvalConfig):
     out_dir: str = "eval_plurel_out"
     mode: Literal["synth", "synth-real"] = "synth"
     ckpt_repo: str = PLUREL_HUB_REPO
+    # PluRel scores best on the legacy/ boolean-typed data (inherited
+    # pre_dir/bool_as_num defaults) with the paper's training bfs_width.
+    bfs_width: int = 128
 
 
 def main(cfg: Config) -> None:

@@ -19,6 +19,13 @@ class Config(LegacyEvalConfig):
     out_dir: str = "eval_v1_out"
     ckpt_repo: str = V1_HUB_REPO
     ckpt_pattern: str = "pretrain_{db}_{task}.pt"
+    # RT-v1 scores better on the modern-typed data than on legacy/ boolean
+    # typing (which helps only some tasks and hurts others), so the modern
+    # data + number-head reading is the default. Pass
+    # --pre-dir stanford-star/relbench-preprocessed/legacy --no-bool-as-num
+    # for the boolean-faithful variant.
+    pre_dir: str = "stanford-star/relbench-preprocessed"
+    bool_as_num: bool = True
 
 
 def main(cfg: Config) -> None:
