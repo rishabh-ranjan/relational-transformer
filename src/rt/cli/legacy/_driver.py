@@ -34,8 +34,8 @@ class LegacyEvalConfig:
     prefer_latest: bool = True
     tokens_per_gpu: int = 2**17
     num_workers: int = 2
-    # None = full test split.
-    items_per_task: int | None = None
+    # effectively the full test split.
+    items_per_task: int = 10_000_000
     shuffle_seed: int = 0
     context_seed: int = 0
     reg_metric: str = "mae"
@@ -71,8 +71,10 @@ def run_legacy_eval(cfg: LegacyEvalConfig, model_for_task) -> dict:
             num_workers=cfg.num_workers,
             shuffle_seed=cfg.shuffle_seed,
             context_seed=cfg.context_seed,
-            # legacy models keep boolean targets boolean (no bool->number cast)
-            bool_as_num=False,
+            # the current preprocessed data stores booleans as z-scored numbers
+            # (no boolean sem type survives), so the number head is the target
+            # reader — same as the non-legacy eval. AUROC is scale-invariant.
+            bool_as_num=True,
         )
         for _task, _ctx, labels, preds_by_prefix, _nl, node_idxs in ev.evaluate_raw(
             [(model, "")], [cfg.ctx_size], with_node_idxs=True
