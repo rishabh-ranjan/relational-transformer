@@ -143,3 +143,31 @@ cmake + a BLAS:
 ```bash
 maturin develop --release --features vecdb
 ```
+
+## Legacy checkpoints (RT-v1, RT-PluRel)
+
+The released checkpoints of the earlier papers use their original
+architectures, kept verbatim in `rt.model.legacy` (state-dict compatible with
+the published `.pt` files). Dedicated eval CLIs reproduce the published
+context configuration (ctx 1024, one BFS neighborhood around the seed,
+bfs_width 256, no random-walk tier) and write RelBench leaderboard submission
+dirs:
+
+```bash
+# RT-v1 (ICLR 2026): task-wise pretrain_<db>_<task>.pt from stanford-star/rt-v1
+pixi run python -m rt.cli.legacy.eval_v1 --out-dir v1_sub
+
+# RT-PluRel (ICML 2026), stanford-star/rt-plurel:
+pixi run python -m rt.cli.legacy.eval_plurel --mode synth      --out-dir plurel_synth_sub
+pixi run python -m rt.cli.legacy.eval_plurel --mode synth-real --out-dir plurel_sr_sub
+```
+
+`--mode synth` uses the best synthetic-only pretraining checkpoint (same for
+all tasks); `--mode synth-real` uses the task-wise continued-pretraining
+checkpoints. All three are in-context: no checkpoint ever trained on the
+target task's database (v1, synth) or task (synth-real).
+
+Caveat: the current preprocessed data stores booleans as z-scored numbers and
+skips missing-value cells, both unlike the RT-v1-era pipeline; metrics
+reproduce the papers within noise except RT-v1 on rel-avito (missing-value
+heavy), which degrades.
