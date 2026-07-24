@@ -7,7 +7,7 @@ RelBench, checkpointing, and automatic selection of the best clf / reg checkpoin
 by mean validation metric.
 
 Checkpoints land in the per-run directory
-`<out-root>/<wandb-entity>/<wandb-project>/<wandb-run-id>/` as `steps=<N>.safetensors` (live) and
+`<out-root>/<wandb-entity>/<wandb-project>/<wandb-id>/` as `steps=<N>.safetensors` (live) and
 `swa_steps=<N>.safetensors` (SWA); at the end the run copies the best classifier
 and regressor to `best_clf.safetensors` / `best_reg.safetensors`. Multi-GPU is
 automatic under `torchrun`, and the run resumes automatically from

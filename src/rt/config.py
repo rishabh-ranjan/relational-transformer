@@ -11,13 +11,12 @@ def default_wandb_id() -> str:
 
     Under torchrun every rank builds its own config, so a bare timestamp would
     differ per rank (they must agree: the id names the shared output dir).
-    The launcher-provided run/job id is identical across ranks and unique per
-    launch, so it takes precedence when present.
+    torchrun's run id is identical across ranks and unique per launch, so it
+    takes precedence when present.
     """
-    for k in ("TORCHELASTIC_RUN_ID", "SLURM_JOB_ID"):
-        v = os.environ.get(k)
-        if v:
-            return v
+    run_id = os.environ.get("TORCHELASTIC_RUN_ID")
+    if run_id:
+        return run_id
     now = time.time_ns()
     return f"{datetime.fromtimestamp(now / 1e9):%y-%m-%d_%H:%M:%S}_{now % 1_000_000_000:09d}"
 

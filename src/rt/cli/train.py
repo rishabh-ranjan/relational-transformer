@@ -8,7 +8,14 @@ GPU-count flexible). Launch with torchrun; see docs/train.md.
 
 import tyro
 
-from rt.config import Config, default_wandb_id, EvalConfig, LoggerConfig, ModelConfig, TrainConfig
+from rt.config import (
+    Config,
+    EvalConfig,
+    LoggerConfig,
+    ModelConfig,
+    TrainConfig,
+    default_wandb_id,
+)
 from rt.train import main
 
 
