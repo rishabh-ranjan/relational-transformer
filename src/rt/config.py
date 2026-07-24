@@ -1,6 +1,25 @@
 from __future__ import annotations
 
+import os
+import time
 from dataclasses import dataclass
+from datetime import datetime
+
+
+def default_wandb_id() -> str:
+    """Unique run id: ``yy-mm-dd_hh:mm:ss_ns``.
+
+    Under torchrun every rank builds its own config, so a bare timestamp would
+    differ per rank (they must agree: the id names the shared output dir).
+    The launcher-provided run/job id is identical across ranks and unique per
+    launch, so it takes precedence when present.
+    """
+    for k in ("TORCHELASTIC_RUN_ID", "SLURM_JOB_ID"):
+        v = os.environ.get(k)
+        if v:
+            return v
+    now = time.time_ns()
+    return f"{datetime.fromtimestamp(now / 1e9):%y-%m-%d_%H:%M:%S}_{now % 1_000_000_000:09d}"
 
 
 @dataclass
@@ -110,6 +129,11 @@ class LoggerConfig:
     # wandb entity (team/user). None = the wandb default entity; it is resolved
     # from the live run when wandb is enabled.
     wandb_entity: str | None
+    # Unique wandb run id; also names the output directory (see
+    # TrainConfig.out_root). Never None -- CLI entry points default it to a
+    # timestamp via ``default_wandb_id()``. Reuse it to resume a run.
+    wandb_id: str
+    # Human-readable label only; wandb_id identifies the run.
     wandb_run_name: str | None
     wandb_disabled: bool
 

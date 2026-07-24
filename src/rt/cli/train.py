@@ -8,7 +8,7 @@ GPU-count flexible). Launch with torchrun; see docs/train.md.
 
 import tyro
 
-from rt.config import Config, EvalConfig, LoggerConfig, ModelConfig, TrainConfig
+from rt.config import Config, default_wandb_id, EvalConfig, LoggerConfig, ModelConfig, TrainConfig
 from rt.train import main
 
 
@@ -18,6 +18,7 @@ def default_config() -> Config:
         logger=LoggerConfig(
             project="rt-verify",
             wandb_entity=None,
+            wandb_id=default_wandb_id(),
             wandb_run_name=None,
             wandb_disabled=True,
         ),

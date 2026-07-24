@@ -74,23 +74,15 @@ def setup_dist():
     return device, 0, 0, 1, False
 
 
-def run_subdir(cfg, run, ddp) -> Path:
-    """``<entity>/<project>/<run id>`` for the live wandb run, so every output
-    directory is uniquely associated with its wandb run.
+def run_subdir(cfg) -> Path:
+    """``<entity>/<project>/<wandb id>``, so every output directory is uniquely
+    associated with its wandb run.
 
-    Only rank 0 initializes wandb, so the resolved triple is broadcast to the
-    other ranks. Falls back to config values when wandb is disabled.
+    Derived from the config alone (wandb_id is always set), hence identical on
+    every rank without any communication.
     """
-    if run is not None:
-        parts = [run.entity, run.project, run.id]
-    else:
-        parts = [cfg.logger.wandb_entity or "no-entity", cfg.logger.project,
-                 cfg.logger.wandb_run_name or "no-run-id"]
-    if ddp:
-        box = [parts]
-        dist.broadcast_object_list(box, src=0)
-        parts = box[0]
-    return Path(*parts)
+    return Path(cfg.logger.wandb_entity or "no-entity", cfg.logger.project,
+                cfg.logger.wandb_id)
 
 
 def seed_everything(seed):
@@ -149,11 +141,11 @@ def main(cfg: Config) -> None:
     use_wandb = (not cfg.logger.wandb_disabled) and is_main
     if use_wandb:
         import wandb
-        run = wandb.init(project=cfg.logger.project, entity=cfg.logger.wandb_entity,
-                         name=cfg.logger.wandb_run_name, id=cfg.logger.wandb_run_name,
-                         resume="allow", config=dataclasses.asdict(cfg))
+        wandb.init(project=cfg.logger.project, entity=cfg.logger.wandb_entity,
+                   name=cfg.logger.wandb_run_name, id=cfg.logger.wandb_id,
+                   resume="allow", config=dataclasses.asdict(cfg))
     seed_everything(cfg.train.seed + rank)
-    out_dir = Path(cfg.train.out_root).expanduser() / run_subdir(cfg, run if use_wandb else None, ddp)
+    out_dir = Path(cfg.train.out_root).expanduser() / run_subdir(cfg)
     if is_main:
         out_dir.mkdir(parents=True, exist_ok=True)
         print(f"out_dir: {out_dir}", flush=True)

@@ -8,7 +8,7 @@ GPU-count flexible). Launch with torchrun; see docs/train.md.
 
 import tyro
 
-from rt.config import Config, EvalConfig, LoggerConfig, ModelConfig, TrainConfig
+from rt.config import Config, default_wandb_id, EvalConfig, LoggerConfig, ModelConfig, TrainConfig
 from rt.train import main
 
 
@@ -16,7 +16,7 @@ def default_config() -> Config:
     return Config(
         logger=LoggerConfig(
             project="2026-07-24",
-            wandb_entity=None,
+            wandb_entity="rtv2",
             wandb_run_name=None,
             wandb_disabled=False,
         ),
