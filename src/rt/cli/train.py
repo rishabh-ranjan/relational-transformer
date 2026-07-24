@@ -17,7 +17,7 @@ def default_config() -> Config:
     return Config(
         logger=LoggerConfig(
             project="rt-verify",
-            entity=None,
+            wandb_entity=None,
             wandb_run_name=None,
             wandb_disabled=True,
         ),

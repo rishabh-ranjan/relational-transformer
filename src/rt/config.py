@@ -109,7 +109,7 @@ class LoggerConfig:
     project: str
     # wandb entity (team/user). None = the wandb default entity; it is resolved
     # from the live run when wandb is enabled.
-    entity: str | None
+    wandb_entity: str | None
     wandb_run_name: str | None
     wandb_disabled: bool
 

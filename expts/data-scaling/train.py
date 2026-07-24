@@ -16,7 +16,7 @@ def default_config() -> Config:
     return Config(
         logger=LoggerConfig(
             project="2026-07-24",
-            entity=None,
+            wandb_entity=None,
             wandb_run_name=None,
             wandb_disabled=False,
         ),

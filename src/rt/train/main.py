@@ -84,7 +84,7 @@ def run_subdir(cfg, run, ddp) -> Path:
     if run is not None:
         parts = [run.entity, run.project, run.id]
     else:
-        parts = [cfg.logger.entity or "no-entity", cfg.logger.project,
+        parts = [cfg.logger.wandb_entity or "no-entity", cfg.logger.project,
                  cfg.logger.wandb_run_name or "no-run-id"]
     if ddp:
         box = [parts]
@@ -149,7 +149,7 @@ def main(cfg: Config) -> None:
     use_wandb = (not cfg.logger.wandb_disabled) and is_main
     if use_wandb:
         import wandb
-        run = wandb.init(project=cfg.logger.project, entity=cfg.logger.entity,
+        run = wandb.init(project=cfg.logger.project, entity=cfg.logger.wandb_entity,
                          name=cfg.logger.wandb_run_name, id=cfg.logger.wandb_run_name,
                          resume="allow", config=dataclasses.asdict(cfg))
     seed_everything(cfg.train.seed + rank)
