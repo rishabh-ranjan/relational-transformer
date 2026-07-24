@@ -52,8 +52,10 @@ class TrainConfig:
     # `<vector_db_path>/<db>/<table>_vectors.bin`. When None, behavior
     # is unchanged (random walk + same-table fallback).
     vector_db_path: str | None
-    # Output directory for checkpoints, resume.pt, config.json, val metrics.
-    out_dir: str
+    # Root for run outputs. The actual output directory is
+    # ``<out_root>/<wandb entity>/<wandb project>/<wandb run id>/`` and holds
+    # checkpoints, resume.pt, config.json and val metrics.
+    out_root: str
     # Also write resume.pt every this many minutes of wall-clock
     # (preemption resilience), on top of the eval-freq save.
     resume_save_mins: float
@@ -105,6 +107,9 @@ class EvalConfig:
 @dataclass
 class LoggerConfig:
     project: str
+    # wandb entity (team/user). None = the wandb default entity; it is resolved
+    # from the live run when wandb is enabled.
+    entity: str | None
     wandb_run_name: str | None
     wandb_disabled: bool
 

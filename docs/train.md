@@ -6,11 +6,12 @@ optimization, stochastic weight averaging (SWA), periodic validation against
 RelBench, checkpointing, and automatic selection of the best clf / reg checkpoint
 by mean validation metric.
 
-Checkpoints land in `<out-dir>/` as `steps=<N>.safetensors` (live) and
+Checkpoints land in the per-run directory
+`<out-root>/<wandb-entity>/<wandb-project>/<wandb-run-id>/` as `steps=<N>.safetensors` (live) and
 `swa_steps=<N>.safetensors` (SWA); at the end the run copies the best classifier
 and regressor to `best_clf.safetensors` / `best_reg.safetensors`. Multi-GPU is
 automatic under `torchrun`, and the run resumes automatically from
-`<out-dir>/resume.pt` (preemption-safe).
+`resume.pt` in that same directory (preemption-safe).
 
 ## Prerequisite: preprocessed data
 
@@ -36,7 +37,7 @@ uses every visible GPU. Pin it to one GPU for a single-GPU run:
 CUDA_VISIBLE_DEVICES=0 pixi run train \
   --train.pre-dir stanford-star/the-join-preprocessed \
   --eval.pre-dir stanford-star/relbench-preprocessed \
-  --train.out-dir ~/ckpts/run1
+  --train.out-root ~/ckpts
 ```
 
 ## Multi-GPU single-node training
@@ -49,7 +50,7 @@ on every rank, no sharding):
 pixi run train \
   --train.pre-dir stanford-star/the-join-preprocessed \
   --eval.pre-dir stanford-star/relbench-preprocessed \
-  --train.out-dir ~/ckpts/run1
+  --train.out-root ~/ckpts
 ```
 
 Give the process as much of the node's RAM as you can: by default each run
@@ -108,7 +109,7 @@ locked cache:
 # terminal 1: hold the data resident (Ctrl-C to release)
 pixi run python -m rt.cli.mlock --pre-dir <PRE_DIR> --workers 32
 # terminal 2 (same node): train without re-populating
-pixi run train --train.pre-dir <PRE_DIR> --train.out-dir ~/ckpts/run1 --no-train.mmap-populate
+pixi run train --train.pre-dir <PRE_DIR> --train.out-root ~/ckpts --no-train.mmap-populate
 ```
 
 This is purely a convenience for repeated local runs; it is **not required**.

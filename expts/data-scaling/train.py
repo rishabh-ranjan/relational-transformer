@@ -2,7 +2,7 @@
 
 Streams training items from the preprocessed mixture at --train.pre-dir,
 periodically evaluates on --eval.pre-dir, and writes checkpoints plus a
-preemption-safe resume.pt to --train.out-root (resume is automatic and
+preemption-safe resume.pt to --train.out-dir (resume is automatic and
 GPU-count flexible). Launch with torchrun; see docs/train.md.
 """
 
@@ -12,14 +12,13 @@ from rt.config import Config, EvalConfig, LoggerConfig, ModelConfig, TrainConfig
 from rt.train import main
 
 
-
 def default_config() -> Config:
     return Config(
         logger=LoggerConfig(
-            project="rt-verify",
+            project="2026-07-24",
             entity=None,
             wandb_run_name=None,
-            wandb_disabled=True,
+            wandb_disabled=False,
         ),
         model=ModelConfig(
             embedding_model="all-MiniLM-L12-v2",
@@ -33,24 +32,24 @@ def default_config() -> Config:
             load_ckpt_path=None,
         ),
         train=TrainConfig(
-            db_task_list="stanford-star/the-join/db-task-lists/forecast.json",
+            db_task_list="stanford-star/the-join/db-task-lists/rt-j.json",
             pre_dir="stanford-star/the-join-preprocessed",
             tokens_per_gpu=2**17,
             num_workers=16,
             prefetch_factor=2,
-            ctx_sizes=[1024, 2048, 4096, 8192],
-            local_ctx_sizes=[512, 1024, 2048],
-            bfs_widths=[16, 32, 64, 128],
+            ctx_sizes=[512, 1024, 2048, 4096],
+            local_ctx_sizes=[256, 512, 1024, 2048, 4096],
+            bfs_widths=[16, 64, 256],
             num_walks=10_000,
             walk_length=20,
-            prefer_latest=[True],
-            mask_prob_max=0.0,
+            prefer_latest=[False, True],
+            mask_prob_max=0.5,
             items_per_task=100_000,
             lr=5e-4,
             wd=0.1,
             warmup_steps=2000,
             grad_norm_max=1.0,
-            total_bs=1024,
+            total_bs=512,
             total_steps=100_001,
             swa_momentum=0.9995,
             seed=0,
@@ -60,9 +59,8 @@ def default_config() -> Config:
             balance_labels=[False],
             timeout_per_item=10.0,
             vector_db_path=None,
-            out_root="~/ckpts",
+            out_root="/dfs/user/ranjanr/ckpts",
             resume_save_mins=20.0,
-
         ),
         eval=EvalConfig(
             splits=["val"],
@@ -75,7 +73,7 @@ def default_config() -> Config:
             walk_length=20,
             freq=2000,
             items_per_task=1024,
-            ctx_sizes=[4096, 8192],
+            ctx_sizes=[4096],
             bool_as_num=True,
             skip_text_cols=False,
             mmap_populate=True,
@@ -94,4 +92,10 @@ def default_config() -> Config:
 
 
 if __name__ == "__main__":
-    main(tyro.cli(tyro.conf.AvoidSubcommands[Config], default=default_config(), description=__doc__))
+    main(
+        tyro.cli(
+            tyro.conf.AvoidSubcommands[Config],
+            default=default_config(),
+            description=__doc__,
+        )
+    )

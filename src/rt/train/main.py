@@ -21,7 +21,7 @@ Single-node multi-GPU and multi-node (preemptible queue) both run under
 ``torchrun`` -- see the README for the exact launch commands.
 
     pixi run train --pre-dir stanford-star/the-join-preprocessed \\
-        --val-pre-dir stanford-star/relbench-preprocessed --out-dir ~/ckpts/run1
+        --val-pre-dir stanford-star/relbench-preprocessed --out-root ~/ckpts
 """
 
 from __future__ import annotations
@@ -72,6 +72,25 @@ def setup_dist():
         return f"cuda:{local_rank}", rank, local_rank, world_size, True
     device = "cuda" if torch.cuda.is_available() else "cpu"
     return device, 0, 0, 1, False
+
+
+def run_subdir(cfg, run, ddp) -> Path:
+    """``<entity>/<project>/<run id>`` for the live wandb run, so every output
+    directory is uniquely associated with its wandb run.
+
+    Only rank 0 initializes wandb, so the resolved triple is broadcast to the
+    other ranks. Falls back to config values when wandb is disabled.
+    """
+    if run is not None:
+        parts = [run.entity, run.project, run.id]
+    else:
+        parts = [cfg.logger.entity or "no-entity", cfg.logger.project,
+                 cfg.logger.wandb_run_name or "no-run-id"]
+    if ddp:
+        box = [parts]
+        dist.broadcast_object_list(box, src=0)
+        parts = box[0]
+    return Path(*parts)
 
 
 def seed_everything(seed):
@@ -130,12 +149,14 @@ def main(cfg: Config) -> None:
     use_wandb = (not cfg.logger.wandb_disabled) and is_main
     if use_wandb:
         import wandb
-        wandb.init(project=cfg.logger.project, name=cfg.logger.wandb_run_name,
-                   id=cfg.logger.wandb_run_name, resume="allow", config=dataclasses.asdict(cfg))
+        run = wandb.init(project=cfg.logger.project, entity=cfg.logger.entity,
+                         name=cfg.logger.wandb_run_name, id=cfg.logger.wandb_run_name,
+                         resume="allow", config=dataclasses.asdict(cfg))
     seed_everything(cfg.train.seed + rank)
-    out_dir = Path(cfg.train.out_dir).expanduser()
+    out_dir = Path(cfg.train.out_root).expanduser() / run_subdir(cfg, run if use_wandb else None, ddp)
     if is_main:
         out_dir.mkdir(parents=True, exist_ok=True)
+        print(f"out_dir: {out_dir}", flush=True)
     compile = cfg.model.compile
 
     def build_net():
