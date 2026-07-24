@@ -9,12 +9,13 @@ from datetime import datetime
 def default_wandb_id() -> str:
     """Unique run id: ``yy-mm-dd_hh:mm:ss_ns``.
 
-    Under torchrun every rank builds its own config, so a bare timestamp would
-    differ per rank (they must agree: the id names the shared output dir).
-    torchrun's run id is identical across ranks and unique per launch, so it
-    takes precedence when present.
+    Every rank builds its own config, so a freshly generated timestamp would
+    differ per rank -- and the ranks must agree, since the id names the shared
+    output dir. The launcher therefore generates the timestamp once and exports
+    it as ``RT_WANDB_ID`` (see the ``train`` pixi task); an explicit
+    ``--logger.wandb-id`` still wins over both.
     """
-    run_id = os.environ.get("TORCHELASTIC_RUN_ID")
+    run_id = os.environ.get("RT_WANDB_ID")
     if run_id:
         return run_id
     now = time.time_ns()

@@ -67,12 +67,18 @@ worker per GPU:
 # on every node (rank 0 on the head node):
 torchrun --nnodes=<N> --nproc-per-node=<GPUS> \
   --node-rank=<i> --master-addr=<head-node> --master-port=<port> \
-  -m rt.cli.train --train.pre-dir ... --eval.pre-dir ... --train.out-dir ...
+  -m rt.cli.train --train.pre-dir ... --eval.pre-dir ... --train.out-root ...
 ```
 
 Wrap this in your cluster's launcher (Slurm, k8s, ...). Hard-won notes for
 writing that wrapper:
 
+- **One run id for the whole job.** Every rank builds its own config, so the
+  wrapper must generate the wandb run id once and export it to all nodes:
+  `export RT_WANDB_ID=$(date +%y-%m-%d_%H:%M:%S_%N)` (the `train` pixi task does
+  this for you). The id names the output directory
+  `<out-root>/<wandb-entity>/<wandb-project>/<wandb-id>/`; reuse the same value
+  (or pass `--logger.wandb-id`) to resume a run.
 - **Static rendezvous.** Pass a fixed `--master-addr`/`--master-port` (derive a
   unique per-job port) rather than torchrun's dynamic c10d rendezvous — the
   dynamic store has wedged large jobs under load.

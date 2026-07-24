@@ -90,7 +90,9 @@ preprocess = { cmd = "python -m rt.cli.preprocess one", depends-on = ["build-sam
 preprocess-many = { cmd = "python -m rt.cli.preprocess many", depends-on = ["build-sampler"] }
 # Upload an already-preprocessed dataset directory to a HuggingFace repo.
 upload = "python -m rt.cli.preprocess upload"
-train = { cmd = "torchrun --standalone --nproc-per-node=auto -m rt.cli.train", depends-on = ["build-sampler"] }
+# RT_WANDB_ID is generated once here so every DDP rank agrees on the wandb run
+# id (and hence the output directory); export it yourself to resume a run.
+train = { cmd = "bash -c 'export RT_WANDB_ID=\"${RT_WANDB_ID:-$(date +%y-%m-%d_%H:%M:%S_%N)}\"; exec torchrun --standalone --nproc-per-node=auto -m rt.cli.train \"$@\"' --", depends-on = ["build-sampler"] }
 # eval is single-process (one GPU) so per-item rows stay in task-table order.
 eval = { cmd = "python -m rt.cli.eval", depends-on = ["build-sampler"] }
 test = { cmd = "pytest", depends-on = ["build-sampler"] }
