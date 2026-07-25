@@ -7,7 +7,7 @@ scaling curve is meant to vary. All of a sampled db's tasks are kept.
 
     python expts/data-scaling/make_subset.py \
         --src /dfs/user/ranjanr/pre/the-join-preprocessed/db-task-lists/rt-j.json \
-        --out expts/data-scaling/1pct.json --frac 0.1 --seed 0
+        --out expts/data-scaling/10pct.json --frac 0.1 --seed 0
 """
 
 import json
