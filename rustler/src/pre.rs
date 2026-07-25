@@ -49,6 +49,7 @@ struct Table {
 // ---------------------------------------------------------------------------
 
 #[derive(Debug, Clone, Default, Deserialize)]
+#[serde(deny_unknown_fields)]
 struct TableSpec {
     #[serde(default)]
     pkey: Option<String>,
@@ -59,13 +60,33 @@ struct TableSpec {
 }
 
 #[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
 struct DatasetManifest {
     name: String,
     #[serde(default)]
     tables: HashMap<String, TableSpec>,
+
+    // Manifest keys rt has no use for. They are listed only so
+    // `deny_unknown_fields` can reject a key that is in neither group: a new
+    // manifest field then stops preprocessing loudly instead of vanishing on
+    // its way into meta.json, which is how `remove_columns` went missing.
+    // meta.json carries the used fields and nothing else.
+    #[serde(default)]
+    #[allow(dead_code)]
+    manifest_version: Option<serde_yaml::Value>,
+    #[serde(default)]
+    #[allow(dead_code)]
+    description: Option<serde_yaml::Value>,
+    #[serde(default)]
+    #[allow(dead_code)]
+    val_timestamp: Option<serde_yaml::Value>,
+    #[serde(default)]
+    #[allow(dead_code)]
+    test_timestamp: Option<serde_yaml::Value>,
 }
 
 #[derive(Debug, Default, Deserialize)]
+#[serde(deny_unknown_fields)]
 struct TaskManifest {
     /// "forecast" | "external" | "autocomplete".
     #[serde(default)]
@@ -94,6 +115,33 @@ struct TaskManifest {
     /// it sits right next to it in the same row.
     #[serde(default)]
     remove_columns: Vec<(String, String)>,
+
+    // Manifest keys rt has no use for. They are listed only so
+    // `deny_unknown_fields` can reject a key that is in neither group: a new
+    // manifest field then stops preprocessing loudly instead of vanishing on
+    // its way into meta.json, which is how `remove_columns` went missing.
+    // meta.json carries the used fields and nothing else.
+    #[serde(default)]
+    #[allow(dead_code)]
+    name: Option<serde_yaml::Value>,
+    #[serde(default)]
+    #[allow(dead_code)]
+    manifest_version: Option<serde_yaml::Value>,
+    #[serde(default)]
+    #[allow(dead_code)]
+    description: Option<serde_yaml::Value>,
+    #[serde(default)]
+    #[allow(dead_code)]
+    timedelta: Option<serde_yaml::Value>,
+    #[serde(default)]
+    #[allow(dead_code)]
+    num_eval_timestamps: Option<serde_yaml::Value>,
+    #[serde(default)]
+    #[allow(dead_code)]
+    eval_k: Option<serde_yaml::Value>,
+    #[serde(default)]
+    #[allow(dead_code)]
+    sql: Option<serde_yaml::Value>,
 }
 
 impl TaskManifest {
