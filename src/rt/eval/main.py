@@ -73,10 +73,8 @@ def main(cfg: Config) -> None:
             "eval.context_seed only applies to single-config runs"
         )
 
-        val_tasks = get_tasks(ev_cfg.pre_dir, ev_cfg.db_task_list, ("val",),
-                              embedder=embedder)
-        test_tasks = get_tasks(ev_cfg.pre_dir, ev_cfg.db_task_list, ("test",),
-                               embedder=embedder)
+        val_tasks = get_tasks(ev_cfg.pre_dir, ev_cfg.db_task_list, ("val",))
+        test_tasks = get_tasks(ev_cfg.pre_dir, ev_cfg.db_task_list, ("test",))
         if not test_tasks:
             raise SystemExit(f"no tasks found in {ev_cfg.pre_dir}")
         run_ensemble(net, ev_cfg.pre_dir, val_tasks, test_tasks, grid=grid,
@@ -84,8 +82,7 @@ def main(cfg: Config) -> None:
                      csv_out_dir=ev_cfg.csv_out_dir, **eval_kwargs)
         return
 
-    tasks = get_tasks(ev_cfg.pre_dir, ev_cfg.db_task_list, tuple(ev_cfg.splits),
-                      embedder=embedder)
+    tasks = get_tasks(ev_cfg.pre_dir, ev_cfg.db_task_list, tuple(ev_cfg.splits))
     if not tasks:
         raise SystemExit(f"no tasks found in {ev_cfg.pre_dir}")
     lcs, bw, pl = grid[0]

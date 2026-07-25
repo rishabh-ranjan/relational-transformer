@@ -67,6 +67,9 @@ struct DatasetManifest {
 
 #[derive(Debug, Default, Deserialize)]
 struct TaskManifest {
+    /// "forecast" | "external" | "autocomplete".
+    #[serde(default)]
+    kind: Option<String>,
     #[serde(default)]
     entity_table: Option<String>,
     #[serde(default)]
@@ -284,6 +287,10 @@ pub fn main(cli: Cli) {
             }
             tasks_meta.push(serde_json::json!({
                 "name": task_name,
+                // Autocomplete tasks ship as a manifest only (no train/val/test
+                // parquet): the target is a column of an existing db table, so
+                // there is no label table to read and `splits` stays empty.
+                "kind": tm.kind,
                 "target_col": tm.target_col,
                 "task_type": tm.task_type,
                 "entity_table": tm.entity_table,

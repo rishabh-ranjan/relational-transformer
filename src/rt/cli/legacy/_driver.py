@@ -55,8 +55,7 @@ def run_legacy_eval(cfg: LegacyEvalConfig, model_for_task) -> dict:
     device = "cuda" if torch.cuda.is_available() else "cpu"
     out_dir = Path(cfg.out_dir).expanduser()
 
-    tasks = get_tasks(cfg.pre_dir, cfg.db_task_list, ("test",),
-                      embedder=LEGACY_EMBEDDER)
+    tasks = get_tasks(cfg.pre_dir, cfg.db_task_list, ("test",))
     if not tasks:
         raise SystemExit(f"no tasks found in {cfg.pre_dir}")
 

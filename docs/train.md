@@ -24,9 +24,12 @@ cached on demand. The released RT-J data (the defaults):
 - `--eval.pre-dir stanford-star/relbench-preprocessed`
 
 The task mixture is given by `--train.db-task-list` — `(db, task)` pairs as a
-local JSON file or a Hub path. `stanford-star/the-join/db-task-lists/forecast.json`
-(default) is every task in the Join; `.../rt-j.json` is the curated RT-J
-mixture.
+local JSON file or a Hub path. Every name must be a task the db actually ships
+(recorded in its `meta.json`). Curated lists on the Hub under
+`stanford-star/the-join/db-task-lists/`: `forecast.json` (every forecast task in
+the Join), `autocomplete.json` (every `kind: autocomplete` task — predict a
+column of a db table, train-split only), `all.json` (both), and `rt-j.json` (the
+curated RT-J mixture, forecast + autocomplete).
 
 ## Single-GPU training
 

@@ -68,7 +68,7 @@ def resolve_db_task_list(db_task_list) -> list[tuple[str, str]]:
     return out
 
 
-def get_tasks(pre_dir, db_task_list, splits, *, embedder) -> list[Task]:
+def get_tasks(pre_dir, db_task_list, splits) -> list[Task]:
     """Build full :class:`Task` objects for a db_task_list at the given splits.
 
     Every name in the list must be an explicit task recorded in the db's
@@ -80,9 +80,7 @@ def get_tasks(pre_dir, db_task_list, splits, *, embedder) -> list[Task]:
     of an existing db table, so they carry no splits and are emitted at the
     ``train`` split only.
 
-    ``embedder`` is accepted for call-site compatibility and unused.
     """
-    del embedder
     pairs = resolve_db_task_list(db_task_list)
     by_db: dict[str, list[str]] = {}
     for db, name in pairs:
