@@ -67,7 +67,10 @@ if [[ -z "${RT_RUN_ID:-}" ]]; then
     fi
 
     # Run id == wandb id == output subdir; fixed here so requeues resume.
-    RT_RUN_ID=$(pixi run python -c 'from rt.config import timestamp; print(timestamp())')
+    # RT_RESUME_ID=<id> reuses an existing run instead of minting a new one, so
+    # a run that has to be relaunched by hand (not by slurm requeue) picks up
+    # its own resume.pt, wandb run and output dir rather than starting over.
+    RT_RUN_ID=${RT_RESUME_ID:-$(pixi run python -c 'from rt.config import timestamp; print(timestamp())')}
 
     mkdir -p "$LOG_DIR"
     echo "repo:   $RT_REPO"
