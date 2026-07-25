@@ -1,4170 +1,4630 @@
 [
  [
-  "join-amazon-tools",
-  "new-product-adoption-signal"
+  "join-amazon-musical-instruments",
+  "product-churn-4x"
  ],
  [
-  "join-amazon-tools",
-  "new-product-first-window-reorder"
+  "join-amazon-musical-instruments",
+  "product-churn-6x"
  ],
  [
-  "join-amazon-tools",
-  "new-product-long-horizon-reviews"
+  "join-amazon-musical-instruments",
+  "product-churn-8x"
  ],
  [
-  "join-amazon-tools",
-  "new-product-repeat-reviews"
+  "join-amazon-musical-instruments",
+  "product-distinct-raters"
  ],
  [
-  "join-amazon-tools",
-  "new-product-sustained-traction"
- ],
- [
-  "join-amazon-tools",
-  "new-reviewer-debut-engagement"
- ],
- [
-  "join-amazon-tools",
-  "new-reviewer-long-horizon"
- ],
- [
-  "join-amazon-tools",
-  "new-reviewer-repeat-activity"
- ],
- [
-  "join-amazon-tools",
-  "new-reviewer-second-review-short"
- ],
- [
-  "join-amazon-tools",
-  "new-reviewer-verified-followup"
- ],
- [
-  "join-amazon-tools",
-  "product-avg-rating"
- ],
- [
-  "join-amazon-tools",
-  "product-distinct-reviewers"
- ],
- [
-  "join-amazon-tools",
+  "join-amazon-musical-instruments",
   "product-high-rating"
  ],
  [
-  "join-amazon-tools",
-  "product-multi-negative-review"
+  "join-amazon-musical-instruments",
+  "product-long-reviews"
  ],
  [
-  "join-amazon-tools",
-  "product-negative-review-event"
- ],
- [
-  "join-amazon-tools",
-  "product-rating-change"
- ],
- [
-  "join-amazon-tools",
+  "join-amazon-musical-instruments",
   "product-rating-trend"
  ],
  [
-  "join-amazon-tools",
-  "product-review-spike-event"
+  "join-amazon-musical-instruments",
+  "product-rating-trend-reversal"
  ],
  [
-  "join-amazon-tools",
-  "product-top-reviewed"
+  "join-amazon-musical-instruments",
+  "product-rating-volatility"
  ],
  [
-  "join-amazon-tools",
-  "product-unverified-review-rare"
+  "join-amazon-musical-instruments",
+  "product-return-4x"
  ],
  [
-  "join-amazon-tools",
-  "reviewer-active"
+  "join-amazon-musical-instruments",
+  "product-return-6x"
  ],
  [
-  "join-amazon-tools",
-  "reviewer-avg-rating"
+  "join-amazon-musical-instruments",
+  "product-review-count"
  ],
  [
-  "join-amazon-tools",
-  "reviewer-churn"
+  "join-amazon-musical-instruments",
+  "product-review-len-change"
  ],
  [
-  "join-amazon-tools",
-  "reviewer-long-review-rare"
+  "join-amazon-musical-instruments",
+  "product-review-streak"
  ],
  [
-  "join-amazon-tools",
-  "reviewer-midrating-rare"
- ],
- [
-  "join-amazon-tools",
-  "reviewer-multi-review-burst"
- ],
- [
-  "join-amazon-tools",
-  "reviewer-negative-review-event"
- ],
- [
-  "join-amazon-tools",
-  "reviewer-return"
- ],
- [
-  "join-amazon-tools",
-  "reviewer-review-count"
- ],
- [
-  "join-amazon-tools",
-  "reviewer-verbosity-per-star"
- ],
- [
-  "join-amazon-tools",
-  "reviewer-verified-purchase-rare"
- ],
- [
-  "join-amazon-tools",
-  "reviewer-voted-review-rare"
- ],
- [
-  "join-amazon-toys",
-  "new-product-fast-followup"
- ],
- [
-  "join-amazon-toys",
-  "new-product-long-tail"
- ],
- [
-  "join-amazon-toys",
-  "new-product-repeat-review"
- ],
- [
-  "join-amazon-toys",
-  "new-product-second-review"
- ],
- [
-  "join-amazon-toys",
-  "new-product-traction"
- ],
- [
-  "join-amazon-toys",
-  "new-reviewer-fast-return"
- ],
- [
-  "join-amazon-toys",
-  "new-reviewer-long-horizon"
- ],
- [
-  "join-amazon-toys",
-  "new-reviewer-repeat"
- ],
- [
-  "join-amazon-toys",
-  "new-reviewer-second-review"
- ],
- [
-  "join-amazon-toys",
-  "new-reviewer-stick"
- ],
- [
-  "join-amazon-toys",
-  "product-avg-rating"
- ],
- [
-  "join-amazon-toys",
-  "product-distinct-reviewers"
- ],
- [
-  "join-amazon-toys",
-  "product-high-price-one-star"
- ],
- [
-  "join-amazon-toys",
-  "product-high-rating"
- ],
- [
-  "join-amazon-toys",
-  "product-multiple-one-stars"
- ],
- [
-  "join-amazon-toys",
-  "product-one-star-event"
- ],
- [
-  "join-amazon-toys",
-  "product-premium-review"
- ],
- [
-  "join-amazon-toys",
-  "product-premium-verified-sale"
- ],
- [
-  "join-amazon-toys",
-  "product-rating-change"
- ],
- [
-  "join-amazon-toys",
-  "product-rating-trend"
- ],
- [
-  "join-amazon-toys",
-  "product-top-rated"
- ],
- [
-  "join-amazon-toys",
-  "product-total-rating-mass"
- ],
- [
-  "join-amazon-toys",
-  "reviewer-active"
- ],
- [
-  "join-amazon-toys",
-  "reviewer-churn"
- ],
- [
-  "join-amazon-toys",
-  "reviewer-long-one-star-rant"
- ],
- [
-  "join-amazon-toys",
-  "reviewer-multi-verified-burst"
- ],
- [
-  "join-amazon-toys",
-  "reviewer-one-star-rant"
- ],
- [
-  "join-amazon-toys",
-  "reviewer-return"
- ],
- [
-  "join-amazon-toys",
-  "reviewer-review-count"
- ],
- [
-  "join-amazon-toys",
-  "reviewer-verified-purchase-rare"
- ],
- [
-  "join-amazon-toys",
-  "reviewer-voted-review-rare"
- ],
- [
-  "join-cfpb-complaints",
-  "company-churn"
- ],
- [
-  "join-cfpb-complaints",
-  "company-churn-4x"
- ],
- [
-  "join-cfpb-complaints",
-  "company-churn-5x"
- ],
- [
-  "join-cfpb-complaints",
-  "company-churn-6x"
- ],
- [
-  "join-cfpb-complaints",
-  "company-churn-8x"
- ],
- [
-  "join-cfpb-complaints",
-  "company-complaint-concentration"
- ],
- [
-  "join-cfpb-complaints",
-  "company-complaint-count"
- ],
- [
-  "join-cfpb-complaints",
-  "company-complaint-existence"
- ],
- [
-  "join-cfpb-complaints",
-  "company-complaint-return"
- ],
- [
-  "join-cfpb-complaints",
-  "company-complaint-sum-id"
- ],
- [
-  "join-cfpb-complaints",
-  "company-complaint-volume-trend"
- ],
- [
-  "join-cfpb-complaints",
-  "company-distinct-products"
- ],
- [
-  "join-cfpb-complaints",
-  "company-distinct-states"
- ],
- [
-  "join-cfpb-complaints",
-  "company-diverse-products"
- ],
- [
-  "join-cfpb-complaints",
-  "company-extended-churn"
- ],
- [
-  "join-cfpb-complaints",
-  "company-extended-complaint-count"
- ],
- [
-  "join-cfpb-complaints",
-  "company-extended-existence"
- ],
- [
-  "join-cfpb-complaints",
-  "company-has-complaint"
- ],
- [
-  "join-cfpb-complaints",
-  "company-low-timely-response"
- ],
- [
-  "join-cfpb-complaints",
-  "company-max-product"
- ],
- [
-  "join-cfpb-complaints",
-  "company-max-product-code"
- ],
- [
-  "join-cfpb-complaints",
-  "company-mean-product"
- ],
- [
-  "join-cfpb-complaints",
-  "company-receives-complaint"
- ],
- [
-  "join-cfpb-complaints",
-  "company-return-4x"
- ],
- [
-  "join-cfpb-complaints",
-  "company-return-5x"
- ],
- [
-  "join-cfpb-complaints",
-  "company-return-6x"
- ],
- [
-  "join-cfpb-complaints",
-  "company-return-7x"
- ],
- [
-  "join-cfpb-complaints",
-  "company-return-8x"
- ],
- [
-  "join-cfpb-complaints",
-  "company-time-until-next-4x"
- ],
- [
-  "join-cfpb-complaints",
-  "company-time-until-next-5x"
- ],
- [
-  "join-cfpb-complaints",
-  "company-time-until-next-6x"
- ],
- [
-  "join-cfpb-complaints",
-  "company-time-until-next-8x"
- ],
- [
-  "join-cfpb-complaints",
-  "company-timely-response"
- ],
- [
-  "join-cfpb-complaints",
-  "company-timely-response-change"
- ],
- [
-  "join-cfpb-complaints",
-  "company-timely-response-volatility"
- ],
- [
-  "join-cfpb-complaints",
-  "company-top-complaint-volume"
- ],
- [
-  "join-cfpb-complaints",
-  "product-company-concentration"
- ],
- [
-  "join-cfpb-complaints",
-  "product-complaint-concentration"
- ],
- [
-  "join-cfpb-complaints",
-  "product-complaint-count"
- ],
- [
-  "join-cfpb-complaints",
-  "product-complaint-trend"
- ],
- [
-  "join-cfpb-complaints",
-  "product-distinct-companies"
- ],
- [
-  "join-cfpb-complaints",
-  "product-distinct-states"
- ],
- [
-  "join-cfpb-complaints",
-  "product-diverse-companies"
- ],
- [
-  "join-cfpb-complaints",
-  "product-extended-churn"
- ],
- [
-  "join-cfpb-complaints",
-  "product-extended-count"
- ],
- [
-  "join-cfpb-complaints",
-  "product-high-timely-response"
- ],
- [
-  "join-cfpb-complaints",
-  "product-high-volume"
- ],
- [
-  "join-cfpb-complaints",
-  "product-max-company"
- ],
- [
-  "join-cfpb-complaints",
+  "join-amazon-musical-instruments",
   "product-time-until-next-4x"
  ],
  [
-  "join-cfpb-complaints",
-  "product-timely-response-rate"
+  "join-amazon-musical-instruments",
+  "product-time-until-next-6x"
  ],
  [
-  "join-cfpb-complaints",
-  "product-top-complaint-volume"
+  "join-amazon-musical-instruments",
+  "product-time-until-next-review"
  ],
  [
-  "join-dblp",
-  "venue-active-publishing"
+  "join-amazon-musical-instruments",
+  "product-top-rated"
  ],
  [
-  "join-dblp",
-  "venue-churn"
+  "join-amazon-musical-instruments",
+  "reviewer-active-next"
  ],
  [
-  "join-dblp",
-  "venue-distinct-author-count"
+  "join-amazon-musical-instruments",
+  "reviewer-avg-rating"
  ],
  [
-  "join-dblp",
-  "venue-extended-churn"
+  "join-amazon-musical-instruments",
+  "reviewer-churn"
  ],
  [
-  "join-dblp",
-  "venue-extended-window-count"
+  "join-amazon-musical-instruments",
+  "reviewer-churn-4x"
  ],
  [
-  "join-dblp",
-  "venue-has-paper"
+  "join-amazon-musical-instruments",
+  "reviewer-churn-5x"
  ],
  [
-  "join-dblp",
-  "venue-multi-window-existence"
+  "join-amazon-musical-instruments",
+  "reviewer-churn-6x"
  ],
  [
-  "join-dblp",
-  "venue-new-author-existence"
+  "join-amazon-musical-instruments",
+  "reviewer-churn-8x"
  ],
  [
-  "join-dblp",
-  "venue-paper-count"
+  "join-amazon-musical-instruments",
+  "reviewer-distinct-products"
  ],
  [
-  "join-dblp",
-  "venue-paper-count-next"
+  "join-amazon-musical-instruments",
+  "reviewer-new-product-adoption"
  ],
  [
-  "join-dblp",
-  "venue-paper-existence-alt"
+  "join-amazon-musical-instruments",
+  "reviewer-rating-per-len"
  ],
  [
-  "join-dblp",
-  "venue-paper-id-sum"
+  "join-amazon-musical-instruments",
+  "reviewer-rating-trend-reversal"
  ],
  [
-  "join-dblp",
-  "venue-paper-key-volatility"
+  "join-amazon-musical-instruments",
+  "reviewer-rating-volatility"
  ],
  [
-  "join-dblp",
-  "venue-peer-outperform-by-type"
+  "join-amazon-musical-instruments",
+  "reviewer-return"
  ],
  [
-  "join-dblp",
-  "venue-publication-streak"
+  "join-amazon-musical-instruments",
+  "reviewer-return-4x"
  ],
  [
-  "join-dblp",
-  "venue-return-activity"
+  "join-amazon-musical-instruments",
+  "reviewer-return-5x"
  ],
  [
-  "join-dblp",
-  "venue-sum-paper-key"
+  "join-amazon-musical-instruments",
+  "reviewer-return-6x"
  ],
  [
-  "join-dblp",
-  "venue-sum-paper-keys"
+  "join-amazon-musical-instruments",
+  "reviewer-return-7x"
  ],
  [
-  "join-dblp",
-  "venue-time-until-next-paper"
+  "join-amazon-musical-instruments",
+  "reviewer-return-8x"
  ],
  [
-  "join-dblp",
-  "venue-top-volume"
+  "join-amazon-musical-instruments",
+  "reviewer-review-len-volatility"
  ],
  [
-  "join-dblp",
-  "venue-upcoming-inactive"
+  "join-amazon-musical-instruments",
+  "reviewer-review-streak"
  ],
  [
-  "join-dblp",
-  "venue-upcoming-publication"
+  "join-amazon-musical-instruments",
+  "reviewer-time-until-next-4x"
  ],
  [
-  "join-dblp",
-  "venue-volume-volatility"
+  "join-amazon-musical-instruments",
+  "reviewer-time-until-next-5x"
  ],
  [
-  "join-foodcom",
-  "recipe-distinct-raters"
+  "join-amazon-musical-instruments",
+  "reviewer-time-until-next-6x"
  ],
  [
-  "join-foodcom",
-  "recipe-high-rated"
+  "join-amazon-musical-instruments",
+  "reviewer-time-until-next-8x"
  ],
  [
-  "join-foodcom",
-  "recipe-interaction-concentration"
+  "join-amazon-musical-instruments",
+  "reviewer-time-until-next-review"
  ],
  [
-  "join-foodcom",
-  "recipe-mean-rating"
+  "join-beeradvocate",
+  "beer-appearance-palate-ratio"
  ],
  [
-  "join-foodcom",
-  "recipe-rating-change"
+  "join-beeradvocate",
+  "beer-aroma-to-taste-ratio"
  ],
  [
-  "join-foodcom",
-  "recipe-rating-trend"
+  "join-beeradvocate",
+  "beer-avg-review-length"
  ],
  [
-  "join-foodcom",
-  "recipe-rating-volatility"
+  "join-beeradvocate",
+  "beer-churn"
  ],
  [
-  "join-foodcom",
-  "recipe-return"
+  "join-beeradvocate",
+  "beer-epic-review-rare"
  ],
  [
-  "join-foodcom",
-  "recipe-top-rated"
+  "join-beeradvocate",
+  "beer-high-rating"
  ],
  [
-  "join-foodcom",
-  "recipe-top-volume"
+  "join-beeradvocate",
+  "beer-highly-rated"
  ],
  [
-  "join-foodcom",
-  "user-distinct-recipes"
+  "join-beeradvocate",
+  "beer-low-rating"
  ],
  [
-  "join-livesql-virtual",
-  "virtualidols-has-interaction"
+  "join-beeradvocate",
+  "beer-max-overall"
  ],
  [
-  "join-livesql-virtual",
-  "virtualidols-interaction-existence"
+  "join-beeradvocate",
+  "beer-mean-appearance"
  ],
  [
-  "join-nsf-awards",
-  "org-adopts-new-program-officer"
+  "join-beeradvocate",
+  "beer-mean-aroma"
  ],
  [
-  "join-nsf-awards",
-  "org-amount-volatility"
+  "join-beeradvocate",
+  "beer-mean-overall"
  ],
  [
-  "join-nsf-awards",
-  "org-award-count-share"
+  "join-beeradvocate",
+  "beer-mean-palate"
  ],
  [
-  "join-nsf-awards",
-  "org-award-count-trend-reversal"
+  "join-beeradvocate",
+  "beer-mean-taste"
  ],
  [
-  "join-nsf-awards",
-  "org-award-streak-length"
+  "join-beeradvocate",
+  "beer-min-overall"
  ],
  [
-  "join-nsf-awards",
-  "org-beats-agency-mean-amount"
+  "join-beeradvocate",
+  "beer-overall-to-taste-ratio"
  ],
  [
-  "join-nsf-awards",
-  "org-beats-po-peer-mean-funds"
+  "join-beeradvocate",
+  "beer-perfect-appearance-rare"
  ],
  [
-  "join-nsf-awards",
-  "org-days-until-next-award"
+  "join-beeradvocate",
+  "beer-perfect-aroma-rare"
  ],
  [
-  "join-nsf-awards",
-  "org-distinct-program-officers"
+  "join-beeradvocate",
+  "beer-perfect-overall-rare"
  ],
  [
-  "join-nsf-awards",
-  "org-first-time-large-award"
+  "join-beeradvocate",
+  "beer-perfect-palate-rare"
  ],
  [
-  "join-nsf-awards",
-  "org-funding-market-share"
+  "join-beeradvocate",
+  "beer-perfect-taste-rare"
  ],
  [
-  "join-nsf-awards",
-  "org-funding-trend-reversal"
+  "join-beeradvocate",
+  "beer-rating-change"
  ],
  [
-  "join-nsf-awards",
-  "org-rank-change-by-amount"
+  "join-beeradvocate",
+  "beer-rating-trend"
  ],
  [
-  "join-nsf-awards",
-  "org-rank-regression-by-funds-obligated"
+  "join-beeradvocate",
+  "beer-rating-volatility"
  ],
  [
-  "join-nsf-awards",
-  "org-repeats-last-program-officer"
+  "join-beeradvocate",
+  "beer-review-concentration"
  ],
  [
-  "join-nyc-311",
-  "agency-avg-resolution-hours"
+  "join-beeradvocate",
+  "beer-review-count"
  ],
  [
-  "join-nyc-311",
-  "agency-complaint-share"
+  "join-beeradvocate",
+  "beer-review-existence"
  ],
  [
-  "join-nyc-311",
-  "agency-distinct-complaint-types"
+  "join-beeradvocate",
+  "beer-review-return"
  ],
  [
-  "join-nyc-311",
-  "agency-new-complaint-type"
+  "join-beeradvocate",
+  "beer-sum-review-len"
  ],
  [
-  "join-nyc-311",
-  "agency-peer-outperform-resolution"
+  "join-beeradvocate",
+  "beer-top-rated"
  ],
  [
-  "join-nyc-311",
-  "agency-rank-regression-by-resolution"
+  "join-beeradvocate",
+  "beer-total-review-length"
  ],
  [
-  "join-nyc-311",
-  "agency-repeat-last-channel"
+  "join-beeradvocate",
+  "beer-viral-burst-rare"
  ],
  [
-  "join-nyc-311",
-  "agency-resolution-concentration"
+  "join-beeradvocate",
+  "new-beer-five-window-cold-start"
  ],
  [
-  "join-nyc-311",
-  "agency-resolution-trend"
+  "join-beeradvocate",
+  "new-beer-repeat-cold-start"
  ],
  [
-  "join-nyc-311",
-  "agency-resolution-trend-reversal"
+  "join-beeradvocate",
+  "new-beer-repeat-long-cold-start"
  ],
  [
-  "join-nyc-311",
-  "agency-slow-resolution"
+  "join-beeradvocate",
+  "new-beer-three-window-cold-start"
  ],
  [
-  "join-nyc-311",
-  "agency-streak-length"
+  "join-beeradvocate",
+  "new-beer-tight-cold-start"
  ],
  [
-  "join-nyc-311",
-  "complaint-type-active"
+  "join-beeradvocate",
+  "new-reviewer-five-window-cold-start"
  ],
  [
-  "join-nyc-311",
-  "complaint-type-churn"
+  "join-beeradvocate",
+  "new-reviewer-repeat-cold-start"
  ],
  [
-  "join-nyc-311",
-  "complaint-type-new-location"
+  "join-beeradvocate",
+  "new-reviewer-repeat-long-cold-start"
  ],
  [
-  "join-nyc-311",
-  "complaint-type-peer-outperform-resolution"
+  "join-beeradvocate",
+  "new-reviewer-three-window-cold-start"
  ],
  [
-  "join-nyc-311",
-  "complaint-type-time-until-next"
+  "join-beeradvocate",
+  "new-reviewer-tight-cold-start"
  ],
  [
-  "join-nyc-311",
-  "location-complaint-count"
+  "join-beeradvocate",
+  "reviewer-churn"
  ],
  [
-  "join-nyc-311",
-  "location-high-complaint-volume"
+  "join-beeradvocate",
+  "reviewer-distinct-beers"
  ],
  [
-  "join-nyc-311",
-  "location-new-complaint-type"
+  "join-beeradvocate",
+  "reviewer-extended-count"
  ],
  [
-  "join-nyc-311",
-  "location-peer-outperform-resolution"
+  "join-beeradvocate",
+  "reviewer-gives-perfect-rare"
  ],
  [
-  "join-nyc-311",
-  "location-rank-improvement-by-resolution"
+  "join-beeradvocate",
+  "reviewer-gives-zero-rare"
  ],
  [
-  "join-nyc-311",
-  "location-rank-regression-by-resolution"
+  "join-beeradvocate",
+  "reviewer-harsh-rater"
  ],
  [
-  "join-nyc-311",
-  "location-repeat-last-complaint-type"
+  "join-beeradvocate",
+  "reviewer-harsh-review"
  ],
  [
-  "join-nyc-311",
-  "location-resolution-change"
+  "join-beeradvocate",
+  "reviewer-has-review"
  ],
  [
-  "join-nyc-311",
-  "location-resolution-trend-reversal"
+  "join-beeradvocate",
+  "reviewer-long-review"
  ],
  [
-  "join-nyc-311",
-  "location-streak-length"
+  "join-beeradvocate",
+  "reviewer-mean-overall"
  ],
  [
-  "join-nyc-311",
-  "location-time-until-next-complaint"
+  "join-beeradvocate",
+  "reviewer-mean-overall-given"
  ],
  [
-  "join-nyc-311",
-  "location-top-complaint-volume"
+  "join-beeradvocate",
+  "reviewer-mean-taste"
  ],
  [
-  "join-amazon-tools",
+  "join-beeradvocate",
+  "reviewer-return"
+ ],
+ [
+  "join-beeradvocate",
+  "reviewer-review-count"
+ ],
+ [
+  "join-beeradvocate",
+  "reviewer-review-existence"
+ ],
+ [
+  "join-beeradvocate",
+  "reviewer-review-length"
+ ],
+ [
+  "join-beeradvocate",
+  "reviewer-review-length-change"
+ ],
+ [
+  "join-beeradvocate",
+  "reviewer-sum-review-len"
+ ],
+ [
+  "join-beeradvocate",
+  "reviewer-top-active"
+ ],
+ [
+  "join-beeradvocate",
+  "reviewer-writes-epic-rare"
+ ],
+ [
+  "join-bird-books",
+  "customer-address-diversity"
+ ],
+ [
+  "join-bird-books",
+  "customer-churn"
+ ],
+ [
+  "join-bird-books",
+  "customer-distinct-shipping-methods"
+ ],
+ [
+  "join-bird-books",
+  "customer-high-value-order"
+ ],
+ [
+  "join-bird-books",
+  "customer-new-order"
+ ],
+ [
+  "join-bird-books",
+  "customer-new-shipping-method-adoption"
+ ],
+ [
+  "join-bird-books",
+  "customer-order-count"
+ ],
+ [
+  "join-bird-books",
+  "customer-order-count-heavytail"
+ ],
+ [
+  "join-bird-books",
+  "customer-order-share"
+ ],
+ [
+  "join-bird-books",
+  "customer-order-streak"
+ ],
+ [
+  "join-bird-books",
+  "customer-rank-regression-shipping"
+ ],
+ [
+  "join-bird-books",
+  "customer-repeat-address"
+ ],
+ [
+  "join-bird-books",
+  "customer-repeat-shipping-method"
+ ],
+ [
+  "join-bird-books",
+  "customer-return-after-inactivity"
+ ],
+ [
+  "join-bird-books",
+  "customer-time-until-next-order"
+ ],
+ [
+  "join-bird-books",
+  "order-history-count"
+ ],
+ [
+  "join-bird-car-retails",
+  "customer-has-order"
+ ],
+ [
+  "join-contacts",
+  "dst-avg-feat0"
+ ],
+ [
+  "join-contacts",
+  "dst-distinct-senders"
+ ],
+ [
+  "join-contacts",
+  "dst-existence"
+ ],
+ [
+  "join-contacts",
+  "dst-top-incoming-feat0"
+ ],
+ [
+  "join-contacts",
+  "incoming-churn"
+ ],
+ [
+  "join-contacts",
+  "incoming-count"
+ ],
+ [
+  "join-contacts",
+  "node-appears-dst"
+ ],
+ [
+  "join-contacts",
+  "node-appears-src"
+ ],
+ [
+  "join-contacts",
+  "node-avg-feat0"
+ ],
+ [
+  "join-contacts",
+  "node-churn"
+ ],
+ [
+  "join-contacts",
+  "node-close-contact-sender"
+ ],
+ [
+  "join-contacts",
+  "node-close-proximity-incoming"
+ ],
+ [
+  "join-contacts",
+  "node-contact-count"
+ ],
+ [
+  "join-contacts",
+  "node-contact-count-long"
+ ],
+ [
+  "join-contacts",
+  "node-contact-received"
+ ],
+ [
+  "join-contacts",
+  "node-far-distance-outgoing"
+ ],
+ [
+  "join-contacts",
+  "node-has-incoming"
+ ],
+ [
+  "join-contacts",
+  "node-incoming-churn-long"
+ ],
+ [
+  "join-contacts",
+  "node-incoming-contact-long"
+ ],
+ [
+  "join-contacts",
+  "node-incoming-feat0-min"
+ ],
+ [
+  "join-contacts",
+  "node-incoming-feat0-sum-long"
+ ],
+ [
+  "join-contacts",
+  "node-incoming-max-proximity-long"
+ ],
+ [
+  "join-contacts",
+  "node-isolated-receiver"
+ ],
+ [
+  "join-contacts",
+  "node-max-feat0-incoming"
+ ],
+ [
+  "join-contacts",
+  "node-max-feat0-outgoing"
+ ],
+ [
+  "join-contacts",
+  "node-mean-feat0-outgoing"
+ ],
+ [
+  "join-contacts",
+  "node-min-feat0-incoming"
+ ],
+ [
+  "join-contacts",
+  "node-min-feat0-outgoing"
+ ],
+ [
+  "join-contacts",
+  "node-outgoing-churn-long"
+ ],
+ [
+  "join-contacts",
+  "node-outgoing-feat0-max-long"
+ ],
+ [
+  "join-contacts",
+  "node-outgoing-feat0-mean-long"
+ ],
+ [
+  "join-contacts",
+  "node-outgoing-feat0-sum-long"
+ ],
+ [
+  "join-contacts",
+  "node-return-as-dst"
+ ],
+ [
+  "join-contacts",
+  "node-return-as-src"
+ ],
+ [
+  "join-contacts",
+  "node-src-exists-long"
+ ],
+ [
+  "join-contacts",
+  "node-sum-feat0-incoming"
+ ],
+ [
+  "join-contacts",
+  "node-sum-feat0-outgoing"
+ ],
+ [
+  "join-contacts",
+  "src-concentration"
+ ],
+ [
+  "join-contacts",
+  "src-distinct-contacts"
+ ],
+ [
+  "join-contacts",
+  "src-feat0-change"
+ ],
+ [
+  "join-contacts",
+  "src-feat0-trend"
+ ],
+ [
+  "join-contacts",
+  "src-feat0-volatility"
+ ],
+ [
+  "join-contacts",
+  "src-top-outgoing-feat0"
+ ],
+ [
+  "join-eia-860",
+  "new-plant-extended-horizon-repeat-commissioning"
+ ],
+ [
+  "join-eia-860",
+  "new-plant-long-horizon-generator-growth"
+ ],
+ [
+  "join-eia-860",
+  "new-plant-will-add-second-generator"
+ ],
+ [
+  "join-eia-860",
+  "plant-rare-multi-generator-expansion"
+ ],
+ [
+  "join-eia-860",
+  "plant-rare-new-generator-commissioning"
+ ],
+ [
+  "join-eia-860",
+  "plant-rare-retirement-decommission-burst"
+ ],
+ [
+  "join-github-archive",
+  "actor-active-streak"
+ ],
+ [
+  "join-github-archive",
+  "actor-activity-concentration"
+ ],
+ [
+  "join-github-archive",
+  "actor-activity-trend-reversal"
+ ],
+ [
+  "join-github-archive",
+  "actor-churn"
+ ],
+ [
+  "join-github-archive",
+  "actor-event-count"
+ ],
+ [
+  "join-github-archive",
+  "actor-event-volatility"
+ ],
+ [
+  "join-github-archive",
+  "actor-outperforms-event-type-peers"
+ ],
+ [
+  "join-github-archive",
+  "actor-rank-improvement-within-repo"
+ ],
+ [
+  "join-github-archive",
+  "actor-rank-within-repo"
+ ],
+ [
+  "join-github-archive",
+  "actor-repeat-last-event-type"
+ ],
+ [
+  "join-github-archive",
+  "actor-time-until-next-event"
+ ],
+ [
+  "join-github-archive",
+  "repo-active-streak"
+ ],
+ [
+  "join-github-archive",
+  "repo-churn"
+ ],
+ [
+  "join-github-archive",
+  "repo-distinct-actor-count"
+ ],
+ [
+  "join-github-archive",
+  "repo-distinct-contributors"
+ ],
+ [
+  "join-github-archive",
+  "repo-event-count"
+ ],
+ [
+  "join-github-archive",
+  "repo-event-rank-improvement"
+ ],
+ [
+  "join-github-archive",
+  "repo-event-rank-regression"
+ ],
+ [
+  "join-github-archive",
+  "repo-event-type-diversity"
+ ],
+ [
+  "join-github-archive",
+  "repo-event-volatility"
+ ],
+ [
+  "join-github-archive",
+  "repo-outperforms-event-type-peers"
+ ],
+ [
+  "join-github-archive",
+  "repo-repeat-last-event-type"
+ ],
+ [
+  "join-github-archive",
+  "repo-return"
+ ],
+ [
+  "join-github-archive",
+  "repo-time-until-next-event"
+ ],
+ [
+  "join-github-archive",
+  "repo-top-quartile-activity"
+ ],
+ [
+  "join-movielens-1m",
+  "movie-appears-ratings"
+ ],
+ [
+  "join-movielens-1m",
+  "movie-churn"
+ ],
+ [
+  "join-movielens-1m",
+  "movie-churn-4x"
+ ],
+ [
+  "join-movielens-1m",
+  "movie-churn-6x"
+ ],
+ [
+  "join-movielens-1m",
+  "movie-churn-8x"
+ ],
+ [
+  "join-movielens-1m",
+  "movie-churn-long"
+ ],
+ [
+  "join-movielens-1m",
+  "movie-favorable-mean"
+ ],
+ [
+  "join-movielens-1m",
+  "movie-five-star-received"
+ ],
+ [
+  "join-movielens-1m",
+  "movie-low-rating-risk"
+ ],
+ [
+  "join-movielens-1m",
+  "movie-max-rating"
+ ],
+ [
+  "join-movielens-1m",
+  "movie-max-rating-long"
+ ],
+ [
+  "join-movielens-1m",
+  "movie-mean-rating-long"
+ ],
+ [
+  "join-movielens-1m",
+  "movie-new-user-adoption"
+ ],
+ [
+  "join-movielens-1m",
+  "movie-peer-outperform-by-user"
+ ],
+ [
+  "join-movielens-1m",
+  "movie-poor-reception"
+ ],
+ [
+  "join-movielens-1m",
+  "movie-rating-change"
+ ],
+ [
+  "join-movielens-1m",
+  "movie-rating-trend"
+ ],
+ [
+  "join-movielens-1m",
+  "movie-rating-trend-reversal"
+ ],
+ [
+  "join-movielens-1m",
+  "movie-rating-volatility"
+ ],
+ [
+  "join-movielens-1m",
+  "movie-return-4x"
+ ],
+ [
+  "join-movielens-1m",
+  "movie-return-5x"
+ ],
+ [
+  "join-movielens-1m",
+  "movie-return-6x"
+ ],
+ [
+  "join-movielens-1m",
+  "movie-return-8x"
+ ],
+ [
+  "join-movielens-1m",
+  "movie-returns"
+ ],
+ [
+  "join-movielens-1m",
+  "movie-time-until-next-4x"
+ ],
+ [
+  "join-movielens-1m",
+  "movie-time-until-next-6x"
+ ],
+ [
+  "join-movielens-1m",
+  "movie-top-rated"
+ ],
+ [
+  "join-movielens-1m",
+  "user-activity-concentration"
+ ],
+ [
+  "join-movielens-1m",
+  "user-appears-ratings"
+ ],
+ [
+  "join-movielens-1m",
+  "user-avg-rating"
+ ],
+ [
+  "join-movielens-1m",
+  "user-churn"
+ ],
+ [
+  "join-movielens-1m",
+  "user-churn-4x"
+ ],
+ [
+  "join-movielens-1m",
+  "user-churn-5x"
+ ],
+ [
+  "join-movielens-1m",
+  "user-churn-6x"
+ ],
+ [
+  "join-movielens-1m",
+  "user-churn-8x"
+ ],
+ [
+  "join-movielens-1m",
+  "user-churn-long"
+ ],
+ [
+  "join-movielens-1m",
+  "user-critic-mode"
+ ],
+ [
+  "join-movielens-1m",
+  "user-floor-positive"
+ ],
+ [
+  "join-movielens-1m",
+  "user-high-volume"
+ ],
+ [
+  "join-movielens-1m",
+  "user-max-rating"
+ ],
+ [
+  "join-movielens-1m",
+  "user-mean-rating-long"
+ ],
+ [
+  "join-movielens-1m",
+  "user-min-rating"
+ ],
+ [
+  "join-movielens-1m",
+  "user-min-rating-long"
+ ],
+ [
+  "join-movielens-1m",
+  "user-negative-tendency"
+ ],
+ [
+  "join-movielens-1m",
+  "user-new-movie-adoption"
+ ],
+ [
+  "join-movielens-1m",
+  "user-one-star-given"
+ ],
+ [
+  "join-movielens-1m",
+  "user-peer-outperform-by-movie"
+ ],
+ [
+  "join-movielens-1m",
+  "user-rating-change"
+ ],
+ [
+  "join-movielens-1m",
+  "user-rating-streak-length"
+ ],
+ [
+  "join-movielens-1m",
+  "user-rating-trend"
+ ],
+ [
+  "join-movielens-1m",
+  "user-rating-volatility"
+ ],
+ [
+  "join-movielens-1m",
+  "user-return-4x"
+ ],
+ [
+  "join-movielens-1m",
+  "user-return-5x"
+ ],
+ [
+  "join-movielens-1m",
+  "user-return-6x"
+ ],
+ [
+  "join-movielens-1m",
+  "user-return-8x"
+ ],
+ [
+  "join-movielens-1m",
+  "user-returns"
+ ],
+ [
+  "join-movielens-1m",
+  "user-time-until-next-4x"
+ ],
+ [
+  "join-movielens-1m",
+  "user-time-until-next-5x"
+ ],
+ [
+  "join-movielens-1m",
+  "user-time-until-next-6x"
+ ],
+ [
+  "join-movielens-1m",
+  "user-time-until-next-rating"
+ ],
+ [
+  "join-movielens-1m",
+  "user-top-enthusiast"
+ ],
+ [
+  "join-oulad",
+  "assessment-resource-popularity"
+ ],
+ [
+  "join-oulad",
+  "student-assessment-churn-4x"
+ ],
+ [
+  "join-oulad",
+  "student-assessment-churn-6x"
+ ],
+ [
+  "join-oulad",
+  "student-assessment-rank"
+ ],
+ [
+  "join-oulad",
+  "student-assessment-rank-change"
+ ],
+ [
+  "join-oulad",
+  "student-assessment-score"
+ ],
+ [
+  "join-oulad",
+  "student-assessment-streak"
+ ],
+ [
+  "join-oulad",
+  "student-assessment-submission"
+ ],
+ [
+  "join-oulad",
+  "student-click-change"
+ ],
+ [
+  "join-oulad",
+  "student-click-concentration"
+ ],
+ [
+  "join-oulad",
+  "student-click-rank-change"
+ ],
+ [
+  "join-oulad",
+  "student-click-trend"
+ ],
+ [
+  "join-oulad",
+  "student-click-trend-reversal"
+ ],
+ [
+  "join-oulad",
+  "student-click-volatility"
+ ],
+ [
+  "join-oulad",
+  "student-distinct-resources"
+ ],
+ [
+  "join-oulad",
+  "student-high-engagement"
+ ],
+ [
+  "join-oulad",
+  "student-high-score"
+ ],
+ [
+  "join-oulad",
+  "student-max-single-session-clicks"
+ ],
+ [
+  "join-oulad",
+  "student-mean-clicks-per-session"
+ ],
+ [
+  "join-oulad",
+  "student-min-assessment-score"
+ ],
+ [
+  "join-oulad",
+  "student-passing-score"
+ ],
+ [
+  "join-oulad",
+  "student-score-beats-cohort"
+ ],
+ [
+  "join-oulad",
+  "student-score-change"
+ ],
+ [
+  "join-oulad",
+  "student-score-trend"
+ ],
+ [
+  "join-oulad",
+  "student-submission-count"
+ ],
+ [
+  "join-oulad",
+  "student-time-until-next-assessment"
+ ],
+ [
+  "join-oulad",
+  "student-time-until-next-vle"
+ ],
+ [
+  "join-oulad",
+  "student-top-engager"
+ ],
+ [
+  "join-oulad",
+  "student-top-scorer"
+ ],
+ [
+  "join-oulad",
+  "student-total-clicks"
+ ],
+ [
+  "join-oulad",
+  "student-vle-activity"
+ ],
+ [
+  "join-oulad",
+  "student-vle-churn"
+ ],
+ [
+  "join-oulad",
+  "student-vle-churn-4x"
+ ],
+ [
+  "join-oulad",
+  "student-vle-churn-5x"
+ ],
+ [
+  "join-oulad",
+  "student-vle-churn-6x"
+ ],
+ [
+  "join-oulad",
+  "student-vle-churn-8x"
+ ],
+ [
+  "join-oulad",
+  "student-vle-return"
+ ],
+ [
+  "join-oulad",
+  "student-vle-session-count"
+ ],
+ [
+  "join-oulad",
+  "student-vle-streak-length"
+ ],
+ [
+  "join-oulad",
+  "student-vle-time-until-next-4x"
+ ],
+ [
+  "join-oulad",
+  "student-vle-time-until-next-5x"
+ ],
+ [
+  "join-oulad",
+  "student-vle-time-until-next-6x"
+ ],
+ [
+  "join-oulad",
+  "student-vle-time-until-next-8x"
+ ],
+ [
+  "join-ram-fisheries",
+  "stock-advised-vs-tac"
+ ],
+ [
+  "join-ram-fisheries",
+  "stock-assessment-count"
+ ],
+ [
+  "join-ram-fisheries",
+  "stock-below-bmsy"
+ ],
+ [
+  "join-ram-fisheries",
+  "stock-biomass"
+ ],
+ [
+  "join-ram-fisheries",
+  "stock-biomass-trend"
+ ],
+ [
+  "join-ram-fisheries",
+  "stock-catch"
+ ],
+ [
+  "join-ram-fisheries",
+  "stock-catch-per-effort"
+ ],
+ [
+  "join-ram-fisheries",
+  "stock-catch-per-effort-ratio"
+ ],
+ [
+  "join-ram-fisheries",
+  "stock-catch-to-msy-ratio"
+ ],
+ [
+  "join-ram-fisheries",
+  "stock-churn"
+ ],
+ [
+  "join-ram-fisheries",
+  "stock-effort-max"
+ ],
+ [
+  "join-ram-fisheries",
+  "stock-exploitation-trend"
+ ],
+ [
+  "join-ram-fisheries",
+  "stock-extended-churn"
+ ],
+ [
+  "join-ram-fisheries",
+  "stock-f-over-fmsy-ratio"
+ ],
+ [
+  "join-ram-fisheries",
+  "stock-f-to-fmsy"
+ ],
+ [
+  "join-ram-fisheries",
+  "stock-fishing-mortality"
+ ],
+ [
+  "join-ram-fisheries",
+  "stock-fishing-mortality-change"
+ ],
+ [
+  "join-ram-fisheries",
+  "stock-has-assessment"
+ ],
+ [
+  "join-ram-fisheries",
+  "stock-healthy-biomass"
+ ],
+ [
+  "join-ram-fisheries",
+  "stock-landings"
+ ],
+ [
+  "join-ram-fisheries",
+  "stock-max-tac"
+ ],
+ [
+  "join-ram-fisheries",
+  "stock-max-total-biomass"
+ ],
+ [
+  "join-ram-fisheries",
+  "stock-mean-fishing-effort"
+ ],
+ [
+  "join-ram-fisheries",
+  "stock-mean-recruitment"
+ ],
+ [
+  "join-ram-fisheries",
+  "stock-overfishing"
+ ],
+ [
+  "join-ram-fisheries",
+  "stock-overfishing-max"
+ ],
+ [
+  "join-ram-fisheries",
+  "stock-quota-utilization"
+ ],
+ [
+  "join-ram-fisheries",
+  "stock-recruitment"
+ ],
+ [
+  "join-ram-fisheries",
+  "stock-recruitment-share"
+ ],
+ [
+  "join-ram-fisheries",
+  "stock-ssb"
+ ],
+ [
+  "join-ram-fisheries",
+  "stock-tac-mean"
+ ],
+ [
+  "join-ram-fisheries",
+  "stock-timeseries-existence"
+ ],
+ [
+  "join-ram-fisheries",
+  "stock-top-exploitation"
+ ],
+ [
+  "join-ram-fisheries",
+  "stock-total-biomass"
+ ],
+ [
+  "join-sec-edgar",
+  "company-adopts-new-form-type"
+ ],
+ [
+  "join-sec-edgar",
+  "company-files-annual"
+ ],
+ [
+  "join-sec-edgar",
+  "company-filing-churn"
+ ],
+ [
+  "join-sec-edgar",
+  "company-filing-existence"
+ ],
+ [
+  "join-sec-edgar",
+  "company-filing-inactive"
+ ],
+ [
+  "join-sec-edgar",
+  "company-form-diversification"
+ ],
+ [
+  "join-sec-edgar",
+  "company-has-filing"
+ ],
+ [
+  "join-sec-edgar",
+  "company-will-file"
+ ],
+ [
+  "join-spider-store-1",
+  "customer-has-purchase"
+ ],
+ [
+  "join-spider-store-1",
+  "customer-invoice-max-heavy-tail"
+ ],
+ [
+  "join-spider-store-1",
+  "customer-invoice-max-long-heavy-tail"
+ ],
+ [
+  "join-spider-store-1",
+  "customer-invoice-mean-heavy-tail"
+ ],
+ [
+  "join-spider-store-1",
+  "customer-invoice-mean-long-heavy-tail"
+ ],
+ [
+  "join-spider-store-1",
+  "customer-invoice-min-heavy-tail"
+ ],
+ [
+  "join-spider-store-1",
+  "customer-invoice-total-heavy-tail"
+ ],
+ [
+  "join-spider-store-1",
+  "customer-invoice-total-long-heavy-tail"
+ ],
+ [
+  "join-unvote",
+  "dst-distinct-voters"
+ ],
+ [
+  "join-unvote",
+  "dst-existence"
+ ],
+ [
+  "join-unvote",
+  "dst-incoming-share"
+ ],
+ [
+  "join-unvote",
+  "dst-new-voter"
+ ],
+ [
+  "join-unvote",
+  "dst-outperform-peers"
+ ],
+ [
+  "join-unvote",
+  "dst-rank-incoming"
+ ],
+ [
+  "join-unvote",
+  "dst-top-incoming-feat0"
+ ],
+ [
+  "join-unvote",
+  "incoming-count"
+ ],
+ [
+  "join-unvote",
+  "incoming-vote-streak"
+ ],
+ [
+  "join-unvote",
+  "mean-vote-feature"
+ ],
+ [
+  "join-unvote",
+  "node-appears-dst"
+ ],
+ [
+  "join-unvote",
+  "node-appears-src"
+ ],
+ [
+  "join-unvote",
+  "node-churn-in-long"
+ ],
+ [
+  "join-unvote",
+  "node-churn-out-long"
+ ],
+ [
+  "join-unvote",
+  "node-dst-exists-long"
+ ],
+ [
+  "join-unvote",
+  "node-high-consensus-voter"
+ ],
+ [
+  "join-unvote",
+  "node-mean-feat0-outgoing"
+ ],
+ [
+  "join-unvote",
+  "node-min-feat0-incoming"
+ ],
+ [
+  "join-unvote",
+  "node-min-feat0-incoming-long"
+ ],
+ [
+  "join-unvote",
+  "node-sum-feat0-incoming"
+ ],
+ [
+  "join-unvote",
+  "node-sum-feat0-outgoing"
+ ],
+ [
+  "join-unvote",
+  "node-votes-received-count"
+ ],
+ [
+  "join-unvote",
+  "outgoing-vote-count"
+ ],
+ [
+  "join-unvote",
+  "outgoing-vote-streak"
+ ],
+ [
+  "join-unvote",
+  "src-distinct-voted-nodes"
+ ],
+ [
+  "join-unvote",
+  "src-existence"
+ ],
+ [
+  "join-unvote",
+  "src-feat0-volatility"
+ ],
+ [
+  "join-unvote",
+  "src-new-partner"
+ ],
+ [
+  "join-unvote",
+  "src-outperform-peers"
+ ],
+ [
+  "join-unvote",
+  "src-rank-by-vote-volume"
+ ],
+ [
+  "join-unvote",
+  "src-top-outgoing-feat0"
+ ],
+ [
+  "join-unvote",
+  "src-vote-concentration"
+ ],
+ [
+  "join-unvote",
+  "src-vote-share"
+ ],
+ [
+  "join-unvote",
+  "unique-voting-partners"
+ ],
+ [
+  "join-amazon-musical-instruments",
   "products-avg_rating"
  ],
  [
-  "join-amazon-tools",
+  "join-amazon-musical-instruments",
   "products-n_reviews"
  ],
  [
-  "join-amazon-tools",
+  "join-amazon-musical-instruments",
   "reviews-rating"
  ],
  [
-  "join-amazon-tools",
+  "join-amazon-musical-instruments",
   "reviews-review_len"
  ],
  [
-  "join-amazon-tools",
+  "join-amazon-musical-instruments",
   "reviews-verified"
  ],
  [
-  "join-amazon-toys",
-  "products-avg_rating"
+  "join-beeradvocate",
+  "reviews-appearance"
  ],
  [
-  "join-amazon-toys",
-  "products-n_reviews"
+  "join-beeradvocate",
+  "reviews-aroma"
  ],
  [
-  "join-amazon-toys",
-  "products-price"
+  "join-beeradvocate",
+  "reviews-overall"
  ],
  [
-  "join-amazon-toys",
-  "reviews-rating"
+  "join-beeradvocate",
+  "reviews-palate"
  ],
  [
-  "join-amazon-toys",
+  "join-beeradvocate",
   "reviews-review_len"
  ],
  [
-  "join-amazon-toys",
-  "reviews-verified"
+  "join-beeradvocate",
+  "reviews-taste"
  ],
  [
-  "join-bird-authors",
-  "Paper-year"
+  "join-bird-books",
+  "book-num_pages"
  ],
  [
-  "join-bird-authors",
-  "PaperAuthor-author_id"
+  "join-bird-books",
+  "order_line-price"
  ],
  [
-  "join-bird-cookbook",
-  "Nutrition-alcohol"
+  "join-bird-books",
+  "shipping_method-cost"
  ],
  [
-  "join-bird-cookbook",
-  "Nutrition-calories"
+  "join-bird-car-retails",
+  "customers-credit_limit"
  ],
  [
-  "join-bird-cookbook",
-  "Nutrition-carbo"
+  "join-bird-car-retails",
+  "customers-sales_rep_employee_number"
  ],
  [
-  "join-bird-cookbook",
-  "Nutrition-cholestrl"
+  "join-bird-car-retails",
+  "orderdetails-order_line_number"
  ],
  [
-  "join-bird-cookbook",
-  "Nutrition-fiber"
+  "join-bird-car-retails",
+  "orderdetails-price_each"
  ],
  [
-  "join-bird-cookbook",
-  "Nutrition-iron"
+  "join-bird-car-retails",
+  "orderdetails-quantity_ordered"
  ],
  [
-  "join-bird-cookbook",
-  "Nutrition-pcnt_cal_carb"
+  "join-bird-car-retails",
+  "payments-amount"
  ],
  [
-  "join-bird-cookbook",
-  "Nutrition-pcnt_cal_fat"
+  "join-bird-car-retails",
+  "products-buy_price"
  ],
  [
-  "join-bird-cookbook",
-  "Nutrition-pcnt_cal_prot"
+  "join-bird-car-retails",
+  "products-msrp"
  ],
  [
-  "join-bird-cookbook",
-  "Nutrition-protein"
+  "join-bird-car-retails",
+  "products-quantity_in_stock"
  ],
  [
-  "join-bird-cookbook",
-  "Nutrition-sat_fat"
+  "join-bird-card-games",
+  "cards-converted_mana_cost"
  ],
  [
-  "join-bird-cookbook",
-  "Nutrition-sodium"
+  "join-bird-card-games",
+  "cards-edhrec_rank"
  ],
  [
-  "join-bird-cookbook",
-  "Nutrition-total_fat"
+  "join-bird-card-games",
+  "cards-has_alternative_deck_limit"
  ],
  [
-  "join-bird-cookbook",
-  "Nutrition-vitamin_a"
+  "join-bird-card-games",
+  "cards-has_content_warning"
  ],
  [
-  "join-bird-cookbook",
-  "Nutrition-vitamin_c"
+  "join-bird-card-games",
+  "cards-has_foil"
  ],
  [
-  "join-bird-cookbook",
-  "Quantity-max_qty"
+  "join-bird-card-games",
+  "cards-has_non_foil"
  ],
  [
-  "join-bird-cookbook",
-  "Quantity-min_qty"
+  "join-bird-card-games",
+  "cards-is_alternative"
  ],
  [
-  "join-bird-cookbook",
-  "Quantity-optional"
+  "join-bird-card-games",
+  "cards-is_full_art"
  ],
  [
-  "join-bird-cookbook",
-  "Recipe-cook_min"
+  "join-bird-card-games",
+  "cards-is_online_only"
  ],
  [
-  "join-bird-cookbook",
-  "Recipe-prep_min"
+  "join-bird-card-games",
+  "cards-is_oversized"
  ],
  [
-  "join-bird-cookbook",
-  "Recipe-servings"
+  "join-bird-card-games",
+  "cards-is_promo"
  ],
  [
-  "join-bird-cookbook",
-  "Recipe-stnd_min"
+  "join-bird-card-games",
+  "cards-is_reprint"
  ],
  [
-  "join-bird-ice-hockey-draft",
-  "PlayerInfo-birthday"
+  "join-bird-card-games",
+  "cards-is_reserved"
  ],
  [
-  "join-bird-ice-hockey-draft",
-  "PlayerInfo-birthmonth"
+  "join-bird-card-games",
+  "cards-is_starter"
  ],
  [
-  "join-bird-ice-hockey-draft",
-  "PlayerInfo-birthyear"
+  "join-bird-card-games",
+  "cards-is_story_spotlight"
  ],
  [
-  "join-bird-ice-hockey-draft",
-  "PlayerInfo-css_rank"
+  "join-bird-card-games",
+  "cards-is_textless"
  ],
  [
-  "join-bird-ice-hockey-draft",
-  "PlayerInfo-draftround"
+  "join-bird-card-games",
+  "cards-is_timeshifted"
  ],
  [
-  "join-bird-ice-hockey-draft",
-  "PlayerInfo-draftyear"
+  "join-bird-card-games",
+  "foreign_data-multiverseid"
  ],
  [
-  "join-bird-ice-hockey-draft",
-  "PlayerInfo-gp_greater_than_0"
+  "join-bird-card-games",
+  "sets-base_set_size"
  ],
  [
-  "join-bird-ice-hockey-draft",
-  "PlayerInfo-overall"
+  "join-bird-card-games",
+  "sets-is_foil_only"
  ],
  [
-  "join-bird-ice-hockey-draft",
-  "PlayerInfo-sum_7yr_gp"
+  "join-bird-card-games",
+  "sets-is_foreign_only"
  ],
  [
-  "join-bird-ice-hockey-draft",
-  "PlayerInfo-sum_7yr_toi"
+  "join-bird-card-games",
+  "sets-is_non_foil_only"
  ],
  [
-  "join-bird-ice-hockey-draft",
-  "SeasonStatus-a"
+  "join-bird-card-games",
+  "sets-is_online_only"
  ],
  [
-  "join-bird-ice-hockey-draft",
-  "SeasonStatus-g"
+  "join-bird-card-games",
+  "sets-is_partial_preview"
  ],
  [
-  "join-bird-ice-hockey-draft",
-  "SeasonStatus-gp"
+  "join-bird-card-games",
+  "sets-mcm_id"
  ],
  [
-  "join-bird-ice-hockey-draft",
-  "SeasonStatus-p"
+  "join-bird-card-games",
+  "sets-tcgplayer_group_id"
  ],
  [
-  "join-bird-ice-hockey-draft",
-  "SeasonStatus-pim"
+  "join-bird-card-games",
+  "sets-total_set_size"
  ],
  [
-  "join-bird-ice-hockey-draft",
-  "SeasonStatus-plusminus"
+  "join-bird-movies-4",
+  "movie-budget"
  ],
  [
-  "join-bird-ice-hockey-draft",
-  "height_info-height_in_cm"
+  "join-bird-movies-4",
+  "movie-popularity"
  ],
  [
-  "join-bird-ice-hockey-draft",
-  "weight_info-weight_in_kg"
+  "join-bird-movies-4",
+  "movie-revenue"
  ],
  [
-  "join-bird-ice-hockey-draft",
-  "weight_info-weight_in_lbs"
+  "join-bird-movies-4",
+  "movie-runtime"
  ],
  [
-  "join-bird-mental-health-survey",
-  "Answer-survey_id"
+  "join-bird-movies-4",
+  "movie-vote_average"
  ],
  [
-  "join-bird-mental-health-survey",
-  "Answer-user_id"
+  "join-bird-movies-4",
+  "movie-vote_count"
  ],
  [
-  "join-bird-social-media",
-  "twitter-day"
+  "join-bird-movies-4",
+  "movie_cast-cast_order"
  ],
  [
-  "join-bird-social-media",
-  "twitter-hour"
+  "join-bird-public-review-platform",
+  "Business-active"
  ],
  [
-  "join-bird-social-media",
-  "twitter-is_reshare"
+  "join-bird-public-review-platform",
+  "Business-stars"
  ],
  [
-  "join-bird-social-media",
-  "twitter-klout"
+  "join-bird-public-review-platform",
+  "Reviews-review_stars"
  ],
  [
-  "join-bird-social-media",
-  "twitter-likes"
+  "join-bird-public-review-platform",
+  "Tips-likes"
  ],
  [
-  "join-bird-social-media",
-  "twitter-reach"
+  "join-bird-public-review-platform",
+  "Users-user_average_stars"
  ],
  [
-  "join-bird-social-media",
-  "twitter-retweet_count"
+  "join-contacts",
+  "edges-feat_0"
  ],
  [
-  "join-bird-social-media",
-  "twitter-sentiment"
+  "join-contacts",
+  "edges-label"
  ],
  [
-  "join-cfpb-complaints",
-  "complaints-timely_response"
+  "join-dplace",
+  "codes-code"
  ],
  [
-  "join-credit",
-  "charge-charge_amt"
+  "join-dplace",
+  "data_points-code"
  ],
  [
-  "join-credit",
-  "charge-statement_no"
+  "join-dplace",
+  "data_points_sccs-code"
  ],
  [
-  "join-credit",
-  "member-curr_balance"
+  "join-dplace",
+  "data_points_sccs-year"
  ],
  [
-  "join-credit",
-  "member-prev_balance"
+  "join-dplace",
+  "societies-lat"
  ],
  [
-  "join-credit",
-  "payment-payment_amt"
+  "join-dplace",
+  "societies-long"
  ],
  [
-  "join-credit",
-  "statement-statement_amt"
+  "join-dplace",
+  "societies-main_focal_year"
  ],
  [
-  "join-facebook",
-  "feat-birthday1"
+  "join-dplace",
+  "societies-orig_lat"
  ],
  [
-  "join-facebook",
-  "feat-birthday2"
+  "join-dplace",
+  "societies-orig_long"
  ],
  [
-  "join-facebook",
-  "feat-birthday3"
+  "join-eia-860",
+  "generators-associated_with_combined_heat_and_power_system"
  ],
  [
-  "join-facebook",
-  "feat-birthday4"
+  "join-eia-860",
+  "generators-nameplate_capacity_mw"
  ],
  [
-  "join-facebook",
-  "feat-birthday5"
+  "join-eia-860",
+  "generators-uprate_or_derate_completed_during_year"
  ],
  [
-  "join-facebook",
-  "feat-birthday6"
+  "join-eia-860",
+  "plants-ash_impoundment"
  ],
  [
-  "join-facebook",
-  "feat-birthday7"
+  "join-eia-860",
+  "plants-energy_storage"
  ],
  [
-  "join-facebook",
-  "feat-birthday8"
+  "join-eia-860",
+  "plants-ferc_cogeneration_status"
  ],
  [
-  "join-facebook",
-  "feat-education1"
+  "join-eia-860",
+  "plants-ferc_exempt_wholesale_generator_status"
  ],
  [
-  "join-facebook",
-  "feat-education10"
+  "join-eia-860",
+  "plants-ferc_small_power_producer_status"
  ],
  [
-  "join-facebook",
-  "feat-education11"
+  "join-eia-860",
+  "plants-primary_purpose_naics_code"
  ],
  [
-  "join-facebook",
-  "feat-education12"
+  "join-eia-860",
+  "plants-sector"
  ],
  [
-  "join-facebook",
-  "feat-education13"
+  "join-eia-860",
+  "utilities-owner_of_plants_reported_on_form"
  ],
  [
-  "join-facebook",
-  "feat-education14"
+  "join-fdic-banks",
+  "financials-asset"
  ],
  [
-  "join-facebook",
-  "feat-education15"
+  "join-fdic-banks",
+  "financials-dep"
  ],
  [
-  "join-facebook",
-  "feat-education16"
+  "join-fdic-banks",
+  "financials-lnlsnet"
  ],
  [
-  "join-facebook",
-  "feat-education17"
+  "join-fdic-banks",
+  "financials-netinc"
  ],
  [
-  "join-facebook",
-  "feat-education18"
+  "join-fdic-banks",
+  "institutions-active"
  ],
  [
-  "join-facebook",
-  "feat-education19"
+  "join-genes",
+  "genes-chromosome"
  ],
  [
-  "join-facebook",
-  "feat-education2"
+  "join-genes",
+  "interactions-expression_corr"
  ],
  [
-  "join-facebook",
-  "feat-education20"
+  "join-github-archive",
+  "actors-actor_key"
  ],
  [
-  "join-facebook",
-  "feat-education21"
+  "join-github-archive",
+  "repos-repo_key"
  ],
  [
-  "join-facebook",
-  "feat-education22"
+  "join-hockey",
+  "coaches-g"
  ],
  [
-  "join-facebook",
-  "feat-education23"
+  "join-hockey",
+  "coaches-l"
  ],
  [
-  "join-facebook",
-  "feat-education24"
+  "join-hockey",
+  "coaches-stint"
  ],
  [
-  "join-facebook",
-  "feat-education25"
+  "join-hockey",
+  "coaches-t"
  ],
  [
-  "join-facebook",
-  "feat-education26"
+  "join-hockey",
+  "coaches-w"
  ],
  [
-  "join-facebook",
-  "feat-education27"
+  "join-hockey",
+  "combinedshutouts-month"
  ],
  [
-  "join-facebook",
-  "feat-education28"
+  "join-hockey",
+  "goalies-ga"
  ],
  [
-  "join-facebook",
-  "feat-education29"
+  "join-hockey",
+  "goalies-min"
  ],
  [
-  "join-facebook",
-  "feat-education3"
+  "join-hockey",
+  "goalies-stint"
  ],
  [
-  "join-facebook",
-  "feat-education30"
+  "join-hockey",
+  "goaliessc-ga"
  ],
  [
-  "join-facebook",
-  "feat-education31"
+  "join-hockey",
+  "goaliessc-gp"
  ],
  [
-  "join-facebook",
-  "feat-education32"
+  "join-hockey",
+  "goaliessc-l"
  ],
  [
-  "join-facebook",
-  "feat-education33"
+  "join-hockey",
+  "goaliessc-min"
  ],
  [
-  "join-facebook",
-  "feat-education34"
+  "join-hockey",
+  "goaliessc-sho"
  ],
  [
-  "join-facebook",
-  "feat-education35"
+  "join-hockey",
+  "goaliessc-t"
  ],
  [
-  "join-facebook",
-  "feat-education36"
+  "join-hockey",
+  "goaliessc-w"
  ],
  [
-  "join-facebook",
-  "feat-education37"
+  "join-hockey",
+  "goaliesshootout-ga"
  ],
  [
-  "join-facebook",
-  "feat-education38"
+  "join-hockey",
+  "goaliesshootout-l"
  ],
  [
-  "join-facebook",
-  "feat-education39"
+  "join-hockey",
+  "goaliesshootout-sa"
  ],
  [
-  "join-facebook",
-  "feat-education4"
+  "join-hockey",
+  "goaliesshootout-stint"
  ],
  [
-  "join-facebook",
-  "feat-education40"
+  "join-hockey",
+  "goaliesshootout-w"
  ],
  [
-  "join-facebook",
-  "feat-education41"
+  "join-hockey",
+  "master-birth_day"
  ],
  [
-  "join-facebook",
-  "feat-education42"
+  "join-hockey",
+  "master-height"
  ],
  [
-  "join-facebook",
-  "feat-education43"
+  "join-hockey",
+  "master-weight"
  ],
  [
-  "join-facebook",
-  "feat-education44"
+  "join-hockey",
+  "scoring-a"
  ],
  [
-  "join-facebook",
-  "feat-education45"
+  "join-hockey",
+  "scoring-col"
  ],
  [
-  "join-facebook",
-  "feat-education46"
+  "join-hockey",
+  "scoring-g"
  ],
  [
-  "join-facebook",
-  "feat-education47"
+  "join-hockey",
+  "scoring-gp"
  ],
  [
-  "join-facebook",
-  "feat-education48"
+  "join-hockey",
+  "scoring-pim"
  ],
  [
-  "join-facebook",
-  "feat-education49"
+  "join-hockey",
+  "scoring-pts"
  ],
  [
-  "join-facebook",
-  "feat-education5"
+  "join-hockey",
+  "scoring-sog"
  ],
  [
-  "join-facebook",
-  "feat-education50"
+  "join-hockey",
+  "scoring-stint"
  ],
  [
-  "join-facebook",
-  "feat-education51"
+  "join-hockey",
+  "scoringsc-a"
  ],
  [
-  "join-facebook",
-  "feat-education52"
+  "join-hockey",
+  "scoringsc-g"
  ],
  [
-  "join-facebook",
-  "feat-education53"
+  "join-hockey",
+  "scoringsc-gp"
  ],
  [
-  "join-facebook",
-  "feat-education54"
+  "join-hockey",
+  "scoringsc-pim"
  ],
  [
-  "join-facebook",
-  "feat-education55"
+  "join-hockey",
+  "scoringsc-pts"
  ],
  [
-  "join-facebook",
-  "feat-education56"
+  "join-hockey",
+  "scoringshootout-g"
  ],
  [
-  "join-facebook",
-  "feat-education57"
+  "join-hockey",
+  "scoringshootout-gdg"
  ],
  [
-  "join-facebook",
-  "feat-education58"
+  "join-hockey",
+  "scoringshootout-s"
  ],
  [
-  "join-facebook",
-  "feat-education59"
+  "join-hockey",
+  "scoringshootout-stint"
  ],
  [
-  "join-facebook",
-  "feat-education6"
+  "join-hockey",
+  "seriespost-goals_loser"
  ],
  [
-  "join-facebook",
-  "feat-education60"
+  "join-hockey",
+  "seriespost-goals_winner"
  ],
  [
-  "join-facebook",
-  "feat-education61"
+  "join-hockey",
+  "seriespost-l"
  ],
  [
-  "join-facebook",
-  "feat-education62"
+  "join-hockey",
+  "seriespost-t"
  ],
  [
-  "join-facebook",
-  "feat-education63"
+  "join-hockey",
+  "seriespost-w"
  ],
  [
-  "join-facebook",
-  "feat-education64"
- ],
- [
-  "join-facebook",
-  "feat-education65"
- ],
- [
-  "join-facebook",
-  "feat-education66"
- ],
- [
-  "join-facebook",
-  "feat-education67"
- ],
- [
-  "join-facebook",
-  "feat-education68"
- ],
- [
-  "join-facebook",
-  "feat-education69"
- ],
- [
-  "join-facebook",
-  "feat-education7"
- ],
- [
-  "join-facebook",
-  "feat-education70"
- ],
- [
-  "join-facebook",
-  "feat-education71"
- ],
- [
-  "join-facebook",
-  "feat-education72"
- ],
- [
-  "join-facebook",
-  "feat-education73"
- ],
- [
-  "join-facebook",
-  "feat-education74"
- ],
- [
-  "join-facebook",
-  "feat-education75"
- ],
- [
-  "join-facebook",
-  "feat-education76"
- ],
- [
-  "join-facebook",
-  "feat-education77"
- ],
- [
-  "join-facebook",
-  "feat-education78"
- ],
- [
-  "join-facebook",
-  "feat-education79"
- ],
- [
-  "join-facebook",
-  "feat-education8"
- ],
- [
-  "join-facebook",
-  "feat-education80"
- ],
- [
-  "join-facebook",
-  "feat-education81"
- ],
- [
-  "join-facebook",
-  "feat-education82"
- ],
- [
-  "join-facebook",
-  "feat-education83"
- ],
- [
-  "join-facebook",
-  "feat-education84"
- ],
- [
-  "join-facebook",
-  "feat-education85"
- ],
- [
-  "join-facebook",
-  "feat-education86"
- ],
- [
-  "join-facebook",
-  "feat-education87"
- ],
- [
-  "join-facebook",
-  "feat-education88"
- ],
- [
-  "join-facebook",
-  "feat-education89"
- ],
- [
-  "join-facebook",
-  "feat-education9"
- ],
- [
-  "join-facebook",
-  "feat-education90"
- ],
- [
-  "join-facebook",
-  "feat-education91"
- ],
- [
-  "join-facebook",
-  "feat-education92"
- ],
- [
-  "join-facebook",
-  "feat-education93"
- ],
- [
-  "join-facebook",
-  "feat-education94"
- ],
- [
-  "join-facebook",
-  "feat-education95"
- ],
- [
-  "join-facebook",
-  "feat-education96"
- ],
- [
-  "join-facebook",
-  "feat-education97"
- ],
- [
-  "join-facebook",
-  "feat-education98"
- ],
- [
-  "join-facebook",
-  "feat-education99"
- ],
- [
-  "join-facebook",
-  "feat-first_name1"
- ],
- [
-  "join-facebook",
-  "feat-first_name10"
- ],
- [
-  "join-facebook",
-  "feat-first_name2"
- ],
- [
-  "join-facebook",
-  "feat-first_name3"
- ],
- [
-  "join-facebook",
-  "feat-first_name4"
- ],
- [
-  "join-facebook",
-  "feat-first_name5"
- ],
- [
-  "join-facebook",
-  "feat-first_name6"
- ],
- [
-  "join-facebook",
-  "feat-first_name7"
- ],
- [
-  "join-facebook",
-  "feat-first_name8"
- ],
- [
-  "join-facebook",
-  "feat-first_name9"
- ],
- [
-  "join-facebook",
-  "feat-gender1"
- ],
- [
-  "join-facebook",
-  "feat-gender2"
- ],
- [
-  "join-facebook",
-  "feat-hometown1"
- ],
- [
-  "join-facebook",
-  "feat-hometown10"
- ],
- [
-  "join-facebook",
-  "feat-hometown11"
- ],
- [
-  "join-facebook",
-  "feat-hometown2"
- ],
- [
-  "join-facebook",
-  "feat-hometown3"
- ],
- [
-  "join-facebook",
-  "feat-hometown4"
- ],
- [
-  "join-facebook",
-  "feat-hometown5"
- ],
- [
-  "join-facebook",
-  "feat-hometown6"
- ],
- [
-  "join-facebook",
-  "feat-hometown7"
- ],
- [
-  "join-facebook",
-  "feat-hometown8"
- ],
- [
-  "join-facebook",
-  "feat-hometown9"
- ],
- [
-  "join-facebook",
-  "feat-languages1"
- ],
- [
-  "join-facebook",
-  "feat-languages10"
- ],
- [
-  "join-facebook",
-  "feat-languages11"
- ],
- [
-  "join-facebook",
-  "feat-languages12"
- ],
- [
-  "join-facebook",
-  "feat-languages2"
- ],
- [
-  "join-facebook",
-  "feat-languages3"
- ],
- [
-  "join-facebook",
-  "feat-languages4"
- ],
- [
-  "join-facebook",
-  "feat-languages5"
- ],
- [
-  "join-facebook",
-  "feat-languages6"
- ],
- [
-  "join-facebook",
-  "feat-languages7"
- ],
- [
-  "join-facebook",
-  "feat-languages8"
- ],
- [
-  "join-facebook",
-  "feat-languages9"
- ],
- [
-  "join-facebook",
-  "feat-last_name1"
- ],
- [
-  "join-facebook",
-  "feat-last_name10"
- ],
- [
-  "join-facebook",
-  "feat-last_name11"
- ],
- [
-  "join-facebook",
-  "feat-last_name12"
- ],
- [
-  "join-facebook",
-  "feat-last_name13"
- ],
- [
-  "join-facebook",
-  "feat-last_name14"
- ],
- [
-  "join-facebook",
-  "feat-last_name15"
- ],
- [
-  "join-facebook",
-  "feat-last_name16"
- ],
- [
-  "join-facebook",
-  "feat-last_name17"
- ],
- [
-  "join-facebook",
-  "feat-last_name18"
- ],
- [
-  "join-facebook",
-  "feat-last_name19"
- ],
- [
-  "join-facebook",
-  "feat-last_name2"
- ],
- [
-  "join-facebook",
-  "feat-last_name20"
- ],
- [
-  "join-facebook",
-  "feat-last_name21"
- ],
- [
-  "join-facebook",
-  "feat-last_name22"
- ],
- [
-  "join-facebook",
-  "feat-last_name23"
- ],
- [
-  "join-facebook",
-  "feat-last_name24"
- ],
- [
-  "join-facebook",
-  "feat-last_name25"
- ],
- [
-  "join-facebook",
-  "feat-last_name26"
- ],
- [
-  "join-facebook",
-  "feat-last_name27"
- ],
- [
-  "join-facebook",
-  "feat-last_name28"
- ],
- [
-  "join-facebook",
-  "feat-last_name29"
- ],
- [
-  "join-facebook",
-  "feat-last_name3"
- ],
- [
-  "join-facebook",
-  "feat-last_name30"
- ],
- [
-  "join-facebook",
-  "feat-last_name4"
- ],
- [
-  "join-facebook",
-  "feat-last_name5"
- ],
- [
-  "join-facebook",
-  "feat-last_name6"
- ],
- [
-  "join-facebook",
-  "feat-last_name7"
- ],
- [
-  "join-facebook",
-  "feat-last_name8"
- ],
- [
-  "join-facebook",
-  "feat-last_name9"
- ],
- [
-  "join-facebook",
-  "feat-locale1"
- ],
- [
-  "join-facebook",
-  "feat-locale2"
- ],
- [
-  "join-facebook",
-  "feat-locale3"
- ],
- [
-  "join-facebook",
-  "feat-locale4"
- ],
- [
-  "join-facebook",
-  "feat-locale5"
- ],
- [
-  "join-facebook",
-  "feat-location1"
- ],
- [
-  "join-facebook",
-  "feat-location10"
- ],
- [
-  "join-facebook",
-  "feat-location11"
- ],
- [
-  "join-facebook",
-  "feat-location12"
- ],
- [
-  "join-facebook",
-  "feat-location13"
- ],
- [
-  "join-facebook",
-  "feat-location14"
- ],
- [
-  "join-facebook",
-  "feat-location15"
- ],
- [
-  "join-facebook",
-  "feat-location16"
- ],
- [
-  "join-facebook",
-  "feat-location2"
- ],
- [
-  "join-facebook",
-  "feat-location3"
- ],
- [
-  "join-facebook",
-  "feat-location4"
- ],
- [
-  "join-facebook",
-  "feat-location5"
- ],
- [
-  "join-facebook",
-  "feat-location6"
- ],
- [
-  "join-facebook",
-  "feat-location7"
- ],
- [
-  "join-facebook",
-  "feat-location8"
- ],
- [
-  "join-facebook",
-  "feat-location9"
- ],
- [
-  "join-facebook",
-  "feat-name1"
- ],
- [
-  "join-facebook",
-  "feat-work1"
- ],
- [
-  "join-facebook",
-  "feat-work10"
- ],
- [
-  "join-facebook",
-  "feat-work11"
- ],
- [
-  "join-facebook",
-  "feat-work12"
- ],
- [
-  "join-facebook",
-  "feat-work13"
- ],
- [
-  "join-facebook",
-  "feat-work14"
- ],
- [
-  "join-facebook",
-  "feat-work15"
- ],
- [
-  "join-facebook",
-  "feat-work16"
- ],
- [
-  "join-facebook",
-  "feat-work17"
- ],
- [
-  "join-facebook",
-  "feat-work18"
- ],
- [
-  "join-facebook",
-  "feat-work19"
- ],
- [
-  "join-facebook",
-  "feat-work2"
- ],
- [
-  "join-facebook",
-  "feat-work20"
- ],
- [
-  "join-facebook",
-  "feat-work21"
- ],
- [
-  "join-facebook",
-  "feat-work22"
- ],
- [
-  "join-facebook",
-  "feat-work23"
- ],
- [
-  "join-facebook",
-  "feat-work24"
- ],
- [
-  "join-facebook",
-  "feat-work25"
- ],
- [
-  "join-facebook",
-  "feat-work26"
- ],
- [
-  "join-facebook",
-  "feat-work27"
- ],
- [
-  "join-facebook",
-  "feat-work28"
- ],
- [
-  "join-facebook",
-  "feat-work29"
- ],
- [
-  "join-facebook",
-  "feat-work3"
- ],
- [
-  "join-facebook",
-  "feat-work30"
- ],
- [
-  "join-facebook",
-  "feat-work31"
- ],
- [
-  "join-facebook",
-  "feat-work32"
- ],
- [
-  "join-facebook",
-  "feat-work33"
- ],
- [
-  "join-facebook",
-  "feat-work34"
- ],
- [
-  "join-facebook",
-  "feat-work35"
- ],
- [
-  "join-facebook",
-  "feat-work36"
- ],
- [
-  "join-facebook",
-  "feat-work37"
- ],
- [
-  "join-facebook",
-  "feat-work38"
- ],
- [
-  "join-facebook",
-  "feat-work39"
- ],
- [
-  "join-facebook",
-  "feat-work4"
- ],
- [
-  "join-facebook",
-  "feat-work40"
- ],
- [
-  "join-facebook",
-  "feat-work41"
- ],
- [
-  "join-facebook",
-  "feat-work42"
- ],
- [
-  "join-facebook",
-  "feat-work43"
- ],
- [
-  "join-facebook",
-  "feat-work44"
- ],
- [
-  "join-facebook",
-  "feat-work45"
- ],
- [
-  "join-facebook",
-  "feat-work46"
- ],
- [
-  "join-facebook",
-  "feat-work47"
- ],
- [
-  "join-facebook",
-  "feat-work48"
- ],
- [
-  "join-facebook",
-  "feat-work49"
- ],
- [
-  "join-facebook",
-  "feat-work5"
- ],
- [
-  "join-facebook",
-  "feat-work50"
- ],
- [
-  "join-facebook",
-  "feat-work51"
- ],
- [
-  "join-facebook",
-  "feat-work52"
- ],
- [
-  "join-facebook",
-  "feat-work53"
- ],
- [
-  "join-facebook",
-  "feat-work54"
- ],
- [
-  "join-facebook",
-  "feat-work55"
- ],
- [
-  "join-facebook",
-  "feat-work56"
- ],
- [
-  "join-facebook",
-  "feat-work57"
- ],
- [
-  "join-facebook",
-  "feat-work58"
- ],
- [
-  "join-facebook",
-  "feat-work59"
- ],
- [
-  "join-facebook",
-  "feat-work6"
- ],
- [
-  "join-facebook",
-  "feat-work60"
- ],
- [
-  "join-facebook",
-  "feat-work61"
- ],
- [
-  "join-facebook",
-  "feat-work62"
- ],
- [
-  "join-facebook",
-  "feat-work63"
- ],
- [
-  "join-facebook",
-  "feat-work64"
- ],
- [
-  "join-facebook",
-  "feat-work65"
- ],
- [
-  "join-facebook",
-  "feat-work66"
- ],
- [
-  "join-facebook",
-  "feat-work67"
- ],
- [
-  "join-facebook",
-  "feat-work68"
- ],
- [
-  "join-facebook",
-  "feat-work7"
- ],
- [
-  "join-facebook",
-  "feat-work8"
- ],
- [
-  "join-facebook",
-  "feat-work9"
- ],
- [
-  "join-foodcom",
-  "interactions-rating"
- ],
- [
-  "join-foodcom",
-  "recipes-contributor_id"
- ],
- [
-  "join-foodcom",
-  "recipes-minutes"
- ],
- [
-  "join-foodcom",
-  "recipes-n_ingredients"
- ],
- [
-  "join-foodcom",
-  "recipes-n_steps"
- ],
- [
-  "join-gbif-species",
-  "datasets-record_count"
- ],
- [
-  "join-gbif-species",
-  "occurrences-latitude"
- ],
- [
-  "join-gbif-species",
-  "occurrences-longitude"
- ],
- [
-  "join-gbif-species",
-  "taxa-num_occurrences"
- ],
- [
-  "join-lahman-2014",
-  "allstarfull-game_num"
- ],
- [
-  "join-lahman-2014",
-  "allstarfull-gp"
- ],
- [
-  "join-lahman-2014",
-  "appearances-g_1b"
- ],
- [
-  "join-lahman-2014",
-  "appearances-g_2b"
- ],
- [
-  "join-lahman-2014",
-  "appearances-g_3b"
- ],
- [
-  "join-lahman-2014",
-  "appearances-g_all"
- ],
- [
-  "join-lahman-2014",
-  "appearances-g_c"
- ],
- [
-  "join-lahman-2014",
-  "appearances-g_cf"
- ],
- [
-  "join-lahman-2014",
-  "appearances-g_defense"
- ],
- [
-  "join-lahman-2014",
-  "appearances-g_dh"
- ],
- [
-  "join-lahman-2014",
-  "appearances-g_lf"
- ],
- [
-  "join-lahman-2014",
-  "appearances-g_of"
- ],
- [
-  "join-lahman-2014",
-  "appearances-g_p"
- ],
- [
-  "join-lahman-2014",
-  "appearances-g_rf"
- ],
- [
-  "join-lahman-2014",
-  "appearances-g_ss"
- ],
- [
-  "join-lahman-2014",
-  "appearances-year_id"
- ],
- [
-  "join-lahman-2014",
-  "awardssharemanagers-points_max"
- ],
- [
-  "join-lahman-2014",
-  "awardssharemanagers-points_won"
- ],
- [
-  "join-lahman-2014",
-  "awardssharemanagers-votes_first"
- ],
- [
-  "join-lahman-2014",
-  "awardsshareplayers-points_max"
- ],
- [
-  "join-lahman-2014",
-  "awardsshareplayers-points_won"
- ],
- [
-  "join-lahman-2014",
-  "awardsshareplayers-votes_first"
- ],
- [
-  "join-lahman-2014",
-  "batting-2_b"
- ],
- [
-  "join-lahman-2014",
-  "batting-3_b"
- ],
- [
-  "join-lahman-2014",
-  "batting-ab"
- ],
- [
-  "join-lahman-2014",
-  "batting-bb"
- ],
- [
-  "join-lahman-2014",
-  "batting-cs"
- ],
- [
-  "join-lahman-2014",
-  "batting-g"
- ],
- [
-  "join-lahman-2014",
-  "batting-g_batting"
- ],
- [
-  "join-lahman-2014",
-  "batting-g_old"
- ],
- [
-  "join-lahman-2014",
-  "batting-gidp"
- ],
- [
-  "join-lahman-2014",
-  "batting-h"
- ],
- [
-  "join-lahman-2014",
-  "batting-hbp"
- ],
- [
-  "join-lahman-2014",
-  "batting-hr"
- ],
- [
-  "join-lahman-2014",
-  "batting-ibb"
- ],
- [
-  "join-lahman-2014",
-  "batting-r"
- ],
- [
-  "join-lahman-2014",
-  "batting-rbi"
- ],
- [
-  "join-lahman-2014",
-  "batting-sb"
- ],
- [
-  "join-lahman-2014",
-  "batting-sf"
- ],
- [
-  "join-lahman-2014",
-  "batting-sh"
- ],
- [
-  "join-lahman-2014",
-  "batting-so"
- ],
- [
-  "join-lahman-2014",
-  "batting-stint"
- ],
- [
-  "join-lahman-2014",
-  "battingpost-2_b"
- ],
- [
-  "join-lahman-2014",
-  "battingpost-3_b"
- ],
- [
-  "join-lahman-2014",
-  "battingpost-ab"
- ],
- [
-  "join-lahman-2014",
-  "battingpost-bb"
- ],
- [
-  "join-lahman-2014",
-  "battingpost-g"
- ],
- [
-  "join-lahman-2014",
-  "battingpost-h"
- ],
- [
-  "join-lahman-2014",
-  "battingpost-hr"
- ],
- [
-  "join-lahman-2014",
-  "battingpost-ibb"
- ],
- [
-  "join-lahman-2014",
-  "battingpost-r"
- ],
- [
-  "join-lahman-2014",
-  "battingpost-rbi"
- ],
- [
-  "join-lahman-2014",
-  "battingpost-sb"
- ],
- [
-  "join-lahman-2014",
-  "battingpost-so"
- ],
- [
-  "join-lahman-2014",
-  "fielding-a"
- ],
- [
-  "join-lahman-2014",
-  "fielding-dp"
- ],
- [
-  "join-lahman-2014",
-  "fielding-e"
- ],
- [
-  "join-lahman-2014",
-  "fielding-g"
- ],
- [
-  "join-lahman-2014",
-  "fielding-gs"
- ],
- [
-  "join-lahman-2014",
-  "fielding-inn_outs"
- ],
- [
-  "join-lahman-2014",
-  "fielding-po"
- ],
- [
-  "join-lahman-2014",
-  "fielding-stint"
- ],
- [
-  "join-lahman-2014",
-  "fieldingof-gcf"
- ],
- [
-  "join-lahman-2014",
-  "fieldingof-glf"
- ],
- [
-  "join-lahman-2014",
-  "fieldingof-grf"
- ],
- [
-  "join-lahman-2014",
-  "fieldingof-stint"
- ],
- [
-  "join-lahman-2014",
-  "fieldingpost-a"
- ],
- [
-  "join-lahman-2014",
-  "fieldingpost-dp"
- ],
- [
-  "join-lahman-2014",
-  "fieldingpost-e"
- ],
- [
-  "join-lahman-2014",
-  "fieldingpost-g"
- ],
- [
-  "join-lahman-2014",
-  "fieldingpost-gs"
- ],
- [
-  "join-lahman-2014",
-  "fieldingpost-inn_outs"
- ],
- [
-  "join-lahman-2014",
-  "fieldingpost-po"
- ],
- [
-  "join-lahman-2014",
-  "fieldingpost-tp"
- ],
- [
-  "join-lahman-2014",
-  "halloffame-ballots"
- ],
- [
-  "join-lahman-2014",
-  "halloffame-inducted"
- ],
- [
-  "join-lahman-2014",
-  "halloffame-needed"
- ],
- [
-  "join-lahman-2014",
-  "halloffame-votes"
- ],
- [
-  "join-lahman-2014",
-  "managers-g"
- ],
- [
-  "join-lahman-2014",
-  "managers-inseason"
- ],
- [
-  "join-lahman-2014",
-  "managers-l"
- ],
- [
-  "join-lahman-2014",
-  "managers-plyr_mgr"
- ],
- [
-  "join-lahman-2014",
-  "managers-rank"
- ],
- [
-  "join-lahman-2014",
-  "managers-w"
- ],
- [
-  "join-lahman-2014",
-  "managershalf-g"
- ],
- [
-  "join-lahman-2014",
-  "managershalf-half"
- ],
- [
-  "join-lahman-2014",
-  "managershalf-inseason"
- ],
- [
-  "join-lahman-2014",
-  "managershalf-l"
- ],
- [
-  "join-lahman-2014",
-  "managershalf-rank"
- ],
- [
-  "join-lahman-2014",
-  "managershalf-w"
- ],
- [
-  "join-lahman-2014",
-  "managershalf-year_id"
- ],
- [
-  "join-lahman-2014",
-  "pitching-ba_opp"
- ],
- [
-  "join-lahman-2014",
-  "pitching-bb"
- ],
- [
-  "join-lahman-2014",
-  "pitching-bfp"
- ],
- [
-  "join-lahman-2014",
-  "pitching-bk"
- ],
- [
-  "join-lahman-2014",
-  "pitching-cg"
- ],
- [
-  "join-lahman-2014",
-  "pitching-er"
- ],
- [
-  "join-lahman-2014",
-  "pitching-era"
- ],
- [
-  "join-lahman-2014",
-  "pitching-g"
- ],
- [
-  "join-lahman-2014",
-  "pitching-gf"
- ],
- [
-  "join-lahman-2014",
-  "pitching-gs"
- ],
- [
-  "join-lahman-2014",
-  "pitching-h"
- ],
- [
-  "join-lahman-2014",
-  "pitching-hbp"
- ],
- [
-  "join-lahman-2014",
-  "pitching-hr"
- ],
- [
-  "join-lahman-2014",
-  "pitching-i_pouts"
- ],
- [
-  "join-lahman-2014",
-  "pitching-ibb"
- ],
- [
-  "join-lahman-2014",
-  "pitching-l"
- ],
- [
-  "join-lahman-2014",
-  "pitching-r"
- ],
- [
-  "join-lahman-2014",
-  "pitching-sho"
- ],
- [
-  "join-lahman-2014",
-  "pitching-so"
- ],
- [
-  "join-lahman-2014",
-  "pitching-stint"
- ],
- [
-  "join-lahman-2014",
-  "pitching-sv"
- ],
- [
-  "join-lahman-2014",
-  "pitching-w"
- ],
- [
-  "join-lahman-2014",
-  "pitching-wp"
- ],
- [
-  "join-lahman-2014",
-  "pitchingpost-ba_opp"
- ],
- [
-  "join-lahman-2014",
-  "pitchingpost-bb"
- ],
- [
-  "join-lahman-2014",
-  "pitchingpost-bfp"
- ],
- [
-  "join-lahman-2014",
-  "pitchingpost-bk"
- ],
- [
-  "join-lahman-2014",
-  "pitchingpost-cg"
- ],
- [
-  "join-lahman-2014",
-  "pitchingpost-er"
- ],
- [
-  "join-lahman-2014",
-  "pitchingpost-era"
- ],
- [
-  "join-lahman-2014",
-  "pitchingpost-g"
- ],
- [
-  "join-lahman-2014",
-  "pitchingpost-gf"
- ],
- [
-  "join-lahman-2014",
-  "pitchingpost-gidp"
- ],
- [
-  "join-lahman-2014",
-  "pitchingpost-gs"
- ],
- [
-  "join-lahman-2014",
-  "pitchingpost-h"
- ],
- [
-  "join-lahman-2014",
-  "pitchingpost-hbp"
- ],
- [
-  "join-lahman-2014",
-  "pitchingpost-hr"
- ],
- [
-  "join-lahman-2014",
-  "pitchingpost-i_pouts"
- ],
- [
-  "join-lahman-2014",
-  "pitchingpost-ibb"
- ],
- [
-  "join-lahman-2014",
-  "pitchingpost-l"
- ],
- [
-  "join-lahman-2014",
-  "pitchingpost-r"
- ],
- [
-  "join-lahman-2014",
-  "pitchingpost-sf"
- ],
- [
-  "join-lahman-2014",
-  "pitchingpost-sh"
- ],
- [
-  "join-lahman-2014",
-  "pitchingpost-sho"
- ],
- [
-  "join-lahman-2014",
-  "pitchingpost-so"
- ],
- [
-  "join-lahman-2014",
-  "pitchingpost-sv"
- ],
- [
-  "join-lahman-2014",
-  "pitchingpost-w"
- ],
- [
-  "join-lahman-2014",
-  "pitchingpost-wp"
- ],
- [
-  "join-lahman-2014",
-  "players-birth_day"
- ],
- [
-  "join-lahman-2014",
-  "players-birth_month"
- ],
- [
-  "join-lahman-2014",
-  "players-height"
- ],
- [
-  "join-lahman-2014",
-  "players-weight"
- ],
- [
-  "join-lahman-2014",
-  "salaries-salary"
- ],
- [
-  "join-lahman-2014",
-  "salaries-year_id"
- ],
- [
-  "join-lahman-2014",
-  "schoolsplayers-year_max"
- ],
- [
-  "join-lahman-2014",
-  "schoolsplayers-year_min"
- ],
- [
-  "join-lahman-2014",
-  "seriespost-losses"
- ],
- [
-  "join-lahman-2014",
-  "seriespost-ties"
- ],
- [
-  "join-lahman-2014",
-  "seriespost-wins"
- ],
- [
-  "join-lahman-2014",
-  "teams-2_b"
- ],
- [
-  "join-lahman-2014",
-  "teams-3_b"
- ],
- [
-  "join-lahman-2014",
-  "teams-ab"
- ],
- [
-  "join-lahman-2014",
-  "teams-bb"
- ],
- [
-  "join-lahman-2014",
-  "teams-bba"
- ],
- [
-  "join-lahman-2014",
-  "teams-bpf"
- ],
- [
-  "join-lahman-2014",
-  "teams-cg"
- ],
- [
-  "join-lahman-2014",
-  "teams-e"
- ],
- [
-  "join-lahman-2014",
-  "teams-er"
- ],
- [
-  "join-lahman-2014",
-  "teams-era"
- ],
- [
-  "join-lahman-2014",
-  "teams-fp"
- ],
- [
-  "join-lahman-2014",
+  "join-hockey",
   "teams-g"
  ],
  [
-  "join-lahman-2014",
-  "teams-h"
+  "join-hockey",
+  "teams-ga"
  ],
  [
-  "join-lahman-2014",
-  "teams-ha"
+  "join-hockey",
+  "teams-gf"
  ],
  [
-  "join-lahman-2014",
-  "teams-hr"
- ],
- [
-  "join-lahman-2014",
-  "teams-hra"
- ],
- [
-  "join-lahman-2014",
-  "teams-i_pouts"
- ],
- [
-  "join-lahman-2014",
+  "join-hockey",
   "teams-l"
  ],
  [
-  "join-lahman-2014",
-  "teams-lg_win"
+  "join-hockey",
+  "teams-pts"
  ],
  [
-  "join-lahman-2014",
-  "teams-ppf"
- ],
- [
-  "join-lahman-2014",
-  "teams-r"
- ],
- [
-  "join-lahman-2014",
-  "teams-ra"
- ],
- [
-  "join-lahman-2014",
+  "join-hockey",
   "teams-rank"
  ],
  [
-  "join-lahman-2014",
-  "teams-sb"
+  "join-hockey",
+  "teams-t"
  ],
  [
-  "join-lahman-2014",
-  "teams-sho"
- ],
- [
-  "join-lahman-2014",
-  "teams-so"
- ],
- [
-  "join-lahman-2014",
-  "teams-soa"
- ],
- [
-  "join-lahman-2014",
-  "teams-sv"
- ],
- [
-  "join-lahman-2014",
+  "join-hockey",
   "teams-w"
  ],
  [
-  "join-lahman-2014",
-  "teamshalf-div_win"
- ],
- [
-  "join-lahman-2014",
+  "join-hockey",
   "teamshalf-g"
  ],
  [
-  "join-lahman-2014",
+  "join-hockey",
+  "teamshalf-ga"
+ ],
+ [
+  "join-hockey",
+  "teamshalf-gf"
+ ],
+ [
+  "join-hockey",
+  "teamshalf-half"
+ ],
+ [
+  "join-hockey",
   "teamshalf-l"
  ],
  [
-  "join-lahman-2014",
+  "join-hockey",
   "teamshalf-rank"
  ],
  [
-  "join-lahman-2014",
+  "join-hockey",
+  "teamshalf-t"
+ ],
+ [
+  "join-hockey",
   "teamshalf-w"
  ],
  [
-  "join-lahman-2014",
-  "teamshalf-year_id"
+  "join-hockey",
+  "teamsplits-feb_l"
  ],
  [
-  "join-legalacts",
-  "legalacts-act_link"
+  "join-hockey",
+  "teamsplits-feb_t"
  ],
  [
-  "join-legalacts",
-  "legalacts-act_year"
+  "join-hockey",
+  "teamsplits-feb_w"
  ],
  [
-  "join-legalacts",
-  "legalacts-case_number"
+  "join-hockey",
+  "teamsplits-h_l"
  ],
  [
-  "join-legalacts",
-  "legalacts-motive_link"
+  "join-hockey",
+  "teamsplits-h_t"
  ],
  [
-  "join-legalacts",
-  "people-jury"
+  "join-hockey",
+  "teamsplits-h_w"
  ],
  [
-  "join-livesql-virtual",
-  "commerceandcollection-collcomprate"
+  "join-hockey",
+  "teamsplits-jan_l"
  ],
  [
-  "join-livesql-virtual",
-  "commerceandcollection-digown"
+  "join-hockey",
+  "teamsplits-jan_t"
  ],
  [
-  "join-livesql-virtual",
-  "commerceandcollection-merchbuy"
+  "join-hockey",
+  "teamsplits-jan_w"
  ],
  [
-  "join-livesql-virtual",
-  "commerceandcollection-merchspendusd"
+  "join-hockey",
+  "teamsplits-r_l"
  ],
  [
-  "join-livesql-virtual",
-  "commerceandcollection-physown"
+  "join-hockey",
+  "teamsplits-r_t"
  ],
  [
-  "join-livesql-virtual",
-  "engagement-actdayswk"
+  "join-hockey",
+  "teamsplits-r_w"
  ],
  [
-  "join-livesql-virtual",
-  "engagement-avgsesscount"
+  "join-hockey",
+  "teamspost-g"
  ],
  [
-  "join-livesql-virtual",
-  "engagement-engrate"
+  "join-hockey",
+  "teamspost-ga"
  ],
  [
-  "join-livesql-virtual",
-  "engagement-socintscore"
+  "join-hockey",
+  "teamspost-gf"
  ],
  [
-  "join-livesql-virtual",
-  "fans-ptsval"
+  "join-hockey",
+  "teamspost-l"
  ],
  [
-  "join-livesql-virtual",
-  "fans-tierstep"
+  "join-hockey",
+  "teamspost-t"
  ],
  [
-  "join-livesql-virtual",
-  "interactions-gifttot"
+  "join-hockey",
+  "teamspost-w"
  ],
  [
-  "join-livesql-virtual",
-  "interactions-giftvalusd"
+  "join-hockey",
+  "teamssc-g"
  ],
  [
-  "join-livesql-virtual",
-  "loyaltyandachievements-inflscore"
+  "join-hockey",
+  "teamssc-ga"
  ],
  [
-  "join-livesql-virtual",
-  "loyaltyandachievements-rankpos"
+  "join-hockey",
+  "teamssc-gf"
  ],
  [
-  "join-livesql-virtual",
-  "loyaltyandachievements-trustval"
+  "join-hockey",
+  "teamssc-l"
  ],
  [
-  "join-livesql-virtual",
-  "membershipandspending-membdays"
+  "join-hockey",
+  "teamssc-t"
  ],
  [
-  "join-livesql-virtual",
-  "membershipandspending-spendusd"
+  "join-hockey",
+  "teamssc-w"
  ],
  [
-  "join-livesql-virtual",
-  "moderationandcompliance-rptcount"
+  "join-hockey",
+  "teamvsteam-l"
  ],
  [
-  "join-livesql-virtual",
-  "moderationandcompliance-warncount"
+  "join-hockey",
+  "teamvsteam-t"
  ],
  [
-  "join-livesql-virtual",
-  "preferencesandsettings-avgdailymin"
+  "join-hockey",
+  "teamvsteam-w"
  ],
  [
-  "join-livesql-virtual",
-  "preferencesandsettings-devcount"
+  "join-indycar",
+  "results-col"
  ],
  [
-  "join-livesql-virtual",
-  "preferencesandsettings-intconsist"
+  "join-indycar",
+  "results-laps"
  ],
  [
-  "join-livesql-virtual",
-  "preferencesandsettings-peaksess"
+  "join-indycar",
+  "results-led"
  ],
  [
-  "join-livesql-virtual",
-  "preferencesandsettings-platstable"
+  "join-indycar",
+  "results-money"
  ],
  [
-  "join-livesql-virtual",
-  "preferencesandsettings-sesscount"
+  "join-indycar",
+  "results-pos"
  ],
  [
-  "join-livesql-virtual",
-  "preferencesandsettings-timehrs"
+  "join-indycar",
+  "results-pts"
  ],
  [
-  "join-livesql-virtual",
-  "retentionandinfluence-contreach"
+  "join-indycar",
+  "results-st"
  ],
  [
-  "join-livesql-virtual",
-  "retentionandinfluence-hashuse"
- ],
- [
-  "join-livesql-virtual",
-  "retentionandinfluence-reactcount"
- ],
- [
-  "join-livesql-virtual",
-  "retentionandinfluence-refcount"
- ],
- [
-  "join-livesql-virtual",
-  "retentionandinfluence-trendpart"
- ],
- [
-  "join-livesql-virtual",
-  "retentionandinfluence-viralcont"
- ],
- [
-  "join-livesql-virtual",
-  "socialcommunity-collabcount"
- ],
- [
-  "join-livesql-virtual",
-  "supportandfeedback-bugsubs"
- ],
- [
-  "join-livesql-virtual",
-  "supportandfeedback-fbsubs"
- ],
- [
-  "join-livesql-virtual",
-  "supportandfeedback-featreqsubs"
- ],
- [
-  "join-livesql-virtual",
-  "supportandfeedback-npsval"
- ],
- [
-  "join-livesql-virtual",
-  "supportandfeedback-satrate"
- ],
- [
-  "join-livesql-virtual",
-  "supportandfeedback-supptix"
- ],
- [
-  "join-livesql-virtual",
-  "supportandfeedback-techissuerpt"
- ],
- [
-  "join-mondial",
-  "borders-length"
- ],
- [
-  "join-mondial",
-  "city-population"
- ],
- [
-  "join-mondial",
-  "continent-area"
- ],
- [
-  "join-mondial",
-  "country-area"
- ],
- [
-  "join-mondial",
-  "country-population"
- ],
- [
-  "join-mondial",
-  "desert-area"
- ],
- [
-  "join-mondial",
-  "desert-latitude"
- ],
- [
-  "join-mondial",
-  "desert-longitude"
- ],
- [
-  "join-mondial",
-  "economy-agriculture"
- ],
- [
-  "join-mondial",
-  "economy-gdp"
- ],
- [
-  "join-mondial",
-  "economy-industry"
- ],
- [
-  "join-mondial",
-  "economy-inflation"
- ],
- [
-  "join-mondial",
-  "economy-service"
- ],
- [
-  "join-mondial",
-  "encompasses-percentage"
- ],
- [
-  "join-mondial",
-  "ethnicgroup-percentage"
- ],
- [
-  "join-mondial",
-  "island-area"
- ],
- [
-  "join-mondial",
-  "island-latitude"
- ],
- [
-  "join-mondial",
-  "island-longitude"
- ],
- [
-  "join-mondial",
-  "lake-altitude"
- ],
- [
-  "join-mondial",
-  "lake-area"
- ],
- [
-  "join-mondial",
-  "lake-depth"
- ],
- [
-  "join-mondial",
-  "lake-latitude"
- ],
- [
-  "join-mondial",
-  "lake-longitude"
- ],
- [
-  "join-mondial",
-  "language-percentage"
- ],
- [
-  "join-mondial",
-  "mountain-height"
- ],
- [
-  "join-mondial",
-  "mountain-latitude"
- ],
- [
-  "join-mondial",
-  "mountain-longitude"
- ],
- [
-  "join-mondial",
-  "population-infant_mortality"
- ],
- [
-  "join-mondial",
-  "population-population_growth"
- ],
- [
-  "join-mondial",
-  "province-area"
- ],
- [
-  "join-mondial",
-  "province-population"
- ],
- [
-  "join-mondial",
-  "religion-percentage"
- ],
- [
-  "join-mondial",
-  "river-estuary_latitude"
- ],
- [
-  "join-mondial",
-  "river-estuary_longitude"
- ],
- [
-  "join-mondial",
-  "river-length"
- ],
- [
-  "join-mondial",
-  "river-source_altitude"
- ],
- [
-  "join-mondial",
-  "river-source_latitude"
- ],
- [
-  "join-mondial",
-  "river-source_longitude"
- ],
- [
-  "join-mondial",
-  "sea-depth"
- ],
- [
-  "join-motogp",
-  "circuits-legacy_id"
- ],
- [
-  "join-motogp",
-  "constructors-legacy_id"
- ],
- [
-  "join-motogp",
-  "events-is_test"
- ],
- [
-  "join-motogp",
-  "events-year"
- ],
- [
-  "join-motogp",
-  "results-avg_speed"
- ],
- [
-  "join-motogp",
-  "results-points"
- ],
- [
-  "join-motogp",
-  "results-position"
- ],
- [
-  "join-motogp",
-  "results-total_laps"
- ],
- [
-  "join-motogp",
+  "join-indycar",
   "results-year"
  ],
  [
-  "join-motogp",
-  "rider_standings-points"
+  "join-ipeds",
+  "completions-awlevel"
  ],
  [
-  "join-motogp",
-  "rider_standings-position"
+  "join-ipeds",
+  "completions-c2_morm"
  ],
  [
-  "join-motogp",
-  "rider_standings-year"
+  "join-ipeds",
+  "completions-c2_mort"
  ],
  [
-  "join-motogp",
-  "riders-legacy_id"
+  "join-ipeds",
+  "completions-c2_morw"
  ],
  [
-  "join-motogp",
-  "riders-number"
+  "join-ipeds",
+  "completions-caianm"
  ],
  [
-  "join-motogp",
-  "seasons-current"
+  "join-ipeds",
+  "completions-caiant"
  ],
  [
-  "join-motogp",
-  "seasons-year"
+  "join-ipeds",
+  "completions-caianw"
  ],
  [
-  "join-motogp",
-  "sessions-number"
+  "join-ipeds",
+  "completions-casiam"
  ],
  [
-  "join-motogp",
-  "sessions-year"
+  "join-ipeds",
+  "completions-casiat"
  ],
  [
-  "join-noaa-storms",
-  "events-begin_lat"
+  "join-ipeds",
+  "completions-casiaw"
  ],
  [
-  "join-noaa-storms",
-  "events-begin_lon"
+  "join-ipeds",
+  "completions-cbkaam"
  ],
  [
-  "join-noaa-storms",
-  "events-cz_fips"
+  "join-ipeds",
+  "completions-cbkaat"
  ],
  [
-  "join-noaa-storms",
-  "events-deaths_direct"
+  "join-ipeds",
+  "completions-cbkaaw"
  ],
  [
-  "join-noaa-storms",
-  "events-deaths_indirect"
+  "join-ipeds",
+  "completions-chispm"
  ],
  [
-  "join-noaa-storms",
-  "events-end_lat"
+  "join-ipeds",
+  "completions-chispt"
  ],
  [
-  "join-noaa-storms",
-  "events-end_lon"
+  "join-ipeds",
+  "completions-chispw"
  ],
  [
-  "join-noaa-storms",
-  "events-episode_id"
+  "join-ipeds",
+  "completions-cipcode"
  ],
  [
-  "join-noaa-storms",
-  "events-injuries_direct"
+  "join-ipeds",
+  "completions-cnhpim"
  ],
  [
-  "join-noaa-storms",
-  "events-injuries_indirect"
+  "join-ipeds",
+  "completions-cnhpit"
  ],
  [
-  "join-noaa-storms",
-  "events-magnitude"
+  "join-ipeds",
+  "completions-cnhpiw"
  ],
  [
-  "join-noaa-storms",
-  "events-state_fips"
+  "join-ipeds",
+  "completions-cnralm"
  ],
  [
-  "join-noaa-storms",
-  "fatalities-fatality_age"
+  "join-ipeds",
+  "completions-cnralt"
  ],
  [
-  "join-noaa-storms",
-  "locations-lat2"
+  "join-ipeds",
+  "completions-cnralw"
  ],
  [
-  "join-noaa-storms",
-  "locations-latitude"
+  "join-ipeds",
+  "completions-ctotalm"
  ],
  [
-  "join-noaa-storms",
-  "locations-location_index"
+  "join-ipeds",
+  "completions-ctotalt"
  ],
  [
-  "join-noaa-storms",
-  "locations-lon2"
+  "join-ipeds",
+  "completions-ctotalw"
  ],
  [
-  "join-noaa-storms",
-  "locations-longitude"
+  "join-ipeds",
+  "completions-cunknm"
  ],
  [
-  "join-noaa-storms",
-  "locations-range"
+  "join-ipeds",
+  "completions-cunknt"
  ],
  [
-  "join-nsf-awards",
-  "awards-amount"
+  "join-ipeds",
+  "completions-cunknw"
  ],
  [
-  "join-nsf-awards",
-  "awards-funds_obligated"
+  "join-ipeds",
+  "completions-cwhitm"
  ],
  [
-  "join-nyc-311",
-  "locations-incident_zip"
+  "join-ipeds",
+  "completions-cwhitt"
  ],
  [
-  "join-nyc-taxi",
-  "trips-airport_fee"
+  "join-ipeds",
+  "completions-cwhitw"
  ],
  [
-  "join-nyc-taxi",
-  "trips-extra"
+  "join-ipeds",
+  "completions-majornum"
  ],
  [
-  "join-nyc-taxi",
-  "trips-fare_amount"
+  "join-ipeds",
+  "enrollment-ef2_morm"
  ],
  [
-  "join-nyc-taxi",
-  "trips-improvement_surcharge"
+  "join-ipeds",
+  "enrollment-ef2_mort"
  ],
  [
-  "join-nyc-taxi",
-  "trips-mta_tax"
+  "join-ipeds",
+  "enrollment-ef2_morw"
  ],
  [
-  "join-nyc-taxi",
-  "trips-passenger_count"
+  "join-ipeds",
+  "enrollment-efaianm"
  ],
  [
-  "join-nyc-taxi",
-  "trips-payment_type"
+  "join-ipeds",
+  "enrollment-efaiant"
  ],
  [
-  "join-nyc-taxi",
-  "trips-ratecode_id"
+  "join-ipeds",
+  "enrollment-efaianw"
  ],
  [
-  "join-nyc-taxi",
-  "trips-tip_amount"
+  "join-ipeds",
+  "enrollment-efalevel"
  ],
  [
-  "join-nyc-taxi",
-  "trips-tolls_amount"
+  "join-ipeds",
+  "enrollment-efasiam"
  ],
  [
-  "join-nyc-taxi",
-  "trips-total_amount"
+  "join-ipeds",
+  "enrollment-efasiat"
  ],
  [
-  "join-nyc-taxi",
-  "trips-trip_distance"
+  "join-ipeds",
+  "enrollment-efasiaw"
  ],
  [
-  "join-nyc-taxi",
-  "trips-vendor_id"
+  "join-ipeds",
+  "enrollment-efbkaam"
  ],
  [
-  "join-sdss-dr18",
-  "objects-clean"
+  "join-ipeds",
+  "enrollment-efbkaat"
  ],
  [
-  "join-sdss-dr18",
-  "objects-dec"
+  "join-ipeds",
+  "enrollment-efbkaaw"
  ],
  [
-  "join-sdss-dr18",
-  "objects-flags"
+  "join-ipeds",
+  "enrollment-efgndrkn"
  ],
  [
-  "join-sdss-dr18",
-  "objects-g"
+  "join-ipeds",
+  "enrollment-efgndrua"
  ],
  [
-  "join-sdss-dr18",
-  "objects-i"
+  "join-ipeds",
+  "enrollment-efgndrun"
  ],
  [
-  "join-sdss-dr18",
-  "objects-r"
+  "join-ipeds",
+  "enrollment-efhispm"
  ],
  [
-  "join-sdss-dr18",
-  "objects-ra"
+  "join-ipeds",
+  "enrollment-efhispt"
  ],
  [
-  "join-sdss-dr18",
-  "objects-spec_obj_id"
+  "join-ipeds",
+  "enrollment-efhispw"
  ],
  [
-  "join-sdss-dr18",
-  "objects-type"
+  "join-ipeds",
+  "enrollment-efnhpim"
  ],
  [
-  "join-sdss-dr18",
-  "objects-u"
+  "join-ipeds",
+  "enrollment-efnhpit"
  ],
  [
-  "join-sdss-dr18",
-  "objects-z"
+  "join-ipeds",
+  "enrollment-efnhpiw"
  ],
  [
-  "join-sdss-dr18",
-  "spectra-best_obj_id"
+  "join-ipeds",
+  "enrollment-efnralm"
  ],
  [
-  "join-sdss-dr18",
-  "spectra-dec"
+  "join-ipeds",
+  "enrollment-efnralt"
  ],
  [
-  "join-sdss-dr18",
-  "spectra-fiber_id"
+  "join-ipeds",
+  "enrollment-efnralw"
  ],
  [
-  "join-sdss-dr18",
-  "spectra-mjd"
+  "join-ipeds",
+  "enrollment-eftotlm"
  ],
  [
-  "join-sdss-dr18",
-  "spectra-plate"
+  "join-ipeds",
+  "enrollment-eftotlt"
  ],
  [
-  "join-sdss-dr18",
-  "spectra-ra"
+  "join-ipeds",
+  "enrollment-eftotlw"
  ],
  [
-  "join-sdss-dr18",
-  "spectra-z"
+  "join-ipeds",
+  "enrollment-efunknm"
  ],
  [
-  "join-sdss-dr18",
-  "spectra-z_err"
+  "join-ipeds",
+  "enrollment-efunknt"
  ],
  [
-  "join-sdss-dr18",
-  "spectra-z_warning"
+  "join-ipeds",
+  "enrollment-efunknw"
  ],
  [
-  "join-sfscores",
-  "businesses-business_certificate"
+  "join-ipeds",
+  "enrollment-efwhitm"
  ],
  [
-  "join-sfscores",
-  "businesses-latitude"
+  "join-ipeds",
+  "enrollment-efwhitt"
  ],
  [
-  "join-sfscores",
-  "businesses-longitude"
+  "join-ipeds",
+  "enrollment-efwhitw"
  ],
  [
-  "join-sfscores",
-  "inspections-score"
+  "join-ipeds",
+  "enrollment-line"
  ],
  [
-  "join-spider-activity-1",
-  "Faculty-phone"
+  "join-ipeds",
+  "enrollment-lstudy"
  ],
  [
-  "join-spider-activity-1",
-  "Faculty_Participates_in-fac_id"
+  "join-ipeds",
+  "enrollment-section"
  ],
  [
-  "join-spider-activity-1",
-  "Student-advisor"
+  "join-ipeds",
+  "institutions-c00_carnegie"
  ],
  [
-  "join-spider-activity-1",
-  "Student-age"
+  "join-ipeds",
+  "institutions-c21_basic"
  ],
  [
-  "join-spider-activity-1",
-  "Student-major"
+  "join-ipeds",
+  "institutions-carnegiealf"
  ],
  [
-  "join-spider-college-1",
-  "COURSE-crs_credit"
+  "join-ipeds",
+  "institutions-carnegieapm"
  ],
  [
-  "join-spider-college-1",
-  "STUDENT-prof_num"
+  "join-ipeds",
+  "institutions-carnegiegpm"
  ],
  [
-  "join-spider-college-1",
-  "STUDENT-stu_gpa"
+  "join-ipeds",
+  "institutions-carnegieic"
  ],
  [
-  "join-spider-college-1",
-  "STUDENT-stu_hrs"
+  "join-ipeds",
+  "institutions-carnegiersch"
  ],
  [
-  "join-spider-college-1",
-  "STUDENT-stu_transfer"
+  "join-ipeds",
+  "institutions-carnegiesaec"
  ],
  [
-  "join-spider-customer-complaints",
-  "Products-parent_product_id"
+  "join-ipeds",
+  "institutions-carnegiesize"
  ],
  [
-  "join-spider-customer-complaints",
-  "Products-product_price"
+  "join-ipeds",
+  "institutions-cbsa"
  ],
  [
-  "join-spider-customer-complaints",
-  "Staff-gender"
+  "join-ipeds",
+  "institutions-cbsatype"
  ],
  [
-  "join-spider-department-store",
-  "Product_Suppliers-total_amount_purchased"
+  "join-ipeds",
+  "institutions-cngdstcd"
  ],
  [
-  "join-spider-department-store",
-  "Product_Suppliers-total_value_purchased"
+  "join-ipeds",
+  "institutions-control"
  ],
  [
-  "join-spider-department-store",
-  "Products-product_price"
+  "join-ipeds",
+  "institutions-countycd"
  ],
  [
-  "join-spider-department-store",
-  "Staff-staff_gender"
+  "join-ipeds",
+  "institutions-csa"
  ],
  [
-  "join-spider-e-learning",
-  "Course_Authors_and_Tutors-author_tutor_atb"
+  "join-ipeds",
+  "institutions-cyactive"
  ],
  [
-  "join-spider-e-learning",
-  "Course_Authors_and_Tutors-gender_mf"
+  "join-ipeds",
+  "institutions-deathyr"
  ],
  [
-  "join-spider-employee-hire-evaluation",
-  "employee-age"
+  "join-ipeds",
+  "institutions-deggrant"
  ],
  [
-  "join-spider-employee-hire-evaluation",
-  "evaluation-bonus"
+  "join-ipeds",
+  "institutions-dfrcgid"
  ],
  [
-  "join-spider-employee-hire-evaluation",
-  "shop-number_products"
+  "join-ipeds",
+  "institutions-dfrcuscg"
  ],
  [
-  "join-spider-film-rank",
-  "film-gross_in_dollar"
+  "join-ipeds",
+  "institutions-ein"
  ],
  [
-  "join-spider-film-rank",
-  "film_market_estimation-high_estimate"
+  "join-ipeds",
+  "institutions-f1_syscod"
  ],
  [
-  "join-spider-film-rank",
-  "film_market_estimation-low_estimate"
+  "join-ipeds",
+  "institutions-f1_systyp"
  ],
  [
-  "join-spider-film-rank",
-  "film_market_estimation-year"
+  "join-ipeds",
+  "institutions-fips"
  ],
  [
-  "join-spider-film-rank",
-  "market-number_cities"
+  "join-ipeds",
+  "institutions-groffer"
  ],
  [
-  "join-spider-journal-committee",
-  "editor-age"
+  "join-ipeds",
+  "institutions-hbcu"
  ],
  [
-  "join-spider-journal-committee",
-  "journal-sales"
+  "join-ipeds",
+  "institutions-hdegofr1"
  ],
  [
-  "join-spider-local-govt-and-lot",
-  "Customer_Event_Notes-property_id"
+  "join-ipeds",
+  "institutions-hloffer"
  ],
  [
-  "join-spider-local-govt-and-lot",
-  "Customer_Event_Notes-resident_id"
+  "join-ipeds",
+  "institutions-hospital"
  ],
  [
-  "join-spider-local-govt-and-lot",
-  "Organizations-parent_organization_id"
+  "join-ipeds",
+  "institutions-iclevel"
  ],
  [
-  "join-spider-manufactory-1",
-  "Manufacturers-revenue"
+  "join-ipeds",
+  "institutions-instcat"
  ],
  [
-  "join-spider-manufactory-1",
-  "Products-price"
+  "join-ipeds",
+  "institutions-instsize"
  ],
  [
-  "join-spider-medicine-enzyme-interaction",
-  "enzyme-omim"
+  "join-ipeds",
+  "institutions-ipeds_year"
  ],
  [
-  "join-spider-medicine-enzyme-interaction",
-  "medicine-fda_approved"
+  "join-ipeds",
+  "institutions-landgrnt"
  ],
  [
-  "join-spider-products-for-hire",
-  "Bookings-amount_of_discount"
+  "join-ipeds",
+  "institutions-latitude"
  ],
  [
-  "join-spider-products-for-hire",
-  "Bookings-amount_of_refund"
+  "join-ipeds",
+  "institutions-locale"
  ],
  [
-  "join-spider-products-for-hire",
-  "Bookings-amount_outstanding"
+  "join-ipeds",
+  "institutions-longitud"
  ],
  [
-  "join-spider-products-for-hire",
-  "Bookings-amount_payable"
+  "join-ipeds",
+  "institutions-medical"
  ],
  [
-  "join-spider-products-for-hire",
-  "Bookings-count_hired"
+  "join-ipeds",
+  "institutions-newid"
  ],
  [
-  "join-spider-products-for-hire",
-  "Bookings-returned_damaged_yn"
+  "join-ipeds",
+  "institutions-obereg"
  ],
  [
-  "join-spider-products-for-hire",
-  "Customers-gender_mf"
+  "join-ipeds",
+  "institutions-opeflag"
  ],
  [
-  "join-spider-products-for-hire",
-  "Discount_Coupons-coupon_amount"
+  "join-ipeds",
+  "institutions-openpubl"
  ],
  [
-  "join-spider-products-for-hire",
-  "Payments-amount_due"
+  "join-ipeds",
+  "institutions-postsec"
  ],
  [
-  "join-spider-products-for-hire",
-  "Payments-amount_paid"
+  "join-ipeds",
+  "institutions-pseflag"
  ],
  [
-  "join-spider-products-for-hire",
-  "Payments-amount_paid_in_full_yn"
+  "join-ipeds",
+  "institutions-pset4_flg"
  ],
  [
-  "join-spider-products-for-hire",
-  "Products_Booked-booked_amount"
+  "join-ipeds",
+  "institutions-rptmth"
  ],
  [
-  "join-spider-products-for-hire",
-  "Products_Booked-booked_count"
+  "join-ipeds",
+  "institutions-sector"
  ],
  [
-  "join-spider-products-for-hire",
-  "Products_Booked-returned_late_yn"
+  "join-ipeds",
+  "institutions-tribal"
  ],
  [
-  "join-spider-products-for-hire",
-  "Products_Booked-returned_yn"
+  "join-ipeds",
+  "institutions-ugoffer"
  ],
  [
-  "join-spider-products-for-hire",
-  "Products_for_Hire-daily_hire_cost"
+  "join-ipeds",
+  "staff-arank"
  ],
  [
-  "join-spider-products-for-hire",
-  "View_Product_Availability-available_yn"
+  "join-ipeds",
+  "staff-sa09_mam"
  ],
  [
-  "join-spider-scientist-1",
-  "Projects-hours"
+  "join-ipeds",
+  "staff-sa09_mat"
  ],
  [
-  "join-spider-solvency-ii",
-  "Products-product_price"
+  "join-ipeds",
+  "staff-sa09_maw"
  ],
  [
-  "join-spider-store-product",
-  "district-city_area"
+  "join-ipeds",
+  "staff-sa09_mcm"
  ],
  [
-  "join-spider-store-product",
-  "district-city_population"
+  "join-ipeds",
+  "staff-sa09_mct"
  ],
  [
-  "join-spider-store-product",
-  "product-dpi"
+  "join-ipeds",
+  "staff-sa09_mcw"
  ],
  [
-  "join-spider-store-product",
-  "product-pages_per_minute_color"
+  "join-ipeds",
+  "staff-sa09_mom"
  ],
  [
-  "join-spider-store-product",
-  "store-area_size"
+  "join-ipeds",
+  "staff-sa09_mot"
  ],
  [
-  "join-spider-store-product",
-  "store-number_of_product_category"
+  "join-ipeds",
+  "staff-sa09_mow"
  ],
  [
-  "join-spider-store-product",
-  "store-ranking"
+  "join-ipeds",
+  "staff-sa10_mcm"
  ],
  [
-  "join-spider2-airlines",
-  "aircrafts_data-range"
+  "join-ipeds",
+  "staff-sa10_mct"
  ],
  [
-  "join-spider2-airlines",
-  "boarding_passes-boarding_no"
+  "join-ipeds",
+  "staff-sa10_mcw"
  ],
  [
-  "join-spider2-airlines",
-  "bookings-total_amount"
+  "join-ipeds",
+  "staff-sa10_mom"
  ],
  [
-  "join-spider2-airlines",
-  "ticket_flights-amount"
+  "join-ipeds",
+  "staff-sa10_mot"
  ],
  [
-  "join-spider2-bowlingleague",
-  "Bowler_Scores-bowler_id"
+  "join-ipeds",
+  "staff-sa10_mow"
  ],
  [
-  "join-spider2-bowlingleague",
-  "Bowler_Scores-game_number"
+  "join-ipeds",
+  "staff-sa11_mcm"
  ],
  [
-  "join-spider2-bowlingleague",
-  "Bowler_Scores-handi_cap_score"
+  "join-ipeds",
+  "staff-sa11_mct"
  ],
  [
-  "join-spider2-bowlingleague",
-  "Bowler_Scores-raw_score"
+  "join-ipeds",
+  "staff-sa11_mcw"
  ],
  [
-  "join-spider2-bowlingleague",
-  "Bowler_Scores-won_game"
+  "join-ipeds",
+  "staff-sa11_mom"
  ],
  [
-  "join-spider2-bowlingleague",
-  "Bowlers-bowler_current_average"
+  "join-ipeds",
+  "staff-sa11_mot"
  ],
  [
-  "join-spider2-bowlingleague",
-  "Bowlers-bowler_current_hcp"
+  "join-ipeds",
+  "staff-sa11_mow"
  ],
  [
-  "join-spider2-bowlingleague",
-  "Bowlers-bowler_games_bowled"
+  "join-ipeds",
+  "staff-sa12_mam"
  ],
  [
-  "join-spider2-bowlingleague",
-  "Bowlers-bowler_total_pins"
+  "join-ipeds",
+  "staff-sa12_mat"
  ],
  [
-  "join-spider2-bowlingleague",
-  "Bowlers-team_id"
+  "join-ipeds",
+  "staff-sa12_maw"
  ],
  [
-  "join-spider2-bowlingleague",
-  "Match_Games-game_number"
+  "join-ipeds",
+  "staff-sa12_mcm"
  ],
  [
-  "join-spider2-bowlingleague",
-  "Match_Games-winning_team_id"
+  "join-ipeds",
+  "staff-sa12_mct"
  ],
  [
-  "join-spider2-bowlingleague",
-  "Teams-captain_id"
+  "join-ipeds",
+  "staff-sa12_mcw"
  ],
  [
-  "join-spider2-bowlingleague",
-  "Tourney_Matches-odd_lane_team_id"
+  "join-ipeds",
+  "staff-sa12_mom"
  ],
  [
-  "join-spider2-bowlingleague",
-  "Tourney_Matches-tourney_id"
+  "join-ipeds",
+  "staff-sa12_mot"
  ],
  [
-  "join-spider2-entertainmentagency",
-  "Agents-commission_rate"
+  "join-ipeds",
+  "staff-sa12_mow"
  ],
  [
-  "join-spider2-entertainmentagency",
-  "Agents-salary"
+  "join-ipeds",
+  "staff-sa_9_mcm"
  ],
  [
-  "join-spider2-entertainmentagency",
-  "Engagements-agent_id"
+  "join-ipeds",
+  "staff-sa_9_mct"
  ],
  [
-  "join-spider2-entertainmentagency",
-  "Engagements-contract_price"
+  "join-ipeds",
+  "staff-sa_9_mcw"
  ],
  [
-  "join-spider2-entertainmentagency",
-  "Engagements-engagement_number"
+  "join-ipeds",
+  "staff-saeq9_am"
  ],
  [
-  "join-spider2-entertainmentagency",
-  "Engagements-entertainer_id"
+  "join-ipeds",
+  "staff-saeq9_at"
  ],
  [
-  "join-spider2-entertainmentagency",
-  "Entertainer_Members-member_id"
+  "join-ipeds",
+  "staff-saeq9_aw"
  ],
  [
-  "join-spider2-entertainmentagency",
-  "Entertainer_Members-status"
+  "join-ipeds",
+  "staff-saeq9_om"
  ],
  [
-  "join-spider2-entertainmentagency",
-  "Entertainer_Styles-entertainer_id"
+  "join-ipeds",
+  "staff-saeq9_ot"
  ],
  [
-  "join-spider2-entertainmentagency",
-  "Entertainer_Styles-style_id"
+  "join-ipeds",
+  "staff-saeq9_ow"
  ],
  [
-  "join-spider2-entertainmentagency",
-  "Entertainer_Styles-style_strength"
+  "join-ipeds",
+  "staff-sainstm"
  ],
  [
-  "join-spider2-entertainmentagency",
-  "Musical_Preferences-preference_seq"
+  "join-ipeds",
+  "staff-sainstt"
  ],
  [
-  "join-spider2-entertainmentagency",
-  "Musical_Preferences-style_id"
+  "join-ipeds",
+  "staff-sainstw"
  ],
  [
-  "join-spider2-entertainmentagency",
-  "ztblMonths-april"
+  "join-ipeds",
+  "staff-saoutlm"
  ],
  [
-  "join-spider2-entertainmentagency",
-  "ztblMonths-august"
+  "join-ipeds",
+  "staff-saoutlt"
  ],
  [
-  "join-spider2-entertainmentagency",
-  "ztblMonths-december"
+  "join-ipeds",
+  "staff-saoutlw"
  ],
  [
-  "join-spider2-entertainmentagency",
-  "ztblMonths-february"
+  "join-ipeds",
+  "staff-satotlm"
  ],
  [
-  "join-spider2-entertainmentagency",
-  "ztblMonths-january"
+  "join-ipeds",
+  "staff-satotlt"
  ],
  [
-  "join-spider2-entertainmentagency",
-  "ztblMonths-july"
+  "join-ipeds",
+  "staff-satotlw"
  ],
  [
-  "join-spider2-entertainmentagency",
-  "ztblMonths-june"
+  "join-livesql-insider",
+  "advancedbehavior-mktcorr"
  ],
  [
-  "join-spider2-entertainmentagency",
-  "ztblMonths-march"
+  "join-livesql-insider",
+  "advancedbehavior-patsim"
  ],
  [
-  "join-spider2-entertainmentagency",
-  "ztblMonths-may"
+  "join-livesql-insider",
+  "advancedbehavior-peercorr"
  ],
  [
-  "join-spider2-entertainmentagency",
-  "ztblMonths-november"
+  "join-livesql-insider",
+  "advancedbehavior-secrotimp"
  ],
  [
-  "join-spider2-entertainmentagency",
-  "ztblMonths-october"
+  "join-livesql-insider",
+  "compliancecase-fposrate"
  ],
  [
-  "join-spider2-entertainmentagency",
-  "ztblMonths-september"
+  "join-livesql-insider",
+  "compliancecase-modelconf"
  ],
  [
-  "join-spider2-entertainmentagency",
-  "ztblMonths-year_number"
+  "join-livesql-insider",
+  "compliancecase-prevviol"
  ],
  [
-  "join-spider2-entertainmentagency",
-  "ztblSkipLabels-label_count"
+  "join-livesql-insider",
+  "compliancecase-risksc"
  ],
  [
-  "join-spider2-imdb-movies",
-  "movies-duration"
+  "join-livesql-insider",
+  "enforcementactions-penamt"
  ],
  [
-  "join-spider2-imdb-movies",
-  "movies-year"
+  "join-livesql-insider",
+  "investigationdetails-behansc"
  ],
  [
-  "join-spider2-imdb-movies",
-  "names-height"
+  "join-livesql-insider",
+  "investigationdetails-commaddr"
  ],
  [
-  "join-spider2-imdb-movies",
-  "ratings-avg_rating"
+  "join-livesql-insider",
+  "investigationdetails-grpbehsc"
  ],
  [
-  "join-spider2-imdb-movies",
-  "ratings-median_rating"
+  "join-livesql-insider",
+  "investigationdetails-mktabprob"
  ],
  [
-  "join-spider2-imdb-movies",
-  "ratings-total_votes"
+  "join-livesql-insider",
+  "investigationdetails-netansc"
  ],
  [
-  "join-spider2-music",
-  "Album-artist_id"
+  "join-livesql-insider",
+  "investigationdetails-patrecsc"
  ],
  [
-  "join-spider2-music",
-  "Customer-support_rep_id"
+  "join-livesql-insider",
+  "investigationdetails-tcirclesz"
  ],
  [
-  "join-spider2-music",
-  "Invoice-customer_id"
+  "join-livesql-insider",
+  "sentimentandfundamentals-anlycount"
  ],
  [
-  "join-spider2-music",
-  "Invoice-total"
+  "join-livesql-insider",
+  "sentimentandfundamentals-impvolrank"
  ],
  [
-  "join-spider2-music",
-  "InvoiceLine-invoice_id"
+  "join-livesql-insider",
+  "sentimentandfundamentals-infoleaksc"
  ],
  [
-  "join-spider2-music",
-  "InvoiceLine-quantity"
+  "join-livesql-insider",
+  "sentimentandfundamentals-inholdpct"
  ],
  [
-  "join-spider2-music",
-  "InvoiceLine-track_id"
+  "join-livesql-insider",
+  "sentimentandfundamentals-instownpct"
  ],
  [
-  "join-spider2-music",
-  "InvoiceLine-unit_price"
+  "join-livesql-insider",
+  "sentimentandfundamentals-newsscore"
  ],
  [
-  "join-spider2-music",
-  "PlaylistTrack-playlist_id"
+  "join-livesql-insider",
+  "sentimentandfundamentals-optvolrt"
  ],
  [
-  "join-spider2-music",
-  "Track-album_id"
+  "join-livesql-insider",
+  "sentimentandfundamentals-putcallrt"
  ],
  [
-  "join-spider2-music",
-  "Track-bytes"
+  "join-livesql-insider",
+  "sentimentandfundamentals-shortintrt"
  ],
  [
-  "join-spider2-music",
-  "Track-genre_id"
+  "join-livesql-insider",
+  "sentimentandfundamentals-socscore"
  ],
  [
-  "join-spider2-music",
-  "Track-milliseconds"
+  "join-livesql-insider",
+  "trader-acctbal"
  ],
  [
-  "join-spider2-music",
-  "Track-unit_price"
+  "join-livesql-insider",
+  "trader-acctdays"
  ],
  [
-  "join-unhcr-refugees",
-  "asylum_decisions-recognized"
+  "join-livesql-insider",
+  "trader-posavg"
  ],
  [
-  "join-unhcr-refugees",
-  "asylum_decisions-rejected"
+  "join-livesql-insider",
+  "trader-voldaily"
  ],
  [
-  "join-unhcr-refugees",
-  "asylum_decisions-total"
+  "join-livesql-insider",
+  "transactionrecord-cancelpct"
  ],
  [
-  "join-unhcr-refugees",
-  "population_stocks-asylum_seekers"
+  "join-livesql-insider",
+  "transactionrecord-crossfreq"
  ],
  [
-  "join-unhcr-refugees",
-  "population_stocks-idps"
+  "join-livesql-insider",
+  "transactionrecord-darkusage"
  ],
  [
-  "join-unhcr-refugees",
-  "population_stocks-others"
+  "join-livesql-insider",
+  "transactionrecord-modfreq"
  ],
  [
-  "join-unhcr-refugees",
-  "population_stocks-refugees"
+  "join-livesql-insider",
+  "transactionrecord-offmkt"
  ],
  [
-  "join-unhcr-refugees",
-  "population_stocks-stateless"
+  "join-livesql-insider",
+  "transactionrecord-ordervar"
  ],
  [
-  "join-walmart-2014",
-  "features-cpi"
+  "join-met-museum",
+  "objects-is_highlight"
  ],
  [
-  "join-walmart-2014",
-  "features-fuel_price"
+  "join-met-museum",
+  "objects-is_public_domain"
  ],
  [
-  "join-walmart-2014",
-  "features-temperature"
+  "join-met-museum",
+  "objects-is_timeline_work"
  ],
  [
-  "join-walmart-2014",
-  "features-unemployment"
+  "join-met-museum",
+  "objects-object_begin_date"
  ],
  [
-  "join-walmart-2014",
-  "stores-size"
+  "join-met-museum",
+  "objects-object_end_date"
  ],
  [
-  "join-walmart-2014",
-  "train-dept"
+  "join-movielens-1m",
+  "ratings-rating"
  ],
  [
-  "join-walmart-2014",
-  "train-is_holiday"
+  "join-movielens-1m",
+  "users-age_bucket"
  ],
  [
-  "join-walmart-2014",
-  "train-weekly_sales"
+  "join-movielens-1m",
+  "users-occupation_code"
  ],
  [
-  "join-wals",
-  "feature_values-number"
+  "join-nascar-cup",
+  "races-year"
  ],
  [
-  "join-wals",
-  "features-chapter_id"
+  "join-nascar-cup",
+  "results-col"
  ],
  [
-  "join-wals",
-  "languages-latitude"
+  "join-nascar-cup",
+  "results-laps"
  ],
  [
-  "join-wals",
-  "languages-longitude"
+  "join-nascar-cup",
+  "results-led"
  ],
  [
-  "join-wals",
-  "languages-samples_100"
+  "join-nascar-cup",
+  "results-money"
  ],
  [
-  "join-wals",
-  "languages-samples_200"
+  "join-nascar-cup",
+  "results-pos"
  ],
  [
-  "join-wals",
-  "observations-value"
+  "join-nascar-cup",
+  "results-pts"
  ],
  [
-  "join-world",
-  "city-population"
+  "join-nascar-cup",
+  "results-st"
  ],
  [
-  "join-world",
-  "country-capital"
+  "join-nascar-cup",
+  "results-year"
  ],
  [
-  "join-world",
-  "country-gnp"
+  "join-open-power-system",
+  "power_plants-capacity"
  ],
  [
-  "join-world",
-  "country-gnp_old"
+  "join-open-power-system",
+  "power_plants-lat"
  ],
  [
-  "join-world",
-  "country-life_expectancy"
+  "join-open-power-system",
+  "power_plants-lon"
  ],
  [
-  "join-world",
+  "join-open-power-system",
+  "time_series-de_solar_capacity"
+ ],
+ [
+  "join-open-power-system",
+  "time_series-de_wind_capacity"
+ ],
+ [
+  "join-open-power-system",
+  "time_series-de_wind_offshore_capacity"
+ ],
+ [
+  "join-open-power-system",
+  "time_series-de_wind_onshore_capacity"
+ ],
+ [
+  "join-open-power-system",
+  "time_series-gb_gbn_solar_capacity"
+ ],
+ [
+  "join-open-power-system",
+  "time_series-gb_gbn_wind_capacity"
+ ],
+ [
+  "join-open-power-system",
+  "time_series-gb_gbn_wind_offshore_capacity"
+ ],
+ [
+  "join-open-power-system",
+  "time_series-gb_gbn_wind_onshore_capacity"
+ ],
+ [
+  "join-open-power-system",
+  "time_series-gb_nir_wind_onshore_capacity"
+ ],
+ [
+  "join-open-power-system",
+  "time_series-gb_ukm_solar_capacity"
+ ],
+ [
+  "join-open-power-system",
+  "time_series-gb_ukm_wind_capacity"
+ ],
+ [
+  "join-open-power-system",
+  "time_series-gb_ukm_wind_offshore_capacity"
+ ],
+ [
+  "join-open-power-system",
+  "time_series-gb_ukm_wind_onshore_capacity"
+ ],
+ [
+  "join-open-power-system",
+  "weather_observations-at_radiation_diffuse_horizontal"
+ ],
+ [
+  "join-open-power-system",
+  "weather_observations-at_radiation_direct_horizontal"
+ ],
+ [
+  "join-open-power-system",
+  "weather_observations-at_temperature"
+ ],
+ [
+  "join-open-power-system",
+  "weather_observations-be_radiation_diffuse_horizontal"
+ ],
+ [
+  "join-open-power-system",
+  "weather_observations-be_radiation_direct_horizontal"
+ ],
+ [
+  "join-open-power-system",
+  "weather_observations-be_temperature"
+ ],
+ [
+  "join-open-power-system",
+  "weather_observations-bg_radiation_diffuse_horizontal"
+ ],
+ [
+  "join-open-power-system",
+  "weather_observations-bg_radiation_direct_horizontal"
+ ],
+ [
+  "join-open-power-system",
+  "weather_observations-bg_temperature"
+ ],
+ [
+  "join-open-power-system",
+  "weather_observations-ch_radiation_diffuse_horizontal"
+ ],
+ [
+  "join-open-power-system",
+  "weather_observations-ch_radiation_direct_horizontal"
+ ],
+ [
+  "join-open-power-system",
+  "weather_observations-ch_temperature"
+ ],
+ [
+  "join-open-power-system",
+  "weather_observations-cz_radiation_diffuse_horizontal"
+ ],
+ [
+  "join-open-power-system",
+  "weather_observations-cz_radiation_direct_horizontal"
+ ],
+ [
+  "join-open-power-system",
+  "weather_observations-cz_temperature"
+ ],
+ [
+  "join-open-power-system",
+  "weather_observations-de_radiation_diffuse_horizontal"
+ ],
+ [
+  "join-open-power-system",
+  "weather_observations-de_radiation_direct_horizontal"
+ ],
+ [
+  "join-open-power-system",
+  "weather_observations-de_temperature"
+ ],
+ [
+  "join-open-power-system",
+  "weather_observations-dk_radiation_diffuse_horizontal"
+ ],
+ [
+  "join-open-power-system",
+  "weather_observations-dk_radiation_direct_horizontal"
+ ],
+ [
+  "join-open-power-system",
+  "weather_observations-dk_temperature"
+ ],
+ [
+  "join-open-power-system",
+  "weather_observations-ee_radiation_diffuse_horizontal"
+ ],
+ [
+  "join-open-power-system",
+  "weather_observations-ee_radiation_direct_horizontal"
+ ],
+ [
+  "join-open-power-system",
+  "weather_observations-ee_temperature"
+ ],
+ [
+  "join-open-power-system",
+  "weather_observations-es_radiation_diffuse_horizontal"
+ ],
+ [
+  "join-open-power-system",
+  "weather_observations-es_radiation_direct_horizontal"
+ ],
+ [
+  "join-open-power-system",
+  "weather_observations-es_temperature"
+ ],
+ [
+  "join-open-power-system",
+  "weather_observations-fi_radiation_diffuse_horizontal"
+ ],
+ [
+  "join-open-power-system",
+  "weather_observations-fi_radiation_direct_horizontal"
+ ],
+ [
+  "join-open-power-system",
+  "weather_observations-fi_temperature"
+ ],
+ [
+  "join-open-power-system",
+  "weather_observations-fr_radiation_diffuse_horizontal"
+ ],
+ [
+  "join-open-power-system",
+  "weather_observations-fr_radiation_direct_horizontal"
+ ],
+ [
+  "join-open-power-system",
+  "weather_observations-fr_temperature"
+ ],
+ [
+  "join-open-power-system",
+  "weather_observations-gb_radiation_diffuse_horizontal"
+ ],
+ [
+  "join-open-power-system",
+  "weather_observations-gb_radiation_direct_horizontal"
+ ],
+ [
+  "join-open-power-system",
+  "weather_observations-gb_temperature"
+ ],
+ [
+  "join-open-power-system",
+  "weather_observations-gr_radiation_diffuse_horizontal"
+ ],
+ [
+  "join-open-power-system",
+  "weather_observations-gr_radiation_direct_horizontal"
+ ],
+ [
+  "join-open-power-system",
+  "weather_observations-gr_temperature"
+ ],
+ [
+  "join-open-power-system",
+  "weather_observations-hr_radiation_diffuse_horizontal"
+ ],
+ [
+  "join-open-power-system",
+  "weather_observations-hr_radiation_direct_horizontal"
+ ],
+ [
+  "join-open-power-system",
+  "weather_observations-hr_temperature"
+ ],
+ [
+  "join-open-power-system",
+  "weather_observations-hu_radiation_diffuse_horizontal"
+ ],
+ [
+  "join-open-power-system",
+  "weather_observations-hu_radiation_direct_horizontal"
+ ],
+ [
+  "join-open-power-system",
+  "weather_observations-hu_temperature"
+ ],
+ [
+  "join-open-power-system",
+  "weather_observations-ie_radiation_diffuse_horizontal"
+ ],
+ [
+  "join-open-power-system",
+  "weather_observations-ie_radiation_direct_horizontal"
+ ],
+ [
+  "join-open-power-system",
+  "weather_observations-ie_temperature"
+ ],
+ [
+  "join-open-power-system",
+  "weather_observations-it_radiation_diffuse_horizontal"
+ ],
+ [
+  "join-open-power-system",
+  "weather_observations-it_radiation_direct_horizontal"
+ ],
+ [
+  "join-open-power-system",
+  "weather_observations-it_temperature"
+ ],
+ [
+  "join-open-power-system",
+  "weather_observations-lt_radiation_diffuse_horizontal"
+ ],
+ [
+  "join-open-power-system",
+  "weather_observations-lt_radiation_direct_horizontal"
+ ],
+ [
+  "join-open-power-system",
+  "weather_observations-lt_temperature"
+ ],
+ [
+  "join-open-power-system",
+  "weather_observations-lu_radiation_diffuse_horizontal"
+ ],
+ [
+  "join-open-power-system",
+  "weather_observations-lu_radiation_direct_horizontal"
+ ],
+ [
+  "join-open-power-system",
+  "weather_observations-lu_temperature"
+ ],
+ [
+  "join-open-power-system",
+  "weather_observations-lv_radiation_diffuse_horizontal"
+ ],
+ [
+  "join-open-power-system",
+  "weather_observations-lv_radiation_direct_horizontal"
+ ],
+ [
+  "join-open-power-system",
+  "weather_observations-lv_temperature"
+ ],
+ [
+  "join-open-power-system",
+  "weather_observations-nl_radiation_diffuse_horizontal"
+ ],
+ [
+  "join-open-power-system",
+  "weather_observations-nl_radiation_direct_horizontal"
+ ],
+ [
+  "join-open-power-system",
+  "weather_observations-nl_temperature"
+ ],
+ [
+  "join-open-power-system",
+  "weather_observations-no_radiation_diffuse_horizontal"
+ ],
+ [
+  "join-open-power-system",
+  "weather_observations-no_radiation_direct_horizontal"
+ ],
+ [
+  "join-open-power-system",
+  "weather_observations-no_temperature"
+ ],
+ [
+  "join-open-power-system",
+  "weather_observations-pl_radiation_diffuse_horizontal"
+ ],
+ [
+  "join-open-power-system",
+  "weather_observations-pl_radiation_direct_horizontal"
+ ],
+ [
+  "join-open-power-system",
+  "weather_observations-pl_temperature"
+ ],
+ [
+  "join-open-power-system",
+  "weather_observations-pt_radiation_diffuse_horizontal"
+ ],
+ [
+  "join-open-power-system",
+  "weather_observations-pt_radiation_direct_horizontal"
+ ],
+ [
+  "join-open-power-system",
+  "weather_observations-pt_temperature"
+ ],
+ [
+  "join-open-power-system",
+  "weather_observations-ro_radiation_diffuse_horizontal"
+ ],
+ [
+  "join-open-power-system",
+  "weather_observations-ro_radiation_direct_horizontal"
+ ],
+ [
+  "join-open-power-system",
+  "weather_observations-ro_temperature"
+ ],
+ [
+  "join-open-power-system",
+  "weather_observations-se_radiation_diffuse_horizontal"
+ ],
+ [
+  "join-open-power-system",
+  "weather_observations-se_radiation_direct_horizontal"
+ ],
+ [
+  "join-open-power-system",
+  "weather_observations-se_temperature"
+ ],
+ [
+  "join-open-power-system",
+  "weather_observations-si_radiation_diffuse_horizontal"
+ ],
+ [
+  "join-open-power-system",
+  "weather_observations-si_radiation_direct_horizontal"
+ ],
+ [
+  "join-open-power-system",
+  "weather_observations-si_temperature"
+ ],
+ [
+  "join-open-power-system",
+  "weather_observations-sk_radiation_diffuse_horizontal"
+ ],
+ [
+  "join-open-power-system",
+  "weather_observations-sk_radiation_direct_horizontal"
+ ],
+ [
+  "join-open-power-system",
+  "weather_observations-sk_temperature"
+ ],
+ [
+  "join-openflights",
+  "airlines-active"
+ ],
+ [
+  "join-openflights",
+  "airports-altitude"
+ ],
+ [
+  "join-openflights",
+  "airports-latitude"
+ ],
+ [
+  "join-openflights",
+  "airports-longitude"
+ ],
+ [
+  "join-openflights",
+  "airports-timezone"
+ ],
+ [
+  "join-openflights",
+  "routes-stops"
+ ],
+ [
+  "join-oulad",
+  "assessments-date"
+ ],
+ [
+  "join-oulad",
+  "assessments-weight"
+ ],
+ [
+  "join-oulad",
+  "courses-module_presentation_length"
+ ],
+ [
+  "join-oulad",
+  "student_assessment-date_submitted"
+ ],
+ [
+  "join-oulad",
+  "student_assessment-id_student"
+ ],
+ [
+  "join-oulad",
+  "student_assessment-is_banked"
+ ],
+ [
+  "join-oulad",
+  "student_assessment-score"
+ ],
+ [
+  "join-oulad",
+  "student_registration-date_registration"
+ ],
+ [
+  "join-oulad",
+  "student_registration-id_student"
+ ],
+ [
+  "join-oulad",
+  "student_vle-date"
+ ],
+ [
+  "join-oulad",
+  "student_vle-id_student"
+ ],
+ [
+  "join-oulad",
+  "student_vle-sum_click"
+ ],
+ [
+  "join-oulad",
+  "students-disability"
+ ],
+ [
+  "join-oulad",
+  "students-id_student"
+ ],
+ [
+  "join-oulad",
+  "students-num_of_prev_attempts"
+ ],
+ [
+  "join-oulad",
+  "students-studied_credits"
+ ],
+ [
+  "join-pubmed-diabetes",
+  "cites-citing_paper_id"
+ ],
+ [
+  "join-pubmed-diabetes",
+  "content-tf_idf"
+ ],
+ [
+  "join-pubmed-diabetes",
+  "paper-class_label"
+ ],
+ [
+  "join-ram-fisheries",
+  "stocks-inmyersdb"
+ ],
+ [
+  "join-ram-fisheries",
+  "stocks-primary_fa_oarea"
+ ],
+ [
+  "join-ram-fisheries",
+  "stocks-tsn"
+ ],
+ [
+  "join-ram-fisheries",
+  "timeseries-cdiv_meanc"
+ ],
+ [
+  "join-ram-fisheries",
+  "timeseries-cdiv_msy"
+ ],
+ [
+  "join-ram-fisheries",
+  "timeseries-t_cbest"
+ ],
+ [
+  "join-ram-fisheries",
+  "timeseries-tc"
+ ],
+ [
+  "join-spider-behavior-monitoring",
+  "Student_Addresses-monthly_rental"
+ ],
+ [
+  "join-spider-behavior-monitoring",
+  "Teachers-gender"
+ ],
+ [
+  "join-spider-coffee-shop",
+  "happy_hour-num_of_shaff_in_charge"
+ ],
+ [
+  "join-spider-coffee-shop",
+  "happy_hour_member-total_amount"
+ ],
+ [
+  "join-spider-coffee-shop",
+  "member-age"
+ ],
+ [
+  "join-spider-coffee-shop",
+  "member-level_of_membership"
+ ],
+ [
+  "join-spider-coffee-shop",
+  "member-time_of_purchase"
+ ],
+ [
+  "join-spider-coffee-shop",
+  "shop-num_of_staff"
+ ],
+ [
+  "join-spider-coffee-shop",
+  "shop-score"
+ ],
+ [
+  "join-spider-cre-doc-control-systems",
+  "Circulation_History-copy_number"
+ ],
+ [
+  "join-spider-cre-doc-control-systems",
+  "Circulation_History-document_id"
+ ],
+ [
+  "join-spider-cre-doc-control-systems",
+  "Circulation_History-draft_number"
+ ],
+ [
+  "join-spider-cre-doc-control-systems",
+  "Document_Drafts-draft_number"
+ ],
+ [
+  "join-spider-cre-doc-control-systems",
+  "Draft_Copies-copy_number"
+ ],
+ [
+  "join-spider-cre-doc-control-systems",
+  "Draft_Copies-document_id"
+ ],
+ [
+  "join-spider-cre-doc-control-systems",
+  "Draft_Copies-draft_number"
+ ],
+ [
+  "join-spider-customers-and-addresses",
+  "Order_Items-order_quantity"
+ ],
+ [
+  "join-spider-insurance-policies",
+  "Claims-amount_claimed"
+ ],
+ [
+  "join-spider-insurance-policies",
+  "Claims-amount_settled"
+ ],
+ [
+  "join-spider-insurance-policies",
+  "Payments-amount_payment"
+ ],
+ [
+  "join-spider-insurance-policies",
+  "Settlements-amount_claimed"
+ ],
+ [
+  "join-spider-insurance-policies",
+  "Settlements-amount_settled"
+ ],
+ [
+  "join-spider-insurance-policies",
+  "Settlements-customer_policy_id"
+ ],
+ [
+  "join-spider-museum-visit",
+  "museum-num_of_staff"
+ ],
+ [
+  "join-spider-museum-visit",
+  "visit-num_of_ticket"
+ ],
+ [
+  "join-spider-museum-visit",
+  "visit-total_spent"
+ ],
+ [
+  "join-spider-museum-visit",
+  "visitor-age"
+ ],
+ [
+  "join-spider-museum-visit",
+  "visitor-level_of_membership"
+ ],
+ [
+  "join-spider-phone-1",
+  "chip_model-launch_year"
+ ],
+ [
+  "join-spider-phone-1",
+  "chip_model-ram_mi_b"
+ ],
+ [
+  "join-spider-phone-1",
+  "chip_model-rom_mi_b"
+ ],
+ [
+  "join-spider-phone-1",
+  "screen_mode-hardware_colours"
+ ],
+ [
+  "join-spider-phone-1",
+  "screen_mode-used_kb"
+ ],
+ [
+  "join-spider-roller-coaster",
+  "country-area"
+ ],
+ [
+  "join-spider-roller-coaster",
   "country-population"
  ],
  [
-  "join-world",
-  "country-surface_area"
+  "join-spider-roller-coaster",
+  "roller_coaster-height"
  ],
  [
-  "join-world",
-  "countrylanguage-percentage"
+  "join-spider-roller-coaster",
+  "roller_coaster-length"
+ ],
+ [
+  "join-spider-roller-coaster",
+  "roller_coaster-speed"
+ ],
+ [
+  "join-spider-school-bus",
+  "driver-age"
+ ],
+ [
+  "join-spider-school-bus",
+  "school_bus-years_working"
+ ],
+ [
+  "join-spider-store-1",
+  "invoice_lines-quantity"
+ ],
+ [
+  "join-spider-store-1",
+  "invoice_lines-unit_price"
+ ],
+ [
+  "join-spider-store-1",
+  "invoices-total"
+ ],
+ [
+  "join-spider-store-1",
+  "tracks-bytes"
+ ],
+ [
+  "join-spider-store-1",
+  "tracks-milliseconds"
+ ],
+ [
+  "join-spider-store-1",
+  "tracks-unit_price"
+ ],
+ [
+  "join-spider-train-station",
+  "station-annual_entry_exit"
+ ],
+ [
+  "join-spider-train-station",
+  "station-annual_interchanges"
+ ],
+ [
+  "join-spider-train-station",
+  "station-number_of_platforms"
+ ],
+ [
+  "join-spider-train-station",
+  "station-total_passengers"
+ ],
+ [
+  "join-spider-wine-1",
+  "appellations-is_ava"
+ ],
+ [
+  "join-spider-wine-1",
+  "wine-no"
+ ],
+ [
+  "join-spider-wine-1",
+  "wine-price"
+ ],
+ [
+  "join-spider-wine-1",
+  "wine-score"
+ ],
+ [
+  "join-spider-wine-1",
+  "wine-year"
+ ],
+ [
+  "join-spider2-complex-oracle",
+  "channels-channel_class_id"
+ ],
+ [
+  "join-spider2-complex-oracle",
+  "channels-channel_total_id"
+ ],
+ [
+  "join-spider2-complex-oracle",
+  "costs-promo_id"
+ ],
+ [
+  "join-spider2-complex-oracle",
+  "costs-unit_cost"
+ ],
+ [
+  "join-spider2-complex-oracle",
+  "costs-unit_price"
+ ],
+ [
+  "join-spider2-complex-oracle",
+  "countries-country_region_id"
+ ],
+ [
+  "join-spider2-complex-oracle",
+  "countries-country_subregion_id"
+ ],
+ [
+  "join-spider2-complex-oracle",
+  "countries-country_total_id"
+ ],
+ [
+  "join-spider2-complex-oracle",
+  "currency-month"
+ ],
+ [
+  "join-spider2-complex-oracle",
+  "currency-to_us"
+ ],
+ [
+  "join-spider2-complex-oracle",
+  "currency-year"
+ ],
+ [
+  "join-spider2-complex-oracle",
+  "customers-country_id"
+ ],
+ [
+  "join-spider2-complex-oracle",
+  "customers-cust_city_id"
+ ],
+ [
+  "join-spider2-complex-oracle",
+  "customers-cust_credit_limit"
+ ],
+ [
+  "join-spider2-complex-oracle",
+  "customers-cust_state_province_id"
+ ],
+ [
+  "join-spider2-complex-oracle",
+  "customers-cust_total_id"
+ ],
+ [
+  "join-spider2-complex-oracle",
+  "products-prod_category_id"
+ ],
+ [
+  "join-spider2-complex-oracle",
+  "products-prod_list_price"
+ ],
+ [
+  "join-spider2-complex-oracle",
+  "products-prod_min_price"
+ ],
+ [
+  "join-spider2-complex-oracle",
+  "products-prod_subcategory_id"
+ ],
+ [
+  "join-spider2-complex-oracle",
+  "products-prod_total_id"
+ ],
+ [
+  "join-spider2-complex-oracle",
+  "products-prod_weight_class"
+ ],
+ [
+  "join-spider2-complex-oracle",
+  "products-supplier_id"
+ ],
+ [
+  "join-spider2-complex-oracle",
+  "promotions-promo_category_id"
+ ],
+ [
+  "join-spider2-complex-oracle",
+  "promotions-promo_cost"
+ ],
+ [
+  "join-spider2-complex-oracle",
+  "promotions-promo_subcategory_id"
+ ],
+ [
+  "join-spider2-complex-oracle",
+  "promotions-promo_total_id"
+ ],
+ [
+  "join-spider2-complex-oracle",
+  "sales-amount_sold"
+ ],
+ [
+  "join-spider2-complex-oracle",
+  "sales-cust_id"
+ ],
+ [
+  "join-spider2-complex-oracle",
+  "sales-promo_id"
+ ],
+ [
+  "join-spider2-complex-oracle",
+  "sales-quantity_sold"
+ ],
+ [
+  "join-spider2-complex-oracle",
+  "supplementary_demographics-affinity_card"
+ ],
+ [
+  "join-spider2-complex-oracle",
+  "supplementary_demographics-baseball"
+ ],
+ [
+  "join-spider2-complex-oracle",
+  "supplementary_demographics-cricket"
+ ],
+ [
+  "join-spider2-complex-oracle",
+  "supplementary_demographics-golf"
+ ],
+ [
+  "join-spider2-complex-oracle",
+  "supplementary_demographics-misc"
+ ],
+ [
+  "join-spider2-complex-oracle",
+  "supplementary_demographics-soccer"
+ ],
+ [
+  "join-spider2-complex-oracle",
+  "supplementary_demographics-tennis"
+ ],
+ [
+  "join-spider2-complex-oracle",
+  "supplementary_demographics-unknown"
+ ],
+ [
+  "join-spider2-complex-oracle",
+  "supplementary_demographics-yrs_residence"
+ ],
+ [
+  "join-spider2-complex-oracle",
+  "times-calendar_month_id"
+ ],
+ [
+  "join-spider2-complex-oracle",
+  "times-calendar_month_number"
+ ],
+ [
+  "join-spider2-complex-oracle",
+  "times-calendar_quarter_id"
+ ],
+ [
+  "join-spider2-complex-oracle",
+  "times-calendar_quarter_number"
+ ],
+ [
+  "join-spider2-complex-oracle",
+  "times-calendar_week_number"
+ ],
+ [
+  "join-spider2-complex-oracle",
+  "times-day_number_in_month"
+ ],
+ [
+  "join-spider2-complex-oracle",
+  "times-day_number_in_week"
+ ],
+ [
+  "join-spider2-complex-oracle",
+  "times-days_in_cal_month"
+ ],
+ [
+  "join-spider2-complex-oracle",
+  "times-days_in_cal_quarter"
+ ],
+ [
+  "join-spider2-complex-oracle",
+  "times-days_in_cal_year"
+ ],
+ [
+  "join-spider2-complex-oracle",
+  "times-days_in_fis_month"
+ ],
+ [
+  "join-spider2-complex-oracle",
+  "times-days_in_fis_quarter"
+ ],
+ [
+  "join-spider2-complex-oracle",
+  "times-days_in_fis_year"
+ ],
+ [
+  "join-spider2-complex-oracle",
+  "times-fiscal_month_id"
+ ],
+ [
+  "join-spider2-complex-oracle",
+  "times-fiscal_month_number"
+ ],
+ [
+  "join-spider2-complex-oracle",
+  "times-fiscal_quarter_id"
+ ],
+ [
+  "join-spider2-complex-oracle",
+  "times-fiscal_quarter_number"
+ ],
+ [
+  "join-spider2-complex-oracle",
+  "times-fiscal_week_number"
+ ],
+ [
+  "join-spider2-complex-oracle",
+  "times-week_ending_day_id"
+ ],
+ [
+  "join-spider2-log",
+  "mst_products_20161201-price"
+ ],
+ [
+  "join-spider2-log",
+  "mst_products_20170101-price"
+ ],
+ [
+  "join-spider2-log",
+  "product_sales-sales"
+ ],
+ [
+  "join-spider2-log",
+  "purchase_log-amount"
+ ],
+ [
+  "join-spider2-oracle-sql",
+  "emp_hire_periods-emp_id"
+ ],
+ [
+  "join-spider2-oracle-sql",
+  "employees-supervisor_id"
+ ],
+ [
+  "join-spider2-oracle-sql",
+  "inventory-location_id"
+ ],
+ [
+  "join-spider2-oracle-sql",
+  "inventory-product_id"
+ ],
+ [
+  "join-spider2-oracle-sql",
+  "inventory-purchase_id"
+ ],
+ [
+  "join-spider2-oracle-sql",
+  "inventory-qty"
+ ],
+ [
+  "join-spider2-oracle-sql",
+  "locations-position"
+ ],
+ [
+  "join-spider2-oracle-sql",
+  "locations-warehouse"
+ ],
+ [
+  "join-spider2-oracle-sql",
+  "monthly_budget-product_id"
+ ],
+ [
+  "join-spider2-oracle-sql",
+  "monthly_budget-qty"
+ ],
+ [
+  "join-spider2-oracle-sql",
+  "monthly_sales-product_id"
+ ],
+ [
+  "join-spider2-oracle-sql",
+  "monthly_sales-qty"
+ ],
+ [
+  "join-spider2-oracle-sql",
+  "orderlines-amount"
+ ],
+ [
+  "join-spider2-oracle-sql",
+  "orderlines-order_id"
+ ],
+ [
+  "join-spider2-oracle-sql",
+  "orderlines-product_id"
+ ],
+ [
+  "join-spider2-oracle-sql",
+  "orderlines-qty"
+ ],
+ [
+  "join-spider2-oracle-sql",
+  "orders-customer_id"
+ ],
+ [
+  "join-spider2-oracle-sql",
+  "packaging_relations-contains_id"
+ ],
+ [
+  "join-spider2-oracle-sql",
+  "packaging_relations-packaging_id"
+ ],
+ [
+  "join-spider2-oracle-sql",
+  "packaging_relations-qty"
+ ],
+ [
+  "join-spider2-oracle-sql",
+  "picking_line-location_id"
+ ],
+ [
+  "join-spider2-oracle-sql",
+  "picking_line-order_id"
+ ],
+ [
+  "join-spider2-oracle-sql",
+  "picking_line-picklist_id"
+ ],
+ [
+  "join-spider2-oracle-sql",
+  "picking_line-product_id"
+ ],
+ [
+  "join-spider2-oracle-sql",
+  "picking_line-qty"
+ ],
+ [
+  "join-spider2-oracle-sql",
+  "picking_list-picker_emp_id"
+ ],
+ [
+  "join-spider2-oracle-sql",
+  "picking_log-location_id"
+ ],
+ [
+  "join-spider2-oracle-sql",
+  "picking_log-picklist_id"
+ ],
+ [
+  "join-spider2-oracle-sql",
+  "product_alcohol-abv"
+ ],
+ [
+  "join-spider2-oracle-sql",
+  "product_alcohol-sales_volume"
+ ],
+ [
+  "join-spider2-oracle-sql",
+  "product_minimums-qty_minimum"
+ ],
+ [
+  "join-spider2-oracle-sql",
+  "product_minimums-qty_purchase"
+ ],
+ [
+  "join-spider2-oracle-sql",
+  "products-group_id"
+ ],
+ [
+  "join-spider2-oracle-sql",
+  "purchases-brewery_id"
+ ],
+ [
+  "join-spider2-oracle-sql",
+  "purchases-cost"
+ ],
+ [
+  "join-spider2-oracle-sql",
+  "purchases-product_id"
+ ],
+ [
+  "join-spider2-oracle-sql",
+  "purchases-qty"
+ ],
+ [
+  "join-spider2-oracle-sql",
+  "ticker-price"
+ ],
+ [
+  "join-spider2-oracle-sql",
+  "web_counter_hist-app_id"
+ ],
+ [
+  "join-spider2-oracle-sql",
+  "web_counter_hist-counter"
+ ],
+ [
+  "join-spider2-oracle-sql",
+  "web_demographics-f_fb_cnt"
+ ],
+ [
+  "join-spider2-oracle-sql",
+  "web_demographics-f_fb_qty"
+ ],
+ [
+  "join-spider2-oracle-sql",
+  "web_demographics-f_tw_cnt"
+ ],
+ [
+  "join-spider2-oracle-sql",
+  "web_demographics-f_tw_qty"
+ ],
+ [
+  "join-spider2-oracle-sql",
+  "web_demographics-m_fb_cnt"
+ ],
+ [
+  "join-spider2-oracle-sql",
+  "web_demographics-m_fb_qty"
+ ],
+ [
+  "join-spider2-oracle-sql",
+  "web_demographics-m_tw_cnt"
+ ],
+ [
+  "join-spider2-oracle-sql",
+  "web_demographics-m_tw_qty"
+ ],
+ [
+  "join-spider2-oracle-sql",
+  "web_devices-pc"
+ ],
+ [
+  "join-spider2-oracle-sql",
+  "web_devices-phone"
+ ],
+ [
+  "join-spider2-oracle-sql",
+  "web_devices-tablet"
+ ],
+ [
+  "join-spider2-oracle-sql",
+  "web_page_visits-app_id"
+ ],
+ [
+  "join-spider2-oracle-sql",
+  "web_pages-app_id"
+ ],
+ [
+  "join-unvote",
+  "edges-feat_0"
+ ],
+ [
+  "join-unvote",
+  "edges-label"
+ ],
+ [
+  "join-usda-fooddata",
+  "food_categories-code"
+ ],
+ [
+  "join-usda-fooddata",
+  "food_nutrients-amount"
+ ],
+ [
+  "join-usda-fooddata",
+  "food_nutrients-data_points"
+ ],
+ [
+  "join-usda-fooddata",
+  "food_nutrients-derivation_id"
+ ],
+ [
+  "join-usda-fooddata",
+  "food_portions-amount"
+ ],
+ [
+  "join-usda-fooddata",
+  "food_portions-data_points"
+ ],
+ [
+  "join-usda-fooddata",
+  "food_portions-gram_weight"
+ ],
+ [
+  "join-usda-fooddata",
+  "food_portions-measure_unit_id"
+ ],
+ [
+  "join-usda-fooddata",
+  "nutrients-nutrient_nbr"
+ ],
+ [
+  "join-usda-fooddata",
+  "nutrients-rank"
+ ],
+ [
+  "join-uspto",
+  "applications-rule_47_flag"
+ ],
+ [
+  "join-uspto",
+  "patents-num_claims"
+ ],
+ [
+  "join-uw-std",
+  "person-professor"
+ ],
+ [
+  "join-uw-std",
+  "person-student"
+ ],
+ [
+  "join-voc",
+  "craftsmen-number"
+ ],
+ [
+  "join-voc",
+  "craftsmen-onboard_at_arrival"
+ ],
+ [
+  "join-voc",
+  "craftsmen-onboard_at_departure"
+ ],
+ [
+  "join-voc",
+  "craftsmen-trip"
+ ],
+ [
+  "join-voc",
+  "impotenten-number"
+ ],
+ [
+  "join-voc",
+  "impotenten-onboard_at_departure"
+ ],
+ [
+  "join-voc",
+  "impotenten-trip"
+ ],
+ [
+  "join-voc",
+  "invoices-invoice"
+ ],
+ [
+  "join-voc",
+  "invoices-number"
+ ],
+ [
+  "join-voc",
+  "invoices-trip"
+ ],
+ [
+  "join-voc",
+  "passengers-death_during_voyage"
+ ],
+ [
+  "join-voc",
+  "passengers-number"
+ ],
+ [
+  "join-voc",
+  "passengers-onboard_at_arrival"
+ ],
+ [
+  "join-voc",
+  "passengers-onboard_at_departure"
+ ],
+ [
+  "join-voc",
+  "passengers-trip"
+ ],
+ [
+  "join-voc",
+  "seafarers-number"
+ ],
+ [
+  "join-voc",
+  "seafarers-onboard_at_departure"
+ ],
+ [
+  "join-voc",
+  "seafarers-trip"
+ ],
+ [
+  "join-voc",
+  "soldiers-number"
+ ],
+ [
+  "join-voc",
+  "soldiers-onboard_at_departure"
+ ],
+ [
+  "join-voc",
+  "soldiers-trip"
+ ],
+ [
+  "join-voc",
+  "total-number"
+ ],
+ [
+  "join-voc",
+  "total-onboard_at_departure"
+ ],
+ [
+  "join-voc",
+  "total-trip"
+ ],
+ [
+  "join-voc",
+  "voyages-number"
+ ],
+ [
+  "join-voc",
+  "voyages-tonnage"
+ ],
+ [
+  "join-voc",
+  "voyages-trip"
+ ],
+ [
+  "join-walmart",
+  "train-item_nbr"
+ ],
+ [
+  "join-walmart",
+  "train-units"
+ ],
+ [
+  "join-walmart",
+  "weather-avgspeed"
+ ],
+ [
+  "join-walmart",
+  "weather-cool"
+ ],
+ [
+  "join-walmart",
+  "weather-dewpoint"
+ ],
+ [
+  "join-walmart",
+  "weather-heat"
+ ],
+ [
+  "join-walmart",
+  "weather-preciptotal"
+ ],
+ [
+  "join-walmart",
+  "weather-resultdir"
+ ],
+ [
+  "join-walmart",
+  "weather-resultspeed"
+ ],
+ [
+  "join-walmart",
+  "weather-sealevel"
+ ],
+ [
+  "join-walmart",
+  "weather-stnpressure"
+ ],
+ [
+  "join-walmart",
+  "weather-tavg"
+ ],
+ [
+  "join-walmart",
+  "weather-tmax"
+ ],
+ [
+  "join-walmart",
+  "weather-tmin"
+ ],
+ [
+  "join-walmart",
+  "weather-wetbulb"
+ ],
+ [
+  "join-wrc",
+  "seasons-n_rounds"
  ]
 ]
