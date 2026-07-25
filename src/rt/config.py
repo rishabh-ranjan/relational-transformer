@@ -6,15 +6,19 @@ from datetime import datetime
 
 
 def timestamp() -> str:
-    """Unique run id: ``yy-mm-dd_hh:mm:ss_ns``.
+    """Unique run id: ``yy-mm-dd_hh-mm-ss_ns``.
 
     Every rank generates its own, so under DDP the ranks disagree -- only rank
     0's is used (it owns the output directory and hands the resume checkpoint
     to the others). Pass ``--logger.id`` to name a run explicitly, which is
     also how you resume one.
+
+    The time is punctuated with ``-`` rather than ``:``: the id names a wandb
+    run (which rejects ``:``) and an output directory, and a build under a path
+    containing ``:`` fails in cargo.
     """
     now = time.time_ns()
-    return f"{datetime.fromtimestamp(now / 1e9):%y-%m-%d_%H:%M:%S}_{now % 1_000_000_000:09d}"
+    return f"{datetime.fromtimestamp(now / 1e9):%y-%m-%d_%H-%M-%S}_{now % 1_000_000_000:09d}"
 
 
 @dataclass

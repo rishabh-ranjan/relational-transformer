@@ -63,11 +63,7 @@ if [[ -z "${RT_RUN_ID:-}" ]]; then
     fi
 
     # Run id == wandb id == output subdir; fixed here so requeues resume.
-    # rt.config.timestamp() formats the time as hh:mm:ss, but wandb rejects run
-    # ids containing ':' and cargo refuses to build under a path containing one,
-    # so swap them for '-' before anything downstream sees the id.
     RT_RUN_ID=$(pixi run python -c 'from rt.config import timestamp; print(timestamp())')
-    RT_RUN_ID=${RT_RUN_ID//:/-}
 
     mkdir -p "$LOG_DIR"
     echo "repo:   $RT_REPO"
