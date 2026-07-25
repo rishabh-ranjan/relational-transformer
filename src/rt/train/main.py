@@ -76,11 +76,7 @@ def setup_dist():
 
 def run_subdir(cfg) -> Path:
     """``<entity>/<project>/<id>``, so every output directory is uniquely
-    associated with its run.
-
-    Derived from the config alone (id is always set), hence identical on
-    every rank without any communication.
-    """
+    associated with its run. Only rank 0 calls this."""
     return Path(cfg.logger.entity or "no-entity", cfg.logger.project,
                 cfg.logger.id)
 
@@ -144,8 +140,14 @@ def main(cfg: Config) -> None:
                    name=cfg.logger.run_name, id=cfg.logger.id,
                    resume="allow", config=dataclasses.asdict(cfg))
     seed_everything(cfg.train.seed + rank)
-    out_dir = Path(cfg.logger.out_root).expanduser() / run_subdir(cfg)
+    # Rank 0 owns the output directory and is its only writer. Each rank builds
+    # its own config and ``logger.id`` defaults to a timestamp, so the ranks do
+    # not agree on the path -- deriving it per rank would fan one job out across
+    # several directories. The one thing the other ranks need from it is the
+    # resume checkpoint, which rank 0 hands them below.
+    out_dir = None
     if is_main:
+        out_dir = Path(cfg.logger.out_root).expanduser() / run_subdir(cfg)
         out_dir.mkdir(parents=True, exist_ok=True)
         print(f"out_dir: {out_dir}", flush=True)
     compile = cfg.model.compile
@@ -182,19 +184,29 @@ def main(cfg: Config) -> None:
     best = {"clf": None, "reg": None}
     start_step = 0
 
+    # ---- resume: rank 0 decides, then tells the other ranks ----
+    # Every rank loads the full model + optimizer state (that is what makes a
+    # resume GPU-count flexible), so rank 0 broadcasts the path it found --
+    # None when there is nothing to resume from.
+    resume_path = out_dir / "resume.pt" if is_main else None
+    if resume_path is not None and not resume_path.exists():
+        resume_path = None
+    if ddp:
+        box = [str(resume_path) if resume_path is not None else None]
+        dist.broadcast_object_list(box, src=0, device=torch.device(device))
+        resume_path = Path(box[0]) if box[0] is not None else None
+
     # ---- warm start (model weights only; optimizer/SWA/step start fresh) ----
     # resume.pt takes precedence: a preempted warm-started run must continue,
     # not restart from the warm-start weights.
-    resume_path = out_dir / "resume.pt"
-    if cfg.model.load_ckpt_path is not None and not resume_path.exists():
+    if cfg.model.load_ckpt_path is not None and resume_path is None:
         _, ckpt_path = resolve_checkpoint(cfg.model.load_ckpt_path)
         raw_net.load_state_dict(load_model(ckpt_path))
         if is_main:
             print(f"warm-started model weights from {cfg.model.load_ckpt_path}",
                   flush=True)
 
-    # ---- resume from preemption (GPU-count flexible: full model+opt per rank) ----
-    if resume_path.exists():
+    if resume_path is not None:
         ck = torch.load(resume_path, map_location="cpu")
         raw_net.load_state_dict(ck["model"])
         for o, sd in zip(opts, ck["optimizers"], strict=True):
@@ -224,7 +236,8 @@ def main(cfg: Config) -> None:
 
     # ---- data: re-seed by resumed step so the stream does not replay ----
     data_seed = cfg.train.seed + SEED_STRIDE * start_step
-    train_tasks = get_tasks(cfg.train.pre_dir, cfg.train.db_task_list, ("train",))
+    train_tasks = get_tasks(cfg.train.pre_dir, cfg.train.db_task_list, ("train",),
+                            embedder=cfg.model.embedder)
     if is_main:
         print(f"pretraining on {len(train_tasks)} tasks from {cfg.train.pre_dir}", flush=True)
     train_ds = TrainDataset(
@@ -277,7 +290,7 @@ def main(cfg: Config) -> None:
     # underlying mmap'd data (page cache), so extra entries cost eval compute
     # only, nothing between eval points.
     val_tasks = get_tasks(cfg.eval.pre_dir, cfg.eval.db_task_list,
-                          tuple(cfg.eval.splits))
+                          tuple(cfg.eval.splits), embedder=cfg.model.embedder)
     from rt.eval import Evaluator
 
     evaluators = [
@@ -329,7 +342,7 @@ def main(cfg: Config) -> None:
                     "optimizers": [o.state_dict() for o in opts],
                     "schedulers": [s.state_dict() for s in scheds],
                     "swa": swa.state_dict(), "step": step, "best": best}, tmp)
-        os.replace(tmp, resume_path)  # atomic
+        os.replace(tmp, out_dir / "resume.pt")  # atomic
 
     def checkpoint(step):
         if not is_main:

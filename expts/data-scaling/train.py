@@ -14,7 +14,7 @@ from rt.config import (
     LoggerConfig,
     ModelConfig,
     TrainConfig,
-    default_id,
+    timestamp,
 )
 from rt.train import main
 
@@ -24,7 +24,7 @@ def default_config() -> Config:
         logger=LoggerConfig(
             project="2026-07-24",
             entity="rtv2",
-            id=default_id(),
+            id=timestamp(),
             run_name=None,
             wandb_disabled=False,
             out_root="/dfs/user/ranjanr/ckpts",

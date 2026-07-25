@@ -14,7 +14,7 @@ from rt.config import (
     LoggerConfig,
     ModelConfig,
     TrainConfig,
-    default_id,
+    timestamp,
 )
 from rt.train import main
 
@@ -25,7 +25,7 @@ def default_config() -> Config:
         logger=LoggerConfig(
             project="rt-verify",
             entity=None,
-            id=default_id(),
+            id=timestamp(),
             run_name=None,
             wandb_disabled=True,
             out_root="~/ckpts",

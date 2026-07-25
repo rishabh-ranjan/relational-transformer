@@ -1,23 +1,18 @@
 from __future__ import annotations
 
-import os
 import time
 from dataclasses import dataclass
 from datetime import datetime
 
 
-def default_id() -> str:
+def timestamp() -> str:
     """Unique run id: ``yy-mm-dd_hh:mm:ss_ns``.
 
-    Every rank builds its own config, so a freshly generated timestamp would
-    differ per rank -- and the ranks must agree, since the id names the shared
-    output dir. The launcher therefore generates the timestamp once and exports
-    it as ``RT_ID`` (see the ``train`` pixi task); an explicit ``--logger.id``
-    still wins over both.
+    Every rank generates its own, so under DDP the ranks disagree -- only rank
+    0's is used (it owns the output directory and hands the resume checkpoint
+    to the others). Pass ``--logger.id`` to name a run explicitly, which is
+    also how you resume one.
     """
-    run_id = os.environ.get("RT_ID")
-    if run_id:
-        return run_id
     now = time.time_ns()
     return f"{datetime.fromtimestamp(now / 1e9):%y-%m-%d_%H:%M:%S}_{now % 1_000_000_000:09d}"
 
@@ -115,7 +110,7 @@ class LoggerConfig:
     # from the live run when wandb is enabled.
     entity: str | None
     # Unique run id; also names the output directory (see ``out_root``). Never
-    # None -- CLI entry points default it to a timestamp via ``default_id()``.
+    # None -- CLI entry points default it to a timestamp via ``timestamp()``.
     # Reuse it to resume a run.
     id: str
     # Human-readable label only; id identifies the run.

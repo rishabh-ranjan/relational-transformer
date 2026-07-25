@@ -14,7 +14,7 @@ from rt.config import (
     EvalConfig,
     LoggerConfig,
     ModelConfig,
-    default_id,
+    timestamp,
 )
 from rt.eval import main
 
@@ -25,7 +25,7 @@ def default_config() -> Config:
         logger=LoggerConfig(
             project="rt",
             entity=None,
-            id=default_id(),
+            id=timestamp(),
             run_name=None,
             wandb_disabled=True,
             out_root="~/ckpts",
