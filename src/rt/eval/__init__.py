@@ -3,3 +3,12 @@
 from rt.eval.evaluator import Evaluator
 from rt.eval.main import build_evaluator, main, run_and_report, run_ensemble
 from rt.eval.metrics import metric_for
+
+__all__ = [
+    "Evaluator",
+    "build_evaluator",
+    "main",
+    "metric_for",
+    "run_and_report",
+    "run_ensemble",
+]

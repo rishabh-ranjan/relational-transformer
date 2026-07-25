@@ -80,8 +80,7 @@ def run_subdir(cfg) -> Path:
     """``<entity>/<project>/<id>``, so every output directory is uniquely
     associated with its run. Derived from the config alone, so every rank
     computes it without communicating."""
-    return Path(cfg.logger.entity or "no-entity", cfg.logger.project,
-                cfg.logger.id)
+    return Path(cfg.logger.entity or "no-entity", cfg.logger.project, cfg.logger.id)
 
 
 def seed_everything(seed):
@@ -139,9 +138,15 @@ def main(cfg: Config) -> None:
     use_wandb = (not cfg.logger.wandb_disabled) and is_main
     if use_wandb:
         import wandb
-        wandb.init(project=cfg.logger.project, entity=cfg.logger.entity,
-                   name=cfg.logger.run_name, id=cfg.logger.id,
-                   resume="allow", config=dataclasses.asdict(cfg))
+
+        wandb.init(
+            project=cfg.logger.project,
+            entity=cfg.logger.entity,
+            name=cfg.logger.run_name,
+            id=cfg.logger.id,
+            resume="allow",
+            config=dataclasses.asdict(cfg),
+        )
 
     seed_everything(cfg.train.seed + rank)
     # Rank 0 is the only writer; the other ranks read exactly one thing from
@@ -157,11 +162,19 @@ def main(cfg: Config) -> None:
     compile = cfg.model.compile
 
     def build_net():
-        return RelationalTransformer(
-            num_blocks=cfg.model.num_blocks, d_model=cfg.model.d_model, d_text=cfg.model.d_text,
-            num_heads=cfg.model.num_heads, d_ff=cfg.model.d_ff, compile=compile,
-            materialize_attn_masks=cfg.model.materialize_attn_masks,
-        ).to(device).to(torch.bfloat16)
+        return (
+            RelationalTransformer(
+                num_blocks=cfg.model.num_blocks,
+                d_model=cfg.model.d_model,
+                d_text=cfg.model.d_text,
+                num_heads=cfg.model.num_heads,
+                d_ff=cfg.model.d_ff,
+                compile=compile,
+                materialize_attn_masks=cfg.model.materialize_attn_masks,
+            )
+            .to(device)
+            .to(torch.bfloat16)
+        )
 
     # ---- model / optim / swa ----
     net = build_net()
@@ -171,14 +184,31 @@ def main(cfg: Config) -> None:
     muon_params = [p for p in net.parameters() if p.ndim == 2]
     other_params = [p for p in net.parameters() if p.ndim != 2]
     opts = [
-        Muon(muon_params, lr=cfg.train.lr, momentum=0.95, weight_decay=cfg.train.wd,
-             adjust_lr_fn="match_rms_adamw", ns_steps=5, compile=compile),
-        optim.AdamW(other_params, lr=cfg.train.lr, weight_decay=0.0, betas=(0.9, 0.999),
-                    eps=1e-8, fused=device.startswith("cuda")),
+        Muon(
+            muon_params,
+            lr=cfg.train.lr,
+            momentum=0.95,
+            weight_decay=cfg.train.wd,
+            adjust_lr_fn="match_rms_adamw",
+            ns_steps=5,
+            compile=compile,
+        ),
+        optim.AdamW(
+            other_params,
+            lr=cfg.train.lr,
+            weight_decay=0.0,
+            betas=(0.9, 0.999),
+            eps=1e-8,
+            fused=device.startswith("cuda"),
+        ),
     ]
 
     def lr_lambda(step):
-        return (step + 1) / cfg.train.warmup_steps if step < cfg.train.warmup_steps else 1.0
+        return (
+            (step + 1) / cfg.train.warmup_steps
+            if step < cfg.train.warmup_steps
+            else 1.0
+        )
 
     scheds = [optim.lr_scheduler.LambdaLR(o, lr_lambda) for o in opts]
     swa = SwaState(raw_net.named_parameters(), momentum=cfg.train.swa_momentum)
@@ -196,8 +226,10 @@ def main(cfg: Config) -> None:
         _, ckpt_path = resolve_checkpoint(cfg.model.load_ckpt_path)
         raw_net.load_state_dict(load_model(ckpt_path))
         if is_main:
-            print(f"warm-started model weights from {cfg.model.load_ckpt_path}",
-                  flush=True)
+            print(
+                f"warm-started model weights from {cfg.model.load_ckpt_path}",
+                flush=True,
+            )
 
     # ---- resume from preemption (GPU-count flexible: full model+opt per rank) ----
     if resume_path.exists():
@@ -211,8 +243,11 @@ def main(cfg: Config) -> None:
         start_step = ck["step"]
         best = ck.get("best", best)
         if is_main:
-            print(f"resumed from {resume_path} at step {start_step} "
-                  f"(world_size now {world_size})", flush=True)
+            print(
+                f"resumed from {resume_path} at step {start_step} "
+                f"(world_size now {world_size})",
+                flush=True,
+            )
 
     if ddp:
         # Multi-node comm tuning: gradient_as_bucket_view avoids a grad copy,
@@ -232,20 +267,42 @@ def main(cfg: Config) -> None:
     data_seed = cfg.train.seed + SEED_STRIDE * start_step
     train_tasks = get_tasks(cfg.train.pre_dir, cfg.train.db_task_list, ("train",))
     if is_main:
-        print(f"pretraining on {len(train_tasks)} tasks from {cfg.train.pre_dir}", flush=True)
+        print(
+            f"pretraining on {len(train_tasks)} tasks from {cfg.train.pre_dir}",
+            flush=True,
+        )
     train_ds = TrainDataset(
-        tasks=train_tasks, pre_dir=cfg.train.pre_dir, train_ctx_size_list=cfg.train.ctx_size_list,
-        train_tokens_per_gpu=cfg.train.tokens_per_gpu, total_bs=cfg.train.total_bs,
-        global_rank=rank, local_rank=local_rank, world_size=world_size,
-        local_ctx_size_list=cfg.train.local_ctx_size_list, bfs_width_list=cfg.train.bfs_width_list,
-        num_walks=cfg.train.num_walks, walk_length=cfg.train.walk_length, prefer_latest_list=cfg.train.prefer_latest_list,
-        mask_prob_max=cfg.train.mask_prob_max, embedder=cfg.model.embedder, d_text=cfg.model.d_text,
-        seed=data_seed, items_per_task=cfg.train.items_per_task, mask_prob_max_shared=None,
-        mmap_populate=cfg.train.mmap_populate, timeout_per_item=cfg.train.timeout_per_item,
-        vector_db_path=cfg.train.vector_db_path, train_only_fallback=False,
+        tasks=train_tasks,
+        pre_dir=cfg.train.pre_dir,
+        train_ctx_size_list=cfg.train.ctx_size_list,
+        train_tokens_per_gpu=cfg.train.tokens_per_gpu,
+        total_bs=cfg.train.total_bs,
+        global_rank=rank,
+        local_rank=local_rank,
+        world_size=world_size,
+        local_ctx_size_list=cfg.train.local_ctx_size_list,
+        bfs_width_list=cfg.train.bfs_width_list,
+        num_walks=cfg.train.num_walks,
+        walk_length=cfg.train.walk_length,
+        prefer_latest_list=cfg.train.prefer_latest_list,
+        mask_prob_max=cfg.train.mask_prob_max,
+        embedder=cfg.model.embedder,
+        d_text=cfg.model.d_text,
+        seed=data_seed,
+        items_per_task=cfg.train.items_per_task,
+        mask_prob_max_shared=None,
+        mmap_populate=cfg.train.mmap_populate,
+        timeout_per_item=cfg.train.timeout_per_item,
+        vector_db_path=cfg.train.vector_db_path,
+        train_only_fallback=False,
     )
-    loader = DataLoader(train_ds, batch_size=None, num_workers=cfg.train.num_workers,
-                        prefetch_factor=cfg.train.prefetch_factor if cfg.train.num_workers else None, pin_memory=True)
+    loader = DataLoader(
+        train_ds,
+        batch_size=None,
+        num_workers=cfg.train.num_workers,
+        prefetch_factor=cfg.train.prefetch_factor if cfg.train.num_workers else None,
+        pin_memory=True,
+    )
     # Per ctx size, train_bs = tokens_per_gpu // ctx and grad_accum makes the
     # global batch exactly total_bs. With multiple ctx sizes the dataloader
     # yields a *list* of grad_accum microbatches per optimizer step (one shared
@@ -282,28 +339,50 @@ def main(cfg: Config) -> None:
     # alongside it under a "lcs<l>-bw<b>-pl<p>_" tag. All evaluators share the
     # underlying mmap'd data (page cache), so extra entries cost eval compute
     # only, nothing between eval points.
-    val_tasks = get_tasks(cfg.eval.pre_dir, cfg.eval.db_task_list,
-                          tuple(cfg.eval.splits))
+    val_tasks = get_tasks(
+        cfg.eval.pre_dir, cfg.eval.db_task_list, tuple(cfg.eval.splits)
+    )
     from rt.eval import Evaluator
 
-    evaluators = [
-        (f"lcs{lcs}-bw{bw}-pl{int(pl)}_" if i else "", Evaluator(
-            tasks=val_tasks, pre_dir=cfg.eval.pre_dir,
-            eval_bs=max(1, cfg.eval.tokens_per_gpu // max(cfg.eval.ctx_size_list)),
-            ctx_size_list=cfg.eval.ctx_size_list, items_per_task=cfg.eval.items_per_task,
-            num_workers=cfg.eval.num_workers, prefetch_factor=cfg.eval.prefetch_factor,
-            persistent_workers=False, local_ctx_size=lcs,
-            bfs_width=bw, num_walks=cfg.eval.num_walks,
-            walk_length=cfg.eval.walk_length, prefer_latest=pl,
-            mmap_populate=cfg.eval.mmap_populate,
-            embedder=cfg.model.embedder, d_text=cfg.model.d_text,
-            shuffle_seed=cfg.eval.shuffle_seed, context_seed=cfg.eval.context_seed,
-            vector_db_path=cfg.eval.vector_db_path, train_only_fallback=False,
-            global_rank=rank, local_rank=local_rank,
-            world_size=world_size, ddp=ddp, device=device,
-        ))
-        for i, (lcs, bw, pl) in enumerate(cfg.eval.lcs_bw_pl_grid)
-    ] if val_tasks else []
+    evaluators = (
+        [
+            (
+                f"lcs{lcs}-bw{bw}-pl{int(pl)}_" if i else "",
+                Evaluator(
+                    tasks=val_tasks,
+                    pre_dir=cfg.eval.pre_dir,
+                    eval_bs=max(
+                        1, cfg.eval.tokens_per_gpu // max(cfg.eval.ctx_size_list)
+                    ),
+                    ctx_size_list=cfg.eval.ctx_size_list,
+                    items_per_task=cfg.eval.items_per_task,
+                    num_workers=cfg.eval.num_workers,
+                    prefetch_factor=cfg.eval.prefetch_factor,
+                    persistent_workers=False,
+                    local_ctx_size=lcs,
+                    bfs_width=bw,
+                    num_walks=cfg.eval.num_walks,
+                    walk_length=cfg.eval.walk_length,
+                    prefer_latest=pl,
+                    mmap_populate=cfg.eval.mmap_populate,
+                    embedder=cfg.model.embedder,
+                    d_text=cfg.model.d_text,
+                    shuffle_seed=cfg.eval.shuffle_seed,
+                    context_seed=cfg.eval.context_seed,
+                    vector_db_path=cfg.eval.vector_db_path,
+                    train_only_fallback=False,
+                    global_rank=rank,
+                    local_rank=local_rank,
+                    world_size=world_size,
+                    ddp=ddp,
+                    device=device,
+                ),
+            )
+            for i, (lcs, bw, pl) in enumerate(cfg.eval.lcs_bw_pl_grid)
+        ]
+        if val_tasks
+        else []
+    )
 
     # ---- preemption: SIGTERM/SIGUSR1 -> save + exit (cooperatively across ranks) ----
     preempt = {"flag": False}
@@ -315,14 +394,25 @@ def main(cfg: Config) -> None:
     signal.signal(signal.SIGUSR1, _on_signal)
 
     if is_main:
-        (out_dir / "config.json").write_text(json.dumps({
-            "embedder": cfg.model.embedder, "d_text": cfg.model.d_text,
-            "checkpoint_file": "model.safetensors",
-            "model": {"num_blocks": cfg.model.num_blocks, "d_model": cfg.model.d_model,
-                      "d_text": cfg.model.d_text, "num_heads": cfg.model.num_heads,
-                      "d_ff": cfg.model.d_ff,
-                      "materialize_attn_masks": cfg.model.materialize_attn_masks},
-        }, indent=2) + "\n")
+        (out_dir / "config.json").write_text(
+            json.dumps(
+                {
+                    "embedder": cfg.model.embedder,
+                    "d_text": cfg.model.d_text,
+                    "checkpoint_file": "model.safetensors",
+                    "model": {
+                        "num_blocks": cfg.model.num_blocks,
+                        "d_model": cfg.model.d_model,
+                        "d_text": cfg.model.d_text,
+                        "num_heads": cfg.model.num_heads,
+                        "d_ff": cfg.model.d_ff,
+                        "materialize_attn_masks": cfg.model.materialize_attn_masks,
+                    },
+                },
+                indent=2,
+            )
+            + "\n"
+        )
 
     def save_resume(step):
         # resume.pt stays a torch.save pickle: it holds non-tensor optimizer /
@@ -331,21 +421,34 @@ def main(cfg: Config) -> None:
         if not is_main:
             return
         tmp = out_dir / "resume.pt.tmp"
-        torch.save({"model": raw_net.state_dict(),
-                    "optimizers": [o.state_dict() for o in opts],
-                    "schedulers": [s.state_dict() for s in scheds],
-                    "swa": swa.state_dict(), "step": step, "best": best}, tmp)
+        torch.save(
+            {
+                "model": raw_net.state_dict(),
+                "optimizers": [o.state_dict() for o in opts],
+                "schedulers": [s.state_dict() for s in scheds],
+                "swa": swa.state_dict(),
+                "step": step,
+                "best": best,
+            },
+            tmp,
+        )
         os.replace(tmp, resume_path)  # atomic
 
     def checkpoint(step):
         if not is_main:
             return
-        save_model(raw_net.state_dict(), out_dir / f"steps={step}.safetensors",
-                   metadata={"step": step})
+        save_model(
+            raw_net.state_dict(),
+            out_dir / f"steps={step}.safetensors",
+            metadata={"step": step},
+        )
         if swa.n > 0:
             swa.sync_to(swa_net.named_parameters())
-            save_model(swa_net.state_dict(), out_dir / f"swa_steps={step}.safetensors",
-                       metadata={"step": step, "swa_n": swa.n})
+            save_model(
+                swa_net.state_dict(),
+                out_dir / f"swa_steps={step}.safetensors",
+                metadata={"step": step, "swa_n": swa.n},
+            )
 
     def consider(metrics, step):
         for prefix, kind in [("", "live"), ("swa_", "swa")]:
@@ -357,8 +460,12 @@ def main(cfg: Config) -> None:
                     continue
                 cur = best[tt]
                 if cur is None or better(v, cur["value"]) == v:
-                    best[tt] = {"kind": kind, "step": step, "value": v,
-                                "metric": "auc" if tt == "clf" else "mae"}
+                    best[tt] = {
+                        "kind": kind,
+                        "step": step,
+                        "value": v,
+                        "metric": "auc" if tt == "clf" else "mae",
+                    }
 
     def run_eval(step):
         if not evaluators:
@@ -370,23 +477,33 @@ def main(cfg: Config) -> None:
         metrics = {}
         for tag, evaluator in evaluators:
             tagged_nets = [(n, tag + p) for n, p in nets]
-            metrics.update(eval_avg_metrics(evaluator, tagged_nets,
-                                            cfg.eval.ctx_size_list))
+            metrics.update(
+                eval_avg_metrics(evaluator, tagged_nets, cfg.eval.ctx_size_list)
+            )
         # Best-checkpoint tracking follows the primary (untagged) grid entry.
         consider(metrics, step)
         if is_main:
             with open(out_dir / "val_metrics.jsonl", "a") as f:
-                f.write(json.dumps({"step": step, "swa_n": swa.n, "metrics": metrics}) + "\n")
+                f.write(
+                    json.dumps({"step": step, "swa_n": swa.n, "metrics": metrics})
+                    + "\n"
+                )
             for prefix, m in metrics.items():
                 label = prefix.rstrip("_") or "live"
-                print(f"  [eval step={step} {label}] clf_auc={m['clf']} "
-                      f"mae={m['reg']}", flush=True)
+                print(
+                    f"  [eval step={step} {label}] clf_auc={m['clf']} mae={m['reg']}",
+                    flush=True,
+                )
             if use_wandb:
-                wandb.log({
-                    f"val/{p}{tt}": metrics[p][tt]
-                    for p in metrics for tt in metrics[p]
-                    if metrics[p][tt] is not None
-                }, step=step)
+                wandb.log(
+                    {
+                        f"val/{p}{tt}": metrics[p][tt]
+                        for p in metrics
+                        for tt in metrics[p]
+                        if metrics[p][tt] is not None
+                    },
+                    step=step,
+                )
         for n, _ in nets:
             n.train()
 
@@ -445,8 +562,12 @@ def main(cfg: Config) -> None:
                 loss.backward()
             total_loss += loss.item()
 
-        norm = torch.nn.utils.get_total_norm([p.grad for p in raw_net.parameters() if p.grad is not None])
-        torch.nn.utils.clip_grads_with_norm_(raw_net.parameters(), cfg.train.grad_norm_max, norm)
+        norm = torch.nn.utils.get_total_norm(
+            [p.grad for p in raw_net.parameters() if p.grad is not None]
+        )
+        torch.nn.utils.clip_grads_with_norm_(
+            raw_net.parameters(), cfg.train.grad_norm_max, norm
+        )
         for o in opts:
             o.step()
         for o in opts:
@@ -460,14 +581,22 @@ def main(cfg: Config) -> None:
         step_t0 = time.perf_counter()
 
         if is_main and step % 50 == 0:
-            print(f"step {step}  loss {total_loss:.4f}  grad_norm {float(norm):.3f}  "
-                  f"sec/step {step_time:.3f}  load_time {load_time:.3f}", flush=True)
+            print(
+                f"step {step}  loss {total_loss:.4f}  grad_norm {float(norm):.3f}  "
+                f"sec/step {step_time:.3f}  load_time {load_time:.3f}",
+                flush=True,
+            )
             if use_wandb:
-                wandb.log({"train/loss": total_loss,
-                           "train/lr": scheds[0].get_last_lr()[0],
-                           "train/grad_norm": float(norm),
-                           "train/sec_per_step": step_time,
-                           "train/load_time": load_time}, step=step)
+                wandb.log(
+                    {
+                        "train/loss": total_loss,
+                        "train/lr": scheds[0].get_last_lr()[0],
+                        "train/grad_norm": float(norm),
+                        "train/sec_per_step": step_time,
+                        "train/load_time": load_time,
+                    },
+                    step=step,
+                )
 
         # Time-based resume checkpoint (preemption resilience), independent of
         # the eval_freq save. All ranks evaluate the same wall-clock condition;
@@ -477,12 +606,18 @@ def main(cfg: Config) -> None:
             last_resume_t = time.perf_counter()
             step_t0 = time.perf_counter()  # don't count the save in sec/step
             if is_main:
-                print(f"resume.pt saved at step {step} "
-                      f"(every {cfg.train.resume_save_mins} min)", flush=True)
+                print(
+                    f"resume.pt saved at step {step} "
+                    f"(every {cfg.train.resume_save_mins} min)",
+                    flush=True,
+                )
 
         if should_stop():
             if is_main:
-                print(f"preemption signal at step {step}; saving resume and exiting", flush=True)
+                print(
+                    f"preemption signal at step {step}; saving resume and exiting",
+                    flush=True,
+                )
             save_resume(step)
             if ddp:
                 dist.barrier()
@@ -499,12 +634,21 @@ def main(cfg: Config) -> None:
             if b is None:
                 print(f"{label}: no {tt} val tasks; skipped", flush=True)
                 continue
-            src = out_dir / (f"swa_steps={b['step']}.safetensors" if b["kind"] == "swa"
-                             else f"steps={b['step']}.safetensors")
+            src = out_dir / (
+                f"swa_steps={b['step']}.safetensors"
+                if b["kind"] == "swa"
+                else f"steps={b['step']}.safetensors"
+            )
             if src.exists():
                 shutil.copyfile(src, out_dir / f"{label}.safetensors")
-            print(f"\n{label}: {b['kind']} model at step {b['step']}, "
-                  f"val {b['metric']}={b['value']:.4f}  ->  {label}.safetensors", flush=True)
-        print(f"(load with rt.model.load_rt_model('{out_dir}/best_clf.safetensors'))", flush=True)
+            print(
+                f"\n{label}: {b['kind']} model at step {b['step']}, "
+                f"val {b['metric']}={b['value']:.4f}  ->  {label}.safetensors",
+                flush=True,
+            )
+        print(
+            f"(load with rt.model.load_rt_model('{out_dir}/best_clf.safetensors'))",
+            flush=True,
+        )
     if ddp:
         dist.destroy_process_group()

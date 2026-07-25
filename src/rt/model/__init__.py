@@ -10,3 +10,14 @@ from rt.model.checkpoints import (
     save_model,
 )
 from rt.model.net import RelationalTransformer
+
+__all__ = [
+    "CONFIG_FILE",
+    "MODEL_DIM_KEYS",
+    "MODEL_FILE",
+    "RelationalTransformer",
+    "load_model",
+    "load_rt_model",
+    "resolve_checkpoint",
+    "save_model",
+]

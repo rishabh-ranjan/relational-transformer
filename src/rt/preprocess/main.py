@@ -40,7 +40,6 @@ from pathlib import Path
 from huggingface_hub import HfApi, snapshot_download
 
 
-
 # --------------------------------------------------------------------------- #
 # Hub / local addressing  (mirrors relbench.hf so we need no relbench dep)
 # --------------------------------------------------------------------------- #
@@ -111,9 +110,7 @@ def run_rustler_pre(
     preprocess(str(dataset_dir), str(out_dir), source=source, skip_tasks=skip_tasks)
 
 
-def embed_dataset(
-    pre_dataset_dir: Path, embedder: str, batch_size: int
-) -> int:
+def embed_dataset(pre_dataset_dir: Path, embedder: str, batch_size: int) -> int:
     """Compute text embeddings for a preprocessed dataset; return d_text."""
     from rt.preprocess.embed import embed_texts
 
@@ -234,11 +231,13 @@ def list_datasets(repo: str, revision: str | None = None) -> list[str]:
     manifest.yaml), as ``org/repo/<subdir>`` specs."""
     api = HfApi()
     files = api.list_repo_files(repo, repo_type="dataset", revision=revision)
-    subdirs = sorted({
-        f.split("/", 1)[0]
-        for f in files
-        if f.endswith("/manifest.yaml") and f.count("/") == 1
-    })
+    subdirs = sorted(
+        {
+            f.split("/", 1)[0]
+            for f in files
+            if f.endswith("/manifest.yaml") and f.count("/") == 1
+        }
+    )
     return [f"{repo}/{d}" for d in subdirs]
 
 
@@ -326,10 +325,15 @@ class UploadConfig:
 
 def run_one(cfg: OneConfig) -> None:
     preprocess_one(
-        cfg.dataset, Path(cfg.out_dir).expanduser(),
-        embedder=cfg.embedder, batch_size=cfg.batch_size,
-        skip_tasks=cfg.skip_tasks, embed=cfg.embed,
-        upload_repo=cfg.upload_repo, private=not cfg.public, revision=cfg.revision,
+        cfg.dataset,
+        Path(cfg.out_dir).expanduser(),
+        embedder=cfg.embedder,
+        batch_size=cfg.batch_size,
+        skip_tasks=cfg.skip_tasks,
+        embed=cfg.embed,
+        upload_repo=cfg.upload_repo,
+        private=not cfg.public,
+        revision=cfg.revision,
     )
 
 
@@ -340,8 +344,10 @@ def run_many(cfg: ManyConfig) -> None:
         f"num_shards={cfg.num_shards}"
     )
     shard = specs[cfg.shard :: cfg.num_shards]
-    print(f"shard {cfg.shard}/{cfg.num_shards}: {len(shard)} of {len(specs)} datasets",
-          flush=True)
+    print(
+        f"shard {cfg.shard}/{cfg.num_shards}: {len(shard)} of {len(specs)} datasets",
+        flush=True,
+    )
     out_dir = Path(cfg.out_dir).expanduser()
     failures = []
     for i, spec in enumerate(shard):
@@ -352,14 +358,20 @@ def run_many(cfg: ManyConfig) -> None:
         print(f"[{i + 1}/{len(shard)}] {spec}", flush=True)
         try:
             preprocess_one(
-                spec, out_dir,
-                embedder=cfg.embedder, batch_size=cfg.batch_size,
-                skip_tasks=cfg.skip_tasks, embed=cfg.embed,
-                upload_repo=cfg.upload_repo, private=not cfg.public,
+                spec,
+                out_dir,
+                embedder=cfg.embedder,
+                batch_size=cfg.batch_size,
+                skip_tasks=cfg.skip_tasks,
+                embed=cfg.embed,
+                upload_repo=cfg.upload_repo,
+                private=not cfg.public,
                 revision=cfg.revision,
             )
         except Exception as e:  # one bad dataset shouldn't sink the shard
-            print(f"  FAILED {spec}: {type(e).__name__}: {e}", file=sys.stderr, flush=True)
+            print(
+                f"  FAILED {spec}: {type(e).__name__}: {e}", file=sys.stderr, flush=True
+            )
             failures.append(spec)
     if failures:
         print(f"\n{len(failures)} failure(s):", file=sys.stderr)

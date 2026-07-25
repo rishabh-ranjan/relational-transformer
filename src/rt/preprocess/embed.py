@@ -7,6 +7,7 @@ import torch
 from ml_dtypes import bfloat16
 from sentence_transformers import SentenceTransformer
 
+
 class TextEmbedder:
     def __init__(self, batch_size, embedder, device):
         device_type = torch.device(device).type

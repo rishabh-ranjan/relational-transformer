@@ -11,6 +11,7 @@ from pathlib import Path
 
 from rt.data import read_meta, resolve_pre_dir
 
+
 # --------------------------------------------------------------------------- #
 # RelBench submission: denormalize / sigmoid, key by node index, score.
 # --------------------------------------------------------------------------- #
@@ -33,7 +34,9 @@ def _seed_offset(pre_dir: str, db: str, table: str, split: str, embedder: str) -
     (so ``node_idx - offset`` is the relbench parquet row index)."""
     local = resolve_pre_dir(pre_dir)
     ti = json.loads((Path(local) / db / "table_info.json").read_text())
-    split_cap = {"train": "Train", "val": "Val", "test": "Test"}.get(split, split.capitalize())
+    split_cap = {"train": "Train", "val": "Val", "test": "Test"}.get(
+        split, split.capitalize()
+    )
     key = f"{table}:Db" if f"{table}:Db" in ti else f"{table}:{split_cap}"
     return int(ti[key]["node_idx_offset"])
 
@@ -54,8 +57,15 @@ def _train_stats(rtask) -> tuple[float, float]:
     return mean, (std if std != 0.0 else 1.0)
 
 
-def _emit_and_score(csv_out_dir: Path | None, task, pre_dir: str, embedder: str,
-                    labels, preds, node_idxs):
+def _emit_and_score(
+    csv_out_dir: Path | None,
+    task,
+    pre_dir: str,
+    embedder: str,
+    labels,
+    preds,
+    node_idxs,
+):
     """Denormalize/sigmoid ``preds``, write a relbench prediction-table CSV keyed
     by ``(entity_col, time_col)``, and score it with relbench's evaluator.
     ``csv_out_dir=None`` scores via a temp file and keeps no CSV.
@@ -96,10 +106,18 @@ def _emit_and_score(csv_out_dir: Path | None, task, pre_dir: str, embedder: str,
     if task.task_type == "reg":
         mean, std = _train_stats(rtask)
         out_preds = preds * std + mean
-        align = f"|dy|<={float(np.max(np.abs(labels * std + mean - gt_vals))):.1e}" if rowidx.size else "n/a"
+        align = (
+            f"|dy|<={float(np.max(np.abs(labels * std + mean - gt_vals))):.1e}"
+            if rowidx.size
+            else "n/a"
+        )
     else:  # clf -> probability in [0, 1]; AUROC is invariant to the sigmoid.
         out_preds = 1.0 / (1.0 + np.exp(-preds))
-        agree = float(np.mean((labels > 0).astype(int) == (gt_vals > 0).astype(int))) if rowidx.size else float("nan")
+        agree = (
+            float(np.mean((labels > 0).astype(int) == (gt_vals > 0).astype(int)))
+            if rowidx.size
+            else float("nan")
+        )
         align = f"cls={agree:.3f}"
 
     sub = masked.iloc[rowidx][[rtask.entity_col, rtask.time_col]].copy()
@@ -116,7 +134,9 @@ def _emit_and_score(csv_out_dir: Path | None, task, pre_dir: str, embedder: str,
         tf.close()
         score_path, ret_path = Path(tf.name), None
 
-    metrics = evaluate_task(f"{task.db_name}/{task.table_name}", str(score_path), dataset=source)
+    metrics = evaluate_task(
+        f"{task.db_name}/{task.table_name}", str(score_path), dataset=source
+    )
     if ret_path is None:
         Path(score_path).unlink(missing_ok=True)
     mname, mval = next(iter(metrics.items()))

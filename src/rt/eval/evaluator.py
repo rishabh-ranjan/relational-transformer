@@ -18,6 +18,7 @@ from rt.model.net import SEM_TYPE_BOOLEAN
 
 wandb = lazy.load("wandb")
 
+
 def fmt_duration(secs):
     m, s = divmod(int(secs), 60)
     return f"{m}m{s:02d}s"
@@ -127,10 +128,10 @@ class Evaluator:
                 persistent_workers=persistent_workers,
                 pin_memory=True,
                 # in_order=True guarantees sampler-order yields; with False the
-            # row order is worker-completion order — a timing race that breaks
-            # cross-seed prediction averaging (context ensembling) on rows
-            # written by eval_grid.
-            in_order=True,
+                # row order is worker-completion order — a timing race that breaks
+                # cross-seed prediction averaging (context ensembling) on rows
+                # written by eval_grid.
+                in_order=True,
             )
             _prefetch_tic = time.time()
             self.eval_loader_iters[eval_task] = iter(self.eval_loaders[eval_task])
@@ -148,8 +149,9 @@ class Evaluator:
                 flush=True,
             )
 
-    def evaluate_raw(self, nets_with_prefix, eval_ctx_size_list_to_use,
-                     with_node_idxs=False):
+    def evaluate_raw(
+        self, nets_with_prefix, eval_ctx_size_list_to_use, with_node_idxs=False
+    ):
         """Per-task pipeline primitive.
 
         Drives per-batch forward + DDP gather + ``batch_mask`` filtering
@@ -526,6 +528,7 @@ class Evaluator:
             for _, prefix in nets_with_prefix:
                 for split in self.eval_splits:
                     for eval_ctx_size in eval_ctx_size_list_to_use:
+
                         def _avg(xs):
                             # Single-task-type task sets (per-task fine-tuning)
                             # have no scores for the other type.

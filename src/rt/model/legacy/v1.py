@@ -78,19 +78,19 @@ class RelationalBlock(nn.Module):
         super().__init__()
 
         self.norms = nn.ModuleDict(
-            {l: nn.RMSNorm(d_model) for l in ["feat", "nbr", "col", "full", "ffn"]}
+            {lvl: nn.RMSNorm(d_model) for lvl in ["feat", "nbr", "col", "full", "ffn"]}
         )
         self.attns = nn.ModuleDict(
             {
-                l: MaskedAttention(d_model, num_heads)
-                for l in ["feat", "nbr", "col", "full"]
+                lvl: MaskedAttention(d_model, num_heads)
+                for lvl in ["feat", "nbr", "col", "full"]
             }
         )
         self.ffn = FFN(d_model, d_ff)
 
     def forward(self, x, block_masks):
-        for l in ["col", "feat", "nbr", "full"]:
-            x = x + self.attns[l](self.norms[l](x), block_mask=block_masks[l])
+        for lvl in ["col", "feat", "nbr", "full"]:
+            x = x + self.attns[lvl](self.norms[lvl](x), block_mask=block_masks[lvl])
         x = x + self.ffn(self.norms["ffn"](x))
         return x
 
@@ -181,13 +181,13 @@ class V1Transformer(nn.Module):
             "full": pad,
         }
 
-        for l in attn_masks:
-            attn_masks[l] = attn_masks[l].contiguous()
+        for lvl in attn_masks:
+            attn_masks[lvl] = attn_masks[lvl].contiguous()
 
         mbm = partial(
             make_block_mask, batch_size=batch_size, seq_len=seq_len, device=device
         )
-        block_masks = {l: mbm(attn_mask) for l, attn_mask in attn_masks.items()}
+        block_masks = {lvl: mbm(attn_mask) for lvl, attn_mask in attn_masks.items()}
 
         x = 0
         x = x + (

@@ -34,9 +34,7 @@ def tiny_checkpoint(tmp_path, tiny_dims):
     from rt import RelationalTransformer
     from rt.model import CONFIG_FILE, MODEL_FILE, save_model
 
-    src = RelationalTransformer(
-        **tiny_dims, compile=False, materialize_attn_masks=True
-    )
+    src = RelationalTransformer(**tiny_dims, compile=False, materialize_attn_masks=True)
     ckpt = tmp_path / "ckpt"
     ckpt.mkdir()
     save_model(src.state_dict(), ckpt / MODEL_FILE)

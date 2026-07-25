@@ -121,8 +121,9 @@ def get_tasks(pre_dir, db_task_list, splits) -> list[Task]:
                 )
             if t.get("kind") == "autocomplete":
                 if "train" in splits:  # autocomplete is a pretraining-only signal
-                    out.append(Task(db, t["entity_table"], t["target_col"], tt,
-                                    "train", leaks))
+                    out.append(
+                        Task(db, t["entity_table"], t["target_col"], tt, "train", leaks)
+                    )
                 continue
             for split in splits:
                 if split in t.get("splits", []):

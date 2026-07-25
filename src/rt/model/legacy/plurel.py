@@ -88,12 +88,12 @@ class RelationalBlock(nn.Module):
         self.attn_types = ["col", "feat", "nbr"]
 
         self.norms = nn.ModuleDict(
-            {l: nn.RMSNorm(d_model) for l in self.attn_types + ["ffn"]}
+            {lvl: nn.RMSNorm(d_model) for lvl in self.attn_types + ["ffn"]}
         )
 
         self.attns = nn.ModuleDict()
-        for l in self.attn_types:
-            self.attns[l] = MaskedAttention(d_model, num_heads)
+        for lvl in self.attn_types:
+            self.attns[lvl] = MaskedAttention(d_model, num_heads)
 
         self.ffn = FFN(d_model, d_ff)
 
@@ -189,13 +189,13 @@ class PluRelTransformer(nn.Module):
             "col": same_col_table & pad,
         }
 
-        for l in attn_masks:
-            attn_masks[l] = attn_masks[l].contiguous()
+        for lvl in attn_masks:
+            attn_masks[lvl] = attn_masks[lvl].contiguous()
 
         mbm = partial(
             make_block_mask, batch_size=batch_size, seq_len=seq_len, device=device
         )
-        block_masks = {l: mbm(attn_mask) for l, attn_mask in attn_masks.items()}
+        block_masks = {lvl: mbm(attn_mask) for lvl, attn_mask in attn_masks.items()}
 
         x = 0
         x = x + (

@@ -90,13 +90,20 @@ def run_legacy_eval(cfg: LegacyEvalConfig, model_for_task) -> dict:
         ):
             preds = preds_by_prefix[""]
             mname, mval, n, align, _ = _emit_and_score(
-                out_dir, task, cfg.pre_dir, LEGACY_EMBEDDER, labels, preds,
+                out_dir,
+                task,
+                cfg.pre_dir,
+                LEGACY_EMBEDDER,
+                labels,
+                preds,
                 node_idxs,
             )
             nm, nv = metric_for(task.task_type, labels, preds)
             by_metric.setdefault(mname, []).append(mval)
             results[f"{task.db_name}/{task.table_name}"] = {
-                "metric": mname, "value": mval, "n": n,
+                "metric": mname,
+                "value": mval,
+                "n": n,
             }
             print(
                 f"{task.db_name + '/' + task.table_name:40} {mname:8} {mval:>9.4f} "
@@ -110,6 +117,8 @@ def run_legacy_eval(cfg: LegacyEvalConfig, model_for_task) -> dict:
     print(f"\n{'mean':40}")
     for name, vals in by_metric.items():
         print(f"  {name:10} {sum(vals) / len(vals):>9.4f}  (over {len(vals)} tasks)")
-    print(f"\nsubmission CSVs written to {out_dir}/  "
-          f"(validate: python -m relbench.submit {out_dir})")
+    print(
+        f"\nsubmission CSVs written to {out_dir}/  "
+        f"(validate: python -m relbench.submit {out_dir})"
+    )
     return results

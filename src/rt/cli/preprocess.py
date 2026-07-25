@@ -19,6 +19,7 @@ from rt.preprocess import (
     main,
 )
 
+
 def default_one() -> OneConfig:
     return OneConfig(
         dataset="stanford-star/relbench/rel-f1",

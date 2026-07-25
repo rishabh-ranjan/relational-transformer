@@ -19,7 +19,6 @@ from rt.config import (
 from rt.train import main
 
 
-
 def default_config() -> Config:
     return Config(
         logger=LoggerConfig(
@@ -92,4 +91,10 @@ def default_config() -> Config:
 
 
 if __name__ == "__main__":
-    main(tyro.cli(tyro.conf.AvoidSubcommands[Config], default=default_config(), description=__doc__))
+    main(
+        tyro.cli(
+            tyro.conf.AvoidSubcommands[Config],
+            default=default_config(),
+            description=__doc__,
+        )
+    )

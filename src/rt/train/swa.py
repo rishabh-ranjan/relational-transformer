@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import torch
 
+
 class SwaState:
     """Equal-weight or EMA running average of a fixed set of named tensors.
 

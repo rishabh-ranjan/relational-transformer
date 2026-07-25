@@ -113,12 +113,15 @@ def transform_dataset(dataset_dir: Path, out_dataset_dir: Path, db_name: str) ->
             out = _transform_df(df, db_name, table_name)
             out.write_parquet(dst)
             changed = [
-                c for c in out.columns
+                c
+                for c in out.columns
                 if c in df.columns and out.schema[c] != df.schema[c]
             ]
             if changed:
-                print(f"  {rel}: {', '.join(f'{c}->{out.schema[c]}' for c in changed)}",
-                      flush=True)
+                print(
+                    f"  {rel}: {', '.join(f'{c}->{out.schema[c]}' for c in changed)}",
+                    flush=True,
+                )
         else:
             shutil.copy2(src, dst)
     return out_dataset_dir
@@ -164,7 +167,9 @@ def preprocess_one_legacy(
         from huggingface_hub import HfApi
 
         api = HfApi()
-        api.create_repo(upload_repo, repo_type="dataset", private=private, exist_ok=True)
+        api.create_repo(
+            upload_repo, repo_type="dataset", private=private, exist_ok=True
+        )
         print(f"uploading {pre_dataset_dir} -> {upload_repo}/legacy/{name}", flush=True)
         api.upload_folder(
             folder_path=str(pre_dataset_dir),

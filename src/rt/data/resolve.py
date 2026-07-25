@@ -78,9 +78,7 @@ def _is_complete(dataset_dir: Path) -> bool:
         embs = json.loads(meta_path.read_text()).get("text_embeddings", {})
     except Exception:
         return False
-    return bool(embs) and all(
-        (dataset_dir / e["file"]).exists() for e in embs.values()
-    )
+    return bool(embs) and all((dataset_dir / e["file"]).exists() for e in embs.values())
 
 
 def list_datasets(pre_dir: str) -> list[str]:

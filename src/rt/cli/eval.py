@@ -19,7 +19,6 @@ from rt.config import (
 from rt.eval import main
 
 
-
 def default_config() -> Config:
     return Config(
         logger=LoggerConfig(
