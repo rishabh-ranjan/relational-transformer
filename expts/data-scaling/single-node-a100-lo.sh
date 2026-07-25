@@ -22,11 +22,13 @@
 #SBATCH --qos=il-lo
 #SBATCH --time=1-00:00:00
 #SBATCH --nodes=1
-#SBATCH --nodelist=ampere1
+# Pick a node with 8 free A100s at submit time; ampere3/8 are down and the
+# others come and go. Override with --nodelist on the sbatch line if needed.
+#SBATCH --nodelist=ampere5
 #SBATCH --gres=gpu:a100:8
 #SBATCH --ntasks-per-node=1
-# Not --exclusive: ampere1 carries an unrelated 8-CPU/32G job, so demanding the
-# whole node would just queue behind it. 112 = the site cap of 14 CPUs per GPU
+# Not --exclusive: these nodes usually carry unrelated CPU-only jobs, so
+# demanding the whole node would just queue behind them. 112 = the site cap of 14 CPUs per GPU
 # on ampere for non-exclusive jobs (8 x 14); asking for more is rejected at
 # submit. Memory is left to DefMemPerGPU, which gives 2017232M for 8 GPUs --
 # the same allocation the exclusive control run gets.
