@@ -70,12 +70,21 @@ pandas = "*"
 pyarrow = "*"
 polars = "*"
 pytest = "*"
+pre-commit = "*"
 lazy_loader = "*"
 tqdm = "*"
 wandb = "*"
 xgboost = "*"
 # pinned until the relbench-hf branch (HF Hub data loading) lands in a relbench release
 relbench = { git = "https://github.com/snap-stanford/relbench.git", rev = "6e4a3a3d271f981b7f61e2ecbb6fd1c0f1cd3eeb" }
+
+[tool.ruff.lint.per-file-ignores]
+# Package __init__ files exist to re-export; the imports are the API.
+"src/rt/**/__init__.py" = ["F401"]
+# Faithful ports of the published RT-v1 / PluRel sources; `l` is theirs.
+"src/rt/model/legacy/*.py" = ["E741"]
+# Tutorial notebook: compact cells are the point.
+"byod/*.ipynb" = ["E401", "E702"]
 
 [tool.pixi.tasks]
 # Standalone preprocessor binary (polars + manifest reader; no FAISS).

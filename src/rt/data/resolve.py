@@ -211,14 +211,13 @@ def read_meta(pre_dir: str, db: str, revision: str | None = None) -> dict:
 # each needing its own copy.
 import multiprocessing as _mp  # noqa: E402
 
+import torch  # noqa: E402
+
 try:
     _mp.set_start_method("fork")
 except RuntimeError:
     pass
-try:
-    torch.multiprocessing.set_sharing_strategy("file_system")
-except Exception:
-    pass
+torch.multiprocessing.set_sharing_strategy("file_system")
 
 
 @cache

@@ -13,6 +13,7 @@ from collections import defaultdict
 from typing import Optional
 
 import torch
+from torch import Tensor
 from torch.optim.optimizer import Optimizer
 
 
