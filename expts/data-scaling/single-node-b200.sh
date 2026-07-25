@@ -29,9 +29,14 @@
 #SBATCH --gres=gpu:b200:4
 #SBATCH --ntasks-per-node=1
 # Half the node's GPUs, so take about half its cores; not --exclusive, since
-# the other B200s stay available. Memory comes from the partition's
-# DefMemPerGPU (an explicit --mem is capped by MaxMemPerCPU and would be lower).
+# the other B200s stay available.
 #SBATCH --cpus-per-task=144
+# Unlike the ampere job, ask for memory explicitly: the site's job_submit plugin
+# defaults this node to mem-per-gpu=144723M, i.e. 565G for 4 GPUs -- below the
+# ~603G the mixture is populated into the page cache, so the cache would be
+# evicted mid-run and reads would fall back to /dfs. 1500000M is the most
+# MaxMemPerCPU (10700M) allows at 144 CPUs, and the node has ~2.8T free.
+#SBATCH --mem=1500000M
 # The submit dir is node-local to the submit node, so don't try to start in it.
 #SBATCH --chdir=/tmp
 #SBATCH --propagate=MEMLOCK
