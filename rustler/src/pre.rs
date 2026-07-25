@@ -437,7 +437,11 @@ pub fn main(cli: Cli) {
                 DataType::Boolean => {
                     let col_float = col.cast(&DataType::Float64).unwrap().drop_nulls();
                     let col_mean = col_float.mean().unwrap_or(0.0);
+                    // A constant (or empty) boolean column has zero variance;
+                    // normalizing by it would divide 0.0 by 0.0 and write NaN
+                    // cells, so fall back to 1.0 as for numeric columns.
                     let col_std = col_float.std(1).unwrap_or(0.0);
+                    let col_std = if col_std == 0.0 { 1.0 } else { col_std };
                     table.col_stats.push(ColStat {
                         mean: col_mean,
                         std: col_std,
@@ -500,11 +504,14 @@ pub fn main(cli: Cli) {
         }
     }
 
+    // Same guard as the per-column stats: a db whose datetimes are all equal
+    // (or has none) must not normalize by zero and emit NaN cells.
     let dt_std = if dt_cnt > 1 {
         (dt_m2 / dt_cnt as f64).sqrt()
     } else {
         1.0
     };
+    let dt_std = if dt_std == 0.0 { 1.0 } else { dt_std };
 
     let mut col_stats_map = HashMap::new();
     for ((table_name, table_type), table) in &table_map {
