@@ -83,20 +83,12 @@ echo "repo=$RT_REPO commit=$RT_COMMIT run_id=$RT_RUN_ID"
 # environment too.
 export USER=${USER:-$(id -un)}
 export TMPDIR=/tmp/$USER
-export PATH=/dfs/user/$USER/.pixi/bin:$PATH  # shared git
 GITHUB_TOKEN=$(tr -d '[:space:]' < "/dfs/user/$USER/.secrets/github")
 mkdir -p "$TMPDIR/clones"
 
 WORK_DIR=$(mktemp -d "$TMPDIR/clones/rt-${RT_RUN_ID}-job${SLURM_JOB_ID}.XXXX")
-# The clone path is unique per job and pixi keys the detached environment on it,
-# so drop the env with the clone -- otherwise every requeue leaves a multi-GB
-# env behind in the node-local pixi cache.
-cleanup() {
-    [[ -f $WORK_DIR/relational-transformer/pyproject.toml ]] &&
-        pixi clean --manifest-path "$WORK_DIR/relational-transformer/pyproject.toml" >/dev/null 2>&1
-    rm -rf "$WORK_DIR"
-}
-trap cleanup EXIT
+# The pixi env lives inside the clone, so it goes away with it.
+trap 'rm -rf "$WORK_DIR"' EXIT
 # The -c url.insteadOf rewrite authenticates the fetch without writing the
 # token into the clone's .git/config (the remote keeps the plain URL).
 git -c url."https://x-access-token:$GITHUB_TOKEN@github.com/".insteadOf="https://github.com/" \
