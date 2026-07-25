@@ -267,8 +267,18 @@ def main(cfg: Config) -> None:
     data_seed = cfg.train.seed + SEED_STRIDE * start_step
     train_tasks = get_tasks(cfg.train.pre_dir, cfg.train.db_task_list, ("train",))
     if is_main:
+        # total_bs items enter the model per optimizer step, so the whole run
+        # consumes total_steps * total_bs items. Printed against the stream's
+        # size (tasks * items_per_task) so it is obvious how many times the
+        # mixture is repeated -- the quantity a data-scaling run is varying.
+        total_items = cfg.train.total_steps * cfg.train.total_bs
+        stream_items = len(train_tasks) * cfg.train.items_per_task
         print(
-            f"pretraining on {len(train_tasks)} tasks from {cfg.train.pre_dir}",
+            f"pretraining on {len(train_tasks)} tasks from {cfg.train.pre_dir}: "
+            f"{total_items:_} items over {cfg.train.total_steps:_} steps "
+            f"(bs {cfg.train.total_bs}), vs {stream_items:_} distinct items "
+            f"({len(train_tasks)} tasks x {cfg.train.items_per_task:_}) "
+            f"= {total_items / stream_items:.2f} epochs",
             flush=True,
         )
     train_ds = TrainDataset(
