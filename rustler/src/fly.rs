@@ -1799,9 +1799,15 @@ fn extend_with_seed_bfs(
             }
             let col_idx: i32 = node.col_name_idxs[cell_i].into();
 
-            // Skip columns to drop
-            if (node.node_idx == target_node_idx && columns_to_drop.contains(&col_idx))
-                || (node.timestamp == target_node.timestamp && columns_to_drop.contains(&col_idx))
+            // Skip this task's leakage columns: on the target's own row, and
+            // on rows sharing its timestamp (for a label table those are the
+            // same forecast horizon). The timestamp arm needs the target to
+            // actually have one -- `None == None` otherwise makes it match
+            // every timestamp-less row, stripping the columns from the whole
+            // table instead of the rows that can leak.
+            if columns_to_drop.contains(&col_idx)
+                && (node.node_idx == target_node_idx
+                    || (target_node.timestamp.is_some() && node.timestamp == target_node.timestamp))
             {
                 continue;
             }
