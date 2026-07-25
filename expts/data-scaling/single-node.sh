@@ -83,7 +83,8 @@ echo "repo=$RT_REPO commit=$RT_COMMIT run_id=$RT_RUN_ID"
 # environment too.
 export USER=${USER:-$(id -un)}
 export TMPDIR=/tmp/$USER
-GITHUB_TOKEN=$(tr -d '[:space:]' < "/sailhome/$USER/.secrets/github")
+export PATH=/dfs/user/$USER/.pixi/bin:$PATH  # shared git
+GITHUB_TOKEN=$(tr -d '[:space:]' < "/dfs/user/$USER/.secrets/github")
 mkdir -p "$TMPDIR/clones"
 
 WORK_DIR=$(mktemp -d "$TMPDIR/clones/rt-${RT_RUN_ID}-job${SLURM_JOB_ID}.XXXX")
@@ -99,14 +100,6 @@ echo "clone: $PWD @ $(git rev-parse --short HEAD)"
 # One shared definition of the job environment (node-local HOME, PATH, caches,
 # tokens); see expts/slurm-env.sh. Nothing env-related is set per job script.
 source expts/slurm-env.sh
-
-# Workspace-local pixi config (takes precedence over the global one). The clone
-# path is unique per job, so detached environments would key on it and pile up
-# unreferenced env dirs in $HOME/.pixi/envs; keeping the env inside the clone
-# means it is node-local and gets removed with the clone. run-post-link-scripts
-# matches the dev config.
-mkdir -p .pixi
-printf 'detached-environments = false\nrun-post-link-scripts = "insecure"\n' > .pixi/config.toml
 
 # Static rendezvous with a per-job port (dynamic c10d has wedged under load).
 export MASTER_ADDR=127.0.0.1
