@@ -21,7 +21,9 @@ def main(src: Path, out: Path, frac: float, seed: int = 0) -> None:
     pairs = [(str(db), str(task)) for db, task in json.loads(src.read_text())]
     dbs = sorted({db for db, _ in pairs})
     k = round(len(dbs) * frac)
-    keep = set(random.Random(seed).sample(dbs, k))
+    order = list(dbs)
+    random.Random(seed).shuffle(order)
+    keep = set(order[:k])
     subset = [p for p in pairs if p[0] in keep]
     out.write_text(json.dumps(subset, indent=1) + "\n")
     print(f"{src}: {len(dbs)} dbs, {len(pairs)} tasks")
