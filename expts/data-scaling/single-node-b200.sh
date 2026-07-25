@@ -13,6 +13,9 @@
 # torchrun with --logger.id=<run id>. The id is fixed at submit time, so every
 # requeue (preemption or time limit) reuses the same wandb run and output dir
 # and resumes from resume.pt there.
+#
+# RT_TRAIN_SCRIPT=<path> runs a different entry point (e.g. train_8k.py);
+# RT_RESUME_ID=<id> relaunches an existing run instead of starting a new one.
 
 #SBATCH --job-name=rt-data-scaling-b200
 #SBATCH --partition=il
@@ -151,7 +154,7 @@ pixi run build-sampler
 pixi run torchrun \
     --nnodes=1 --nproc-per-node=4 \
     --master-addr="$MASTER_ADDR" --master-port="$MASTER_PORT" \
-    expts/data-scaling/train.py \
+    "${RT_TRAIN_SCRIPT:-expts/data-scaling/train.py}" \
     --logger.id "$RT_RUN_ID" \
     "$@" &
 TRAIN_PID=$!

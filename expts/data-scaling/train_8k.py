@@ -22,12 +22,12 @@ from rt.train import main
 def default_config() -> Config:
     return Config(
         logger=LoggerConfig(
-            project="rt-verify",
-            entity=None,
+            project="2026-07-24",
+            entity="rtv2",
             id=timestamp(),
             run_name=None,
-            wandb_disabled=True,
-            out_root="~/ckpts",
+            wandb_disabled=False,
+            out_root="/dfs/user/ranjanr/ckpts",
         ),
         model=ModelConfig(
             embedder="all-MiniLM-L12-v2",
@@ -41,13 +41,13 @@ def default_config() -> Config:
             load_ckpt_path=None,
         ),
         train=TrainConfig(
-            db_task_list="data/the-join-preprocessed/db-task-lists/rt-j.json",
-            pre_dir="data/the-join-preprocessed",
+            db_task_list="/dfs/user/ranjanr/pre/the-join-preprocessed/db-task-lists/rt-j.json",
+            pre_dir="/dfs/user/ranjanr/pre/the-join-preprocessed",
             tokens_per_gpu=2**17,
             num_workers=16,
             prefetch_factor=2,
-            ctx_size_list=[1024, 2048, 4096, 8192],
-            local_ctx_size_list=[256, 512, 1024, 2048, 4096, 8192],
+            ctx_size_list=[512, 1024, 2048, 4096, 8192],
+            local_ctx_size_list=[256, 512, 1024, 2048, 4096, 8096],
             bfs_width_list=[16, 64, 256],
             prefer_latest_list=[False, True],
             num_walks=10_000,
@@ -70,8 +70,8 @@ def default_config() -> Config:
         ),
         eval=EvalConfig(
             splits=["val"],
-            db_task_list="data/relbench-preprocessed/db-task-lists/forecast.json",
-            pre_dir="data/relbench-preprocessed",
+            db_task_list="/dfs/user/ranjanr/pre/relbench-preprocessed/db-task-lists/forecast.json",
+            pre_dir="/dfs/user/ranjanr/pre/relbench-preprocessed",
             tokens_per_gpu=2**17,
             num_workers=1,
             prefetch_factor=2,
