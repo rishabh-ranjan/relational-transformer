@@ -10,8 +10,9 @@ Checkpoints land in the per-run directory
 `<out-root>/<entity>/<project>/<id>/` as `steps=<N>.safetensors` (live) and
 `swa_steps=<N>.safetensors` (SWA); at the end the run copies the best classifier
 and regressor to `best_clf.safetensors` / `best_reg.safetensors`. Multi-GPU is
-automatic under `torchrun`, and the run resumes automatically from
-`resume.pt` in that same directory (preemption-safe).
+automatic under `torchrun`, and a run relaunched with the same `--logger.id`
+resumes automatically from `resume.pt` in that same directory
+(preemption-safe).
 
 ## Prerequisite: preprocessed data
 
@@ -79,12 +80,11 @@ torchrun --nnodes=<N> --nproc-per-node=<GPUS> \
 Wrap this in your cluster's launcher (Slurm, k8s, ...). Hard-won notes for
 writing that wrapper:
 
-- **Name the run to resume it.** `--logger.id` names the output directory
-  `<out-root>/<entity>/<project>/<id>/`; pass the same value again to resume.
-  Left unset it defaults to a per-rank timestamp, and rank 0's wins — rank 0
-  owns the output directory and broadcasts the resume checkpoint to the other
-  ranks, so the ranks do not need to agree. A run you may want to resume
-  should pass an explicit id.
+- **Name a run you may want to resume.** `--logger.id` names the output
+  directory `<out-root>/<entity>/<project>/<id>/`; pass the same value again to
+  pick the run's `resume.pt` back up. Resuming *requires* an explicit id:
+  unset, it defaults to a per-rank timestamp, which names a fresh directory
+  with nothing to resume from. Rank 0 is the only rank that writes there.
 - **Static rendezvous.** Pass a fixed `--master-addr`/`--master-port` (derive a
   unique per-job port) rather than torchrun's dynamic c10d rendezvous — the
   dynamic store has wedged large jobs under load.
