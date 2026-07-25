@@ -37,7 +37,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 
-from huggingface_hub import HfApi, hf_hub_download, snapshot_download
+from huggingface_hub import HfApi, snapshot_download
 
 
 
@@ -71,29 +71,17 @@ def resolve_dataset_dir(spec: str, revision: str | None = None) -> Path:
         return Path(
             snapshot_download(repo_id=repo_id, revision=revision, repo_type="dataset")
         )
-    # Scope the tree listing to just this subdir. snapshot_download's allow_patterns
-    # path still recursively lists the *whole* repo, which is huge (and gets rate
-    # limited) for big collection repos like the-join (hundreds of datasets); listing
-    # only ``subdir`` keeps the API calls small and avoids HTTP 429s.
-    api = HfApi()
-    files = [
-        e.path
-        for e in api.list_repo_tree(
-            repo_id, path_in_repo=subdir, recursive=True,
-            repo_type="dataset", revision=revision,
-        )
-        if e.__class__.__name__ == "RepoFile"
-    ]
-    local_root = None
-    for rel in files:
-        local = hf_hub_download(
-            repo_id, rel, revision=revision, repo_type="dataset",
-        )
-        if local_root is None:
-            # hf_hub_download returns <cache>/<...>/snapshots/<rev>/<rel>; strip rel.
-            local_root = Path(local)
-            for _ in Path(rel).parts:
-                local_root = local_root.parent
+    # One bulk snapshot scoped to ``subdir``. Downloading the files one by one
+    # instead is what gets rate limited (HTTP 429): a dataset here is hundreds of
+    # task dirs, and every hf_hub_download is its own HEAD + GET. snapshot_download
+    # resolves the whole file list in one paginated listing and fetches in
+    # parallel, so a dataset costs a couple of API calls rather than thousands.
+    local_root = snapshot_download(
+        repo_id=repo_id,
+        revision=revision,
+        repo_type="dataset",
+        allow_patterns=f"{subdir}/*",
+    )
     return Path(local_root) / subdir
 
 
