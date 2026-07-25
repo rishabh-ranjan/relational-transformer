@@ -4,8 +4,7 @@
 # Same shape as single-node.sh, but not under the `il` QOS: `il` caps a100 at 10
 # per user and the control run already holds 8, so a second 8-GPU a100 job is
 # only reachable via il-lo (priority 100, preemptible -- the requeue machinery
-# below covers that). Not --exclusive either, since ampere1 has unrelated
-# CPU-only jobs on it.
+# below covers that).
 #
 #   ./expts/data-scaling/single-node.sh [extra train.py args...]
 #
@@ -23,15 +22,13 @@
 #SBATCH --qos=il-lo
 #SBATCH --time=1-00:00:00
 #SBATCH --nodes=1
-#SBATCH --nodelist=ampere1
+#SBATCH --nodelist=ampere3
+#SBATCH --exclusive
 #SBATCH --gres=gpu:a100:8
 #SBATCH --ntasks-per-node=1
-# What ampere1 has free beside the CPU-only jobs already on it (128 cores, 16
-# taken). Memory is explicit: the default mem-per-gpu would ask 2017232M, more
-# than the node has left, and the job would never start. 1198400M is the most
-# MaxMemPerCPU (10700M) allows at 112 CPUs, and covers the page-cache populate.
-#SBATCH --cpus-per-task=112
-#SBATCH --mem=1198400M
+#SBATCH --cpus-per-task=128
+# No --mem, as in single-node.sh: --exclusive plus the partition's DefMemPerGPU
+# lands on mem=2017232M, and an explicit --mem is capped lower by MaxMemPerCPU.
 # The submit dir is node-local to the submit node, so don't try to start in it.
 #SBATCH --chdir=/tmp
 #SBATCH --propagate=MEMLOCK
