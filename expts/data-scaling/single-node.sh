@@ -63,7 +63,11 @@ if [[ -z "${RT_RUN_ID:-}" ]]; then
     fi
 
     # Run id == wandb id == output subdir; fixed here so requeues resume.
+    # rt.config.timestamp() formats the time as hh:mm:ss, but wandb rejects run
+    # ids containing ':' and cargo refuses to build under a path containing one,
+    # so swap them for '-' before anything downstream sees the id.
     RT_RUN_ID=$(pixi run python -c 'from rt.config import timestamp; print(timestamp())')
+    RT_RUN_ID=${RT_RUN_ID//:/-}
 
     mkdir -p "$LOG_DIR"
     echo "repo:   $RT_REPO"
@@ -101,10 +105,7 @@ export TMPDIR=/tmp/$USER
 GITHUB_TOKEN=$(tr -d '[:space:]' < "/dfs/user/$USER/.secrets/github")
 mkdir -p "$TMPDIR/clones"
 
-# The run id has colons in it (hh:mm:ss); cargo refuses to build under a path
-# containing one ("path segment contains separator `:`"), so keep them out of
-# the clone path while the id itself stays as-is for wandb and the out dir.
-WORK_DIR=$(mktemp -d "$TMPDIR/clones/rt-${RT_RUN_ID//:/-}-job${SLURM_JOB_ID}.XXXX")
+WORK_DIR=$(mktemp -d "$TMPDIR/clones/rt-${RT_RUN_ID}-job${SLURM_JOB_ID}.XXXX")
 # The pixi env lives inside the clone, so it goes away with it.
 trap 'rm -rf "$WORK_DIR"' EXIT
 # The -c url.insteadOf rewrite authenticates the fetch without writing the
