@@ -28,11 +28,11 @@ export XDG_CACHE_HOME=$HOME/.cache
 export WANDB_DIR=$HOME/.cache
 mkdir -p "$TMPDIR" "$XDG_CACHE_HOME"
 
-# One pixi install for the whole cluster, on shared storage. Project
-# environments stay node-local: detached-environments = false in
-# $PIXI_HOME/config.toml keeps each env inside its project dir, and the project
-# is a node-local clone under $TMPDIR. The package cache is node-local too, and
-# warm across jobs landing on the same node.
+# One pixi install for the whole cluster, on shared storage: only the binary
+# and the global CLI tools live there. Project environments stay node-local --
+# detached-environments = true in $PIXI_HOME/config.toml puts them under
+# $PIXI_CACHE_DIR/envs, which is node-local, as is the package cache itself
+# (warm across jobs landing on the same node).
 export PIXI_HOME=$SHARED/.pixi
 export PIXI_CACHE_DIR=$HOME/.cache/rattler/cache
 export PATH=$PIXI_HOME/bin:/usr/local/bin:/usr/bin:/bin
