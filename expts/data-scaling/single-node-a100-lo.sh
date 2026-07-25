@@ -26,10 +26,11 @@
 #SBATCH --gres=gpu:a100:8
 #SBATCH --ntasks-per-node=1
 # Not --exclusive: ampere1 carries an unrelated 8-CPU/32G job, so demanding the
-# whole node would just queue behind it. What it costs us is 8 of 128 cores and
-# 32G of 2050000M -- all 8 GPUs are free, and the memory left (2017232M) is
-# exactly what DefMemPerGPU asks for 8 GPUs, so the populate is unaffected.
-#SBATCH --cpus-per-task=120
+# whole node would just queue behind it. 112 = the site cap of 14 CPUs per GPU
+# on ampere for non-exclusive jobs (8 x 14); asking for more is rejected at
+# submit. Memory is left to DefMemPerGPU, which gives 2017232M for 8 GPUs --
+# the same allocation the exclusive control run gets.
+#SBATCH --cpus-per-task=112
 # The submit dir is node-local to the submit node, so don't try to start in it.
 #SBATCH --chdir=/tmp
 #SBATCH --propagate=MEMLOCK
