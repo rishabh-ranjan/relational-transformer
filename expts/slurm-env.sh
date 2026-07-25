@@ -21,12 +21,11 @@ export USER=${USER:-$(id -un)}
 export HOME=/lfs/local/0/$USER
 SETUP_URL=https://raw.githubusercontent.com/rishabh-ranjan/dotfiles/main/setup-node.sh
 
-if [[ -f $HOME/setup-node.sh ]]; then
-    bash "$HOME/setup-node.sh" || die "$(hostname -s) not usable"
-else
-    # Node has never been touched: bootstrap it straight from GitHub.
-    curl -fsSL "$SETUP_URL" | bash || die "could not set up $(hostname -s)"
-fi
+# The job script is a login shell (`#!/bin/bash -l`), so .bashrc.user has
+# already run setup-node.sh -- the same path an interactive login takes. Assert
+# that it worked rather than duplicating it here.
+[[ -d $HOME/.git && -x $HOME/.pixi/bin/pixi ]] ||
+    die "$(hostname -s) not set up: run $SETUP_URL (is this script #!/bin/bash -l ?)"
 
 # Shared state that no amount of node setup can create.
 for s in wandb huggingface github; do

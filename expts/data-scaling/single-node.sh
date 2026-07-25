@@ -1,5 +1,9 @@
-#!/bin/bash
+#!/bin/bash -l
 # Launch expts/data-scaling/train.py as a full-node DDP job on one ampere node.
+#
+# `-l` matters: it makes the batch script a login shell, so it runs the same
+# ~/.bash_login -> .bashrc.user as an interactive login, which is the single
+# path that brings a node up to spec (setup-node.sh) before anything else runs.
 #
 #   ./expts/data-scaling/single-node.sh [extra train.py args...]
 #
@@ -60,8 +64,8 @@ if [[ -z "${RT_RUN_ID:-}" ]]; then
         exit 1
     fi
 
-    # Run id == wandb id == output subdir; frozen here so requeues resume.
-    RT_RUN_ID=$(pixi run --frozen python -c 'from rt.config import timestamp; print(timestamp())')
+    # Run id == wandb id == output subdir; fixed here so requeues resume.
+    RT_RUN_ID=$(pixi run python -c 'from rt.config import timestamp; print(timestamp())')
 
     mkdir -p "$LOG_DIR"
     echo "repo:   $RT_REPO"
@@ -118,9 +122,21 @@ source expts/slurm-env.sh
 export MASTER_ADDR=127.0.0.1
 export MASTER_PORT=$((20000 + SLURM_JOB_ID % 20000))
 
-pixi run --frozen build-sampler
+# pixi.lock is gitignored in this repo, so a fresh clone has none and the first
+# job of a run has to solve the environment itself. Keep that solve next to the
+# run's logs and reuse it on every requeue, so the environment is identical
+# across the whole run instead of re-solving (and drifting) each time.
+RUN_LOCK=$LOG_DIR/${RT_RUN_ID}.pixi.lock
+if [[ -f $RUN_LOCK ]]; then
+    echo "reusing pixi.lock from $RUN_LOCK"
+    cp "$RUN_LOCK" pixi.lock
+fi
+pixi install
+[[ -f $RUN_LOCK ]] || cp pixi.lock "$RUN_LOCK"
 
-pixi run --frozen torchrun \
+pixi run build-sampler
+
+pixi run torchrun \
     --nnodes=1 --nproc-per-node=8 \
     --master-addr="$MASTER_ADDR" --master-port="$MASTER_PORT" \
     expts/data-scaling/train.py \
