@@ -7,7 +7,6 @@ def test_extension_symbols():
     import rt.rustler as r
 
     assert hasattr(r, "Sampler")
-    assert hasattr(r, "column_sem_types")
     assert hasattr(r, "preprocess")  # present only when built with --features pre
 
 

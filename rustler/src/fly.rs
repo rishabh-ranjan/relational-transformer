@@ -16,7 +16,7 @@ use pyo3::IntoPyObjectExt;
 use pyo3::PyObject;
 use pyo3::PyResult;
 use pyo3::Python;
-use pyo3::{pyclass, pyfunction, pymethods};
+use pyo3::{pyclass, pymethods};
 use rand::prelude::*;
 use rand::seq::index;
 use rayon::prelude::*;
@@ -2029,82 +2029,6 @@ fn get_text_emb(dataset: &Dataset, idx: i32, d_text: usize) -> &[bf16] {
     let (pref, text_emb, suf) = unsafe { dataset.text_mmap.align_to::<bf16>() };
     assert!(pref.is_empty() && suf.is_empty());
     &text_emb[(idx as usize) * d_text..(idx as usize + 1) * d_text]
-}
-
-/// Per-column semantic type for a preprocessed db, used to recover the
-/// schema-derived "autocomplete" pretraining tasks (predict-a-masked-column)
-/// that the original pipeline generated from each table's feature columns.
-///
-/// Returns `{ "<col> of <table>": sem_type }` where sem_type is one of
-/// "Boolean" (-> clf task), "Number" (-> reg task), "DateTime", "Text".
-/// Foreign-key columns are absent by construction: `pre` emits no cell for
-/// them (it only records f2p edges), so they never appear in any node's
-/// `col_name_idxs` and are correctly excluded as task targets -- matching the
-/// original "feature_cols" (non-FK) semantics.
-///
-/// Implementation: for each Db table we read its first node (one rkyv access)
-/// and map each cell's `col_name_idx` to its `sem_type`. sem_type is uniform
-/// within a column, so a single node per table suffices. The col_name_idx is
-/// resolved back to the human-readable "<col> of <table>" key via the inverse
-/// of `column_index.json`.
-#[pyfunction]
-pub fn column_sem_types(pre_dir: String, db_name: String) -> PyResult<HashMap<String, String>> {
-    let pre_path = format!("{}/{}", pre_dir, db_name);
-
-    // offsets.rkyv
-    let offsets: Vec<i64> = {
-        let file = fs::File::open(format!("{}/offsets.rkyv", pre_path))?;
-        let mut bytes = Vec::new();
-        BufReader::new(file).read_to_end(&mut bytes)?;
-        let archived = rkyv::access::<ArchivedOffsets, Error>(&bytes)
-            .map_err(|e| pyo3::exceptions::PyValueError::new_err(e.to_string()))?;
-        rkyv::deserialize::<Offsets, Error>(archived)
-            .map_err(|e| pyo3::exceptions::PyValueError::new_err(e.to_string()))?
-            .offsets
-    };
-
-    // nodes.rkyv (mmap)
-    let nodes_file = fs::File::open(format!("{}/nodes.rkyv", pre_path))?;
-    let mmap = unsafe { Mmap::map(&nodes_file)? };
-
-    // table_info.json: table key "<table>:<split>" -> node_idx_offset
-    let table_info: HashMap<String, TableInfo> = {
-        let f = fs::File::open(format!("{}/table_info.json", pre_path))?;
-        serde_json::from_reader(BufReader::new(f))
-            .map_err(|e| pyo3::exceptions::PyValueError::new_err(e.to_string()))?
-    };
-
-    // column_index.json: "<col> of <table>" -> global col_idx. Invert it.
-    let column_index: HashMap<String, i32> = {
-        let f = fs::File::open(format!("{}/column_index.json", pre_path))?;
-        serde_json::from_reader(BufReader::new(f))
-            .map_err(|e| pyo3::exceptions::PyValueError::new_err(e.to_string()))?
-    };
-    let idx_to_name: HashMap<i32, &String> = column_index.iter().map(|(k, v)| (*v, k)).collect();
-
-    let mut out: HashMap<String, String> = HashMap::new();
-    for info in table_info.values() {
-        if info.num_nodes <= 0 {
-            continue;
-        }
-        let first_idx = info.node_idx_offset;
-        let l = offsets[first_idx as usize] as usize;
-        let r = offsets[(first_idx + 1) as usize] as usize;
-        let node = unsafe { rkyv::access_unchecked::<ArchivedNode>(&mmap[l..r]) };
-        for (cell_i, col_idx) in node.col_name_idxs.iter().enumerate() {
-            let ci: i32 = (*col_idx).into();
-            if let Some(name) = idx_to_name.get(&ci) {
-                let sem = match node.sem_types[cell_i] {
-                    ArchivedSemType::Number => "Number",
-                    ArchivedSemType::Text => "Text",
-                    ArchivedSemType::DateTime => "DateTime",
-                    ArchivedSemType::Boolean => "Boolean",
-                };
-                out.insert((*name).clone(), sem.to_string());
-            }
-        }
-    }
-    Ok(out)
 }
 
 #[derive(Parser)]
