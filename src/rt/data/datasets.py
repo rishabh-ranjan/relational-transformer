@@ -127,15 +127,15 @@ class RustlerDataset:
                 target_column_indices.append(target_idx)
 
                 drop_indices = []
-                for col in columns_to_drop:
-                    if col == target_column:
-                        continue
+                for drop_table, col in columns_to_drop:
+                    if drop_table == table_name and col == target_column:
+                        continue  # never drop the target itself
                     try:
                         drop_indices.append(
-                            get_column_index(col, table_name, db_name, pre_dir)
+                            get_column_index(col, drop_table, db_name, pre_dir)
                         )
                     except ValueError:
-                        pass  # skip_col not in task parquet; ignore
+                        pass  # column absent from this db's index; ignore
                 drop_column_indices.append(drop_indices)
 
                 dataset_tuples.append((db_name, table_name, node_idx_offset, num_nodes))

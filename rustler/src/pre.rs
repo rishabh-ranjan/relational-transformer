@@ -88,6 +88,12 @@ struct TaskManifest {
     dst_entity_table: Option<String>,
     #[serde(default)]
     dst_entity_col: Option<String>,
+    /// Columns that leak this task's target and must be kept out of its
+    /// context, as `[table, column]` pairs. Mostly an autocomplete concern:
+    /// the target is a real db column, so anything trivially derivable from
+    /// it sits right next to it in the same row.
+    #[serde(default)]
+    remove_columns: Vec<(String, String)>,
 }
 
 impl TaskManifest {
@@ -295,6 +301,7 @@ pub fn main(cli: Cli) {
                 "task_type": tm.task_type,
                 "entity_table": tm.entity_table,
                 "time_col": tm.time_col,
+                "remove_columns": tm.remove_columns,
                 "splits": splits,
             }));
         }

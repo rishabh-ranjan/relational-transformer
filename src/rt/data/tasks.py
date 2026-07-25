@@ -35,7 +35,12 @@ class Task:
     target_column: str
     task_type: str  # "clf" | "reg"
     split: str = ""  # "train" | "val" | "test"
-    leakage_columns: tuple[str, ...] = ()
+    # ``(table, column)`` pairs to keep out of this task's context because they
+    # leak the target -- ``remove_columns`` in the task's manifest.yaml, carried
+    # through to meta.json by the preprocessor. Empty for most tasks; it matters
+    # for autocomplete, whose target is a real db column sitting in a row next
+    # to columns trivially derivable from it.
+    leakage_columns: tuple[tuple[str, str], ...] = ()
 
 
 def resolve_db_task_list(db_task_list) -> list[tuple[str, str]]:
@@ -80,6 +85,8 @@ def get_tasks(pre_dir, db_task_list, splits) -> list[Task]:
     of an existing db table, so they carry no splits and are emitted at the
     ``train`` split only.
 
+    A task's ``remove_columns`` becomes :attr:`Task.leakage_columns`, which the
+    dataset turns into column indices the sampler drops from every context.
     """
     pairs = resolve_db_task_list(db_task_list)
     by_db: dict[str, list[str]] = {}
@@ -102,11 +109,15 @@ def get_tasks(pre_dir, db_task_list, splits) -> list[Task]:
                     f"({sorted(explicit)})"
                 )
             tt = _TASK_TYPE[t["task_type"]]
+            leaks = tuple(
+                (str(tbl), str(col)) for tbl, col in t.get("remove_columns") or ()
+            )
             if t.get("kind") == "autocomplete":
                 if "train" in splits:  # autocomplete is a pretraining-only signal
-                    out.append(Task(db, t["entity_table"], t["target_col"], tt, "train"))
+                    out.append(Task(db, t["entity_table"], t["target_col"], tt,
+                                    "train", leaks))
                 continue
             for split in splits:
                 if split in t.get("splits", []):
-                    out.append(Task(db, name, t["target_col"], tt, split))
+                    out.append(Task(db, name, t["target_col"], tt, split, leaks))
     return out

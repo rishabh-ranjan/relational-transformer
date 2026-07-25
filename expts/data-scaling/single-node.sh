@@ -78,30 +78,15 @@ fi
 echo "=== $(date -Is) job $SLURM_JOB_ID on $(hostname), restarts=${SLURM_RESTART_COUNT:-0} ==="
 echo "repo=$RT_REPO commit=$RT_COMMIT run_id=$RT_RUN_ID"
 
-# ---- env: the batch script is not a login shell, so no fish config runs ----
-# Node-local home (pixi envs, HF/torch caches) on whichever node we landed on.
+# Bootstrap only what the clone itself needs; the full env comes from the
+# cloned tree's expts/slurm-env.sh below, so the recorded commit pins the job
+# environment too.
 export USER=${USER:-$(id -un)}
-NODE_HOME=/lfs/local/0/$USER
-mkdir -p "$NODE_HOME" || NODE_HOME=/sailhome/$USER
-export HOME=$NODE_HOME
-export PATH=$HOME/.pixi/bin:/sailhome/$USER/.pixi/bin:/usr/local/bin:/usr/bin:/bin
-unset PYTHONPATH  # submit-node-local, would shadow the pixi env
 export TMPDIR=/tmp/$USER
-export XDG_CACHE_HOME=$HOME/.cache
-export WANDB_DIR=$HOME/.cache
-mkdir -p "$TMPDIR" "$XDG_CACHE_HOME" "$HOME/.pixi"
+GITHUB_TOKEN=$(tr -d '[:space:]' < "/sailhome/$USER/.secrets/github")
+mkdir -p "$TMPDIR/clones"
 
-# ---- tokens: read from the shared secrets dir, never from the job env ----
-SECRETS=/sailhome/$USER/.secrets
-read_secret() { tr -d '[:space:]' < "$SECRETS/$1"; }
-WANDB_API_KEY=$(read_secret wandb); export WANDB_API_KEY
-HF_TOKEN=$(read_secret huggingface); export HF_TOKEN
-export HUGGING_FACE_HUB_TOKEN=$HF_TOKEN
-# github: only needed if the repo ever goes private (the clone below is https).
-GITHUB_TOKEN=$(read_secret github); export GITHUB_TOKEN GH_TOKEN=$GITHUB_TOKEN
-echo "env: HOME=$HOME pixi=$(command -v pixi) tokens=wandb,hf,github"
-
-WORK_DIR=$(mktemp -d "/tmp/ranjanr/clones/rt-${RT_RUN_ID}-job${SLURM_JOB_ID}.XXXX")
+WORK_DIR=$(mktemp -d "$TMPDIR/clones/rt-${RT_RUN_ID}-job${SLURM_JOB_ID}.XXXX")
 trap 'rm -rf "$WORK_DIR"' EXIT
 # The -c url.insteadOf rewrite authenticates the fetch without writing the
 # token into the clone's .git/config (the remote keeps the plain URL).
@@ -111,9 +96,10 @@ cd "$WORK_DIR/relational-transformer"
 git checkout --quiet "$RT_COMMIT"
 echo "clone: $PWD @ $(git rev-parse --short HEAD)"
 
-ulimit -l unlimited || true
-export OMP_NUM_THREADS=8
-export TOKENIZERS_PARALLELISM=false
+# One shared definition of the job environment (node-local HOME, PATH, caches,
+# tokens); see expts/slurm-env.sh. Nothing env-related is set per job script.
+source expts/slurm-env.sh
+
 # Static rendezvous with a per-job port (dynamic c10d has wedged under load).
 export MASTER_ADDR=127.0.0.1
 export MASTER_PORT=$((20000 + SLURM_JOB_ID % 20000))
