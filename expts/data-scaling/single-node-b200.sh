@@ -1,5 +1,5 @@
 #!/bin/bash
-# Launch expts/data-scaling/train.py on 2 B200s of blackwell1, to compare
+# Launch expts/data-scaling/train.py on 4 B200s of blackwell1, to compare
 # training throughput against the 8xA100 (ampere) run. Same train config: the
 # code adapts to the GPU count on its own and total_bs is held constant, so
 # sec/step is comparable modulo the changed grad-accum.
@@ -17,24 +17,25 @@
 #SBATCH --job-name=rt-data-scaling-b200
 #SBATCH --partition=il
 #SBATCH --account=infolab
-# 2 GPUs, not more: the default `il` QOS caps b200 at 2 per user (and
-# il-interactive caps GPUs at 2 of any kind), so 4 is only reachable under il-lo
-# -- priority 100 instead of 1000, which on a busy blackwell1 means waiting for
-# days. Two B200s under `il` keep the fast queue.
-#SBATCH --qos=il
+# QOS: 4xB200 is only reachable under il-lo. The default `il` QOS caps b200 at
+# 2 per user and il-interactive caps GPUs at 2 of any kind, so both reject this
+# job outright (verified by submitting under each). il-lo is priority 100 rather
+# than 1000 -- it queues behind and is preempted first -- but blackwell1 has
+# capacity, and the requeue machinery below covers preemption.
+#SBATCH --qos=il-lo
 #SBATCH --time=1-00:00:00
 #SBATCH --nodes=1
 #SBATCH --nodelist=blackwell1
-#SBATCH --gres=gpu:b200:2
+#SBATCH --gres=gpu:b200:4
 #SBATCH --ntasks-per-node=1
-# A quarter of the node's GPUs, so a quarter of its cores; not --exclusive.
-#SBATCH --cpus-per-task=72
+# Half the node's GPUs, so about half its cores; not --exclusive.
+#SBATCH --cpus-per-task=144
 # Ask for memory explicitly: the site's job_submit plugin would default this to
-# mem-per-gpu=144723M (~283G for 2 GPUs), well below the ~603G the mixture is
+# mem-per-gpu=144723M (~565G for 4 GPUs), below the ~603G the mixture is
 # populated into the page cache, so the cache would be evicted mid-run and reads
-# would fall back to /dfs. 770000M is the most MaxMemPerCPU (10700M) allows at
-# 72 CPUs.
-#SBATCH --mem=770000M
+# would fall back to /dfs. 1500000M is the most MaxMemPerCPU (10700M) allows at
+# 144 CPUs.
+#SBATCH --mem=1500000M
 # The submit dir is node-local to the submit node, so don't try to start in it.
 #SBATCH --chdir=/tmp
 #SBATCH --propagate=MEMLOCK
@@ -141,7 +142,7 @@ pixi install
 pixi run build-sampler
 
 pixi run torchrun \
-    --nnodes=1 --nproc-per-node=2 \
+    --nnodes=1 --nproc-per-node=4 \
     --master-addr="$MASTER_ADDR" --master-port="$MASTER_PORT" \
     expts/data-scaling/train.py \
     --logger.id "$RT_RUN_ID" \
