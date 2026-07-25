@@ -1,9 +1,5 @@
-#!/bin/bash -l
+#!/bin/bash
 # Launch expts/data-scaling/train.py as a full-node DDP job on one ampere node.
-#
-# `-l` matters: it makes the batch script a login shell, so it runs the same
-# ~/.bash_login -> .bashrc.user as an interactive login, which is the single
-# path that brings a node up to spec (setup-node.sh) before anything else runs.
 #
 #   ./expts/data-scaling/single-node.sh [extra train.py args...]
 #

@@ -4,11 +4,10 @@
 # runs. This file is the single place that defines what a job's env looks like,
 # so no individual job script has to get it right.
 #
-# It does not paper over an unprepared node: setup-node.sh (from the dotfiles
-# repo) checks that the node meets the standard assumptions -- a node-local home
-# that is a dotfiles checkout, with a node-local pixi and the global CLI tools --
-# and sets the node up if it does not. Everything below then just uses them.
-# Run without --update, so it never pulls a node out from under a running job.
+# It does not paper over an unprepared node: it sources .bashrc.user, the same
+# entry point an interactive login uses, which runs setup-node.sh -- a node-local
+# home that is a dotfiles checkout, with a node-local pixi and the global CLI
+# tools. Without --update, so it never pulls a node out from under a running job.
 #
 # No fallbacks: anything that cannot be reinstated is a hard error here, seconds
 # into the job, rather than a silently degraded run discovered hours later.
@@ -18,14 +17,25 @@ set -euo pipefail
 die() { echo "slurm-env: $*" >&2; exit 1; }
 
 export USER=${USER:-$(id -un)}
-export HOME=/lfs/local/0/$USER
 SETUP_URL=https://raw.githubusercontent.com/rishabh-ranjan/dotfiles/main/setup-node.sh
 
-# The job script is a login shell (`#!/bin/bash -l`), so .bashrc.user has
-# already run setup-node.sh -- the same path an interactive login takes. Assert
-# that it worked rather than duplicating it here.
+# Go through the same entry point an interactive login does -- .bashrc.user in
+# the real (passwd) home -- so bringing a node up to spec has exactly one path.
+# It runs setup-node.sh and switches HOME to the node-local dotfiles checkout;
+# sourcing it non-interactively stops before the fish exec. It also cd's to the
+# new HOME, hence the restore.
+_passwd_home=$(getent passwd "$USER" | cut -d: -f6)
+_cwd=$PWD
+if [[ -f $_passwd_home/.bashrc.user ]]; then
+    source "$_passwd_home/.bashrc.user"
+else
+    curl -fsSL "$SETUP_URL" | bash || die "could not set up $(hostname -s)"
+    export HOME=/lfs/local/0/$USER
+fi
+cd "$_cwd"
+
 [[ -d $HOME/.git && -x $HOME/.pixi/bin/pixi ]] ||
-    die "$(hostname -s) not set up: run $SETUP_URL (is this script #!/bin/bash -l ?)"
+    die "$(hostname -s) not set up (HOME=$HOME); see $SETUP_URL"
 
 # Shared state that no amount of node setup can create.
 for s in wandb huggingface github; do
