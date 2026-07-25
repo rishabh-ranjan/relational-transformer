@@ -601,37 +601,48 @@ impl Sampler {
         );
 
         let vector_db_path_ref = vector_db_path.as_deref();
+        // A db whose on-disk files are missing or unreadable is dropped rather
+        // than taking the whole run down -- the same bargain ignore_data_errors
+        // strikes for a bad task below. load_dataset unwraps its way through
+        // half a dozen files, so the guard is a catch_unwind around the load;
+        // the tasks belonging to a dropped db are skipped in the loop after
+        // this one. Without ignore_data_errors (eval, pre-validated inputs) the
+        // panic propagates as before.
+        let try_load = |db_name: &String, table_names: &Vec<String>| {
+            let compute = std::panic::AssertUnwindSafe(|| {
+                Self::load_dataset(
+                    db_name,
+                    table_names,
+                    &pre_dir,
+                    &mmap_opts,
+                    embedder_ref,
+                    vector_db_path_ref,
+                )
+            });
+            let r = if ignore_data_errors {
+                std::panic::catch_unwind(compute).ok()
+            } else {
+                Some(compute())
+            };
+            pb.inc(1);
+            if r.is_none() && local_rank == 0 && !quiet {
+                eprintln!(
+                    "\n\x1b[31mskipping db {}: cannot load its preprocessed files \
+                     from {}\x1b[0m",
+                    db_name, pre_dir,
+                );
+            }
+            r
+        };
         let datasets: HashMap<String, Dataset> = if db_to_tables.len() > 1 {
             db_to_tables
                 .par_iter()
-                .map(|(db_name, table_names)| {
-                    let r = Self::load_dataset(
-                        db_name,
-                        table_names,
-                        &pre_dir,
-                        &mmap_opts,
-                        embedder_ref,
-                        vector_db_path_ref,
-                    );
-                    pb.inc(1);
-                    r
-                })
+                .filter_map(|(db_name, table_names)| try_load(db_name, table_names))
                 .collect()
         } else {
             db_to_tables
                 .iter()
-                .map(|(db_name, table_names)| {
-                    let r = Self::load_dataset(
-                        db_name,
-                        table_names,
-                        &pre_dir,
-                        &mmap_opts,
-                        embedder_ref,
-                        vector_db_path_ref,
-                    );
-                    pb.inc(1);
-                    r
-                })
+                .filter_map(|(db_name, table_names)| try_load(db_name, table_names))
                 .collect()
         };
         pb.finish_and_clear();
@@ -653,7 +664,9 @@ impl Sampler {
                 let db = db_name.clone();
                 let table = table_name.clone();
                 let compute = std::panic::AssertUnwindSafe(|| {
-                    let dataset = &datasets_ref[&db];
+                    let dataset = datasets_ref.get(&db).unwrap_or_else(|| {
+                        panic!("db {} was dropped (its files could not be loaded)", db)
+                    });
                     let mut range_start = i32::MAX;
                     let mut range_end = i32::MIN;
                     for (key, info) in &dataset.table_info {
@@ -751,7 +764,13 @@ impl Sampler {
 
         sampler.create_items();
         if sampler.local_rank == 0 && !sampler.quiet {
-            let num_dbs = db_to_tables.len();
+            // dbs that actually loaded, not dbs that were asked for
+            let num_dbs = sampler
+                .dataset_tuples
+                .iter()
+                .map(|(db, _, _, _)| db)
+                .collect::<std::collections::HashSet<_>>()
+                .len();
             let num_tasks = sampler.dataset_tuples.len();
             let num_items = sampler.items.len();
             let num_skipped = num_prev_skipped + rust_skipped;
