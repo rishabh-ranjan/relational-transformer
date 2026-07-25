@@ -32,7 +32,9 @@ set -euo pipefail
 LOG_DIR=/dfs/user/ranjanr/slurm-logs/rt-data-scaling
 
 # ---------------------------------------------------------------- submit side
-if [[ -z "${SLURM_JOB_ID:-}" ]]; then
+# RT_RUN_ID (not SLURM_JOB_ID) tells the two sides apart: submitting from inside
+# an interactive allocation means SLURM_JOB_ID is already set in your shell.
+if [[ -z "${RT_RUN_ID:-}" ]]; then
     cd "$(git rev-parse --show-toplevel)"
 
     if [[ -n "$(git status --porcelain)" ]]; then
@@ -60,10 +62,15 @@ if [[ -z "${SLURM_JOB_ID:-}" ]]; then
     echo "commit: $RT_COMMIT"
     echo "run id: $RT_RUN_ID"
 
+    # Deliberately NOT --export=ALL: this shell's env is fish-config'd for the
+    # submit node (HOME=/lfs/local/0/..., a node-local PATH) and holds API
+    # tokens. Exporting it would point the job at a home that does not exist on
+    # the compute node and would stash the tokens in Slurm's job record. Only
+    # the RT_* vars travel; the job rebuilds its env below.
     exec sbatch \
         --output="$LOG_DIR/${RT_RUN_ID}_%j.out" \
         --error="$LOG_DIR/${RT_RUN_ID}_%j.out" \
-        --export=ALL,RT_REPO="$RT_REPO",RT_COMMIT="$RT_COMMIT",RT_BRANCH="$RT_BRANCH",RT_RUN_ID="$RT_RUN_ID" \
+        --export=RT_REPO="$RT_REPO",RT_COMMIT="$RT_COMMIT",RT_BRANCH="$RT_BRANCH",RT_RUN_ID="$RT_RUN_ID" \
         "$0" "$@"
 fi
 
@@ -71,9 +78,35 @@ fi
 echo "=== $(date -Is) job $SLURM_JOB_ID on $(hostname), restarts=${SLURM_RESTART_COUNT:-0} ==="
 echo "repo=$RT_REPO commit=$RT_COMMIT run_id=$RT_RUN_ID"
 
+# ---- env: the batch script is not a login shell, so no fish config runs ----
+# Node-local home (pixi envs, HF/torch caches) on whichever node we landed on.
+export USER=${USER:-$(id -un)}
+NODE_HOME=/lfs/local/0/$USER
+mkdir -p "$NODE_HOME" || NODE_HOME=/sailhome/$USER
+export HOME=$NODE_HOME
+export PATH=$HOME/.pixi/bin:/sailhome/$USER/.pixi/bin:/usr/local/bin:/usr/bin:/bin
+unset PYTHONPATH  # submit-node-local, would shadow the pixi env
+export TMPDIR=/tmp/$USER
+export XDG_CACHE_HOME=$HOME/.cache
+export WANDB_DIR=$HOME/.cache
+mkdir -p "$TMPDIR" "$XDG_CACHE_HOME" "$HOME/.pixi"
+
+# ---- tokens: read from the shared secrets dir, never from the job env ----
+SECRETS=/sailhome/$USER/.secrets
+read_secret() { tr -d '[:space:]' < "$SECRETS/$1"; }
+WANDB_API_KEY=$(read_secret wandb); export WANDB_API_KEY
+HF_TOKEN=$(read_secret huggingface); export HF_TOKEN
+export HUGGING_FACE_HUB_TOKEN=$HF_TOKEN
+# github: only needed if the repo ever goes private (the clone below is https).
+GITHUB_TOKEN=$(read_secret github); export GITHUB_TOKEN GH_TOKEN=$GITHUB_TOKEN
+echo "env: HOME=$HOME pixi=$(command -v pixi) tokens=wandb,hf,github"
+
 WORK_DIR=$(mktemp -d "/tmp/ranjanr/clones/rt-${RT_RUN_ID}-job${SLURM_JOB_ID}.XXXX")
 trap 'rm -rf "$WORK_DIR"' EXIT
-git clone --quiet "$RT_REPO" "$WORK_DIR/relational-transformer"
+# The -c url.insteadOf rewrite authenticates the fetch without writing the
+# token into the clone's .git/config (the remote keeps the plain URL).
+git -c url."https://x-access-token:$GITHUB_TOKEN@github.com/".insteadOf="https://github.com/" \
+    clone --quiet "$RT_REPO" "$WORK_DIR/relational-transformer"
 cd "$WORK_DIR/relational-transformer"
 git checkout --quiet "$RT_COMMIT"
 echo "clone: $PWD @ $(git rev-parse --short HEAD)"
