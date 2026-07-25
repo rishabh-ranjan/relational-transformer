@@ -71,7 +71,13 @@ if [[ -z "${RT_RUN_ID:-}" ]]; then
     # tokens. Exporting it would point the job at a home that does not exist on
     # the compute node and would stash the tokens in Slurm's job record. Only
     # the RT_* vars travel; the job rebuilds its env below.
-    exec sbatch \
+    # Slurm env vars outrank #SBATCH directives, so a submit from inside an
+    # interactive allocation would silently impose that job's cpu/mem/node
+    # shape on this one. Strip them.
+    strip=()
+    while IFS='=' read -r k _; do strip+=(-u "$k"); done < <(env | grep -E '^(SLURM|SBATCH)_')
+
+    exec env "${strip[@]}" sbatch \
         --output="$LOG_DIR/${RT_RUN_ID}_%j.out" \
         --error="$LOG_DIR/${RT_RUN_ID}_%j.out" \
         --export=RT_REPO="$RT_REPO",RT_COMMIT="$RT_COMMIT",RT_BRANCH="$RT_BRANCH",RT_RUN_ID="$RT_RUN_ID" \
