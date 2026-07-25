@@ -25,7 +25,10 @@
 #SBATCH --gres=gpu:a100:8
 #SBATCH --ntasks-per-node=1
 #SBATCH --cpus-per-task=128
-#SBATCH --mem=0
+# No --mem: the partition caps memory at MaxMemPerCPU (10700M x 128 CPUs), so
+# --mem=0 ("all of it", 2050000M) is rejected outright. --exclusive plus the
+# partition's DefMemPerGPU=240000 lands on mem=2017232M -- the whole node bar
+# its reserve -- and nothing else can run there anyway.
 #SBATCH --propagate=MEMLOCK
 #SBATCH --requeue
 #SBATCH --open-mode=append
