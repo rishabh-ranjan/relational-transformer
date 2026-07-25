@@ -226,9 +226,11 @@ fn normalize_df(df: DataFrame) -> DataFrame {
                         .cast(DataType::Datetime(TimeUnit::Nanoseconds, None))
                         .alias(name.as_str()),
                 ),
-                DataType::Categorical(_, _) => {
-                    Some(col(name.as_str()).cast(DataType::String).alias(name.as_str()))
-                }
+                DataType::Categorical(_, _) => Some(
+                    col(name.as_str())
+                        .cast(DataType::String)
+                        .alias(name.as_str()),
+                ),
                 _ => None,
             }
         })
@@ -289,7 +291,10 @@ pub fn main(cli: Cli) {
         let path = entry.unwrap();
         let stem = path.file_stem().unwrap().to_str().unwrap().to_string();
         let spec = manifest.tables.get(&stem).cloned().unwrap_or_else(|| {
-            eprintln!("warning: table {:?} not in manifest; treating as relation-free", stem);
+            eprintln!(
+                "warning: table {:?} not in manifest; treating as relation-free",
+                stem
+            );
             TableSpec::default()
         });
         db_specs.push(ReadSpec {
@@ -633,10 +638,9 @@ pub fn main(cli: Cli) {
                             .expect("parent node index overflow");
                         node.f2p_nbr_idxs.push(pnode_idx);
 
-                        let ptimestamp = ptable
-                            .tcol_name
-                            .as_ref()
-                            .and_then(|tcol_name| read_timestamp(&ptable.df, tcol_name, pval as usize));
+                        let ptimestamp = ptable.tcol_name.as_ref().and_then(|tcol_name| {
+                            read_timestamp(&ptable.df, tcol_name, pval as usize)
+                        });
 
                         let f2p_edge = Edge {
                             node_idx: pnode_idx,
@@ -853,7 +857,9 @@ pub fn main(cli: Cli) {
 
     // Self-describing metadata for the preprocessed artifact. The embedding
     // step appends `text_embeddings` (model -> file) to this file.
-    let source = cli.source.unwrap_or_else(|| dataset_dir.display().to_string());
+    let source = cli
+        .source
+        .unwrap_or_else(|| dataset_dir.display().to_string());
     let meta = serde_json::json!({
         "name": name,
         "format_version": PRE_FORMAT_VERSION,
