@@ -123,6 +123,10 @@ echo "clone: $PWD @ $(git rev-parse --short HEAD)"
 # tokens); see expts/slurm-env.sh. Nothing env-related is set per job script.
 source expts/slurm-env.sh
 
+# Where the ranks write their preemption checkpoint; the trap below waits for
+# it. Mirrors rt.train.main: <out_root>/<entity>/<project>/<id>/resume.pt.
+RESUME_PT=/dfs/user/ranjanr/ckpts/rtv2/2026-07-24/$RT_RUN_ID/resume.pt
+
 # Static rendezvous with a per-job port (dynamic c10d has wedged under load).
 export MASTER_ADDR=127.0.0.1
 export MASTER_PORT=$((20000 + SLURM_JOB_ID % 20000))
@@ -149,19 +153,43 @@ pixi run torchrun \
     "$@" &
 TRAIN_PID=$!
 
-# Slurm sends SIGTERM on preemption (GraceTime=300s) and SIGUSR1 300s before the
-# time limit. Forward either to torchrun, which shuts the workers down; the
-# train loop then writes resume.pt and exits 0. Preemption requeues the job by
-# itself (PreemptMode=REQUEUE); the time-limit case we requeue explicitly.
+# Slurm sends SIGTERM on preemption (GraceTime=300s) and SIGUSR1 shortly before
+# the time limit -- and, as it turns out, in the preemption grace window too, so
+# the two are indistinguishable from here. Either way: tell the ranks to save,
+# wait for resume.pt, then let the job be requeued.
 requeue_after_wait() {
     local sig=$1
-    echo "=== $(date -Is) caught $sig; forwarding to torchrun ==="
+    echo "=== $(date -Is) caught $sig (preemption or time limit) ==="
+    # Signal the ranks directly, not just torchrun. Sending TERM to the agent
+    # alone lost work: the agent tore its workers down before they reached the
+    # step boundary where they write resume.pt, so a preempted run rewound to
+    # the last periodic save instead of the step it was preempted at. The ranks
+    # take SIGUSR1, set their flag, and save at the next step (sub-second).
+    pkill -USR1 -P "$TRAIN_PID" 2>/dev/null || true
+    # Wait for that save to land before tearing anything down. Slurm's
+    # GraceTime is 300s, so 120s is affordable; the loop exits early as soon as
+    # resume.pt is newer than the signal.
+    local before now
+    before=$( (stat -c %Y "$RESUME_PT" 2>/dev/null) || echo 0 )
+    for _ in $(seq 60); do
+        sleep 2
+        now=$( (stat -c %Y "$RESUME_PT" 2>/dev/null) || echo 0 )
+        [[ $now -gt $before ]] && break
+        kill -0 "$TRAIN_PID" 2>/dev/null || break
+    done
+    if [[ $now -gt $before ]]; then
+        echo "=== resume.pt saved at $(date -Is -d @"$now") ==="
+    else
+        echo "WARNING: resume.pt not updated; resuming from the last periodic save" >&2
+    fi
     kill -TERM "$TRAIN_PID" 2>/dev/null || true
     wait "$TRAIN_PID" || true
-    if [[ $sig == SIGUSR1 ]]; then
-        echo "=== requeueing job $SLURM_JOB_ID (time limit) ==="
-        scontrol requeue "$SLURM_JOB_ID"
-    fi
+    # Preemption requeues the job by itself; a time limit does not. Requeueing
+    # an already-requeued job is a harmless no-op, and we cannot tell the two
+    # apart from here -- slurm delivers SIGUSR1 in the preemption grace window
+    # too -- so just ask and ignore the error.
+    echo "=== requeueing job $SLURM_JOB_ID ==="
+    scontrol requeue "$SLURM_JOB_ID" || true
     exit 0
 }
 trap 'requeue_after_wait SIGTERM' TERM

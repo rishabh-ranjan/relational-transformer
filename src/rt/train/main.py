@@ -147,6 +147,14 @@ def main(cfg: Config) -> None:
             resume="allow",
             config=dataclasses.asdict(cfg),
         )
+        # Log against our own step axis rather than wandb's internal counter.
+        # A resumed run rewinds to the last resume.pt, so it re-logs steps the
+        # previous attempt already sent; wandb's counter only moves forward and
+        # would drop every one of them ("Tried to log to step N that is less
+        # than the current step M ... this data will be ignored"), silently
+        # losing the window between the last checkpoint and the preemption.
+        wandb.define_metric("step")
+        wandb.define_metric("*", step_metric="step")
 
     seed_everything(cfg.train.seed + rank)
     # Rank 0 is the only writer; the other ranks read exactly one thing from
@@ -507,12 +515,14 @@ def main(cfg: Config) -> None:
             if use_wandb:
                 wandb.log(
                     {
-                        f"val/{p}{tt}": metrics[p][tt]
-                        for p in metrics
-                        for tt in metrics[p]
-                        if metrics[p][tt] is not None
-                    },
-                    step=step,
+                        "step": step,
+                        **{
+                            f"val/{p}{tt}": metrics[p][tt]
+                            for p in metrics
+                            for tt in metrics[p]
+                            if metrics[p][tt] is not None
+                        },
+                    }
                 )
         for n, _ in nets:
             n.train()
@@ -599,13 +609,13 @@ def main(cfg: Config) -> None:
             if use_wandb:
                 wandb.log(
                     {
+                        "step": step,
                         "train/loss": total_loss,
                         "train/lr": scheds[0].get_last_lr()[0],
                         "train/grad_norm": float(norm),
                         "train/sec_per_step": step_time,
                         "train/load_time": load_time,
-                    },
-                    step=step,
+                    }
                 )
 
         # Time-based resume checkpoint (preemption resilience), independent of
