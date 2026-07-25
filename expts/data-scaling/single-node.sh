@@ -29,6 +29,8 @@
 # --mem=0 ("all of it", 2050000M) is rejected outright. --exclusive plus the
 # partition's DefMemPerGPU=240000 lands on mem=2017232M -- the whole node bar
 # its reserve -- and nothing else can run there anyway.
+# The submit dir is node-local to the submit node, so don't try to start in it.
+#SBATCH --chdir=/tmp
 #SBATCH --propagate=MEMLOCK
 #SBATCH --requeue
 #SBATCH --open-mode=append
@@ -99,7 +101,10 @@ export TMPDIR=/tmp/$USER
 GITHUB_TOKEN=$(tr -d '[:space:]' < "/dfs/user/$USER/.secrets/github")
 mkdir -p "$TMPDIR/clones"
 
-WORK_DIR=$(mktemp -d "$TMPDIR/clones/rt-${RT_RUN_ID}-job${SLURM_JOB_ID}.XXXX")
+# The run id has colons in it (hh:mm:ss); cargo refuses to build under a path
+# containing one ("path segment contains separator `:`"), so keep them out of
+# the clone path while the id itself stays as-is for wandb and the out dir.
+WORK_DIR=$(mktemp -d "$TMPDIR/clones/rt-${RT_RUN_ID//:/-}-job${SLURM_JOB_ID}.XXXX")
 # The pixi env lives inside the clone, so it goes away with it.
 trap 'rm -rf "$WORK_DIR"' EXIT
 # The -c url.insteadOf rewrite authenticates the fetch without writing the
