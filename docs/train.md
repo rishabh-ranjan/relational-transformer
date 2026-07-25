@@ -33,11 +33,14 @@ curated RT-J mixture, forecast + autocomplete).
 
 ## Single-GPU training
 
-The `train` task launches `torchrun --standalone --nproc-per-node=auto`, which
-uses every visible GPU. Pin it to one GPU for a single-GPU run:
+Training always runs under `torchrun`; there is no pixi task for it, so build
+the sampler once (`pixi run build-sampler`) and launch it yourself.
+`--nproc-per-node=auto` uses every visible GPU, so pin it to one for a
+single-GPU run:
 
 ```bash
-CUDA_VISIBLE_DEVICES=0 pixi run train \
+CUDA_VISIBLE_DEVICES=0 pixi run torchrun --standalone --nproc-per-node=auto \
+  -m rt.cli.train \
   --train.pre-dir stanford-star/the-join-preprocessed \
   --eval.pre-dir stanford-star/relbench-preprocessed \
   --logger.out-root ~/ckpts
@@ -50,7 +53,7 @@ on the node, and the model is replicated per GPU via DDP (full model + optimizer
 on every rank, no sharding):
 
 ```bash
-pixi run train \
+pixi run torchrun --standalone --nproc-per-node=auto -m rt.cli.train \
   --train.pre-dir stanford-star/the-join-preprocessed \
   --eval.pre-dir stanford-star/relbench-preprocessed \
   --logger.out-root ~/ckpts
@@ -76,12 +79,12 @@ torchrun --nnodes=<N> --nproc-per-node=<GPUS> \
 Wrap this in your cluster's launcher (Slurm, k8s, ...). Hard-won notes for
 writing that wrapper:
 
-- **One run id for the whole job.** Every rank builds its own config, so the
-  wrapper must generate the wandb run id once and export it to all nodes:
-  `export RT_ID=$(date +%y-%m-%d_%H:%M:%S_%N)` (the `train` pixi task does
-  this for you). The id names the output directory
-  `<out-root>/<entity>/<project>/<id>/`; reuse the same value
-  (or pass `--logger.id`) to resume a run.
+- **Name the run to resume it.** `--logger.id` names the output directory
+  `<out-root>/<entity>/<project>/<id>/`; pass the same value again to resume.
+  Left unset it defaults to a per-rank timestamp, and rank 0's wins — rank 0
+  owns the output directory and broadcasts the resume checkpoint to the other
+  ranks, so the ranks do not need to agree. A run you may want to resume
+  should pass an explicit id.
 - **Static rendezvous.** Pass a fixed `--master-addr`/`--master-port` (derive a
   unique per-job port) rather than torchrun's dynamic c10d rendezvous — the
   dynamic store has wedged large jobs under load.
@@ -118,7 +121,8 @@ locked cache:
 # terminal 1: hold the data resident (Ctrl-C to release)
 pixi run python -m rt.cli.mlock --pre-dir <PRE_DIR> --workers 32
 # terminal 2 (same node): train without re-populating
-pixi run train --train.pre-dir <PRE_DIR> --logger.out-root ~/ckpts --no-train.mmap-populate
+pixi run torchrun --standalone --nproc-per-node=auto -m rt.cli.train \
+  --train.pre-dir <PRE_DIR> --logger.out-root ~/ckpts --no-train.mmap-populate
 ```
 
 This is purely a convenience for repeated local runs; it is **not required**.

@@ -20,8 +20,10 @@ Robust to preemption (the default config matches the released RT-J runs):
 Single-node multi-GPU and multi-node (preemptible queue) both run under
 ``torchrun`` -- see the README for the exact launch commands.
 
-    pixi run train --pre-dir stanford-star/the-join-preprocessed \\
-        --val-pre-dir stanford-star/relbench-preprocessed --out-root ~/ckpts
+    torchrun --standalone --nproc-per-node=auto -m rt.cli.train \\
+        --train.pre-dir stanford-star/the-join-preprocessed \\
+        --eval.pre-dir stanford-star/relbench-preprocessed \\
+        --logger.out-root ~/ckpts
 """
 
 from __future__ import annotations
@@ -236,8 +238,7 @@ def main(cfg: Config) -> None:
 
     # ---- data: re-seed by resumed step so the stream does not replay ----
     data_seed = cfg.train.seed + SEED_STRIDE * start_step
-    train_tasks = get_tasks(cfg.train.pre_dir, cfg.train.db_task_list, ("train",),
-                            embedder=cfg.model.embedder)
+    train_tasks = get_tasks(cfg.train.pre_dir, cfg.train.db_task_list, ("train",))
     if is_main:
         print(f"pretraining on {len(train_tasks)} tasks from {cfg.train.pre_dir}", flush=True)
     train_ds = TrainDataset(
@@ -290,7 +291,7 @@ def main(cfg: Config) -> None:
     # underlying mmap'd data (page cache), so extra entries cost eval compute
     # only, nothing between eval points.
     val_tasks = get_tasks(cfg.eval.pre_dir, cfg.eval.db_task_list,
-                          tuple(cfg.eval.splits), embedder=cfg.model.embedder)
+                          tuple(cfg.eval.splits))
     from rt.eval import Evaluator
 
     evaluators = [
