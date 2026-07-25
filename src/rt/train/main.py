@@ -45,7 +45,12 @@ from torch import optim
 from torch.utils.data import DataLoader
 
 from rt.config import Config
-from rt.data import TrainDataset, get_tasks
+from rt.data import (
+    TrainDataset,
+    get_tasks,
+    prefetch_pre_dir,
+    resolve_db_task_list,
+)
 from rt.model import (
     RelationalTransformer,
     load_model,
@@ -142,6 +147,29 @@ def main(cfg: Config) -> None:
         wandb.init(project=cfg.logger.project, entity=cfg.logger.entity,
                    name=cfg.logger.run_name, id=cfg.logger.id,
                    resume="allow", config=dataclasses.asdict(cfg))
+
+    # ---- data: on local disk before anything else touches the Hub ----
+    # Local rank 0 fetches whatever this run is missing (once per node, in one
+    # bulk call) while the others wait; then every rank swaps the Hub spec for
+    # the local path, so everything downstream -- read_meta per db, the dataset's
+    # own resolve, in every rank and every dataloader worker -- is a plain file
+    # read. Without this, those per-db calls fan out across the world size and
+    # the Hub answers with HTTP 429 even when the bytes are already cached.
+    # (After wandb.init so the logged config keeps the Hub spec, not a cache path.)
+    for _turn in (0, 1):
+        if (local_rank == 0) == (_turn == 0):
+            for _sub in (cfg.train, cfg.eval):
+                _sub.pre_dir = prefetch_pre_dir(
+                    _sub.pre_dir,
+                    [db for db, _ in resolve_db_task_list(_sub.db_task_list)],
+                    cfg.model.embedder,
+                    quiet=local_rank != 0,
+                )
+        if ddp:
+            dist.barrier()
+    if is_main:
+        print(f"train.pre_dir: {cfg.train.pre_dir}", flush=True)
+        print(f"eval.pre_dir:  {cfg.eval.pre_dir}", flush=True)
     seed_everything(cfg.train.seed + rank)
     # Rank 0 is the only writer; the other ranks read exactly one thing from
     # here, resume.pt. That needs no agreement between ranks: a resume only

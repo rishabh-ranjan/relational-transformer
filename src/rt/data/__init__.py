@@ -14,6 +14,7 @@ from rt.data.resolve import (
     get_column_index,
     is_local,
     list_datasets,
+    prefetch_pre_dir,
     read_meta,
     resolve_pre_dir,
     resolve_repo,
