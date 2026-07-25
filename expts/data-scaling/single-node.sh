@@ -14,7 +14,11 @@
 #SBATCH --job-name=rt-data-scaling
 #SBATCH --partition=il
 #SBATCH --account=infolab
-#SBATCH --time=21-00:00:00
+# 7 days is the cap of the default `il` QOS (priority 1000). The partition
+# itself allows 21 days, but only under `il-lo` (priority 100), which queues far
+# behind and gets preempted more; requeue-on-preemption makes the run outlive
+# the wall clock anyway, so take the fast queue.
+#SBATCH --time=7-00:00:00
 #SBATCH --nodes=1
 #SBATCH --constraint=ampere
 #SBATCH --exclusive
