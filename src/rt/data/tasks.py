@@ -2,17 +2,17 @@
 
 The set of tasks to train or evaluate on is always given explicitly as a
 ``db_task_list``: a list of ``(db_name, task_name)`` pairs, a local path to a
-JSON file holding such a list, or a Hub path ``org/repo/path/to/list.json``
-(only that file is downloaded). ``task_name`` is always a task recorded in the
+JSON file holding such a list. ``task_name`` is always a task recorded in the
 db's ``meta.json``: a forecast/external task, or an autocomplete task
 (``kind: autocomplete``, a manifest-only task dir whose target is a column of a
 db table). There is no enumerate-everything fallback and no on-the-fly column
 resolution: the list is the single source of truth.
 
-Curated lists ship on the Hub, e.g.
-``stanford-star/relbench/db-task-lists/forecast.json`` (the 21-task RelBench
-benchmark) and ``stanford-star/the-join/db-task-lists/{forecast,autocomplete,all,rt-j}.json``
-(the pretraining mixtures).
+Curated lists ship inside the preprocessed dataset repos, so they arrive with
+the data they refer to: ``<pre_dir>/db-task-lists/forecast.json`` (for
+relbench-preprocessed, the 21-task RelBench benchmark) and
+``<pre_dir>/db-task-lists/{forecast,autocomplete,all,rt-j}.json`` (for
+the-join-preprocessed, the pretraining mixtures).
 """
 
 from __future__ import annotations
@@ -21,7 +21,7 @@ import json
 from dataclasses import dataclass
 from pathlib import Path
 
-from rt.data.resolve import read_meta, resolve_repo
+from rt.data.resolve import read_meta
 
 # relbench task_type -> RT task_type. Only node-level clf/reg tasks are modeled;
 # link_prediction (recommendation) tasks are skipped.
@@ -46,24 +46,19 @@ class Task:
 def resolve_db_task_list(db_task_list) -> list[tuple[str, str]]:
     """Materialize a db_task_list into ``[(db_name, task_name), ...]``.
 
-    Accepts an in-memory list of pairs, a local JSON file path, or a Hub path
-    ``org/repo/path/to/list.json`` (downloads only that file).
+    Accepts an in-memory list of pairs or a path to a JSON file of pairs. The
+    released lists ship inside the preprocessed dataset repos, so they arrive
+    with the data: ``<pre_dir>/db-task-lists/<name>.json``.
     """
     if isinstance(db_task_list, str):
         p = Path(db_task_list).expanduser()
-        if p.exists():
-            pairs = json.loads(p.read_text())
-        else:
-            from huggingface_hub import hf_hub_download
-
-            repo_id, filename = resolve_repo(db_task_list)
-            if not filename:
-                raise ValueError(
-                    f"{db_task_list!r}: expected a local file or a Hub path "
-                    f"'org/repo/path/to/list.json'"
-                )
-            local = hf_hub_download(repo_id, filename, repo_type="dataset")
-            pairs = json.loads(Path(local).read_text())
+        if not p.is_file():
+            raise FileNotFoundError(
+                f"db_task_list {db_task_list!r} does not exist. The released "
+                f"lists ship with the preprocessed data, as "
+                f"<pre_dir>/db-task-lists/<name>.json"
+            )
+        pairs = json.loads(p.read_text())
     else:
         pairs = db_task_list
     out = []

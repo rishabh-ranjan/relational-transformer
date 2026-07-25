@@ -1,4 +1,4 @@
-"""Preprocessed-data access: pre_dir resolution (local or Hub), datasets, task
+"""Preprocessed-data access: local pre_dir resolution, datasets, task
 enumeration, and RAM pinning."""
 
 from rt.data.datasets import (
@@ -14,7 +14,6 @@ from rt.data.resolve import (
     get_column_index,
     is_local,
     list_datasets,
-    prefetch_pre_dir,
     read_meta,
     resolve_pre_dir,
     resolve_repo,

@@ -41,8 +41,8 @@ def default_config() -> Config:
             load_ckpt_path=None,
         ),
         train=TrainConfig(
-            db_task_list="stanford-star/the-join/db-task-lists/rt-j.json",
-            pre_dir="stanford-star/the-join-preprocessed",
+            db_task_list="/dfs/user/ranjanr/pre/the-join-preprocessed/db-task-lists/rt-j.json",
+            pre_dir="/dfs/user/ranjanr/pre/the-join-preprocessed",
             tokens_per_gpu=2**17,
             num_workers=16,
             prefetch_factor=2,
@@ -70,8 +70,8 @@ def default_config() -> Config:
         ),
         eval=EvalConfig(
             splits=["val"],
-            db_task_list="stanford-star/relbench/db-task-lists/forecast.json",
-            pre_dir="stanford-star/relbench-preprocessed",
+            db_task_list="/dfs/user/ranjanr/pre/relbench-preprocessed/db-task-lists/forecast.json",
+            pre_dir="/dfs/user/ranjanr/pre/relbench-preprocessed",
             tokens_per_gpu=2**17,
             num_workers=1,
             prefetch_factor=2,

@@ -39,12 +39,12 @@ pixi run preprocess-many \
 written are skipped). `--shard i --num-shards N` splits the collection across a
 job array (e.g. a preemptible Slurm array with `--array=0-63` mapping the task id to `--shard`).
 
-## Using preprocessed data (local or Hub — same interface)
+## Using preprocessed data
 
 Everywhere a `pre_dir` is taken (see [inference](inference.md) and
-[pretrain](train.md)), pass **either** a local path **or** a Hub repo: a local
-path is used directly (and always wins, so iterating on freshly preprocessed data
-never triggers a download), a Hub repo is downloaded and cached on demand (only
-the files needed for the requested databases). So you never have to upload
-anything to use your own data, and you can consume a published collection without
-downloading it whole.
+[pretrain](train.md)) it is a **local directory**: what this preprocessor wrote,
+or a published collection you downloaded with `hf download --local-dir` (see
+[downloads.md](downloads.md)). Nothing is fetched on demand, so you never have
+to upload anything to use your own data, and a run's data is a path you can
+inspect. The layout is the same either way — one subdirectory per database — so
+your own output and a downloaded collection are interchangeable.

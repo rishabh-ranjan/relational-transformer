@@ -1,6 +1,13 @@
-"""pre_dir resolution: every ``pre_dir`` in rt accepts a local path or a Hub
-repo ``org/repo[/subdir]``; local wins, Hub files download into the HF cache on
-demand."""
+"""pre_dir resolution: a ``pre_dir`` is a local directory of preprocessed
+datasets (one subdirectory per db).
+
+Preprocessed data is downloaded up front, not on demand -- see docs/train.md.
+The datasets are hundreds of GiB and every rank and dataloader worker reads
+them, so on-demand Hub fetches meant thousands of requests per run (rate-limited
+with HTTP 429 even when the bytes were already cached, since each call still
+revalidates over the network) and one copy per node. An explicit
+``hf download`` into a path you can inspect is both faster and simpler.
+"""
 
 from __future__ import annotations
 
@@ -26,12 +33,13 @@ def resolve_repo(spec: str) -> tuple[str, str]:
     """Split a Hub spec into ``(repo_id, subdir)``.
 
     ``"org/name"`` -> ``("org/name", "")``; ``"org/name/a/b"`` -> ``("org/name", "a/b")``.
+
+    Hub specs remain how released *checkpoints* are named (see
+    ``rt.model.resolve_checkpoint``); data is local-only.
     """
     parts = str(spec).strip("/").split("/")
     if len(parts) < 2:
-        raise ValueError(
-            f"{spec!r} is neither an existing local path nor a Hub 'org/name[/subdir]' spec."
-        )
+        raise ValueError(f"{spec!r} is not a Hub 'org/name[/subdir]' spec.")
     return f"{parts[0]}/{parts[1]}", "/".join(parts[2:])
 
 
@@ -39,105 +47,22 @@ def is_local(pre_dir: str) -> bool:
     return Path(pre_dir).expanduser().exists()
 
 
-def resolve_pre_dir(
-    pre_dir: str,
-    db_names,
-    embedder: str,
-    *,
-    include_text: bool = False,
-    metadata_only: bool = False,
-    revision: str | None = None,
-) -> str:
-    """Return a local root directory containing ``<db>/`` subfolders for each db.
+def resolve_pre_dir(pre_dir: str) -> str:
+    """Validate a ``pre_dir`` and return it as a plain local path.
 
-    If ``pre_dir`` is an existing local path it is returned as-is. Otherwise it is
-    treated as a Hub ``org/repo[/subdir]`` and only the files needed for
-    ``db_names`` (+ the chosen ``embedder``) are downloaded and cached.
-    ``metadata_only`` fetches just the small schema files (no node blobs or
-    embeddings) -- enough to browse tables/columns.
+    Raises if it does not exist -- a missing pre_dir is a setup mistake to fix
+    with ``hf download``, not something to paper over at runtime.
     """
     p = Path(pre_dir).expanduser()
-    if p.exists():
-        return str(p)
-
-    from huggingface_hub import snapshot_download
-
-    repo_id, subdir = resolve_repo(pre_dir)
-    prefix = f"{subdir}/" if subdir else ""
-    file_set = METADATA_FILES if metadata_only else CORE_FILES
-    patterns: list[str] = []
-    for db in dict.fromkeys(db_names):  # dedup, preserve order
-        base = f"{prefix}{db}"
-        patterns += [f"{base}/{f}" for f in file_set]
-        if not metadata_only:
-            patterns.append(f"{base}/text_emb_{embedder}.bin")
-        if include_text:
-            patterns.append(f"{base}/text.json")
-
-    local = snapshot_download(
-        repo_id=repo_id,
-        repo_type="dataset",
-        revision=revision,
-        allow_patterns=patterns,
-    )
-    return str(Path(local) / subdir) if subdir else str(local)
-
-
-def prefetch_pre_dir(
-    pre_dir: str,
-    db_names,
-    embedder: str,
-    *,
-    revision: str | None = None,
-    quiet: bool = False,
-) -> str:
-    """Make sure everything a run needs from ``pre_dir`` is on local disk, and
-    return the local path to use from then on.
-
-    Entry points call this once, up front, on one process per node. Afterwards
-    ``pre_dir`` is a plain local directory, so every later call -- ``read_meta``
-    per db, ``resolve_pre_dir`` per dataset, in every rank and every dataloader
-    worker -- is a file read and touches the Hub not at all. Without it, those
-    per-db calls fan out across the world size and the Hub rate-limits them
-    (HTTP 429) even when the bytes are already cached, because each call still
-    revalidates over the network.
-
-    Missing files are fetched in one bulk download; nothing is re-fetched.
-    """
-    p = Path(pre_dir).expanduser()
-    if p.exists():
-        return str(p)
-
-    from huggingface_hub import snapshot_download
-
-    repo_id, subdir = resolve_repo(pre_dir)
-    prefix = f"{subdir}/" if subdir else ""
-    wanted = [
-        f"{prefix}{db}/{f}"
-        for db in dict.fromkeys(db_names)
-        for f in (*CORE_FILES, f"text_emb_{embedder}.bin")
-    ]
-
-    kwargs = dict(
-        repo_id=repo_id,
-        repo_type="dataset",
-        revision=revision,
-        allow_patterns=wanted,
-    )
-    try:
-        local = snapshot_download(**kwargs, local_files_only=True)
-        missing = [w for w in wanted if not (Path(local) / w).exists()]
-    except Exception:
-        local, missing = None, wanted
-    if missing:
-        if not quiet:
-            print(
-                f"{pre_dir}: {len(missing)}/{len(wanted)} files not in the local "
-                f"HF cache; downloading them once now (this can take a while)",
-                flush=True,
-            )
-        local = snapshot_download(**kwargs)
-    return str(Path(local) / subdir) if subdir else str(local)
+    if not p.is_dir():
+        raise FileNotFoundError(
+            f"pre_dir {pre_dir!r} does not exist. Preprocessed data is not "
+            f"downloaded on demand; fetch it first, e.g.\n"
+            f"  hf download stanford-star/the-join-preprocessed --repo-type dataset "
+            f"--local-dir {pre_dir}\n"
+            f"(see docs/train.md for fetching only the dbs you need)"
+        )
+    return str(p)
 
 
 def _is_complete(dataset_dir: Path) -> bool:
@@ -158,46 +83,15 @@ def _is_complete(dataset_dir: Path) -> bool:
     )
 
 
-def list_datasets(pre_dir: str, revision: str | None = None) -> list[str]:
-    """Names of the preprocessed datasets under ``pre_dir`` (local dir or Hub repo)."""
-    p = Path(pre_dir).expanduser()
-    if p.exists():
-        return sorted(d.name for d in p.iterdir() if _is_complete(d))
-
-    from huggingface_hub import HfApi
-
-    repo_id, subdir = resolve_repo(pre_dir)
-    prefix = f"{subdir}/" if subdir else ""
-    files = HfApi().list_repo_files(repo_id, repo_type="dataset", revision=revision)
-    out = set()
-    for f in files:
-        if f.startswith(prefix) and f.endswith("/meta.json"):
-            rest = f[len(prefix):]
-            if rest.count("/") == 1:  # <db>/meta.json
-                out.add(rest.split("/", 1)[0])
-    return sorted(out)
+def list_datasets(pre_dir: str) -> list[str]:
+    """Names of the complete preprocessed datasets under ``pre_dir``."""
+    p = Path(resolve_pre_dir(pre_dir))
+    return sorted(d.name for d in p.iterdir() if d.is_dir() and _is_complete(d))
 
 
-def read_meta(pre_dir: str, db: str, revision: str | None = None) -> dict:
-    """Read one preprocessed dataset's ``meta.json`` (local or downloaded from Hub).
-
-    Callers loop this over a whole db_task_list, so a Hub ``pre_dir`` means one
-    request per db per rank -- enough to get rate-limited. Entry points call
-    :func:`prefetch_pre_dir` first, which leaves ``pre_dir`` a local path and
-    this a plain file read.
-    """
-    p = Path(pre_dir).expanduser()
-    if p.exists():
-        return json.loads((p / db / "meta.json").read_text())
-
-    from huggingface_hub import hf_hub_download
-
-    repo_id, subdir = resolve_repo(pre_dir)
-    filename = f"{subdir}/{db}/meta.json" if subdir else f"{db}/meta.json"
-    path = hf_hub_download(
-        repo_id=repo_id, filename=filename, repo_type="dataset", revision=revision
-    )
-    return json.loads(Path(path).read_text())
+def read_meta(pre_dir: str, db: str) -> dict:
+    """Read one preprocessed dataset's ``meta.json`` from ``pre_dir``."""
+    return json.loads((Path(pre_dir).expanduser() / db / "meta.json").read_text())
 
 
 # rustler's Sampler is an unpicklable Rust object, so any DataLoader over a

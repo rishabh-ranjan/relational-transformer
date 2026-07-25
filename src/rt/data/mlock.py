@@ -52,9 +52,9 @@ def mlock_file(path: str) -> int:
 @dataclass
 class MlockConfig:
     db_task_list: list[tuple[str, str]] | str
-    """(db, task) pairs, a local JSON file, or a Hub path like
-    stanford-star/the-join/db-task-lists/rt-j.json; the referenced dbs are
-    locked."""
+    """(db, task) pairs, or a path to a JSON file of pairs (the released lists
+    ship with the data, as <pre_dir>/db-task-lists/<name>.json); the referenced
+    dbs are locked."""
 
     pre_dir: str
 

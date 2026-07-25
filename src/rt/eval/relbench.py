@@ -31,7 +31,7 @@ def _relbench():
 def _seed_offset(pre_dir: str, db: str, table: str, split: str, embedder: str) -> int:
     """Global rustler ``node_idx`` of the first row of ``table``'s ``split``
     (so ``node_idx - offset`` is the relbench parquet row index)."""
-    local = resolve_pre_dir(pre_dir, [db], embedder)
+    local = resolve_pre_dir(pre_dir)
     ti = json.loads((Path(local) / db / "table_info.json").read_text())
     split_cap = {"train": "Train", "val": "Val", "test": "Test"}.get(split, split.capitalize())
     key = f"{table}:Db" if f"{table}:Db" in ti else f"{table}:{split_cap}"

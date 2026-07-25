@@ -13,15 +13,18 @@ checkpoints), eval prints a note and still runs both.
 
 ## Prerequisite: preprocessed data
 
-Inference takes an `--eval.pre-dir` of preprocessed data — either a local path
-you produced (see [preprocess.md](preprocess.md)) or a Hub repo such as
-`stanford-star/relbench-preprocessed`, downloaded and cached on demand. So you
-can reproduce the RelBench numbers with nothing downloaded up front:
+Inference takes an `--eval.pre-dir` of preprocessed data: a **local directory**,
+either produced by you (see [preprocess.md](preprocess.md)) or downloaded up
+front (see [downloads.md](downloads.md)). Data is never fetched on demand;
+checkpoints still are. To reproduce the RelBench numbers:
 
 ```bash
-# checkpoint and data both come from the Hub
+pixi run hf download stanford-star/relbench-preprocessed --repo-type dataset \
+  --local-dir data/relbench-preprocessed
+
+# the checkpoint still comes from the Hub, on demand
 pixi run eval --model.load-ckpt-path stanford-star/rt-j/classification \
-  --eval.pre-dir stanford-star/relbench-preprocessed --eval.csv-out-dir eval_out
+  --eval.pre-dir data/relbench-preprocessed --eval.csv-out-dir eval_out
 ```
 
 ## Inference with default context
@@ -29,7 +32,7 @@ pixi run eval --model.load-ckpt-path stanford-star/rt-j/classification \
 The command above runs **simple** inference: one default context config
 (`--eval.lcs-bw-pl-grid 256 32 True`, total `--eval.ctx-size-list 8192`) on the
 test split of every task in the default task list
-(`stanford-star/relbench/db-task-lists/forecast.json`, the 21-task RelBench
+(`data/relbench-preprocessed/db-task-lists/forecast.json`, the 21-task RelBench
 benchmark). For each test row the sampler builds a context (a sampled
 neighborhood of the relational graph), the model does a single forward pass,
 and predictions are keyed back to each row by its seed node index. Eval is
@@ -45,18 +48,21 @@ score) on the released RT-J checkpoints.
 
 ## Inference on a subset of tasks
 
-The task set is `--eval.db-task-list`: `(db, task)` pairs given inline, as a
-local JSON file of pairs, or as a Hub path to such a file. To run one task:
+The task set is `--eval.db-task-list`: `(db, task)` pairs given inline or as a
+JSON file of pairs. To run one task:
 
 ```bash
 pixi run eval --model.load-ckpt-path stanford-star/rt-j/classification \
-  --eval.pre-dir stanford-star/relbench-preprocessed \
+  --eval.pre-dir data/relbench-preprocessed \
   --eval.db-task-list rel-f1 driver-top3 --eval.csv-out-dir eval_out
 ```
 
-This downloads only that task's data (the Hub `--eval.pre-dir` is fetched on
-demand), so it's the quickest way to try the model end-to-end. Curated lists
-ship on the Hub: `stanford-star/relbench/db-task-lists/{forecast,autocomplete,all}.json`.
+That reads just that task's data out of `--eval.pre-dir`, so it's the quickest
+way to try the model end-to-end — and you can fetch only that database:
+`hf download stanford-star/relbench-preprocessed --repo-type dataset --local-dir
+data/relbench-preprocessed --include "rel-f1/*" "db-task-lists/*"`. Curated
+lists ship with the data:
+`<pre_dir>/db-task-lists/{forecast,autocomplete,all}.json`.
 
 ## Evaluate with the RelBench evaluator
 
@@ -110,7 +116,7 @@ seed, so no averaging yet):
 ```bash
 pixi run eval \
   --model.load-ckpt-path stanford-star/rt-j/regression \
-  --eval.pre-dir stanford-star/relbench-preprocessed \
+  --eval.pre-dir data/relbench-preprocessed \
   --eval.lcs-bw-pl-grid 256 32 True 512 64 True \
   --eval.ensemble-size 1 --eval.csv-out-dir eval_out
 ```
@@ -125,7 +131,7 @@ predictions are averaged before scoring:
 ```bash
 pixi run eval \
   --model.load-ckpt-path stanford-star/rt-j/regression \
-  --eval.pre-dir stanford-star/relbench-preprocessed \
+  --eval.pre-dir data/relbench-preprocessed \
   --eval.lcs-bw-pl-grid 256 32 True 512 64 True \
   --eval.ensemble-size 4 --eval.csv-out-dir eval_out
 ```
@@ -167,7 +173,8 @@ all tasks); `--mode synth-real` uses the task-wise continued-pretraining
 checkpoints. All three are in-context: no checkpoint ever trained on the
 target task's database (v1, synth) or task (synth-real).
 
-`stanford-star/relbench-preprocessed/legacy` holds RelBench re-preprocessed
+`data/relbench-preprocessed/legacy` (from
+`stanford-star/relbench-preprocessed`, subdir `legacy/`) holds RelBench re-preprocessed
 with `rt.cli.legacy.preprocess`, which applies the RT-v1-era boolean-typing
 rules (binary targets and a few db columns become a real Boolean semantic
 type instead of z-scored numbers) before the regular pipeline. The legacy

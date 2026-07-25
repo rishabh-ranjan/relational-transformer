@@ -26,8 +26,8 @@ class LegacyEvalConfig:
     out_dir: str
     # legacy/ holds RelBench re-preprocessed with RT-v1 boolean typing
     # (booleans are a real sem type instead of z-scored numbers).
-    pre_dir: str = "stanford-star/relbench-preprocessed/legacy"
-    db_task_list: str = "stanford-star/relbench/db-task-lists/forecast.json"
+    pre_dir: str = "data/relbench-preprocessed/legacy"
+    db_task_list: str = "data/relbench-preprocessed/db-task-lists/forecast.json"
     # published legacy eval context: the whole 1024-token context is one BFS
     # neighborhood around the seed (local_ctx_size == ctx_size), width 256,
     # no random-walk tier (num_walks=0) and no recency-sorted neighbors

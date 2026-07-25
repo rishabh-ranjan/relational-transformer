@@ -17,20 +17,30 @@ resumes automatically from `resume.pt` in that same directory
 ## Prerequisite: preprocessed data
 
 Pretraining takes a `--train.pre-dir` of preprocessed pretraining data (the
-Join) and an `--eval.pre-dir` of preprocessed RelBench for validation — each a
-local path (see [preprocess.md](preprocess.md)) or a Hub repo, downloaded and
-cached on demand. The released RT-J data (the defaults):
+Join) and an `--eval.pre-dir` of preprocessed RelBench for validation. Both are
+**local directories** — either produced by [preprocess.md](preprocess.md) or
+downloaded up front; nothing is fetched on demand (see
+[downloads.md](downloads.md) for why, and for how to fetch a subset):
 
-- `--train.pre-dir stanford-star/the-join-preprocessed`
-- `--eval.pre-dir stanford-star/relbench-preprocessed`
+```bash
+pixi run hf download stanford-star/the-join-preprocessed --repo-type dataset \
+  --local-dir data/the-join-preprocessed
+pixi run hf download stanford-star/relbench-preprocessed --repo-type dataset \
+  --local-dir data/relbench-preprocessed
+```
+
+Those two paths are the defaults (`--train.pre-dir data/the-join-preprocessed`,
+`--eval.pre-dir data/relbench-preprocessed`). The full preprocessed Join is
+~1.5 TiB, so on a cluster fetch it **once** to shared storage and point every
+run at that path.
 
 The task mixture is given by `--train.db-task-list` — `(db, task)` pairs as a
-local JSON file or a Hub path. Every name must be a task the db actually ships
-(recorded in its `meta.json`). Curated lists on the Hub under
-`stanford-star/the-join/db-task-lists/`: `forecast.json` (every forecast task in
-the Join), `autocomplete.json` (every `kind: autocomplete` task — predict a
-column of a db table, train-split only), `all.json` (both), and `rt-j.json` (the
-curated RT-J mixture, forecast + autocomplete).
+JSON file. Every name must be a task the db actually ships (recorded in its
+`meta.json`). The curated lists ship with the data, under
+`<pre_dir>/db-task-lists/`: `forecast.json` (every forecast task in the Join),
+`autocomplete.json` (every `kind: autocomplete` task — predict a column of a db
+table, train-split only), `all.json` (both), and `rt-j.json` (the curated RT-J
+mixture, forecast + autocomplete).
 
 ## Single-GPU training
 
@@ -42,8 +52,8 @@ single-GPU run:
 ```bash
 CUDA_VISIBLE_DEVICES=0 pixi run torchrun --standalone --nproc-per-node=auto \
   -m rt.cli.train \
-  --train.pre-dir stanford-star/the-join-preprocessed \
-  --eval.pre-dir stanford-star/relbench-preprocessed \
+  --train.pre-dir data/the-join-preprocessed \
+  --eval.pre-dir data/relbench-preprocessed \
   --logger.out-root ~/ckpts
 ```
 
@@ -55,8 +65,8 @@ on every rank, no sharding):
 
 ```bash
 pixi run torchrun --standalone --nproc-per-node=auto -m rt.cli.train \
-  --train.pre-dir stanford-star/the-join-preprocessed \
-  --eval.pre-dir stanford-star/relbench-preprocessed \
+  --train.pre-dir data/the-join-preprocessed \
+  --eval.pre-dir data/relbench-preprocessed \
   --logger.out-root ~/ckpts
 ```
 
@@ -100,6 +110,9 @@ writing that wrapper:
   preemptible queue).
 - **Shared storage for the clone.** Run from a repo checkout all nodes can
   read; the pixi env itself builds node-locally.
+- **One copy of the data.** `pre_dir` is a plain path, so fetch the preprocessed
+  mixture once to storage every node can read rather than per node. Startup
+  populates it into the page cache, after which reads are RAM-speed.
 - **Flaky InfiniBand?** `NCCL_IB_DISABLE=1` forces NCCL over TCP — slower but
   robust.
 

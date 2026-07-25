@@ -83,9 +83,7 @@ class RustlerDataset:
         vector_db_path: str | None,
         train_only_fallback: bool,
     ):
-        # `pre_dir` may be a local path or a HuggingFace repo spec; resolve to a
-        # local root, downloading only the files needed for these databases.
-        pre_dir = resolve_pre_dir(pre_dir, [t.db_name for t in tasks], embedder)
+        pre_dir = resolve_pre_dir(pre_dir)
         if vector_db_path is not None:
             vector_db_path = str(Path(vector_db_path).expanduser())
 

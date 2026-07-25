@@ -37,9 +37,12 @@ class ModelConfig:
 @dataclass
 class TrainConfig:
     db_task_list: list[tuple[str, str]] | str
-    """(db, task) pairs, a local JSON file of pairs, or a Hub path like
-    stanford-star/the-join/db-task-lists/forecast.json (only that file downloads)."""
+    """(db, task) pairs, or a path to a JSON file of pairs. The released lists
+    ship with the data: <pre_dir>/db-task-lists/<name>.json."""
     pre_dir: str
+    """Local directory of preprocessed datasets (one subdir per db). Download it
+    up front with `hf download` -- see docs/train.md; it is not fetched on
+    demand."""
     tokens_per_gpu: int
     num_workers: int
     prefetch_factor: int
@@ -79,9 +82,12 @@ class EvalConfig:
     # which task splits to evaluate, e.g. ["test"] or ["val", "test"]
     splits: list[str]
     db_task_list: list[tuple[str, str]] | str
-    """(db, task) pairs, a local JSON file of pairs, or a Hub path like
-    stanford-star/relbench/db-task-lists/forecast.json."""
+    """(db, task) pairs, or a path to a JSON file of pairs. The released lists
+    ship with the data: <pre_dir>/db-task-lists/<name>.json."""
     pre_dir: str
+    """Local directory of preprocessed datasets (one subdir per db). Download it
+    up front with `hf download` -- see docs/train.md; it is not fetched on
+    demand."""
     tokens_per_gpu: int
     num_workers: int
     prefetch_factor: int
