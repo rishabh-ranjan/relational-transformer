@@ -25,7 +25,12 @@ export XDG_CACHE_HOME=$HOME/.cache
 export WANDB_DIR=$HOME/.cache
 mkdir -p "$TMPDIR" "$XDG_CACHE_HOME"
 
+# pixi is a single static binary in the shared home, so it exists on every node
+# even when this node has never been used before; the node-local copy just wins
+# on PATH when present. The package cache is node-local, and warm across jobs
+# that land on the same node.
 command -v pixi >/dev/null || die "pixi not on PATH ($PATH)"
+export PIXI_CACHE_DIR=$HOME/.cache/rattler/cache
 
 # Tokens live in the shared secrets dir (readable from every node) rather than
 # being exported into the job env, where slurm would record them.
