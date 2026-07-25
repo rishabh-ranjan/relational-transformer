@@ -63,7 +63,7 @@ cfg = model.config
 tasks = get_tasks(pre_dir, [("rel-f1", "driver-dnf")], ("test",))
 ev = build_evaluator(
     tasks, pre_dir,
-    embedding_model=cfg["embedding_model"], d_text=cfg["d_text"],
+    embedder=cfg["embedder"], d_text=cfg["d_text"],
     device=device, ctx_size=128, local_ctx_size=64,
     items_per_task=5, num_workers=0,
 )

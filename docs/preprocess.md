@@ -21,7 +21,7 @@ which are used by RT dataloaders.
 Any dataset in relbench format works by swapping the `--dataset` argument — the
 manifest is the sole source of relational metadata; the parquet files carry only
 native dtypes. Useful flags: `--skip-tasks` (ingest db tables only), `--no-embed`,
-`--embedding-model`, `--batch-size`, and `--upload-repo <hub repo>` (preprocess
+`--embedder`, `--batch-size`, and `--upload-repo <hub repo>` (preprocess
 and push in one step).
 
 ## Preprocess many databases efficiently

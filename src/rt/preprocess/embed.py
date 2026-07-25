@@ -8,10 +8,10 @@ from ml_dtypes import bfloat16
 from sentence_transformers import SentenceTransformer
 
 class TextEmbedder:
-    def __init__(self, batch_size, embedding_model, device):
+    def __init__(self, batch_size, embedder, device):
         device_type = torch.device(device).type
         self.model = SentenceTransformer(
-            f"sentence-transformers/{embedding_model}",
+            f"sentence-transformers/{embedder}",
             device=device,
             model_kwargs={
                 "dtype": torch.bfloat16 if device_type == "cuda" else torch.float32,
@@ -49,7 +49,7 @@ def embed_texts(
     pre_dir: str,
     device,
     batch_size,
-    embedding_model,
+    embedder,
 ):
     if device is None:
         if torch.cuda.is_available():
@@ -69,9 +69,9 @@ def embed_texts(
     text_list = orjson.loads(raw)
     print(f"Loaded {len(text_list)} texts from {text_path}")
 
-    text_embedder = TextEmbedder(batch_size, embedding_model, init_device)
+    text_embedder = TextEmbedder(batch_size, embedder, init_device)
     emb = text_embedder(text_list, device=device)
 
-    emb_path = f"{pre_dir}/{dataset_name}/text_emb_{embedding_model}.bin"
+    emb_path = f"{pre_dir}/{dataset_name}/text_emb_{embedder}.bin"
     emb.tofile(emb_path)
     print(f"Wrote {emb.shape} {emb.dtype} to {emb_path}")

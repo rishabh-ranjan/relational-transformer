@@ -128,7 +128,7 @@ def preprocess_one_legacy(
     spec: str,
     out_dir: Path,
     *,
-    embedding_model: str,
+    embedder: str,
     batch_size: int,
     upload_repo: str | None,
     private: bool,
@@ -157,8 +157,8 @@ def preprocess_one_legacy(
     pre_dataset_dir = out_dir / name
     print(f"=== preprocessing {name} -> {pre_dataset_dir} ===", flush=True)
     run_rustler_pre(tf_dir, out_dir, source=spec, skip_tasks=False)
-    d_text = embed_dataset(pre_dataset_dir, embedding_model, batch_size)
-    update_meta_with_embeddings(pre_dataset_dir, embedding_model, d_text)
+    d_text = embed_dataset(pre_dataset_dir, embedder, batch_size)
+    update_meta_with_embeddings(pre_dataset_dir, embedder, d_text)
 
     if upload_repo:
         from huggingface_hub import HfApi

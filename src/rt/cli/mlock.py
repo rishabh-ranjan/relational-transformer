@@ -17,7 +17,7 @@ def default_config() -> MlockConfig:
     return MlockConfig(
         pre_dir="stanford-star/the-join-preprocessed",
         db_task_list="stanford-star/the-join/db-task-lists/rt-j.json",
-        embedding_model_ref="all-MiniLM-L12-v2",
+        embedder_ref="all-MiniLM-L12-v2",
         workers=32,
     )
 

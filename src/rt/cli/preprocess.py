@@ -23,7 +23,7 @@ def default_one() -> OneConfig:
     return OneConfig(
         dataset="stanford-star/relbench/rel-f1",
         out_dir="~/scratch/pre",
-        embedding_model="all-MiniLM-L12-v2",
+        embedder="all-MiniLM-L12-v2",
         batch_size=1024,
         skip_tasks=False,
         embed=True,
@@ -40,7 +40,7 @@ def default_many() -> ManyConfig:
         shard=0,
         num_shards=1,
         skip_existing=False,
-        embedding_model="all-MiniLM-L12-v2",
+        embedder="all-MiniLM-L12-v2",
         batch_size=1024,
         skip_tasks=False,
         embed=True,

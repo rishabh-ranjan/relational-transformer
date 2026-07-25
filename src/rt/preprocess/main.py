@@ -124,7 +124,7 @@ def run_rustler_pre(
 
 
 def embed_dataset(
-    pre_dataset_dir: Path, embedding_model: str, batch_size: int
+    pre_dataset_dir: Path, embedder: str, batch_size: int
 ) -> int:
     """Compute text embeddings for a preprocessed dataset; return d_text."""
     from rt.preprocess.embed import embed_texts
@@ -138,9 +138,9 @@ def embed_dataset(
         pre_dir=str(out_root),
         device=None,  # auto: all visible GPUs, else CPU
         batch_size=batch_size,
-        embedding_model=embedding_model,
+        embedder=embedder,
     )
-    emb_path = pre_dataset_dir / f"text_emb_{embedding_model}.bin"
+    emb_path = pre_dataset_dir / f"text_emb_{embedder}.bin"
     num_text = len(json.loads((pre_dataset_dir / "text.json").read_text()))
     # bfloat16 -> 2 bytes/elem; the emb file is (num_text, d_text) row-major.
     d_text = emb_path.stat().st_size // (max(num_text, 1) * 2)
@@ -164,12 +164,12 @@ def _embeddings_done(pre_dataset_dir: Path) -> bool:
 
 
 def update_meta_with_embeddings(
-    pre_dataset_dir: Path, embedding_model: str, d_text: int
+    pre_dataset_dir: Path, embedder: str, d_text: int
 ) -> None:
     meta_path = pre_dataset_dir / "meta.json"
     meta = json.loads(meta_path.read_text())
-    meta.setdefault("text_embeddings", {})[embedding_model] = {
-        "file": f"text_emb_{embedding_model}.bin",
+    meta.setdefault("text_embeddings", {})[embedder] = {
+        "file": f"text_emb_{embedder}.bin",
         "d_text": d_text,
     }
     meta_path.write_text(json.dumps(meta, indent=2) + "\n")
@@ -216,7 +216,7 @@ def preprocess_one(
     spec: str,
     out_dir: Path,
     *,
-    embedding_model: str,
+    embedder: str,
     batch_size: int,
     skip_tasks: bool,
     embed: bool = True,
@@ -231,8 +231,8 @@ def preprocess_one(
 
     run_rustler_pre(dataset_dir, out_dir, source=spec, skip_tasks=skip_tasks)
     if embed:
-        d_text = embed_dataset(pre_dataset_dir, embedding_model, batch_size)
-        update_meta_with_embeddings(pre_dataset_dir, embedding_model, d_text)
+        d_text = embed_dataset(pre_dataset_dir, embedder, batch_size)
+        update_meta_with_embeddings(pre_dataset_dir, embedder, d_text)
     if upload_repo:
         upload_dataset(pre_dataset_dir, upload_repo, private=private)
     return pre_dataset_dir
@@ -265,7 +265,7 @@ class OneConfig:
     """Local path or org/repo[/subdir]."""
     out_dir: str
     """Preprocessed-data output root."""
-    embedding_model: str
+    embedder: str
     """Sentence-transformers model for text embeddings."""
     batch_size: int
     """Embedding batch size."""
@@ -295,7 +295,7 @@ class ManyConfig:
     """Total shards (for slurm arrays)."""
     skip_existing: bool
     """Skip datasets whose output meta.json already exists."""
-    embedding_model: str
+    embedder: str
     """Sentence-transformers model for text embeddings."""
     batch_size: int
     """Embedding batch size."""
@@ -339,7 +339,7 @@ class UploadConfig:
 def run_one(cfg: OneConfig) -> None:
     preprocess_one(
         cfg.dataset, Path(cfg.out_dir).expanduser(),
-        embedding_model=cfg.embedding_model, batch_size=cfg.batch_size,
+        embedder=cfg.embedder, batch_size=cfg.batch_size,
         skip_tasks=cfg.skip_tasks, embed=cfg.embed,
         upload_repo=cfg.upload_repo, private=not cfg.public, revision=cfg.revision,
     )
@@ -365,7 +365,7 @@ def run_many(cfg: ManyConfig) -> None:
         try:
             preprocess_one(
                 spec, out_dir,
-                embedding_model=cfg.embedding_model, batch_size=cfg.batch_size,
+                embedder=cfg.embedder, batch_size=cfg.batch_size,
                 skip_tasks=cfg.skip_tasks, embed=cfg.embed,
                 upload_repo=cfg.upload_repo, private=not cfg.public,
                 revision=cfg.revision,

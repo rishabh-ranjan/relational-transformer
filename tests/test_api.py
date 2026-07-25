@@ -19,7 +19,7 @@ def test_from_pretrained_local(tiny_checkpoint):
     ckpt, src = tiny_checkpoint
     model = RelationalTransformer.from_pretrained(ckpt, device="cpu")
     assert isinstance(model, RelationalTransformer)
-    assert model.config["embedding_model"] == "test-embed"  # config attached
+    assert model.config["embedder"] == "test-embed"  # config attached
     s1, s2 = src.state_dict(), model.state_dict()
     assert s1.keys() == s2.keys()
     assert all(torch.equal(s1[k], s2[k]) for k in s1)  # weights round-trip
@@ -29,7 +29,7 @@ def test_load_rt_model_backcompat(tiny_checkpoint):
     ckpt, _ = tiny_checkpoint
     model, config = load_rt_model(str(ckpt))
     assert isinstance(model, RelationalTransformer)
-    assert config["embedding_model"] == "test-embed"
+    assert config["embedder"] == "test-embed"
 
 
 def test_from_pretrained_subfolder(tmp_path, tiny_dims):
@@ -37,19 +37,19 @@ def test_from_pretrained_subfolder(tmp_path, tiny_dims):
     (tmp_path / "classification").mkdir()
     save_model(src.state_dict(), tmp_path / "classification" / MODEL_FILE)
     (tmp_path / "classification" / CONFIG_FILE).write_text(
-        json.dumps({"model": tiny_dims, "embedding_model": "sub"})
+        json.dumps({"model": tiny_dims, "embedder": "sub"})
     )
     model = RelationalTransformer.from_pretrained(tmp_path, subfolder="classification")
-    assert model.config["embedding_model"] == "sub"
+    assert model.config["embedder"] == "sub"
 
 
 def test_from_pretrained_model_kwargs(tmp_path, tiny_dims):
     # config.json without dims -> dims supplied via keyword args
     src = RelationalTransformer(**tiny_dims, compile=False, materialize_attn_masks=True)
     save_model(src.state_dict(), tmp_path / MODEL_FILE)
-    (tmp_path / CONFIG_FILE).write_text(json.dumps({"embedding_model": "x"}))
+    (tmp_path / CONFIG_FILE).write_text(json.dumps({"embedder": "x"}))
     model = RelationalTransformer.from_pretrained(tmp_path, **tiny_dims)
-    assert model.config["embedding_model"] == "x"
+    assert model.config["embedder"] == "x"
 
 
 def test_compile_true_builds(tiny_dims):

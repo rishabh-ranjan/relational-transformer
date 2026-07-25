@@ -8,7 +8,7 @@ from torch.nn.attention.flex_attention import create_block_mask
 
 # Both legacy papers use the same architecture dims.
 LEGACY_MODEL_DIMS = dict(num_blocks=12, d_model=256, d_text=384, num_heads=8, d_ff=1024)
-LEGACY_EMBEDDING_MODEL = "all-MiniLM-L12-v2"
+LEGACY_EMBEDDER = "all-MiniLM-L12-v2"
 
 
 def make_block_mask(mask, batch_size, seq_len, device):
@@ -26,13 +26,13 @@ def make_block_mask(mask, batch_size, seq_len, device):
     )
 
 
-def predict(model, batch, eval_ctx_sizes, device, task, bool_as_num):
+def predict(model, batch, eval_ctx_size_list, device, task, bool_as_num):
     """Evaluator-facing eval-time predictions; mirrors
     :meth:`rt.model.net.RelationalTransformer.predict` for the legacy nets
     (which keep token order, so ``is_targets`` needs no re-sort)."""
     val_key = "boolean" if task.task_type == "clf" and not bool_as_num else "number"
     preds = {}
-    for ctx_size in eval_ctx_sizes:
+    for ctx_size in eval_ctx_size_list:
         trunc = {
             k: v[:, :ctx_size].to(device, non_blocking=True) for k, v in batch.items()
         }

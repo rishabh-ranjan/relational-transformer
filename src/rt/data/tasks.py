@@ -70,14 +70,14 @@ def resolve_db_task_list(db_task_list) -> list[tuple[str, str]]:
     return out
 
 
-def get_tasks(pre_dir, db_task_list, splits, *, embedding_model=None) -> list[Task]:
+def get_tasks(pre_dir, db_task_list, splits, *, embedder=None) -> list[Task]:
     """Build full :class:`Task` objects for a db_task_list at the given splits.
 
     Forecast task names are looked up in each db's ``meta.json`` (target column,
     task type, available splits). Autocomplete names (``"<table>/<column>"``)
     are emitted at the ``train`` split only; their clf/reg type is read off the
     preprocessed nodes via ``rustler.column_sem_types``, which requires the
-    db's core files locally (``embedding_model`` selects the text-embedding
+    db's core files locally (``embedder`` selects the text-embedding
     file when ``pre_dir`` is a Hub repo and the data must be fetched -- the
     same files training/eval need anyway).
     """
@@ -109,12 +109,12 @@ def get_tasks(pre_dir, db_task_list, splits, *, embedding_model=None) -> list[Ta
                 if sem is None:
                     from rt.rustler import column_sem_types
 
-                    if embedding_model is None:
+                    if embedder is None:
                         raise ValueError(
                             f"resolving autocomplete task {db}/{name} needs "
-                            f"embedding_model to fetch the db's core files"
+                            f"embedder to fetch the db's core files"
                         )
-                    local = resolve_pre_dir(pre_dir, [db], embedding_model)
+                    local = resolve_pre_dir(pre_dir, [db], embedder)
                     sem = column_sem_types(local, db)
                 tt = _SEM_TASK_TYPE.get(sem.get(f"{col} of {table}"))
                 if tt is None:

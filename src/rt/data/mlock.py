@@ -58,7 +58,7 @@ class MlockConfig:
 
     pre_dir: str
 
-    embedding_model_ref: str
+    embedder_ref: str
 
     workers: int
     """parallel mlock workers; networked filesystems typically scale with
@@ -73,7 +73,7 @@ def mlock_main(cfg: MlockConfig) -> None:
         base = os.path.join(cfg.pre_dir, db)
         return [
             os.path.join(base, "nodes.rkyv"),
-            os.path.join(base, f"text_emb_{cfg.embedding_model_ref}.bin"),
+            os.path.join(base, f"text_emb_{cfg.embedder_ref}.bin"),
             os.path.join(base, "p2f_adj.rkyv"),
         ]
 

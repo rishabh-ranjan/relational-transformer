@@ -40,6 +40,13 @@ def load_model(path):
     return load_file(str(path))
 
 
+def _compat(config: dict) -> None:
+    """In-place rename of legacy config.json keys (checkpoints written before
+    ``embedding_model`` became ``embedder``)."""
+    if "embedder" not in config and "embedding_model" in config:
+        config["embedder"] = config.pop("embedding_model")
+
+
 def resolve_checkpoint(
     spec, *, revision: str | None = None, subfolder: str | None = None
 ) -> tuple[dict, Path]:
@@ -56,6 +63,7 @@ def resolve_checkpoint(
     if p.is_file():
         cfg_path = p.with_name(CONFIG_FILE)
         config = json.loads(cfg_path.read_text()) if cfg_path.exists() else {}
+        _compat(config)
         return config, p
     if p.is_dir():
         d = p / subfolder if subfolder else p
@@ -72,6 +80,7 @@ def resolve_checkpoint(
         )
         d = Path(local) / subdir if subdir else Path(local)
     config = json.loads((d / CONFIG_FILE).read_text())
+    _compat(config)
     return config, d / config.get("checkpoint_file", MODEL_FILE)
 
 

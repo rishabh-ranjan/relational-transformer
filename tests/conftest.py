@@ -41,7 +41,7 @@ def tiny_checkpoint(tmp_path, tiny_dims):
     ckpt.mkdir()
     save_model(src.state_dict(), ckpt / MODEL_FILE)
     (ckpt / CONFIG_FILE).write_text(
-        json.dumps({"model": tiny_dims, "embedding_model": "test-embed"})
+        json.dumps({"model": tiny_dims, "embedder": "test-embed"})
     )
     return ckpt, src
 

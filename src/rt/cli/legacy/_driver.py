@@ -17,7 +17,7 @@ from rt.data import get_tasks
 from rt.eval.main import build_evaluator
 from rt.eval.metrics import metric_for
 from rt.eval.relbench import _emit_and_score
-from rt.model.legacy._common import LEGACY_EMBEDDING_MODEL
+from rt.model.legacy._common import LEGACY_EMBEDDER
 
 
 @dataclass
@@ -47,7 +47,6 @@ class LegacyEvalConfig:
     items_per_task: int = 10_000_000
     shuffle_seed: int = 0
     context_seed: int = 0
-    reg_metric: str = "mae"
 
 
 def run_legacy_eval(cfg: LegacyEvalConfig, model_for_task) -> dict:
@@ -68,7 +67,7 @@ def run_legacy_eval(cfg: LegacyEvalConfig, model_for_task) -> dict:
         ev = build_evaluator(
             [task],
             cfg.pre_dir,
-            embedding_model=LEGACY_EMBEDDING_MODEL,
+            embedder=LEGACY_EMBEDDER,
             d_text=384,
             device=device,
             ctx_size=cfg.ctx_size,
@@ -89,10 +88,10 @@ def run_legacy_eval(cfg: LegacyEvalConfig, model_for_task) -> dict:
         ):
             preds = preds_by_prefix[""]
             mname, mval, n, align, _ = _emit_and_score(
-                out_dir, task, cfg.pre_dir, LEGACY_EMBEDDING_MODEL, labels, preds,
-                node_idxs, keep_csv=True,
+                out_dir, task, cfg.pre_dir, LEGACY_EMBEDDER, labels, preds,
+                node_idxs,
             )
-            nm, nv = metric_for(task.task_type, labels, preds, cfg.reg_metric)
+            nm, nv = metric_for(task.task_type, labels, preds)
             by_metric.setdefault(mname, []).append(mval)
             results[f"{task.db_name}/{task.table_name}"] = {
                 "metric": mname, "value": mval, "n": n,

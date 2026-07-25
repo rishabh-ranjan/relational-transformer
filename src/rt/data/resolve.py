@@ -42,7 +42,7 @@ def is_local(pre_dir: str) -> bool:
 def resolve_pre_dir(
     pre_dir: str,
     db_names,
-    embedding_model: str,
+    embedder: str,
     *,
     include_text: bool = False,
     metadata_only: bool = False,
@@ -52,7 +52,7 @@ def resolve_pre_dir(
 
     If ``pre_dir`` is an existing local path it is returned as-is. Otherwise it is
     treated as a Hub ``org/repo[/subdir]`` and only the files needed for
-    ``db_names`` (+ the chosen ``embedding_model``) are downloaded and cached.
+    ``db_names`` (+ the chosen ``embedder``) are downloaded and cached.
     ``metadata_only`` fetches just the small schema files (no node blobs or
     embeddings) -- enough to browse tables/columns.
     """
@@ -70,7 +70,7 @@ def resolve_pre_dir(
         base = f"{prefix}{db}"
         patterns += [f"{base}/{f}" for f in file_set]
         if not metadata_only:
-            patterns.append(f"{base}/text_emb_{embedding_model}.bin")
+            patterns.append(f"{base}/text_emb_{embedder}.bin")
         if include_text:
             patterns.append(f"{base}/text.json")
 

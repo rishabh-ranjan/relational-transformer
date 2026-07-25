@@ -22,7 +22,7 @@ SEM_TYPE_NUMBER = 0
 SEM_TYPE_BOOLEAN = 3
 
 
-def process_batch(tup, d_text, bool_as_num):
+def process_batch(tup, d_text, bool_as_num=True):
     out = dict(tup)
     seq_len = out.pop("seq_len")
 
@@ -57,6 +57,10 @@ def process_batch(tup, d_text, bool_as_num):
     out["text_values"] = out["text_values"].view(-1, seq_len, d_text)
     out["col_name_values"] = out["col_name_values"].view(-1, seq_len, d_text)
 
+    # `bool_as_num=False` is a legacy-only escape hatch: RT-v1/PluRel
+    # checkpoints were trained on boolean-typed data and read clf targets from
+    # the boolean head. Everything current runs with booleans folded into
+    # numbers.
     if bool_as_num:
         bool_mask = out["sem_types"] == SEM_TYPE_BOOLEAN
         out["number_values"][bool_mask] = out["boolean_values"][bool_mask]
@@ -74,31 +78,28 @@ class RustlerDataset:
         global_rank,
         local_rank,
         world_size,
-        local_ctx_sizes: list[int],
-        bfs_widths: list[int],
+        local_ctx_size_list: list[int],
+        bfs_width_list: list[int],
         num_walks,
         walk_length,
-        prefer_latest: list[bool],
+        prefer_latest_list: list[bool],
         mask_prob_max,
-        embedding_model,
+        embedder,
         d_text,
         shuffle_seed,
         context_seed,
         items_per_task,
         quiet,
-        bool_as_num,
         ignore_data_errors,
-        skip_text_cols,
         mmap_populate,
-        balance_labels: list[bool],
         timeout_per_item,
-        ablate_schema_semantics,
         vector_db_path: str | None,
         train_only_fallback: bool,
+        bool_as_num=True,
     ):
         # `pre_dir` may be a local path or a HuggingFace repo spec; resolve to a
         # local root, downloading only the files needed for these databases.
-        pre_dir = resolve_pre_dir(pre_dir, [t.db_name for t in tasks], embedding_model)
+        pre_dir = resolve_pre_dir(pre_dir, [t.db_name for t in tasks], embedder)
         if vector_db_path is not None:
             vector_db_path = str(Path(vector_db_path).expanduser())
 
@@ -172,13 +173,13 @@ class RustlerDataset:
             global_rank=global_rank,
             local_rank=local_rank,
             world_size=world_size,
-            local_ctx_sizes=local_ctx_sizes,
-            bfs_widths=bfs_widths,
+            local_ctx_size_list=local_ctx_size_list,
+            bfs_width_list=bfs_width_list,
             num_walks=num_walks,
             walk_length=walk_length,
-            prefer_latest=prefer_latest,
+            prefer_latest_list=prefer_latest_list,
             mask_prob_max=mask_prob_max,
-            embedding_model=embedding_model,
+            embedder=embedder,
             pre_dir=pre_dir,
             d_text=d_text,
             shuffle_seed=shuffle_seed,
@@ -189,11 +190,8 @@ class RustlerDataset:
             quiet=quiet,
             ignore_data_errors=ignore_data_errors,
             num_prev_skipped=len(skipped_tasks),
-            skip_text_cols=skip_text_cols,
             mmap_populate=mmap_populate,
-            balance_labels=balance_labels,
             timeout_per_item=timeout_per_item,
-            ablate_schema_semantics=ablate_schema_semantics,
             vector_db_path=vector_db_path,
             train_only_fallback=train_only_fallback,
         )
@@ -211,29 +209,25 @@ class TrainDataset(RustlerDataset, IterableDataset):
         self,
         tasks,
         pre_dir: str,
-        train_ctx_sizes,
+        train_ctx_size_list,
         train_tokens_per_gpu,
         total_bs,
         global_rank,
         local_rank,
         world_size,
-        local_ctx_sizes: list[int],
-        bfs_widths: list[int],
+        local_ctx_size_list: list[int],
+        bfs_width_list: list[int],
         num_walks,
         walk_length,
-        prefer_latest: list[bool],
+        prefer_latest_list: list[bool],
         mask_prob_max,
-        embedding_model,
+        embedder,
         d_text,
         seed,
         items_per_task,
         mask_prob_max_shared,
-        bool_as_num,
-        skip_text_cols,
         mmap_populate,
-        balance_labels: list[bool],
         timeout_per_item,
-        ablate_schema_semantics,
         vector_db_path: str | None,
         train_only_fallback: bool,
     ):
@@ -246,29 +240,25 @@ class TrainDataset(RustlerDataset, IterableDataset):
             global_rank=global_rank,
             local_rank=local_rank,
             world_size=world_size,
-            local_ctx_sizes=local_ctx_sizes,
-            bfs_widths=bfs_widths,
+            local_ctx_size_list=local_ctx_size_list,
+            bfs_width_list=bfs_width_list,
             num_walks=num_walks,
             walk_length=walk_length,
-            prefer_latest=prefer_latest,
+            prefer_latest_list=prefer_latest_list,
             mask_prob_max=mask_prob_max,
-            embedding_model=embedding_model,
+            embedder=embedder,
             d_text=d_text,
             shuffle_seed=seed,
             context_seed=seed,
             items_per_task=items_per_task,
             quiet=False,
-            bool_as_num=bool_as_num,
             ignore_data_errors=True,
-            skip_text_cols=skip_text_cols,
             mmap_populate=mmap_populate,
-            balance_labels=balance_labels,
             timeout_per_item=timeout_per_item,
-            ablate_schema_semantics=ablate_schema_semantics,
             vector_db_path=vector_db_path,
             train_only_fallback=train_only_fallback,
         )
-        self.train_ctx_sizes = train_ctx_sizes
+        self.train_ctx_size_list = train_ctx_size_list
         self.seed = random.Random(seed).getrandbits(64)
         self.train_tokens_per_gpu = train_tokens_per_gpu
         self.total_bs = total_bs
@@ -276,7 +266,7 @@ class TrainDataset(RustlerDataset, IterableDataset):
         # total_bs must split evenly into world_size * per_gpu_bs so the global
         # batch is exactly total_bs. Pick a GPU count that divides
         # total_bs / per_gpu_bs (the launcher does this); fail loudly otherwise.
-        for c in train_ctx_sizes:
+        for c in train_ctx_size_list:
             train_bs = max(1, train_tokens_per_gpu // c)
             if total_bs < world_size * train_bs:
                 assert total_bs % world_size == 0, (
@@ -303,12 +293,12 @@ class TrainDataset(RustlerDataset, IterableDataset):
         # in parallel. List-yielding (multi-ctx case) blocks each worker for
         # grad_accum batches before yielding, which is unnecessary here since
         # all microbatches share the only ctx_size anyway.
-        single_ctx = len(self.train_ctx_sizes) == 1
+        single_ctx = len(self.train_ctx_size_list) == 1
         while True:
             if self.mask_prob_max_shared is not None:
                 self.sampler.set_mask_prob_max_py(self.mask_prob_max_shared.value)
             train_ctx_size = random.Random(self.seed + step).choice(
-                self.train_ctx_sizes
+                self.train_ctx_size_list
             )
             train_bs = max(1, self.train_tokens_per_gpu // train_ctx_size)
             if self.total_bs < self.world_size * train_bs:
@@ -322,7 +312,7 @@ class TrainDataset(RustlerDataset, IterableDataset):
             else:
                 # Multi ctx_size: yield grad_accum batches atomically with
                 # shared ctx_size to avoid worker-round-robin interleaving
-                # ctx_sizes within an optimizer step.
+                # ctx_size_list within an optimizer step.
                 batches = []
                 for _ in range(grad_accum):
                     tup = self.sampler.batch_py(None, train_bs, train_ctx_size)

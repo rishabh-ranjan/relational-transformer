@@ -3,22 +3,35 @@
 Loads --model.load-ckpt-path (local dir/file or Hub repo such as
 stanford-star/rt-j/classification), evaluates every RelBench task of the
 checkpoint's kind (clf/reg) via RelBench's own leaderboard evaluator, and
-writes --eval.out-dir as a valid RelBench submission directory. Single-process,
+writes --eval.csv-out-dir as a valid RelBench submission directory. Single-process,
 one GPU.
 """
 
 import tyro
 
-from rt.config import Config, EvalConfig, LoggerConfig, ModelConfig
+from rt.config import (
+    Config,
+    EvalConfig,
+    LoggerConfig,
+    ModelConfig,
+    default_id,
+)
 from rt.eval import main
 
 
 
 def default_config() -> Config:
     return Config(
-        logger=LoggerConfig(project="rt", wandb_run_name=None, wandb_disabled=True),
+        logger=LoggerConfig(
+            project="rt",
+            entity=None,
+            id=default_id(),
+            run_name=None,
+            wandb_disabled=True,
+            out_root="~/ckpts",
+        ),
         model=ModelConfig(
-            embedding_model="all-MiniLM-L12-v2",
+            embedder="all-MiniLM-L12-v2",
             d_text=384,
             num_blocks=12,
             d_model=512,
@@ -38,22 +51,15 @@ def default_config() -> Config:
             prefetch_factor=2,
             num_walks=10_000,
             walk_length=20,
-            freq=None,
             items_per_task=10_000_000,
-            ctx_sizes=[8192],
-            bool_as_num=True,
-            skip_text_cols=False,
+            ctx_size_list=[8192],
             mmap_populate=True,
-            balance_labels=False,
-            ablate_schema_semantics=False,
-            reg_metric="mae",
             shuffle_seed=0,
             context_seed=0,
             vector_db_path=None,
             lcs_bw_pl_grid=[(256, 32, True)],
             ensemble_size=1,
-            out_dir="eval_out",
-            write_csv=True,
+            csv_out_dir="eval_out",
         ),
     )
 

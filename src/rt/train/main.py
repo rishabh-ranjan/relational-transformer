@@ -75,14 +75,14 @@ def setup_dist():
 
 
 def run_subdir(cfg) -> Path:
-    """``<entity>/<project>/<wandb id>``, so every output directory is uniquely
-    associated with its wandb run.
+    """``<entity>/<project>/<id>``, so every output directory is uniquely
+    associated with its run.
 
-    Derived from the config alone (wandb_id is always set), hence identical on
+    Derived from the config alone (id is always set), hence identical on
     every rank without any communication.
     """
-    return Path(cfg.logger.wandb_entity or "no-entity", cfg.logger.project,
-                cfg.logger.wandb_id)
+    return Path(cfg.logger.entity or "no-entity", cfg.logger.project,
+                cfg.logger.id)
 
 
 def seed_everything(seed):
@@ -100,7 +100,7 @@ def move(batch, device):
 
 
 @torch.inference_mode()
-def eval_avg_metrics(evaluator, nets_with_prefix, ctx_sizes, reg_metric):
+def eval_avg_metrics(evaluator, nets_with_prefix, ctx_size_list):
     """Mean val metric per net prefix: {prefix: {"clf": auc, "reg": mae}}.
 
     Averaged over both eval tasks and the requested eval ctx sizes -- each
@@ -111,12 +111,11 @@ def eval_avg_metrics(evaluator, nets_with_prefix, ctx_sizes, reg_metric):
 
     acc = {p: {"clf": [], "reg": []} for _, p in nets_with_prefix}
     for task, _ctx, labels, preds_by_prefix, _nl in evaluator.evaluate_raw(
-        nets_with_prefix, ctx_sizes
+        nets_with_prefix, ctx_size_list
     ):
         for _, prefix in nets_with_prefix:
             try:
-                _, v = metric_for(task.task_type, labels, preds_by_prefix[prefix],
-                                  reg_metric)
+                _, v = metric_for(task.task_type, labels, preds_by_prefix[prefix])
             except ValueError:
                 # e.g. a single-class slice -> ROC AUC undefined; skip this task.
                 continue
@@ -132,7 +131,7 @@ def main(cfg: Config) -> None:
         "in-loop eval does not ensemble; use rt.cli.eval on a saved checkpoint "
         "for eval.ensemble_size > 1"
     )
-    assert not cfg.eval.write_csv and not cfg.eval.out_dir, (
+    assert cfg.eval.csv_out_dir is None, (
         "in-loop eval computes metrics only; submission CSVs come from rt.cli.eval"
     )
     device, rank, local_rank, world_size, ddp = setup_dist()
@@ -141,11 +140,11 @@ def main(cfg: Config) -> None:
     use_wandb = (not cfg.logger.wandb_disabled) and is_main
     if use_wandb:
         import wandb
-        wandb.init(project=cfg.logger.project, entity=cfg.logger.wandb_entity,
-                   name=cfg.logger.wandb_run_name, id=cfg.logger.wandb_id,
+        wandb.init(project=cfg.logger.project, entity=cfg.logger.entity,
+                   name=cfg.logger.run_name, id=cfg.logger.id,
                    resume="allow", config=dataclasses.asdict(cfg))
     seed_everything(cfg.train.seed + rank)
-    out_dir = Path(cfg.train.out_root).expanduser() / run_subdir(cfg)
+    out_dir = Path(cfg.logger.out_root).expanduser() / run_subdir(cfg)
     if is_main:
         out_dir.mkdir(parents=True, exist_ok=True)
         print(f"out_dir: {out_dir}", flush=True)
@@ -226,19 +225,18 @@ def main(cfg: Config) -> None:
     # ---- data: re-seed by resumed step so the stream does not replay ----
     data_seed = cfg.train.seed + SEED_STRIDE * start_step
     train_tasks = get_tasks(cfg.train.pre_dir, cfg.train.db_task_list, ("train",),
-                            embedding_model=cfg.model.embedding_model)
+                            embedder=cfg.model.embedder)
     if is_main:
         print(f"pretraining on {len(train_tasks)} tasks from {cfg.train.pre_dir}", flush=True)
     train_ds = TrainDataset(
-        tasks=train_tasks, pre_dir=cfg.train.pre_dir, train_ctx_sizes=cfg.train.ctx_sizes,
+        tasks=train_tasks, pre_dir=cfg.train.pre_dir, train_ctx_size_list=cfg.train.ctx_size_list,
         train_tokens_per_gpu=cfg.train.tokens_per_gpu, total_bs=cfg.train.total_bs,
         global_rank=rank, local_rank=local_rank, world_size=world_size,
-        local_ctx_sizes=cfg.train.local_ctx_sizes, bfs_widths=cfg.train.bfs_widths,
-        num_walks=cfg.train.num_walks, walk_length=cfg.train.walk_length, prefer_latest=cfg.train.prefer_latest,
-        mask_prob_max=cfg.train.mask_prob_max, embedding_model=cfg.model.embedding_model, d_text=cfg.model.d_text,
+        local_ctx_size_list=cfg.train.local_ctx_size_list, bfs_width_list=cfg.train.bfs_width_list,
+        num_walks=cfg.train.num_walks, walk_length=cfg.train.walk_length, prefer_latest_list=cfg.train.prefer_latest_list,
+        mask_prob_max=cfg.train.mask_prob_max, embedder=cfg.model.embedder, d_text=cfg.model.d_text,
         seed=data_seed, items_per_task=cfg.train.items_per_task, mask_prob_max_shared=None,
-        bool_as_num=cfg.train.bool_as_num, skip_text_cols=cfg.train.skip_text_cols, mmap_populate=cfg.train.mmap_populate,
-        balance_labels=cfg.train.balance_labels, timeout_per_item=cfg.train.timeout_per_item, ablate_schema_semantics=False,
+        mmap_populate=cfg.train.mmap_populate, timeout_per_item=cfg.train.timeout_per_item,
         vector_db_path=cfg.train.vector_db_path, train_only_fallback=False,
     )
     loader = DataLoader(train_ds, batch_size=None, num_workers=cfg.train.num_workers,
@@ -250,8 +248,8 @@ def main(cfg: Config) -> None:
     # time. Validate total_bs splits exactly for every ctx size, mirroring
     # TrainDataset.__iter__: when world_size*train_bs would exceed total_bs the
     # per-gpu batch shrinks to total_bs/world_size with grad_accum=1.
-    multi_ctx = len(cfg.train.ctx_sizes) > 1
-    for c in cfg.train.ctx_sizes:
+    multi_ctx = len(cfg.train.ctx_size_list) > 1
+    for c in cfg.train.ctx_size_list:
         tb = max(1, cfg.train.tokens_per_gpu // c)
         if cfg.train.total_bs < world_size * tb:
             assert cfg.train.total_bs % world_size == 0, (
@@ -266,7 +264,7 @@ def main(cfg: Config) -> None:
             )
     # grad_accum for the single-ctx loop; multi-ctx derives it from the yielded
     # list length each step.
-    train_bs = max(1, cfg.train.tokens_per_gpu // max(cfg.train.ctx_sizes))
+    train_bs = max(1, cfg.train.tokens_per_gpu // max(cfg.train.ctx_size_list))
     if cfg.train.total_bs < world_size * train_bs:
         train_bs = max(1, cfg.train.total_bs // world_size)
         grad_accum = 1
@@ -286,16 +284,14 @@ def main(cfg: Config) -> None:
     evaluators = [
         (f"lcs{lcs}-bw{bw}-pl{int(pl)}_" if i else "", Evaluator(
             tasks=val_tasks, pre_dir=cfg.eval.pre_dir,
-            eval_bs=max(1, cfg.eval.tokens_per_gpu // max(cfg.eval.ctx_sizes)),
-            ctx_sizes=cfg.eval.ctx_sizes, items_per_task=cfg.eval.items_per_task,
+            eval_bs=max(1, cfg.eval.tokens_per_gpu // max(cfg.eval.ctx_size_list)),
+            ctx_size_list=cfg.eval.ctx_size_list, items_per_task=cfg.eval.items_per_task,
             num_workers=cfg.eval.num_workers, prefetch_factor=cfg.eval.prefetch_factor,
             persistent_workers=False, local_ctx_size=lcs,
             bfs_width=bw, num_walks=cfg.eval.num_walks,
             walk_length=cfg.eval.walk_length, prefer_latest=pl,
-            bool_as_num=cfg.eval.bool_as_num, skip_text_cols=cfg.eval.skip_text_cols,
-            mmap_populate=cfg.eval.mmap_populate, balance_labels=cfg.eval.balance_labels,
-            ablate_schema_semantics=cfg.eval.ablate_schema_semantics,
-            embedding_model=cfg.model.embedding_model, d_text=cfg.model.d_text,
+            mmap_populate=cfg.eval.mmap_populate,
+            embedder=cfg.model.embedder, d_text=cfg.model.d_text,
             shuffle_seed=cfg.eval.shuffle_seed, context_seed=cfg.eval.context_seed,
             vector_db_path=cfg.eval.vector_db_path, train_only_fallback=False,
             global_rank=rank, local_rank=local_rank,
@@ -315,7 +311,7 @@ def main(cfg: Config) -> None:
 
     if is_main:
         (out_dir / "config.json").write_text(json.dumps({
-            "embedding_model": cfg.model.embedding_model, "d_text": cfg.model.d_text,
+            "embedder": cfg.model.embedder, "d_text": cfg.model.d_text,
             "checkpoint_file": "model.safetensors",
             "model": {"num_blocks": cfg.model.num_blocks, "d_model": cfg.model.d_model,
                       "d_text": cfg.model.d_text, "num_heads": cfg.model.num_heads,
@@ -357,7 +353,7 @@ def main(cfg: Config) -> None:
                 cur = best[tt]
                 if cur is None or better(v, cur["value"]) == v:
                     best[tt] = {"kind": kind, "step": step, "value": v,
-                                "metric": "auc" if tt == "clf" else cfg.eval.reg_metric}
+                                "metric": "auc" if tt == "clf" else "mae"}
 
     def run_eval(step):
         if not evaluators:
@@ -370,7 +366,7 @@ def main(cfg: Config) -> None:
         for tag, evaluator in evaluators:
             tagged_nets = [(n, tag + p) for n, p in nets]
             metrics.update(eval_avg_metrics(evaluator, tagged_nets,
-                                            cfg.eval.ctx_sizes, cfg.eval.reg_metric))
+                                            cfg.eval.ctx_size_list))
         # Best-checkpoint tracking follows the primary (untagged) grid entry.
         consider(metrics, step)
         if is_main:
@@ -379,7 +375,7 @@ def main(cfg: Config) -> None:
             for prefix, m in metrics.items():
                 label = prefix.rstrip("_") or "live"
                 print(f"  [eval step={step} {label}] clf_auc={m['clf']} "
-                      f"{cfg.eval.reg_metric}={m['reg']}", flush=True)
+                      f"mae={m['reg']}", flush=True)
             if use_wandb:
                 wandb.log({
                     f"val/{p}{tt}": metrics[p][tt]
@@ -406,7 +402,7 @@ def main(cfg: Config) -> None:
     # 0 only; we don't count it in sec/step (step_t0 is reset after).
     last_resume_t = time.perf_counter()
     while step < cfg.train.total_steps:
-        if cfg.eval.freq and step % cfg.eval.freq == 0:
+        if cfg.train.eval_freq and step % cfg.train.eval_freq == 0:
             run_eval(step)
             checkpoint(step)
             save_resume(step)

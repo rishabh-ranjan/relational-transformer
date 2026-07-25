@@ -7,7 +7,7 @@ RelBench, checkpointing, and automatic selection of the best clf / reg checkpoin
 by mean validation metric.
 
 Checkpoints land in the per-run directory
-`<out-root>/<wandb-entity>/<wandb-project>/<wandb-id>/` as `steps=<N>.safetensors` (live) and
+`<out-root>/<entity>/<project>/<id>/` as `steps=<N>.safetensors` (live) and
 `swa_steps=<N>.safetensors` (SWA); at the end the run copies the best classifier
 and regressor to `best_clf.safetensors` / `best_reg.safetensors`. Multi-GPU is
 automatic under `torchrun`, and the run resumes automatically from
@@ -37,7 +37,7 @@ uses every visible GPU. Pin it to one GPU for a single-GPU run:
 CUDA_VISIBLE_DEVICES=0 pixi run train \
   --train.pre-dir stanford-star/the-join-preprocessed \
   --eval.pre-dir stanford-star/relbench-preprocessed \
-  --train.out-root ~/ckpts
+  --logger.out-root ~/ckpts
 ```
 
 ## Multi-GPU single-node training
@@ -50,7 +50,7 @@ on every rank, no sharding):
 pixi run train \
   --train.pre-dir stanford-star/the-join-preprocessed \
   --eval.pre-dir stanford-star/relbench-preprocessed \
-  --train.out-root ~/ckpts
+  --logger.out-root ~/ckpts
 ```
 
 Give the process as much of the node's RAM as you can: by default each run
@@ -67,7 +67,7 @@ worker per GPU:
 # on every node (rank 0 on the head node):
 torchrun --nnodes=<N> --nproc-per-node=<GPUS> \
   --node-rank=<i> --master-addr=<head-node> --master-port=<port> \
-  -m rt.cli.train --train.pre-dir ... --eval.pre-dir ... --train.out-root ...
+  -m rt.cli.train --train.pre-dir ... --eval.pre-dir ... --logger.out-root ...
 ```
 
 Wrap this in your cluster's launcher (Slurm, k8s, ...). Hard-won notes for
@@ -75,10 +75,10 @@ writing that wrapper:
 
 - **One run id for the whole job.** Every rank builds its own config, so the
   wrapper must generate the wandb run id once and export it to all nodes:
-  `export RT_WANDB_ID=$(date +%y-%m-%d_%H:%M:%S_%N)` (the `train` pixi task does
+  `export RT_ID=$(date +%y-%m-%d_%H:%M:%S_%N)` (the `train` pixi task does
   this for you). The id names the output directory
-  `<out-root>/<wandb-entity>/<wandb-project>/<wandb-id>/`; reuse the same value
-  (or pass `--logger.wandb-id`) to resume a run.
+  `<out-root>/<entity>/<project>/<id>/`; reuse the same value
+  (or pass `--logger.id`) to resume a run.
 - **Static rendezvous.** Pass a fixed `--master-addr`/`--master-port` (derive a
   unique per-job port) rather than torchrun's dynamic c10d rendezvous — the
   dynamic store has wedged large jobs under load.
@@ -115,7 +115,7 @@ locked cache:
 # terminal 1: hold the data resident (Ctrl-C to release)
 pixi run python -m rt.cli.mlock --pre-dir <PRE_DIR> --workers 32
 # terminal 2 (same node): train without re-populating
-pixi run train --train.pre-dir <PRE_DIR> --train.out-root ~/ckpts --no-train.mmap-populate
+pixi run train --train.pre-dir <PRE_DIR> --logger.out-root ~/ckpts --no-train.mmap-populate
 ```
 
 This is purely a convenience for repeated local runs; it is **not required**.

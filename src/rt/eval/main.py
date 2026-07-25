@@ -17,22 +17,21 @@ from rt.model import load_rt_model
 def main(cfg: Config) -> None:
     ev_cfg = cfg.eval
     assert cfg.logger.wandb_disabled, "standalone eval does not log to wandb"
-    assert ev_cfg.freq is None, "eval.freq is an in-loop training knob"
-    assert len(ev_cfg.ctx_sizes) == 1, (
+    assert len(ev_cfg.ctx_size_list) == 1, (
         "standalone eval writes one submission per run and needs exactly one "
-        "ctx size; multi-size ctx_sizes is an in-loop training-eval feature"
+        "ctx size; multi-size ctx_size_list is an in-loop training-eval feature"
     )
-    ctx_size = ev_cfg.ctx_sizes[0]
+    ctx_size = ev_cfg.ctx_size_list[0]
     device = "cuda" if torch.cuda.is_available() else "cpu"
 
     checkpoint = cfg.model.load_ckpt_path
     assert checkpoint is not None, "model.load_ckpt_path is required"
     net, config = load_rt_model(checkpoint, device=device, compile=False)
     net = net.to(torch.bfloat16)
-    embedding_model = config["embedding_model"]
+    embedder = config["embedder"]
     d_text = config["d_text"]
     print(f"loaded {config.get('name', checkpoint)} "
-          f"(embed={embedding_model}) on {device}")
+          f"(embed={embedder}) on {device}")
     if config.get("task_type") in ("clf", "reg"):
         print(f"warning: this checkpoint was selected/trained for "
               f"task_type={config['task_type']}; it will be evaluated on "
@@ -50,23 +49,20 @@ def main(cfg: Config) -> None:
                      ("d_ff", cfg.model.d_ff))
         if k in ckpt_model and ckpt_model[k] != v
     ]
-    if cfg.model.embedding_model != embedding_model:
-        mismatches.append(f"embedding_model: config={cfg.model.embedding_model} "
-                          f"checkpoint={embedding_model}")
+    if cfg.model.embedder != embedder:
+        mismatches.append(f"embedder: config={cfg.model.embedder} "
+                          f"checkpoint={embedder}")
     if mismatches:
         print("warning: model config ignored for checkpoint eval; differs from "
               "the checkpoint's own config: " + "; ".join(mismatches), flush=True)
 
 
     eval_kwargs = dict(
-        embedding_model=embedding_model, d_text=d_text, device=device,
+        embedder=embedder, d_text=d_text, device=device,
         num_walks=ev_cfg.num_walks, walk_length=ev_cfg.walk_length,
         tokens_per_gpu=ev_cfg.tokens_per_gpu, items_per_task=ev_cfg.items_per_task,
         num_workers=ev_cfg.num_workers, shuffle_seed=ev_cfg.shuffle_seed,
-        prefetch_factor=ev_cfg.prefetch_factor, bool_as_num=ev_cfg.bool_as_num,
-        skip_text_cols=ev_cfg.skip_text_cols, mmap_populate=ev_cfg.mmap_populate,
-        balance_labels=ev_cfg.balance_labels,
-        ablate_schema_semantics=ev_cfg.ablate_schema_semantics,
+        prefetch_factor=ev_cfg.prefetch_factor, mmap_populate=ev_cfg.mmap_populate,
         vector_db_path=ev_cfg.vector_db_path,
     )
     grid = ev_cfg.lcs_bw_pl_grid
@@ -83,8 +79,7 @@ def main(cfg: Config) -> None:
             raise SystemExit(f"no tasks found in {ev_cfg.pre_dir}")
         run_ensemble(net, ev_cfg.pre_dir, val_tasks, test_tasks, grid=grid,
                      ensemble_size=ev_cfg.ensemble_size, ctx_size=ctx_size,
-                     reg_metric=ev_cfg.reg_metric, out_dir=ev_cfg.out_dir, no_csv=not ev_cfg.write_csv,
-                     **eval_kwargs)
+                     csv_out_dir=ev_cfg.csv_out_dir, **eval_kwargs)
         return
 
     tasks = get_tasks(ev_cfg.pre_dir, ev_cfg.db_task_list, tuple(ev_cfg.splits))
@@ -95,17 +90,14 @@ def main(cfg: Config) -> None:
                          local_ctx_size=lcs, bfs_width=bw, prefer_latest=pl,
                          context_seed=ev_cfg.context_seed, **eval_kwargs)
     run_and_report(net, tasks, ev_cfg.pre_dir, ctx_size=ctx_size,
-                   reg_metric=ev_cfg.reg_metric, out_dir=ev_cfg.out_dir, no_csv=not ev_cfg.write_csv,
-                   evaluator=ev, embedding_model=embedding_model)
+                   csv_out_dir=ev_cfg.csv_out_dir, evaluator=ev, embedder=embedder)
 
 
-def build_evaluator(tasks, pre_dir, *, embedding_model, d_text, device, ctx_size=8192,
+def build_evaluator(tasks, pre_dir, *, embedder, d_text, device, ctx_size=8192,
                     local_ctx_size=256, bfs_width=32, num_walks=10_000, walk_length=20,
                     tokens_per_gpu=2**18, items_per_task=None, num_workers=2, context_seed=0,
                     prefer_latest=True, shuffle_seed=0, mmap_populate=True,
-                    prefetch_factor=2, bool_as_num=True, skip_text_cols=False,
-                    balance_labels=False, ablate_schema_semantics=False,
-                    vector_db_path=None):
+                    prefetch_factor=2, bool_as_num=True, vector_db_path=None):
     # mmap_populate=True by default: pre-fault the eval data into RAM so the
     # context build is fed instead of cold-faulting it from shared storage per
     # item (the same starvation that hits training without it).
@@ -116,23 +108,23 @@ def build_evaluator(tasks, pre_dir, *, embedding_model, d_text, device, ctx_size
     # subsample stays the *same* rows across configs (context tuning, ensembling).
     return Evaluator(
         tasks=tasks, pre_dir=pre_dir, eval_bs=max(1, tokens_per_gpu // ctx_size),
-        ctx_sizes=[ctx_size], items_per_task=items_per_task, num_workers=num_workers,
+        ctx_size_list=[ctx_size], items_per_task=items_per_task, num_workers=num_workers,
         prefetch_factor=prefetch_factor, persistent_workers=False, local_ctx_size=local_ctx_size,
         bfs_width=bfs_width, num_walks=num_walks, walk_length=walk_length,
-        prefer_latest=prefer_latest, bool_as_num=bool_as_num, skip_text_cols=skip_text_cols,
-        mmap_populate=mmap_populate, balance_labels=balance_labels,
-        ablate_schema_semantics=ablate_schema_semantics, embedding_model=embedding_model, d_text=d_text,
+        prefer_latest=prefer_latest, bool_as_num=bool_as_num,
+        mmap_populate=mmap_populate, embedder=embedder, d_text=d_text,
         shuffle_seed=shuffle_seed, context_seed=context_seed, vector_db_path=vector_db_path,
         train_only_fallback=False,
         global_rank=0, local_rank=0, world_size=1, ddp=False, device=device,
     )
 
 
-def run_and_report(model, tasks, pre_dir, *, ctx_size, reg_metric, out_dir, no_csv,
-                   evaluator, embedding_model):
-    """Run inference, write relbench submission CSVs, score via relbench's
-    evaluator, print per-task + mean metrics. Returns a results dict."""
-    out_dir = Path(out_dir).expanduser()
+def run_and_report(model, tasks, pre_dir, *, ctx_size, csv_out_dir, evaluator,
+                   embedder):
+    """Run inference, write relbench submission CSVs (when ``csv_out_dir`` is
+    set), score via relbench's evaluator, print per-task + mean metrics.
+    Returns a results dict."""
+    csv_out_dir = None if csv_out_dir is None else Path(csv_out_dir).expanduser()
     by_metric: dict[str, list[float]] = {}
     results = {}
     print(f"\n{'task':40} {'metric':8} {'value':>9} {'n':>7}  {'align':>11}  debug")
@@ -141,10 +133,9 @@ def run_and_report(model, tasks, pre_dir, *, ctx_size, reg_metric, out_dir, no_c
     ):
         preds = preds_by_prefix[""]
         mname, mval, n, align, _ = _emit_and_score(
-            out_dir, task, pre_dir, embedding_model, labels, preds, node_idxs,
-            keep_csv=not no_csv,
+            csv_out_dir, task, pre_dir, embedder, labels, preds, node_idxs,
         )
-        nm, nv = metric_for(task.task_type, labels, preds, reg_metric)  # normalized-scale debug
+        nm, nv = metric_for(task.task_type, labels, preds)  # normalized-scale debug
         by_metric.setdefault(mname, []).append(mval)
         results[f"{task.db_name}/{task.table_name}"] = {"metric": mname, "value": mval, "n": n}
         print(f"{task.db_name + '/' + task.table_name:40} {mname:8} {mval:>9.4f} {n:>7}  "
@@ -152,9 +143,9 @@ def run_and_report(model, tasks, pre_dir, *, ctx_size, reg_metric, out_dir, no_c
     print(f"\n{'mean':40}")
     for name, vals in by_metric.items():
         print(f"  {name:10} {sum(vals) / len(vals):>9.4f}  (over {len(vals)} tasks)")
-    if not no_csv:
-        print(f"\nsubmission CSVs written to {out_dir}/  "
-              f"(validate: python -m relbench.leaderboard {out_dir})")
+    if csv_out_dir is not None:
+        print(f"\nsubmission CSVs written to {csv_out_dir}/  "
+              f"(validate: python -m relbench.leaderboard {csv_out_dir})")
     return results
 
 
@@ -163,7 +154,7 @@ def _is_better(task_type, a, b):
 
 
 def run_ensemble(model, pre_dir, val_tasks, test_tasks, *, grid, ensemble_size, ctx_size,
-                 reg_metric, out_dir, no_csv, **eval_kwargs):
+                 csv_out_dir, **eval_kwargs):
     """Context-tuned + ensembled evaluation.
 
     Tune: for each task, pick the (local_ctx_size, bfs_width, prefer_latest) in
@@ -175,7 +166,7 @@ def run_ensemble(model, pre_dir, val_tasks, test_tasks, *, grid, ensemble_size, 
 
     import numpy as np
 
-    embedding_model = eval_kwargs["embedding_model"]
+    embedder = eval_kwargs["embedder"]
 
     # ---- tune on val: best context config per task ----
     best = {}  # (db, table) -> {"cfg", "value", "task_type"}
@@ -184,7 +175,7 @@ def run_ensemble(model, pre_dir, val_tasks, test_tasks, *, grid, ensemble_size, 
         ev = build_evaluator(val_tasks, pre_dir, ctx_size=ctx_size, local_ctx_size=lcs,
                              bfs_width=bw, prefer_latest=pl, **eval_kwargs)
         for task, _c, labels, preds_by_prefix, _nl in ev.evaluate_raw([(model, "")], [ctx_size]):
-            _, v = metric_for(task.task_type, labels, preds_by_prefix[""], reg_metric)
+            _, v = metric_for(task.task_type, labels, preds_by_prefix[""])
             key = (task.db_name, task.table_name)
             if key not in best or _is_better(task.task_type, v, best[key]["value"]):
                 best[key] = {"cfg": cfg, "value": v, "task_type": task.task_type}
@@ -197,7 +188,7 @@ def run_ensemble(model, pre_dir, val_tasks, test_tasks, *, grid, ensemble_size, 
         if b is not None:
             groups[b["cfg"]].append(t)
 
-    out_dir = Path(out_dir).expanduser()
+    csv_out_dir = None if csv_out_dir is None else Path(csv_out_dir).expanduser()
     by_metric: dict[str, list[float]] = {}
     results = {}
     print(f"\n{'task':40} {'cfg':14} {'metric':8} {'value':>9} {'n':>7}  {'align':>11}")
@@ -219,8 +210,7 @@ def run_ensemble(model, pre_dir, val_tasks, test_tasks, *, grid, ensemble_size, 
         for key, (labels, sp, task, node_idxs) in acc.items():
             preds = sp / ensemble_size
             mname, mval, n, align, _ = _emit_and_score(
-                out_dir, task, pre_dir, embedding_model, labels, preds, node_idxs,
-                keep_csv=not no_csv,
+                csv_out_dir, task, pre_dir, embedder, labels, preds, node_idxs,
             )
             by_metric.setdefault(mname, []).append(mval)
             results[f"{task.db_name}/{task.table_name}"] = {"metric": mname, "value": mval,
@@ -230,7 +220,7 @@ def run_ensemble(model, pre_dir, val_tasks, test_tasks, *, grid, ensemble_size, 
     print(f"\n{'mean (ensembled)':40}")
     for name, vals in by_metric.items():
         print(f"  {name:10} {sum(vals) / len(vals):>9.4f}  (over {len(vals)} tasks)")
-    if not no_csv:
-        print(f"\nsubmission CSVs written to {out_dir}/  "
-              f"(validate: python -m relbench.leaderboard {out_dir})")
+    if csv_out_dir is not None:
+        print(f"\nsubmission CSVs written to {csv_out_dir}/  "
+              f"(validate: python -m relbench.leaderboard {csv_out_dir})")
     return results

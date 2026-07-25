@@ -25,7 +25,7 @@ class Config:
     out_dir: str
     # Hub repo to upload the result to (under legacy/<db>/); None = no upload.
     upload_repo: str | None = None
-    embedding_model: str = "all-MiniLM-L12-v2"
+    embedder: str = "all-MiniLM-L12-v2"
     batch_size: int = 8192
     public: bool = True
     revision: str | None = None
@@ -35,7 +35,7 @@ def main(cfg: Config) -> None:
     preprocess_one_legacy(
         cfg.dataset,
         Path(cfg.out_dir).expanduser(),
-        embedding_model=cfg.embedding_model,
+        embedder=cfg.embedder,
         batch_size=cfg.batch_size,
         upload_repo=cfg.upload_repo,
         private=not cfg.public,

@@ -339,14 +339,6 @@ struct Dataset {
     p2f_adj_mmap: Mmap,
     offsets: Vec<i64>,
     table_info: HashMap<String, TableInfo>,
-    // When `Some`, a deterministic bijection over this database's column
-    // indices used to ablate schema semantics: at col_name_values lookup
-    // time, the original col_name_idx is replaced by col_name_perm[orig]
-    // before fetching the text embedding. The map's domain == range == set
-    // of column indices in column_index.json, so cells that originally
-    // shared a column name still share one after the shuffle, and cells
-    // that originally differed still differ.
-    col_name_perm: Option<HashMap<i32, i32>>,
     /// Per-table FAISS lookup, keyed by table name. `None` when
     /// `vector_db_path` is not set on the Sampler. When present, every
     /// table referenced by this dataset's task tuples must have an entry.
@@ -367,8 +359,8 @@ pub struct Sampler {
     world_size: usize,
     datasets: HashMap<String, Dataset>,
     items: Vec<Item>,
-    local_ctx_sizes: Vec<usize>, // Maximum cells per BFS collection; sampled uniformly per item
-    bfs_widths: Vec<usize>, // Maximum number of DB nodes per BFS level; sampled uniformly per item
+    local_ctx_size_list: Vec<usize>, // Maximum cells per BFS collection; sampled uniformly per item
+    bfs_width_list: Vec<usize>, // Maximum number of DB nodes per BFS level; sampled uniformly per item
     // Number of random walks used to compute same-table visit counts. When 0,
     // similar-node selection skips the walk and falls through directly to the
     // unvisited same-table tier — that's the "random_same_table" mode.
@@ -381,7 +373,7 @@ pub struct Sampler {
     // True:  (ts desc, count desc, random)
     // False: (count desc, random)
     // None ts ranks below any Some (std Option ord).
-    prefer_latest: Vec<bool>,
+    prefer_latest_list: Vec<bool>,
     mask_prob_max: f64, // Maximum probability of masking cells
     step: u64,
     stride: u64,
@@ -401,18 +393,6 @@ pub struct Sampler {
     dataset_tuples: Vec<(String, String, i32, i32)>, // (db_name, table_name, node_idx_offset, num_nodes) for each dataset
     table_ranges: Vec<(i32, i32)>, // (range_start, range_end) per dataset tuple, cached for fallback same-table sampling
     quiet: bool,
-    // When true, cells whose sem_type is Text are not added to the context
-    // during BFS expansion. The target cell is always emitted first and is
-    // unaffected. Skipping text cells frees slots for non-text cells, so a
-    // given ctx_len ends up covering more rows than it would otherwise.
-    skip_text_cols: bool,
-    // When true, conceptually keep two priority lists of similar same-table
-    // seeds — one with target-column value < 0 and one with >= 0 — and pick
-    // the next seed from each list with 50% probability (falling back to the
-    // non-empty list when one runs dry). The original priority ordering
-    // within each tier is preserved inside both lists. Sampled uniformly
-    // per item from this list.
-    balance_labels: Vec<bool>,
     // Per-item wall-clock budget for one `seq_build` attempt. Enforced by
     // the training path (`seq`); eval bypasses it. Cooperative — checked
     // at the top of each iteration of the inner BFS-collection and
@@ -440,13 +420,13 @@ impl Sampler {
         global_rank: usize,
         local_rank: usize,
         world_size: usize,
-        local_ctx_sizes: Vec<usize>,
-        bfs_widths: Vec<usize>,
+        local_ctx_size_list: Vec<usize>,
+        bfs_width_list: Vec<usize>,
         num_walks: usize,
         walk_length: usize,
-        prefer_latest: Vec<bool>,
+        prefer_latest_list: Vec<bool>,
         mask_prob_max: f64,
-        embedding_model: &str,
+        embedder: &str,
         pre_dir: String,
         d_text: usize,
         shuffle_seed: u64,
@@ -457,11 +437,8 @@ impl Sampler {
         quiet: bool,
         ignore_data_errors: bool,
         num_prev_skipped: usize,
-        skip_text_cols: bool,
         mmap_populate: bool,
-        balance_labels: Vec<bool>,
         timeout_per_item: f64,
-        ablate_schema_semantics: bool,
         vector_db_path: Option<String>,
         train_only_fallback: bool,
     ) -> Self {
@@ -471,13 +448,13 @@ impl Sampler {
                 global_rank,
                 local_rank,
                 world_size,
-                local_ctx_sizes,
-                bfs_widths,
+                local_ctx_size_list,
+                bfs_width_list,
                 num_walks,
                 walk_length,
-                prefer_latest,
+                prefer_latest_list,
                 mask_prob_max,
-                embedding_model,
+                embedder,
                 pre_dir,
                 d_text,
                 shuffle_seed,
@@ -488,11 +465,8 @@ impl Sampler {
                 quiet,
                 ignore_data_errors,
                 num_prev_skipped,
-                skip_text_cols,
                 mmap_populate,
-                balance_labels,
                 timeout_per_item,
-                ablate_schema_semantics,
                 vector_db_path,
                 train_only_fallback,
             )
@@ -566,7 +540,7 @@ impl Sampler {
 
     #[getter]
     fn local_ctx_size(&self) -> usize {
-        self.local_ctx_sizes[0]
+        self.local_ctx_size_list[0]
     }
 
     #[getter]
@@ -582,13 +556,13 @@ impl Sampler {
         global_rank: usize,
         local_rank: usize,
         world_size: usize,
-        local_ctx_sizes: Vec<usize>,
-        bfs_widths: Vec<usize>,
+        local_ctx_size_list: Vec<usize>,
+        bfs_width_list: Vec<usize>,
         num_walks: usize,
         walk_length: usize,
-        prefer_latest: Vec<bool>,
+        prefer_latest_list: Vec<bool>,
         mask_prob_max: f64,
-        embedding_model: &str,
+        embedder: &str,
         pre_dir: String,
         d_text: usize,
         shuffle_seed: u64,
@@ -599,15 +573,12 @@ impl Sampler {
         quiet: bool,
         ignore_data_errors: bool,
         num_prev_skipped: usize,
-        skip_text_cols: bool,
         mmap_populate: bool,
-        balance_labels: Vec<bool>,
         timeout_per_item: f64,
-        ablate_schema_semantics: bool,
         vector_db_path: Option<String>,
         train_only_fallback: bool,
     ) -> Self {
-        let embedding_model_ref = embedding_model;
+        let embedder_ref = embedder;
 
         // Collect unique db_names and their associated table_names for deduplication.
         let mut db_to_tables: HashMap<String, Vec<String>> = HashMap::new();
@@ -639,9 +610,7 @@ impl Sampler {
                         table_names,
                         &pre_dir,
                         &mmap_opts,
-                        embedding_model_ref,
-                        ablate_schema_semantics,
-                        shuffle_seed,
+                        embedder_ref,
                         vector_db_path_ref,
                     );
                     pb.inc(1);
@@ -657,9 +626,7 @@ impl Sampler {
                         table_names,
                         &pre_dir,
                         &mmap_opts,
-                        embedding_model_ref,
-                        ablate_schema_semantics,
-                        shuffle_seed,
+                        embedder_ref,
                         vector_db_path_ref,
                     );
                     pb.inc(1);
@@ -692,8 +659,7 @@ impl Sampler {
                     for (key, info) in &dataset.table_info {
                         if let Some(colon_pos) = key.rfind(':')
                             && &key[..colon_pos] == table.as_str()
-                            && (!train_only_fallback
-                                || &key[colon_pos + 1..] == "Train")
+                            && (!train_only_fallback || &key[colon_pos + 1..] == "Train")
                         {
                             range_start = range_start.min(info.node_idx_offset);
                             range_end = range_end.max(info.node_idx_offset + info.num_nodes);
@@ -742,14 +708,16 @@ impl Sampler {
             "All tasks were skipped due to errors, cannot proceed."
         );
         assert!(
-            !local_ctx_sizes.is_empty(),
-            "local_ctx_sizes must be non-empty"
+            !local_ctx_size_list.is_empty(),
+            "local_ctx_size_list must be non-empty"
         );
-        assert!(!bfs_widths.is_empty(), "bfs_widths must be non-empty");
-        assert!(!prefer_latest.is_empty(), "prefer_latest must be non-empty");
         assert!(
-            !balance_labels.is_empty(),
-            "balance_labels must be non-empty"
+            !bfs_width_list.is_empty(),
+            "bfs_width_list must be non-empty"
+        );
+        assert!(
+            !prefer_latest_list.is_empty(),
+            "prefer_latest_list must be non-empty"
         );
         let mut sampler = Self {
             global_rank,
@@ -757,11 +725,11 @@ impl Sampler {
             world_size,
             datasets,
             items: Vec::new(), // Will be populated by create_items
-            local_ctx_sizes,
-            bfs_widths,
+            local_ctx_size_list,
+            bfs_width_list,
             num_walks,
             walk_length,
-            prefer_latest,
+            prefer_latest_list,
             mask_prob_max,
             step: 0,
             stride: 1,
@@ -774,8 +742,6 @@ impl Sampler {
             dataset_tuples,
             table_ranges,
             quiet,
-            skip_text_cols,
-            balance_labels,
             timeout_per_item,
             vector_db_path,
         };
@@ -807,9 +773,7 @@ impl Sampler {
         table_names: &[String],
         pre_dir: &str,
         mmap_opts: &MmapOptions,
-        embedding_model_ref: &str,
-        ablate_schema_semantics: bool,
-        shuffle_seed: u64,
+        embedder_ref: &str,
         vector_db_path: Option<&str>,
     ) -> (String, Dataset) {
         let pre_path = format!("{}/{}", pre_dir, db_name);
@@ -818,7 +782,7 @@ impl Sampler {
         let file = fs::File::open(&nodes_path).unwrap();
         let mmap = unsafe { mmap_opts.map(&file).unwrap() };
 
-        let text_path = format!("{}/text_emb_{}.bin", pre_path, embedding_model_ref);
+        let text_path = format!("{}/text_emb_{}.bin", pre_path, embedder_ref);
         let text_file = fs::File::open(&text_path).unwrap();
         let text_mmap = unsafe { mmap_opts.map(&text_file).unwrap() };
 
@@ -838,12 +802,6 @@ impl Sampler {
         let table_info_file = fs::File::open(&table_info_path).unwrap();
         let table_info: HashMap<String, TableInfo> =
             serde_json::from_reader(BufReader::new(table_info_file)).unwrap();
-
-        let col_name_perm = if ablate_schema_semantics {
-            Some(build_col_name_perm(&pre_path, db_name, shuffle_seed))
-        } else {
-            None
-        };
 
         #[cfg(not(feature = "vecdb"))]
         assert!(
@@ -916,7 +874,6 @@ impl Sampler {
                 p2f_adj_mmap,
                 offsets,
                 table_info,
-                col_name_perm,
                 #[cfg(feature = "vecdb")]
                 vector_db,
             },
@@ -1154,24 +1111,23 @@ impl Sampler {
         let mut seq_rng = StdRng::seed_from_u64(step_seed + target_node_idx as u64);
         let mask_prob = seq_rng.random::<f64>() * self.mask_prob_max;
 
-        let valid_local_ctx_sizes: Vec<usize> = self
-            .local_ctx_sizes
+        let valid_local_ctx_size_list: Vec<usize> = self
+            .local_ctx_size_list
             .iter()
             .copied()
             .filter(|&l| l <= ctx_len)
             .collect();
         assert!(
-            !valid_local_ctx_sizes.is_empty(),
+            !valid_local_ctx_size_list.is_empty(),
             "No local_ctx_size in {:?} is <= ctx_len={}",
-            self.local_ctx_sizes,
+            self.local_ctx_size_list,
             ctx_len
         );
         let local_ctx_size =
-            valid_local_ctx_sizes[seq_rng.random_range(0..valid_local_ctx_sizes.len())];
-        let bfs_width = self.bfs_widths[seq_rng.random_range(0..self.bfs_widths.len())];
-        let prefer_latest = self.prefer_latest[seq_rng.random_range(0..self.prefer_latest.len())];
-        let balance_labels =
-            self.balance_labels[seq_rng.random_range(0..self.balance_labels.len())];
+            valid_local_ctx_size_list[seq_rng.random_range(0..valid_local_ctx_size_list.len())];
+        let bfs_width = self.bfs_width_list[seq_rng.random_range(0..self.bfs_width_list.len())];
+        let prefer_latest =
+            self.prefer_latest_list[seq_rng.random_range(0..self.prefer_latest_list.len())];
 
         // Step 1: walk visit counts (skip when num_walks == 0; that's
         // pure random_same_table mode — every same-table node falls through
@@ -1269,15 +1225,6 @@ impl Sampler {
             0,
         ));
 
-        // Independent rng for balance_labels coin flips; unused when
-        // balance_labels=false. Kept separate from bfs_rng so flipping the
-        // flag doesn't perturb BFS expansion order on either branch.
-        let mut balance_rng = StdRng::seed_from_u64(
-            step_seed
-                .wrapping_add(target_node_idx as u64)
-                .wrapping_add(0x5A5A_5A5A_5A5A_5A5A),
-        );
-
         // Drive the fill loop with a labeled block so each tier can break out
         // when the context is full.
         'fill_ctx: {
@@ -1306,8 +1253,7 @@ impl Sampler {
             // walks (visit_counts → visited_sorted) or FAISS-similarity
             // (vector_db_path), depending on Sampler config. Seeds with
             // missing/NaN target labels are dropped — they carry no usable
-            // label. When balance_labels is on, surviving seeds are routed
-            // into neg / pos buckets and drained alternately.
+            // label.
             //
             // `tier1_seen` (random-walk path only) holds every seed Tier 1
             // considered, so Tier 2 can avoid re-issuing BFS from a node
@@ -1317,71 +1263,18 @@ impl Sampler {
             if use_vector_db {
                 #[cfg(feature = "vecdb")]
                 {
-                let entry = dataset
-                    .vector_db
-                    .as_ref()
-                    .expect("vector_db_path is set but dataset.vector_db was not loaded")
-                    .get(item.table_name.as_str())
-                    .unwrap_or_else(|| {
-                        panic!(
-                            "vector_db has no FAISS entry for table '{}'",
-                            item.table_name
-                        )
-                    });
-                let mut vdb = VectorDbStream::new(entry, target_node_idx, target_node);
-                if balance_labels {
-                    // Lazy variant: pull-classify-drain on demand. The 50/50
-                    // alternation runs over whatever's already materialized
-                    // in neg / pos, so the realized pattern depends on
-                    // iterator order — distinct from the upfront-partition
-                    // path but consistent with the lazy-retrieval contract.
-                    let mut neg: Vec<i32> = Vec::new();
-                    let mut pos: Vec<i32> = Vec::new();
-                    let mut neg_i = 0;
-                    let mut pos_i = 0;
-                    loop {
-                        if let Some(seed_node_idx) =
-                            pick_balanced(&neg, &pos, &mut neg_i, &mut pos_i, &mut balance_rng)
-                        {
-                            check_deadline(deadline);
-                            if extend_with_seed_bfs(
-                                self,
-                                dataset,
-                                seed_node_idx,
-                                target_node_idx,
-                                target_node,
-                                target_column,
-                                columns_to_drop,
-                                local_ctx_size,
-                                bfs_width,
-                                ctx_len,
-                                &mut bfs_rng,
-                                &mut visited_at_depth,
-                                &mut visited_in_ctx,
-                                &mut cells_to_add,
-                                deadline,
-                            ) {
-                                break 'fill_ctx;
-                            }
-                            continue;
-                        }
-                        check_deadline(deadline);
-                        match vdb.next(dataset) {
-                            None => break,
-                            Some(seed_node_idx) => {
-                                let seed_node = get_node(dataset, seed_node_idx);
-                                if seed_label_missing(seed_node, target_column) {
-                                    continue;
-                                }
-                                if seed_label_is_negative(seed_node, target_column) {
-                                    neg.push(seed_node_idx);
-                                } else {
-                                    pos.push(seed_node_idx);
-                                }
-                            }
-                        }
-                    }
-                } else {
+                    let entry = dataset
+                        .vector_db
+                        .as_ref()
+                        .expect("vector_db_path is set but dataset.vector_db was not loaded")
+                        .get(item.table_name.as_str())
+                        .unwrap_or_else(|| {
+                            panic!(
+                                "vector_db has no FAISS entry for table '{}'",
+                                item.table_name
+                            )
+                        });
+                    let mut vdb = VectorDbStream::new(entry, target_node_idx, target_node);
                     while let Some(seed_node_idx) = vdb.next(dataset) {
                         check_deadline(deadline);
                         if seed_label_missing(get_node(dataset, seed_node_idx), target_column) {
@@ -1406,50 +1299,6 @@ impl Sampler {
                         ) {
                             break 'fill_ctx;
                         }
-                    }
-                }
-                }
-            } else if balance_labels {
-                let mut neg: Vec<i32> = Vec::new();
-                let mut pos: Vec<i32> = Vec::new();
-                for (i, &n) in visited_sorted.iter().enumerate() {
-                    if i & (DEADLINE_CHECK_EVERY - 1) == 0 {
-                        check_deadline(deadline);
-                    }
-                    let seed_node = get_node(dataset, n);
-                    if seed_label_missing(seed_node, target_column) {
-                        continue;
-                    }
-                    if seed_label_is_negative(seed_node, target_column) {
-                        neg.push(n);
-                    } else {
-                        pos.push(n);
-                    }
-                }
-                let mut neg_i = 0;
-                let mut pos_i = 0;
-                while let Some(seed_node_idx) =
-                    pick_balanced(&neg, &pos, &mut neg_i, &mut pos_i, &mut balance_rng)
-                {
-                    check_deadline(deadline);
-                    if extend_with_seed_bfs(
-                        self,
-                        dataset,
-                        seed_node_idx,
-                        target_node_idx,
-                        target_node,
-                        target_column,
-                        columns_to_drop,
-                        local_ctx_size,
-                        bfs_width,
-                        ctx_len,
-                        &mut bfs_rng,
-                        &mut visited_at_depth,
-                        &mut visited_in_ctx,
-                        &mut cells_to_add,
-                        deadline,
-                    ) {
-                        break 'fill_ctx;
                     }
                 }
             } else {
@@ -1509,105 +1358,45 @@ impl Sampler {
             let mut fallback_rng = StdRng::seed_from_u64(fallback_seed);
             let fallback_offsets = index::sample(&mut fallback_rng, total_table, fallback_amount);
             check_deadline(deadline);
-            if balance_labels {
-                // Materialize valid candidates into neg/pos buckets, preserving
-                // the random sample order, then drain alternately.
-                let mut neg: Vec<i32> = Vec::new();
-                let mut pos: Vec<i32> = Vec::new();
-                for (i, off) in fallback_offsets.iter().enumerate() {
-                    if i & (DEADLINE_CHECK_EVERY - 1) == 0 {
-                        check_deadline(deadline);
-                    }
-                    let seed_node_idx = range_start + off as i32;
-                    if seed_node_idx == target_node_idx {
-                        continue;
-                    }
-                    if tier1_seen.contains(&seed_node_idx) {
-                        continue;
-                    }
-                    let seed_node = get_node(dataset, seed_node_idx);
-                    if target_node.timestamp.is_some()
-                        && seed_node.timestamp.is_some()
-                        && seed_node.timestamp > target_node.timestamp
-                    {
-                        continue;
-                    }
-                    if seed_label_missing(seed_node, target_column) {
-                        continue;
-                    }
-                    if seed_label_is_negative(seed_node, target_column) {
-                        neg.push(seed_node_idx);
-                    } else {
-                        pos.push(seed_node_idx);
-                    }
+            for off in fallback_offsets.iter() {
+                check_deadline(deadline);
+                let seed_node_idx = range_start + off as i32;
+                if seed_node_idx == target_node_idx {
+                    continue;
                 }
-                let mut neg_i = 0;
-                let mut pos_i = 0;
-                while let Some(seed_node_idx) =
-                    pick_balanced(&neg, &pos, &mut neg_i, &mut pos_i, &mut balance_rng)
+                if tier1_seen.contains(&seed_node_idx) {
+                    continue;
+                }
+                // Temporal: only nodes with timestamp <= target.ts (or None)
+                // can serve as similar seeds.
+                let seed_node = get_node(dataset, seed_node_idx);
+                if target_node.timestamp.is_some()
+                    && seed_node.timestamp.is_some()
+                    && seed_node.timestamp > target_node.timestamp
                 {
-                    check_deadline(deadline);
-                    if extend_with_seed_bfs(
-                        self,
-                        dataset,
-                        seed_node_idx,
-                        target_node_idx,
-                        target_node,
-                        target_column,
-                        columns_to_drop,
-                        local_ctx_size,
-                        bfs_width,
-                        ctx_len,
-                        &mut bfs_rng,
-                        &mut visited_at_depth,
-                        &mut visited_in_ctx,
-                        &mut cells_to_add,
-                        deadline,
-                    ) {
-                        break 'fill_ctx;
-                    }
+                    continue;
                 }
-            } else {
-                for off in fallback_offsets.iter() {
-                    check_deadline(deadline);
-                    let seed_node_idx = range_start + off as i32;
-                    if seed_node_idx == target_node_idx {
-                        continue;
-                    }
-                    if tier1_seen.contains(&seed_node_idx) {
-                        continue;
-                    }
-                    // Temporal: only nodes with timestamp <= target.ts (or None)
-                    // can serve as similar seeds.
-                    let seed_node = get_node(dataset, seed_node_idx);
-                    if target_node.timestamp.is_some()
-                        && seed_node.timestamp.is_some()
-                        && seed_node.timestamp > target_node.timestamp
-                    {
-                        continue;
-                    }
-                    if seed_label_missing(seed_node, target_column) {
-                        continue;
-                    }
-                    if extend_with_seed_bfs(
-                        self,
-                        dataset,
-                        seed_node_idx,
-                        target_node_idx,
-                        target_node,
-                        target_column,
-                        columns_to_drop,
-                        local_ctx_size,
-                        bfs_width,
-                        ctx_len,
-                        &mut bfs_rng,
-                        &mut visited_at_depth,
-                        &mut visited_in_ctx,
-                        &mut cells_to_add,
-                        deadline,
-                    ) {
-                        break 'fill_ctx;
-                    }
+                if seed_label_missing(seed_node, target_column) {
+                    continue;
+                }
+                if extend_with_seed_bfs(
+                    self,
+                    dataset,
+                    seed_node_idx,
+                    target_node_idx,
+                    target_node,
+                    target_column,
+                    columns_to_drop,
+                    local_ctx_size,
+                    bfs_width,
+                    ctx_len,
+                    &mut bfs_rng,
+                    &mut visited_at_depth,
+                    &mut visited_in_ctx,
+                    &mut cells_to_add,
+                    deadline,
+                ) {
+                    break 'fill_ctx;
                 }
             }
         }
@@ -1801,16 +1590,9 @@ impl Sampler {
         slices.table_name_idxs[*seq_i] = node.table_name_idx.into();
         slices.col_name_idxs[*seq_i] = node.col_name_idxs[cell_i].into();
         slices.class_value_idxs[*seq_i] = node.class_value_idx[cell_i].into();
-        // Apply the schema-semantics ablation only at the embedding lookup:
-        // the stored col_name_idx still drives same-column comparisons in
-        // the model (which a bijection preserves), but the embedding the
-        // model actually consumes for the column name is the shuffled one.
-        let col_emb_idx = match &dataset.col_name_perm {
-            Some(perm) => perm[&slices.col_name_idxs[*seq_i]],
-            None => slices.col_name_idxs[*seq_i],
-        };
-        slices.col_name_values[*seq_i * self.d_text..(*seq_i + 1) * self.d_text]
-            .copy_from_slice(get_text_emb(dataset, col_emb_idx, self.d_text));
+        slices.col_name_values[*seq_i * self.d_text..(*seq_i + 1) * self.d_text].copy_from_slice(
+            get_text_emb(dataset, slices.col_name_idxs[*seq_i], self.d_text),
+        );
 
         slices.sem_types[*seq_i] = node.sem_types[cell_i].clone() as i32;
         slices.number_values[*seq_i] = bf16::from_f32(node.number_values[cell_i].into());
@@ -1822,13 +1604,12 @@ impl Sampler {
         slices.datetime_values[*seq_i] = bf16::from_f32(node.datetime_values[cell_i].into());
         slices.boolean_values[*seq_i] = bf16::from_f32(node.boolean_values[cell_i].into());
 
-        slices.is_targets[*seq_i] = if node.node_idx == target_node_idx
-            && node.col_name_idxs[cell_i] == target_column
-        {
-            true
-        } else {
-            rng.random::<f64>() < mask_prob
-        };
+        slices.is_targets[*seq_i] =
+            if node.node_idx == target_node_idx && node.col_name_idxs[cell_i] == target_column {
+                true
+            } else {
+                rng.random::<f64>() < mask_prob
+            };
 
         slices.is_task_nodes[*seq_i] =
             node.is_task_node || (node.col_name_idxs[cell_i] == target_column);
@@ -2030,13 +1811,6 @@ fn extend_with_seed_bfs(
                 continue;
             }
 
-            // Skip text-typed cells when configured. The target cell was
-            // already pushed unconditionally before BFS, so a text-typed
-            // target is preserved.
-            if sampler.skip_text_cols && matches!(node.sem_types[cell_i], ArchivedSemType::Text) {
-                continue;
-            }
-
             cells_to_add.push((bfs_node_idx, cell_i, col_idx, seed_node_idx, depth as i32));
 
             if cells_to_add.len() == ctx_len {
@@ -2180,9 +1954,9 @@ impl<'a> VectorDbStream<'a> {
 }
 
 /// Returns true when the seed's target-column value is missing or NaN.
-/// Such seeds are skipped from same-table seed sampling regardless of
-/// `balance_labels` — they carry no usable label. Text targets have no
-/// NaN concept and never report missing here.
+/// Such seeds are skipped from same-table seed sampling — they carry no
+/// usable label. Text targets have no NaN concept and never report missing
+/// here.
 fn seed_label_missing(node: &ArchivedNode, target_column: i32) -> bool {
     let cell_i = match node
         .col_name_idxs
@@ -2197,55 +1971,6 @@ fn seed_label_missing(node: &ArchivedNode, target_column: i32) -> bool {
         ArchivedSemType::Boolean => f32::from(node.boolean_values[cell_i]).is_nan(),
         ArchivedSemType::DateTime => f32::from(node.datetime_values[cell_i]).is_nan(),
         ArchivedSemType::Text => false,
-    }
-}
-
-/// Bucket a same-table seed by label sign. Callers must have already
-/// excluded missing/NaN labels via `seed_label_missing`. Panics on Text
-/// targets, which have no signed numeric representation.
-fn seed_label_is_negative(node: &ArchivedNode, target_column: i32) -> bool {
-    let cell_i = node
-        .col_name_idxs
-        .iter()
-        .position(|&c| i32::from(c) == target_column)
-        .expect("seed_label_missing must be checked before seed_label_is_negative");
-    let val = match &node.sem_types[cell_i] {
-        ArchivedSemType::Number => f32::from(node.number_values[cell_i]),
-        ArchivedSemType::Boolean => f32::from(node.boolean_values[cell_i]),
-        ArchivedSemType::DateTime => f32::from(node.datetime_values[cell_i]),
-        ArchivedSemType::Text => {
-            panic!("balance_labels=true is not supported for Text targets")
-        }
-    };
-    val < 0.0
-}
-
-/// Pop the next seed from a 50/50 mix of two pre-ordered lists, advancing
-/// the per-list cursors in place. Falls back to whichever list is non-empty
-/// when one runs out. Returns `None` once both lists are drained.
-fn pick_balanced(
-    neg: &[i32],
-    pos: &[i32],
-    neg_i: &mut usize,
-    pos_i: &mut usize,
-    rng: &mut StdRng,
-) -> Option<i32> {
-    let neg_avail = *neg_i < neg.len();
-    let pos_avail = *pos_i < pos.len();
-    let pick_neg = match (neg_avail, pos_avail) {
-        (false, false) => return None,
-        (true, false) => true,
-        (false, true) => false,
-        (true, true) => rng.random::<bool>(),
-    };
-    if pick_neg {
-        let s = neg[*neg_i];
-        *neg_i += 1;
-        Some(s)
-    } else {
-        let s = pos[*pos_i];
-        *pos_i += 1;
-        Some(s)
     }
 }
 
@@ -2355,8 +2080,7 @@ pub fn column_sem_types(pre_dir: String, db_name: String) -> PyResult<HashMap<St
         serde_json::from_reader(BufReader::new(f))
             .map_err(|e| pyo3::exceptions::PyValueError::new_err(e.to_string()))?
     };
-    let idx_to_name: HashMap<i32, &String> =
-        column_index.iter().map(|(k, v)| (*v, k)).collect();
+    let idx_to_name: HashMap<i32, &String> = column_index.iter().map(|(k, v)| (*v, k)).collect();
 
     let mut out: HashMap<String, String> = HashMap::new();
     for info in table_info.values() {
@@ -2383,49 +2107,6 @@ pub fn column_sem_types(pre_dir: String, db_name: String) -> PyResult<HashMap<St
     Ok(out)
 }
 
-/// Build a deterministic derangement over the column indices listed in
-/// `column_index.json` for this database. Seeded from `(shuffle_seed,
-/// db_name)` so the same seed reproduces the same permutation, and
-/// different databases get independent permutations. Sorting the keys
-/// before shuffling pins the result down regardless of HashMap
-/// iteration order. Uses Sattolo's algorithm (Fisher-Yates with the
-/// upper bound exclusive instead of inclusive) so every column is
-/// guaranteed to map to a *different* column — no fixed points, hence
-/// every emitted cell's col_name embedding actually changes under
-/// ablation. Requires |columns| >= 2.
-fn build_col_name_perm(pre_path: &str, db_name: &str, shuffle_seed: u64) -> HashMap<i32, i32> {
-    let column_index_path = format!("{}/column_index.json", pre_path);
-    let file = fs::File::open(&column_index_path).unwrap();
-    let column_index: HashMap<String, i32> = serde_json::from_reader(BufReader::new(file)).unwrap();
-
-    let mut col_indices: Vec<i32> = column_index.values().copied().collect();
-    col_indices.sort();
-    assert!(
-        col_indices.len() >= 2,
-        "ablate_schema_semantics needs >= 2 columns in db {} (got {})",
-        db_name,
-        col_indices.len(),
-    );
-
-    let mut db_hasher = std::collections::hash_map::DefaultHasher::new();
-    use std::hash::{Hash, Hasher};
-    db_name.hash(&mut db_hasher);
-    let db_seed = shuffle_seed.wrapping_add(db_hasher.finish());
-
-    let mut shuffled = col_indices.clone();
-    let mut rng = StdRng::seed_from_u64(db_seed);
-    // Sattolo's algorithm: like Fisher-Yates but the swap target is drawn
-    // from `0..i` instead of `0..=i`, forcing every element to move to a
-    // strictly-earlier slot. Result is a uniform random cyclic permutation
-    // — no element ends up at its original index.
-    for i in (1..shuffled.len()).rev() {
-        let j = rng.random_range(0..i);
-        shuffled.swap(i, j);
-    }
-
-    col_indices.into_iter().zip(shuffled).collect()
-}
-
 #[derive(Parser)]
 pub struct Cli {
     #[arg(default_value = "rel-f1")]
@@ -2447,13 +2128,13 @@ pub fn main(cli: Cli) {
         0,                                                     // global_rank
         0,                                                     // local_rank
         1,                                                     // world_size
-        vec![128],                                             // local_ctx_sizes
-        vec![16],                                              // bfs_widths
+        vec![128],                                             // local_ctx_size_list
+        vec![16],                                              // bfs_width_list
         0,                                                     // num_walks (random_same_table)
         10,                                                    // walk_length
-        vec![false],                                           // prefer_latest
+        vec![false],                                           // prefer_latest_list
         0.5,                                                   // mask_prob_max
-        "all-MiniLM-L12-v2",                                   // embedding_model
+        "all-MiniLM-L12-v2",                                   // embedder
         cli.pre_dir.clone(),                                   // pre_dir
         384,                                                   // d_text
         0,                                                     // shuffle_seed
@@ -2464,11 +2145,8 @@ pub fn main(cli: Cli) {
         false,                                                 // quiet
         false,                                                 // ignore_data_errors
         0,                                                     // num_prev_skipped
-        false,                                                 // skip_text_cols
         true,                                                  // mmap_populate
-        vec![false],                                           // balance_labels
         1.0,                                                   // timeout_per_item
-        false,                                                 // ablate_schema_semantics
         None,                                                  // vector_db_path
         false,                                                 // train_only_fallback
     );

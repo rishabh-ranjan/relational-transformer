@@ -28,10 +28,10 @@ def _relbench():
 
 
 @cache
-def _seed_offset(pre_dir: str, db: str, table: str, split: str, embedding_model: str) -> int:
+def _seed_offset(pre_dir: str, db: str, table: str, split: str, embedder: str) -> int:
     """Global rustler ``node_idx`` of the first row of ``table``'s ``split``
     (so ``node_idx - offset`` is the relbench parquet row index)."""
-    local = resolve_pre_dir(pre_dir, [db], embedding_model)
+    local = resolve_pre_dir(pre_dir, [db], embedder)
     ti = json.loads((Path(local) / db / "table_info.json").read_text())
     split_cap = {"train": "Train", "val": "Val", "test": "Test"}.get(split, split.capitalize())
     key = f"{table}:Db" if f"{table}:Db" in ti else f"{table}:{split_cap}"
@@ -54,10 +54,11 @@ def _train_stats(rtask) -> tuple[float, float]:
     return mean, (std if std != 0.0 else 1.0)
 
 
-def _emit_and_score(out_dir: Path, task, pre_dir: str, embedding_model: str,
-                    labels, preds, node_idxs, *, keep_csv: bool):
+def _emit_and_score(csv_out_dir: Path | None, task, pre_dir: str, embedder: str,
+                    labels, preds, node_idxs):
     """Denormalize/sigmoid ``preds``, write a relbench prediction-table CSV keyed
     by ``(entity_col, time_col)``, and score it with relbench's evaluator.
+    ``csv_out_dir=None`` scores via a temp file and keeps no CSV.
 
     Returns ``(metric_name, metric_value, n, align_str, csv_path | None)``.
     ``align_str`` is a built-in alignment guard: denormalized rt labels are
@@ -76,7 +77,7 @@ def _emit_and_score(out_dir: Path, task, pre_dir: str, embedding_model: str,
             f"{task.db_name}/meta.json has no 'source'; cannot locate the relbench task"
         )
     rtask = _load_relbench_task(source, task.table_name)
-    offset = _seed_offset(pre_dir, task.db_name, task.table_name, task.split, embedding_model)
+    offset = _seed_offset(pre_dir, task.db_name, task.table_name, task.split, embedder)
 
     node_idxs = np.asarray(node_idxs, dtype=np.int64)
     rowidx = node_idxs - offset
@@ -104,9 +105,9 @@ def _emit_and_score(out_dir: Path, task, pre_dir: str, embedding_model: str,
     sub = masked.iloc[rowidx][[rtask.entity_col, rtask.time_col]].copy()
     sub[rtask.target_col] = out_preds
 
-    if keep_csv:
-        out_dir.mkdir(parents=True, exist_ok=True)
-        csv_path = out_dir / f"{task.db_name}__{task.table_name}.csv"
+    if csv_out_dir is not None:
+        csv_out_dir.mkdir(parents=True, exist_ok=True)
+        csv_path = csv_out_dir / f"{task.db_name}__{task.table_name}.csv"
         sub.to_csv(csv_path, index=False)
         score_path, ret_path = csv_path, csv_path
     else:

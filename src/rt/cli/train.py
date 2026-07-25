@@ -2,7 +2,7 @@
 
 Streams training items from the preprocessed mixture at --train.pre-dir,
 periodically evaluates on --eval.pre-dir, and writes checkpoints plus a
-preemption-safe resume.pt to --train.out-root (resume is automatic and
+preemption-safe resume.pt to --logger.out-root (resume is automatic and
 GPU-count flexible). Launch with torchrun; see docs/train.md.
 """
 
@@ -14,7 +14,7 @@ from rt.config import (
     LoggerConfig,
     ModelConfig,
     TrainConfig,
-    default_wandb_id,
+    default_id,
 )
 from rt.train import main
 
@@ -24,13 +24,14 @@ def default_config() -> Config:
     return Config(
         logger=LoggerConfig(
             project="rt-verify",
-            wandb_entity=None,
-            wandb_id=default_wandb_id(),
-            wandb_run_name=None,
+            entity=None,
+            id=default_id(),
+            run_name=None,
             wandb_disabled=True,
+            out_root="~/ckpts",
         ),
         model=ModelConfig(
-            embedding_model="all-MiniLM-L12-v2",
+            embedder="all-MiniLM-L12-v2",
             d_text=384,
             num_blocks=12,
             d_model=512,
@@ -46,12 +47,12 @@ def default_config() -> Config:
             tokens_per_gpu=2**17,
             num_workers=16,
             prefetch_factor=2,
-            ctx_sizes=[1024, 2048, 4096, 8192],
-            local_ctx_sizes=[512, 1024, 2048],
-            bfs_widths=[16, 32, 64, 128],
+            ctx_size_list=[1024, 2048, 4096, 8192],
+            local_ctx_size_list=[512, 1024, 2048],
+            bfs_width_list=[16, 32, 64, 128],
+            prefer_latest_list=[True],
             num_walks=10_000,
             walk_length=20,
-            prefer_latest=[True],
             mask_prob_max=0.0,
             items_per_task=100_000,
             lr=5e-4,
@@ -62,15 +63,11 @@ def default_config() -> Config:
             total_steps=100_001,
             swa_momentum=0.9995,
             seed=0,
-            bool_as_num=True,
-            skip_text_cols=False,
             mmap_populate=True,
-            balance_labels=[False],
             timeout_per_item=10.0,
+            eval_freq=2000,
             vector_db_path=None,
-            out_root="~/ckpts",
             resume_save_mins=20.0,
-
         ),
         eval=EvalConfig(
             splits=["val"],
@@ -81,22 +78,15 @@ def default_config() -> Config:
             prefetch_factor=2,
             num_walks=10_000,
             walk_length=20,
-            freq=2000,
             items_per_task=1024,
-            ctx_sizes=[4096, 8192],
-            bool_as_num=True,
-            skip_text_cols=False,
+            ctx_size_list=[4096, 8192],
             mmap_populate=True,
-            balance_labels=False,
-            ablate_schema_semantics=False,
-            reg_metric="mae",
             shuffle_seed=0,
             context_seed=0,
             vector_db_path=None,
             lcs_bw_pl_grid=[(256, 32, True)],
             ensemble_size=1,
-            out_dir="",
-            write_csv=False,
+            csv_out_dir=None,
         ),
     )
 

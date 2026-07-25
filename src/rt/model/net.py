@@ -544,7 +544,7 @@ class RelationalTransformer(nn.Module):
 
         return loss_out, yhat_out, sem_type_losses, is_targets
 
-    def predict(self, batch, eval_ctx_sizes, device, task, bool_as_num):
+    def predict(self, batch, eval_ctx_size_list, device, task, bool_as_num=True):
         """Eval-mode predictions at multiple context sizes.
 
         batch: dict of CPU tensors (B, S_max).
@@ -555,7 +555,7 @@ class RelationalTransformer(nn.Module):
         """
         val_key = "boolean" if task.task_type == "clf" and not bool_as_num else "number"
         preds = {}
-        for ctx_size in eval_ctx_sizes:
+        for ctx_size in eval_ctx_size_list:
             trunc = {
                 k: v[:, :ctx_size].to(device, non_blocking=True)
                 for k, v in batch.items()

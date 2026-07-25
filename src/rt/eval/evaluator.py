@@ -40,7 +40,7 @@ class Evaluator:
         tasks,
         pre_dir,
         eval_bs,
-        ctx_sizes,
+        ctx_size_list,
         items_per_task,
         num_workers,
         prefetch_factor,
@@ -50,12 +50,8 @@ class Evaluator:
         num_walks,
         walk_length,
         prefer_latest,
-        bool_as_num,
-        skip_text_cols,
         mmap_populate,
-        balance_labels,
-        ablate_schema_semantics,
-        embedding_model,
+        embedder,
         d_text,
         shuffle_seed,
         context_seed,
@@ -66,10 +62,11 @@ class Evaluator:
         world_size,
         ddp,
         device,
+        bool_as_num=True,
     ):
         self.tasks = [t for t in tasks if "synthetic" not in t.db_name]
         self.eval_splits = sorted(set(t.split for t in self.tasks if t.split))
-        self.ctx_sizes = ctx_sizes
+        self.ctx_size_list = ctx_size_list
         self.eval_bs = eval_bs
         self.items_per_task = items_per_task
         self.bool_as_num = bool_as_num
@@ -79,7 +76,7 @@ class Evaluator:
         self.ddp = ddp
         self.device = device
 
-        max_eval_ctx_size = max(ctx_sizes)
+        max_eval_ctx_size = max(ctx_size_list)
 
         self.eval_loaders = {}
         self.eval_loader_iters = {}
@@ -100,13 +97,13 @@ class Evaluator:
                 global_rank=global_rank,
                 local_rank=local_rank,
                 world_size=world_size,
-                local_ctx_sizes=[local_ctx_size],
-                bfs_widths=[bfs_width],
+                local_ctx_size_list=[local_ctx_size],
+                bfs_width_list=[bfs_width],
                 num_walks=num_walks,
                 walk_length=walk_length,
-                prefer_latest=[prefer_latest],
+                prefer_latest_list=[prefer_latest],
                 mask_prob_max=0.0,
-                embedding_model=embedding_model,
+                embedder=embedder,
                 d_text=d_text,
                 shuffle_seed=shuffle_seed,
                 context_seed=context_seed,
@@ -114,11 +111,8 @@ class Evaluator:
                 quiet=True,
                 bool_as_num=bool_as_num,
                 ignore_data_errors=False,
-                skip_text_cols=skip_text_cols,
                 mmap_populate=mmap_populate,
-                balance_labels=[balance_labels],
                 timeout_per_item=3600.0,
-                ablate_schema_semantics=ablate_schema_semantics,
                 vector_db_path=vector_db_path,
                 train_only_fallback=train_only_fallback,
             )
@@ -156,7 +150,7 @@ class Evaluator:
                 flush=True,
             )
 
-    def evaluate_raw(self, nets_with_prefix, eval_ctx_sizes_to_use,
+    def evaluate_raw(self, nets_with_prefix, eval_ctx_size_list_to_use,
                      with_node_idxs=False):
         """Per-task pipeline primitive.
 
@@ -218,10 +212,10 @@ class Evaluator:
                     )
 
                 preds_per_prefix_per_ctx = {
-                    prefix: {ctx: [] for ctx in eval_ctx_sizes_to_use}
+                    prefix: {ctx: [] for ctx in eval_ctx_size_list_to_use}
                     for _, prefix in nets_with_prefix
                 }
-                num_labels_per_ctx = {ctx: [] for ctx in eval_ctx_sizes_to_use}
+                num_labels_per_ctx = {ctx: [] for ctx in eval_ctx_size_list_to_use}
                 labels = []
                 batch_masks = []
                 node_idxs_acc = []
@@ -245,7 +239,7 @@ class Evaluator:
                     # target column, for each requested ctx_size. Gathered
                     # and masked alongside labels/preds so the eventual
                     # mean_labels stat is uniform over real items.
-                    for eval_ctx_size in eval_ctx_sizes_to_use:
+                    for eval_ctx_size in eval_ctx_size_list_to_use:
                         tb = {k: v[:, :eval_ctx_size] for k, v in batch.items()}
                         tb_is_targets = tb["is_targets"]
                         tb_target_col = torch.full(
@@ -274,7 +268,7 @@ class Evaluator:
                     for net, prefix in nets_with_prefix:
                         preds_by_ctx = net.predict(
                             batch,
-                            eval_ctx_sizes_to_use,
+                            eval_ctx_size_list_to_use,
                             device,
                             eval_task,
                             bool_as_num=self.bool_as_num,
@@ -358,7 +352,7 @@ class Evaluator:
                     if global_rank == 0:
                         node_idxs_np = nidx_gathered[masks_gathered].cpu().numpy()
 
-                for eval_ctx_size in eval_ctx_sizes_to_use:
+                for eval_ctx_size in eval_ctx_size_list_to_use:
                     nlabels_cat = torch.cat(
                         num_labels_per_ctx[eval_ctx_size], dim=0
                     ).to(device)
@@ -407,7 +401,7 @@ class Evaluator:
                             out = out + (node_idxs_np,)
                         yield out
 
-    def evaluate(self, nets_with_prefix, eval_ctx_sizes_to_use, steps, reg_metric):
+    def evaluate(self, nets_with_prefix, eval_ctx_size_list_to_use, steps):
         """Full in-loop eval pass: per-task metrics, per-split avg
         aggregation, stdout printing, wandb logging.
 
@@ -415,18 +409,9 @@ class Evaluator:
         feed into wandb keys + console labels (e.g. ``""`` for the
         live net, ``"swa_"`` for the SWA snapshot).
 
-        ``reg_metric``: ``"mae"`` (mean absolute error) or ``"r2"``
-        (coefficient of determination). Selects the per-task metric
-        computed for ``task_type == "reg"`` tasks; both the wandb key
-        and the ``all_metrics`` aggregate key are named
-        ``avg_{reg_metric}``.
-
         Returns the empty-prefix net's metrics dict, or the first
         net's if no empty-prefix entry exists.
         """
-        assert reg_metric in ("mae", "r2"), (
-            f"reg_metric must be 'mae' or 'r2', got {reg_metric!r}"
-        )
         eval_tic = time.time()
         local_rank = self.local_rank
         global_rank = self.global_rank
@@ -434,27 +419,27 @@ class Evaluator:
         if local_rank == 0:
             tqdm.write(f"[step {steps}]")
 
-        avg_reg_key = f"avg_{reg_metric}"
+        avg_reg_key = "avg_mae"
 
         all_metrics = {}
         all_reg_scores = {}
         all_auc_scores = {}
         for _, prefix in nets_with_prefix:
             all_metrics[prefix] = {
-                split: {ctx: {} for ctx in eval_ctx_sizes_to_use}
+                split: {ctx: {} for ctx in eval_ctx_size_list_to_use}
                 for split in self.eval_splits
             }
             all_reg_scores[prefix] = {
-                (x, y): [] for x in eval_ctx_sizes_to_use for y in self.eval_splits
+                (x, y): [] for x in eval_ctx_size_list_to_use for y in self.eval_splits
             }
             all_auc_scores[prefix] = {
-                (x, y): [] for x in eval_ctx_sizes_to_use for y in self.eval_splits
+                (x, y): [] for x in eval_ctx_size_list_to_use for y in self.eval_splits
             }
         all_mean_labels_reg = {
-            (x, y): [] for x in eval_ctx_sizes_to_use for y in self.eval_splits
+            (x, y): [] for x in eval_ctx_size_list_to_use for y in self.eval_splits
         }
         all_mean_labels_clf = {
-            (x, y): [] for x in eval_ctx_sizes_to_use for y in self.eval_splits
+            (x, y): [] for x in eval_ctx_size_list_to_use for y in self.eval_splits
         }
 
         outer_pbar = tqdm(
@@ -471,7 +456,7 @@ class Evaluator:
             labels_np,
             preds_by_prefix_np,
             num_labels_np,
-        ) in self.evaluate_raw(nets_with_prefix, eval_ctx_sizes_to_use):
+        ) in self.evaluate_raw(nets_with_prefix, eval_ctx_size_list_to_use):
             if last_task is not None and eval_task is not last_task:
                 outer_pbar.update(1)
             last_task = eval_task
@@ -489,8 +474,8 @@ class Evaluator:
 
             for prefix, preds_np in preds_by_prefix_np.items():
                 if eval_task.task_type == "reg":
-                    metric_name = reg_metric
-                    _, metric = metric_for("reg", labels_np, preds_np, reg_metric)
+                    metric_name = "mae"
+                    _, metric = metric_for("reg", labels_np, preds_np)
                     all_reg_scores[prefix][(eval_ctx_size, eval_task.split)].append(
                         metric
                     )
@@ -541,7 +526,7 @@ class Evaluator:
         if global_rank == 0:
             for _, prefix in nets_with_prefix:
                 for split in self.eval_splits:
-                    for eval_ctx_size in eval_ctx_sizes_to_use:
+                    for eval_ctx_size in eval_ctx_size_list_to_use:
                         def _avg(xs):
                             # Single-task-type task sets (per-task fine-tuning)
                             # have no scores for the other type.
@@ -573,7 +558,7 @@ class Evaluator:
                         tqdm.write(
                             f"  {f'{prefix}avg/{split}':<30}"
                             f"ctx: {eval_ctx_size:<7}"
-                            f"{reg_metric}: \033[1m{avg_reg:<6.4f}\033[0m  "
+                            f"mae: \033[1m{avg_reg:<6.4f}\033[0m  "
                             f"auc: \033[1m{avg_auc * 100:<5.1f}\033[0m  "
                             f"mean_labels_reg: \033[1m{avg_mean_labels_reg:<5.1f}\033[0m  "
                             f"mean_labels_clf: \033[1m{avg_mean_labels_clf:<5.1f}\033[0m"
@@ -585,7 +570,7 @@ class Evaluator:
                 tasks_by_split[t.split].append(t)
             for _, prefix in nets_with_prefix:
                 for split in self.eval_splits:
-                    for eval_ctx_size in eval_ctx_sizes_to_use:
+                    for eval_ctx_size in eval_ctx_size_list_to_use:
                         payload = {
                             "ctx_size": eval_ctx_size,
                             f"{prefix}ctx_scaling/steps={steps}/{split}/{avg_reg_key}": all_metrics[
@@ -602,7 +587,7 @@ class Evaluator:
                             ][split][eval_ctx_size]["avg_mean_labels_clf"],
                         }
                         for t in tasks_by_split[split]:
-                            metric_name = reg_metric if t.task_type == "reg" else "auc"
+                            metric_name = "mae" if t.task_type == "reg" else "auc"
                             base = (
                                 f"per_task/{prefix}ctx_scaling/steps={steps}/"
                                 f"{t.db_name}/{t.table_name}/{split}"

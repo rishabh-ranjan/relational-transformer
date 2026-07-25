@@ -21,13 +21,13 @@ can reproduce the RelBench numbers with nothing downloaded up front:
 ```bash
 # checkpoint and data both come from the Hub
 pixi run eval --model.load-ckpt-path stanford-star/rt-j/classification \
-  --eval.pre-dir stanford-star/relbench-preprocessed --eval.out-dir eval_out
+  --eval.pre-dir stanford-star/relbench-preprocessed --eval.csv-out-dir eval_out
 ```
 
 ## Inference with default context
 
 The command above runs **simple** inference: one default context config
-(`--eval.lcs-bw-pl-grid 256 32 True`, total `--eval.ctx-sizes 8192`) on the
+(`--eval.lcs-bw-pl-grid 256 32 True`, total `--eval.ctx-size-list 8192`) on the
 test split of every task in the default task list
 (`stanford-star/relbench/db-task-lists/forecast.json`, the 21-task RelBench
 benchmark). For each test row the sampler builds a context (a sampled
@@ -51,7 +51,7 @@ local JSON file of pairs, or as a Hub path to such a file. To run one task:
 ```bash
 pixi run eval --model.load-ckpt-path stanford-star/rt-j/classification \
   --eval.pre-dir stanford-star/relbench-preprocessed \
-  --eval.db-task-list rel-f1 driver-top3 --eval.out-dir eval_out
+  --eval.db-task-list rel-f1 driver-top3 --eval.csv-out-dir eval_out
 ```
 
 This downloads only that task's data (the Hub `--eval.pre-dir` is fetched on
@@ -60,7 +60,7 @@ ship on the Hub: `stanford-star/relbench/db-task-lists/{forecast,autocomplete,al
 
 ## Evaluate with the RelBench evaluator
 
-`--eval.out-dir` is a valid RelBench **submission directory**: one
+`--eval.csv-out-dir` is a valid RelBench **submission directory**: one
 `<dataset>__<task>.csv` prediction table per task, scored through **RelBench's own
 leaderboard evaluator** (`relbench.leaderboard`). Eval denormalizes regression
 predictions to the original target scale (`y = pred*std + mean`, train-split
@@ -82,7 +82,7 @@ the main quality knob. All are CLI flags on `eval`:
 
 | flag | meaning | default |
 |---|---|---|
-| `--eval.ctx-sizes` | total context size (cells) the model attends over (one value for standalone eval) | 8192 |
+| `--eval.ctx-size-list` | total context size (cells) the model attends over (one value for standalone eval) | 8192 |
 | `--eval.lcs-bw-pl-grid` | `(local_ctx_size, bfs_width, prefer_latest)` context configs; one entry = use it directly, several = tune per task on validation | `256 32 True` |
 | `--eval.num-walks` | random walks used to rank same-table neighbors | 10000 |
 | `--eval.walk-length` | max length of each random walk | 20 |
@@ -90,7 +90,7 @@ the main quality knob. All are CLI flags on `eval`:
 Within a grid entry, larger `local_ctx_size` (max cells per BFS expansion
 around the seed) and `bfs_width` (max DB nodes kept per BFS level) pull more
 relational neighborhood into each row's context (more signal, more tokens);
-`--eval.ctx-sizes` caps the total. `prefer_latest` controls *which* same-table
+`--eval.ctx-size-list` caps the total. `prefer_latest` controls *which* same-table
 neighbors win that budget — the most recent rows (`True`, default) or the most
 frequent (`False`). The best setting is task-dependent — which motivates tuning
 and ensembling below.
@@ -112,7 +112,7 @@ pixi run eval \
   --model.load-ckpt-path stanford-star/rt-j/regression \
   --eval.pre-dir stanford-star/relbench-preprocessed \
   --eval.lcs-bw-pl-grid 256 32 True 512 64 True \
-  --eval.ensemble-size 1 --eval.out-dir eval_out
+  --eval.ensemble-size 1 --eval.csv-out-dir eval_out
 ```
 
 ## Context ensembling
@@ -127,7 +127,7 @@ pixi run eval \
   --model.load-ckpt-path stanford-star/rt-j/regression \
   --eval.pre-dir stanford-star/relbench-preprocessed \
   --eval.lcs-bw-pl-grid 256 32 True 512 64 True \
-  --eval.ensemble-size 4 --eval.out-dir eval_out
+  --eval.ensemble-size 4 --eval.csv-out-dir eval_out
 ```
 
 Tuning (on validation) and ensembling (on test) engage automatically whenever
