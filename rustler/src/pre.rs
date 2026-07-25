@@ -339,7 +339,7 @@ pub fn main(cli: Cli) {
                     });
                 }
             }
-            tasks_meta.push(serde_json::json!({
+            let mut task_meta = serde_json::json!({
                 "name": task_name,
                 // Autocomplete tasks ship as a manifest only (no train/val/test
                 // parquet): the target is a column of an existing db table, so
@@ -349,9 +349,15 @@ pub fn main(cli: Cli) {
                 "task_type": tm.task_type,
                 "entity_table": tm.entity_table,
                 "time_col": tm.time_col,
-                "remove_columns": tm.remove_columns,
                 "splits": splits,
-            }));
+            });
+            // Omitted when empty rather than written as []: an empty list says
+            // nothing a missing key does not, and the vast majority of tasks
+            // declare no leakage columns.
+            if !tm.remove_columns.is_empty() {
+                task_meta["remove_columns"] = serde_json::json!(tm.remove_columns);
+            }
+            tasks_meta.push(task_meta);
         }
         task_specs.sort_by(|a, b| a.path.cmp(&b.path));
         num_task_tables = task_specs.len();
