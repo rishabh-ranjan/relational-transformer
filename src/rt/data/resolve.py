@@ -60,8 +60,6 @@ def resolve_pre_dir(
     if p.exists():
         return str(p)
 
-    from huggingface_hub import snapshot_download
-
     repo_id, subdir = resolve_repo(pre_dir)
     prefix = f"{subdir}/" if subdir else ""
     file_set = METADATA_FILES if metadata_only else CORE_FILES
@@ -74,13 +72,48 @@ def resolve_pre_dir(
         if include_text:
             patterns.append(f"{base}/text.json")
 
-    local = snapshot_download(
+    # Every pattern here is a concrete path, so they double as the check that
+    # the local cache actually holds this call's files.
+    local = _snapshot(repo_id, revision, tuple(patterns), tuple(patterns))
+    return str(Path(local) / subdir) if subdir else str(local)
+
+
+@cache
+def _snapshot(
+    repo_id: str,
+    revision: str | None,
+    patterns: tuple[str, ...],
+    require: tuple[str, ...] = (),
+) -> str:
+    """One bulk ``snapshot_download`` per (repo, revision, pattern set), cached.
+
+    Every rank of a DDP job runs this independently, so anything issued per
+    dataset here is multiplied by the world size and the Hub answers the burst
+    with HTTP 429. Two rules keep the request count flat: fetch in bulk (one
+    call for all the files, never one call per dataset), and try the local
+    cache first so a warm node -- a requeue, or the other ranks on this node --
+    makes no requests at all.
+
+    ``require`` lists snapshot-relative paths that must all exist for the
+    cached answer to count: a local-only snapshot happily returns a directory
+    populated by some earlier, narrower download, so the directory existing
+    proves nothing about the files this caller needs.
+    """
+    from huggingface_hub import snapshot_download
+
+    kwargs = dict(
         repo_id=repo_id,
         repo_type="dataset",
         revision=revision,
-        allow_patterns=patterns,
+        allow_patterns=list(patterns),
     )
-    return str(Path(local) / subdir) if subdir else str(local)
+    try:
+        local = snapshot_download(**kwargs, local_files_only=True)
+        if all((Path(local) / r).exists() for r in require):
+            return local
+    except Exception:
+        pass
+    return snapshot_download(**kwargs)
 
 
 def _is_complete(dataset_dir: Path) -> bool:
@@ -122,19 +155,22 @@ def list_datasets(pre_dir: str, revision: str | None = None) -> list[str]:
 
 
 def read_meta(pre_dir: str, db: str, revision: str | None = None) -> dict:
-    """Read one preprocessed dataset's ``meta.json`` (local or downloaded from Hub)."""
+    """Read one preprocessed dataset's ``meta.json`` (local or downloaded from Hub).
+
+    Callers read metas for a whole db_task_list in a loop (see
+    ``rt.data.tasks.get_tasks``), so this fetches *every* meta.json in the repo
+    in one shot rather than one request per db: hundreds of dbs times the world
+    size is exactly the request storm the Hub rate-limits.
+    """
     p = Path(pre_dir).expanduser()
     if p.exists():
         return json.loads((p / db / "meta.json").read_text())
 
-    from huggingface_hub import hf_hub_download
-
     repo_id, subdir = resolve_repo(pre_dir)
-    filename = f"{subdir}/{db}/meta.json" if subdir else f"{db}/meta.json"
-    path = hf_hub_download(
-        repo_id=repo_id, filename=filename, repo_type="dataset", revision=revision
-    )
-    return json.loads(Path(path).read_text())
+    prefix = f"{subdir}/" if subdir else ""
+    rel = f"{prefix}{db}/meta.json"
+    root = Path(_snapshot(repo_id, revision, (f"{prefix}*/meta.json",), (rel,)))
+    return json.loads((root / rel).read_text())
 
 
 # rustler's Sampler is an unpicklable Rust object, so any DataLoader over a
