@@ -73,8 +73,10 @@ def main(cfg: Config) -> None:
             "eval.context_seed only applies to single-config runs"
         )
 
-        val_tasks = get_tasks(ev_cfg.pre_dir, ev_cfg.db_task_list, ("val",))
-        test_tasks = get_tasks(ev_cfg.pre_dir, ev_cfg.db_task_list, ("test",))
+        val_tasks = get_tasks(ev_cfg.pre_dir, ev_cfg.db_task_list, ("val",),
+                              embedder=embedder)
+        test_tasks = get_tasks(ev_cfg.pre_dir, ev_cfg.db_task_list, ("test",),
+                               embedder=embedder)
         if not test_tasks:
             raise SystemExit(f"no tasks found in {ev_cfg.pre_dir}")
         run_ensemble(net, ev_cfg.pre_dir, val_tasks, test_tasks, grid=grid,
@@ -82,7 +84,8 @@ def main(cfg: Config) -> None:
                      csv_out_dir=ev_cfg.csv_out_dir, **eval_kwargs)
         return
 
-    tasks = get_tasks(ev_cfg.pre_dir, ev_cfg.db_task_list, tuple(ev_cfg.splits))
+    tasks = get_tasks(ev_cfg.pre_dir, ev_cfg.db_task_list, tuple(ev_cfg.splits),
+                      embedder=embedder)
     if not tasks:
         raise SystemExit(f"no tasks found in {ev_cfg.pre_dir}")
     lcs, bw, pl = grid[0]
@@ -93,26 +96,28 @@ def main(cfg: Config) -> None:
                    csv_out_dir=ev_cfg.csv_out_dir, evaluator=ev, embedder=embedder)
 
 
-def build_evaluator(tasks, pre_dir, *, embedder, d_text, device, ctx_size=8192,
-                    local_ctx_size=256, bfs_width=32, num_walks=10_000, walk_length=20,
-                    tokens_per_gpu=2**18, items_per_task=None, num_workers=2, context_seed=0,
-                    prefer_latest=True, shuffle_seed=0, mmap_populate=True,
-                    prefetch_factor=2, bool_as_num=True, vector_db_path=None):
-    # mmap_populate=True by default: pre-fault the eval data into RAM so the
-    # context build is fed instead of cold-faulting it from shared storage per
-    # item (the same starvation that hits training without it).
-    #
-    # prefer_latest / shuffle_seed are real knobs (not constants): prefer_latest
-    # picks the same-table neighbor sort (recency vs frequency); shuffle_seed
-    # fixes the val/test subset selection + item shuffle, so an --items-per-task
-    # subsample stays the *same* rows across configs (context tuning, ensembling).
+def build_evaluator(tasks, pre_dir, *, embedder, d_text, device, ctx_size,
+                    local_ctx_size, bfs_width, num_walks, walk_length,
+                    tokens_per_gpu, items_per_task, num_workers, context_seed,
+                    prefer_latest, shuffle_seed, mmap_populate, prefetch_factor,
+                    vector_db_path):
+    """Single-process Evaluator over ``tasks`` at one context size.
+
+    Every knob is required: a default here would silently paper over a
+    misconfigured caller. ``mmap_populate=True`` pre-faults the eval data into
+    RAM so the context build is fed instead of cold-faulting it from shared
+    storage per item (the same starvation that hits training without it).
+    ``prefer_latest`` picks the same-table neighbor sort (recency vs
+    frequency); ``shuffle_seed`` fixes the val/test subset selection + item
+    shuffle, so an ``items_per_task`` subsample stays the *same* rows across
+    configs (context tuning, ensembling).
+    """
     return Evaluator(
         tasks=tasks, pre_dir=pre_dir, eval_bs=max(1, tokens_per_gpu // ctx_size),
         ctx_size_list=[ctx_size], items_per_task=items_per_task, num_workers=num_workers,
         prefetch_factor=prefetch_factor, persistent_workers=False, local_ctx_size=local_ctx_size,
         bfs_width=bfs_width, num_walks=num_walks, walk_length=walk_length,
-        prefer_latest=prefer_latest, bool_as_num=bool_as_num,
-        mmap_populate=mmap_populate, embedder=embedder, d_text=d_text,
+        prefer_latest=prefer_latest, mmap_populate=mmap_populate, embedder=embedder, d_text=d_text,
         shuffle_seed=shuffle_seed, context_seed=context_seed, vector_db_path=vector_db_path,
         train_only_fallback=False,
         global_rank=0, local_rank=0, world_size=1, ddp=False, device=device,
@@ -172,8 +177,11 @@ def run_ensemble(model, pre_dir, val_tasks, test_tasks, *, grid, ensemble_size, 
     best = {}  # (db, table) -> {"cfg", "value", "task_type"}
     for cfg in grid:
         lcs, bw, pl = cfg
+        # Tuning always reads context seed 0; the seed sweep is a test-side
+        # ensembling concern (below), not part of picking the best config.
         ev = build_evaluator(val_tasks, pre_dir, ctx_size=ctx_size, local_ctx_size=lcs,
-                             bfs_width=bw, prefer_latest=pl, **eval_kwargs)
+                             bfs_width=bw, prefer_latest=pl, context_seed=0,
+                             **eval_kwargs)
         for task, _c, labels, preds_by_prefix, _nl in ev.evaluate_raw([(model, "")], [ctx_size]):
             _, v = metric_for(task.task_type, labels, preds_by_prefix[""])
             key = (task.db_name, task.table_name)

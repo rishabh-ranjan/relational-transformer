@@ -14,6 +14,7 @@ from tqdm.auto import tqdm
 
 from rt.data import EvalDataset, RustlerDataset
 from rt.eval.metrics import metric_for
+from rt.model.net import SEM_TYPE_BOOLEAN
 
 wandb = lazy.load("wandb")
 
@@ -62,14 +63,12 @@ class Evaluator:
         world_size,
         ddp,
         device,
-        bool_as_num=True,
     ):
         self.tasks = [t for t in tasks if "synthetic" not in t.db_name]
         self.eval_splits = sorted(set(t.split for t in self.tasks if t.split))
         self.ctx_size_list = ctx_size_list
         self.eval_bs = eval_bs
         self.items_per_task = items_per_task
-        self.bool_as_num = bool_as_num
         self.global_rank = global_rank
         self.local_rank = local_rank
         self.world_size = world_size
@@ -109,7 +108,6 @@ class Evaluator:
                 context_seed=context_seed,
                 items_per_task=items_per_task,
                 quiet=True,
-                bool_as_num=bool_as_num,
                 ignore_data_errors=False,
                 mmap_populate=mmap_populate,
                 timeout_per_item=3600.0,
@@ -271,21 +269,22 @@ class Evaluator:
                             eval_ctx_size_list_to_use,
                             device,
                             eval_task,
-                            bool_as_num=self.bool_as_num,
                         )
                         for ctx_size, yhat in preds_by_ctx.items():
                             assert yhat.size(0) == batch_mask.size(0)
                             preds_per_prefix_per_ctx[prefix][ctx_size].append(yhat)
 
-                    val_key = (
-                        "boolean_values"
-                        if eval_task.task_type == "clf" and not self.bool_as_num
-                        else "number_values"
-                    )
-                    y = (
-                        batch[val_key].squeeze(-1)
-                        * batch["is_targets"].to(batch[val_key].dtype)
-                    ).sum(dim=1)
+                    # Read the label from the channel its semantic type names:
+                    # Boolean-typed targets (legacy-preprocessed data) live in
+                    # boolean_values, everything else in number_values. The
+                    # stored value is the same either way, so this needs no
+                    # knowledge of which net is being evaluated.
+                    vals = torch.where(
+                        (batch["sem_types"] == SEM_TYPE_BOOLEAN).unsqueeze(-1),
+                        batch["boolean_values"],
+                        batch["number_values"],
+                    ).squeeze(-1)
+                    y = (vals * batch["is_targets"].to(vals.dtype)).sum(dim=1)
                     assert y.size(0) == batch_mask.size(0)
                     labels.append(y)
                     batch_masks.append(batch_mask)

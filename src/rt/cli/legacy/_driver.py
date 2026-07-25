@@ -2,7 +2,7 @@
 
 Evaluates a possibly per-task family of legacy checkpoints on the RelBench
 tasks with the published legacy context configuration (ctx=1024, one BFS
-context around the seed with bfs_width=256, boolean targets kept boolean),
+context around the seed with bfs_width=256),
 and writes a RelBench leaderboard submission directory of prediction CSVs.
 """
 
@@ -28,9 +28,6 @@ class LegacyEvalConfig:
     # (booleans are a real sem type instead of z-scored numbers).
     pre_dir: str = "stanford-star/relbench-preprocessed/legacy"
     db_task_list: str = "stanford-star/relbench/db-task-lists/forecast.json"
-    # False reads clf targets from the boolean head (BCE-trained), matching
-    # the legacy models' training. Requires boolean-typed data (legacy/).
-    bool_as_num: bool = False
     # published legacy eval context: the whole 1024-token context is one BFS
     # neighborhood around the seed (local_ctx_size == ctx_size), width 256,
     # no random-walk tier (num_walks=0) and no recency-sorted neighbors
@@ -47,6 +44,9 @@ class LegacyEvalConfig:
     items_per_task: int = 10_000_000
     shuffle_seed: int = 0
     context_seed: int = 0
+    mmap_populate: bool = True
+    prefetch_factor: int = 2
+    vector_db_path: str | None = None
 
 
 def run_legacy_eval(cfg: LegacyEvalConfig, model_for_task) -> dict:
@@ -55,7 +55,8 @@ def run_legacy_eval(cfg: LegacyEvalConfig, model_for_task) -> dict:
     device = "cuda" if torch.cuda.is_available() else "cpu"
     out_dir = Path(cfg.out_dir).expanduser()
 
-    tasks = get_tasks(cfg.pre_dir, cfg.db_task_list, ("test",))
+    tasks = get_tasks(cfg.pre_dir, cfg.db_task_list, ("test",),
+                      embedder=LEGACY_EMBEDDER)
     if not tasks:
         raise SystemExit(f"no tasks found in {cfg.pre_dir}")
 
@@ -81,7 +82,9 @@ def run_legacy_eval(cfg: LegacyEvalConfig, model_for_task) -> dict:
             num_workers=cfg.num_workers,
             shuffle_seed=cfg.shuffle_seed,
             context_seed=cfg.context_seed,
-            bool_as_num=cfg.bool_as_num,
+            mmap_populate=cfg.mmap_populate,
+            prefetch_factor=cfg.prefetch_factor,
+            vector_db_path=cfg.vector_db_path,
         )
         for _task, _ctx, labels, preds_by_prefix, _nl, node_idxs in ev.evaluate_raw(
             [(model, "")], [cfg.ctx_size], with_node_idxs=True

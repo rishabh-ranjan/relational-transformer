@@ -2,8 +2,6 @@
 enumeration, and RAM pinning."""
 
 from rt.data.datasets import (
-    SEM_TYPE_BOOLEAN,
-    SEM_TYPE_NUMBER,
     EvalDataset,
     RustlerDataset,
     TrainDataset,

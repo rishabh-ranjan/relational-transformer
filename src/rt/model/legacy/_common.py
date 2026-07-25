@@ -26,11 +26,15 @@ def make_block_mask(mask, batch_size, seq_len, device):
     )
 
 
-def predict(model, batch, eval_ctx_size_list, device, task, bool_as_num):
+def predict(model, batch, eval_ctx_size_list, device, task):
     """Evaluator-facing eval-time predictions; mirrors
     :meth:`rt.model.net.RelationalTransformer.predict` for the legacy nets
-    (which keep token order, so ``is_targets`` needs no re-sort)."""
-    val_key = "boolean" if task.task_type == "clf" and not bool_as_num else "number"
+    (which keep token order, so ``is_targets`` needs no re-sort).
+
+    Unlike the current net, these were trained with Boolean as a real semantic
+    type, so classification targets are read from the BCE-trained boolean head.
+    """
+    val_key = "boolean" if task.task_type == "clf" else "number"
     preds = {}
     for ctx_size in eval_ctx_size_list:
         trunc = {

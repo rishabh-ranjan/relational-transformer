@@ -170,10 +170,9 @@ target task's database (v1, synth) or task (synth-real).
 `stanford-star/relbench-preprocessed/legacy` holds RelBench re-preprocessed
 with `rt.cli.legacy.preprocess`, which applies the RT-v1-era boolean-typing
 rules (binary targets and a few db columns become a real Boolean semantic
-type instead of z-scored numbers) before the regular pipeline; with it,
-`--no-bool-as-num` reads classification targets from the BCE-trained boolean
-head, matching the legacy models' training. Both CLIs default to the legacy
-data with the boolean head; `eval_plurel` additionally defaults to the
-paper's bfs_width 128. Metrics reproduce the papers within noise except
+type instead of z-scored numbers) before the regular pipeline. The legacy
+nets read classification targets from their BCE-trained boolean head, so this
+is the data they need; both CLIs default to it. `eval_plurel` additionally
+defaults to the paper's bfs_width 128. Metrics reproduce the papers within noise except
 RT-v1 on rel-avito, which degrades for sampler-level reasons outside these
 configs.

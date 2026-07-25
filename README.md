@@ -60,12 +60,15 @@ cfg = model.config
 
 # 3. build an evaluator for one task and predict zero-shot for 5 test rows.
 #    the evaluator samples each row's context from the preprocessed DB;
-tasks = get_tasks(pre_dir, [("rel-f1", "driver-dnf")], ("test",))
+tasks = get_tasks(pre_dir, [("rel-f1", "driver-dnf")], ("test",),
+                  embedder=cfg["embedder"])
 ev = build_evaluator(
     tasks, pre_dir,
-    embedder=cfg["embedder"], d_text=cfg["d_text"],
-    device=device, ctx_size=128, local_ctx_size=64,
-    items_per_task=5, num_workers=0,
+    embedder=cfg["embedder"], d_text=cfg["d_text"], device=device,
+    ctx_size=128, local_ctx_size=64, bfs_width=32, prefer_latest=True,
+    num_walks=10_000, walk_length=20, tokens_per_gpu=2**18,
+    items_per_task=5, num_workers=0, prefetch_factor=2,
+    shuffle_seed=0, context_seed=0, mmap_populate=True, vector_db_path=None,
 )
 
 # evaluate_raw yields one (task, ctx, labels, preds, n) per task

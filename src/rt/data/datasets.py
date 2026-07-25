@@ -18,11 +18,8 @@ from rt.rustler import Sampler
 
 MAX_F2P_NBRS = 5  # See fly.rs L32
 
-SEM_TYPE_NUMBER = 0
-SEM_TYPE_BOOLEAN = 3
 
-
-def process_batch(tup, d_text, bool_as_num=True):
+def process_batch(tup, d_text):
     out = dict(tup)
     seq_len = out.pop("seq_len")
 
@@ -57,16 +54,6 @@ def process_batch(tup, d_text, bool_as_num=True):
     out["text_values"] = out["text_values"].view(-1, seq_len, d_text)
     out["col_name_values"] = out["col_name_values"].view(-1, seq_len, d_text)
 
-    # `bool_as_num=False` is a legacy-only escape hatch: RT-v1/PluRel
-    # checkpoints were trained on boolean-typed data and read clf targets from
-    # the boolean head. Everything current runs with booleans folded into
-    # numbers.
-    if bool_as_num:
-        bool_mask = out["sem_types"] == SEM_TYPE_BOOLEAN
-        out["number_values"][bool_mask] = out["boolean_values"][bool_mask]
-        out["boolean_values"][bool_mask] = 0
-        out["sem_types"][bool_mask] = SEM_TYPE_NUMBER
-
     return out
 
 
@@ -95,7 +82,6 @@ class RustlerDataset:
         timeout_per_item,
         vector_db_path: str | None,
         train_only_fallback: bool,
-        bool_as_num=True,
     ):
         # `pre_dir` may be a local path or a HuggingFace repo spec; resolve to a
         # local root, downloading only the files needed for these databases.
@@ -198,10 +184,9 @@ class RustlerDataset:
         self.num_items = self.sampler.num_items
 
         self.d_text = d_text
-        self.bool_as_num = bool_as_num
 
     def _process_batch(self, tup):
-        return process_batch(tup, self.d_text, self.bool_as_num)
+        return process_batch(tup, self.d_text)
 
 
 class TrainDataset(RustlerDataset, IterableDataset):

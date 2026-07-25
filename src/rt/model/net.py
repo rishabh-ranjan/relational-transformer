@@ -235,6 +235,10 @@ def _kv_sizes(node_idxs, f2p_nbr_idxs, col_name_idxs, table_name_idxs, is_paddin
 
 SEM_TYPE_NAMES = ["number", "text", "datetime", "boolean"]
 
+# Indices into SEM_TYPE_NAMES; must match rustler's SemType discriminants.
+SEM_TYPE_NUMBER = SEM_TYPE_NAMES.index("number")
+SEM_TYPE_BOOLEAN = SEM_TYPE_NAMES.index("boolean")
+
 
 class RelationalTransformer(nn.Module):
     def __init__(
@@ -385,9 +389,27 @@ class RelationalTransformer(nn.Module):
         sem_types = batch["sem_types"].gather(1, sort_idxs)
         is_targets = batch["is_targets"].gather(1, sort_idxs)
         type_values = {}
-        for t in ["number", "text", "datetime", "boolean"]:
+        for t in SEM_TYPE_NAMES:
             k = t + "_values"
             type_values[t] = batch[k].gather(1, si.expand_as(batch[k]))
+
+        # Boolean cells take the numeric path: their stored value is already a
+        # z-scored 0/1, so re-typing them as Number lets one head cover both.
+        # This net has no trained boolean head -- every checkpoint was fit with
+        # the fold in place. The legacy RT-v1 / PluRel nets do keep Boolean as a
+        # real type (BCE head), which is why they do not do this.
+        is_bool = (sem_types == SEM_TYPE_BOOLEAN).unsqueeze(-1)
+        type_values["number"] = torch.where(
+            is_bool, type_values["boolean"], type_values["number"]
+        )
+        type_values["boolean"] = torch.where(
+            is_bool, torch.zeros_like(type_values["boolean"]), type_values["boolean"]
+        )
+        sem_types = torch.where(
+            sem_types == SEM_TYPE_BOOLEAN,
+            torch.full_like(sem_types, SEM_TYPE_NUMBER),
+            sem_types,
+        )
 
         if self.materialize_attn_masks:
             # Materialize (B, S, S) pairwise masks, then convert to block masks.
@@ -544,16 +566,18 @@ class RelationalTransformer(nn.Module):
 
         return loss_out, yhat_out, sem_type_losses, is_targets
 
-    def predict(self, batch, eval_ctx_size_list, device, task, bool_as_num=True):
+    def predict(self, batch, eval_ctx_size_list, device, task):
         """Eval-mode predictions at multiple context sizes.
 
-        batch: dict of CPU tensors (B, S_max).
+        batch: dict of CPU tensors (B, S_max). ``task`` is unused here (kept
+        for signature parity with the legacy nets' ``predict``).
         Returns dict mapping ctx_size → (B,) prediction tensor (CPU), with
         one entry per batch row. Rows with no target (phantom rows from
         last-batch overshoot, batch_mask=false) get 0.0; the caller filters
         them out using batch_mask after gather.
         """
-        val_key = "boolean" if task.task_type == "clf" and not bool_as_num else "number"
+        # Boolean cells are folded into the number channel in forward, so every
+        # prediction -- clf included -- comes out of the number head.
         preds = {}
         for ctx_size in eval_ctx_size_list:
             trunc = {
@@ -564,6 +588,6 @@ class RelationalTransformer(nn.Module):
             # Each real row has exactly one target position (eval invariant).
             # Collapse (B, S, 1) → (B,) by summing the per-row target entry.
             # Phantom rows have no target → sum is 0, filtered by batch_mask.
-            yhat = yhat_dict[val_key].squeeze(-1)  # (B, S)
+            yhat = yhat_dict["number"].squeeze(-1)  # (B, S)
             preds[ctx_size] = (yhat * sorted_is_targets.to(yhat.dtype)).sum(dim=1).cpu()
         return preds

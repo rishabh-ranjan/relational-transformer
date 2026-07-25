@@ -3,15 +3,16 @@
 The set of tasks to train or evaluate on is always given explicitly as a
 ``db_task_list``: a list of ``(db_name, task_name)`` pairs, a local path to a
 JSON file holding such a list, or a Hub path ``org/repo/path/to/list.json``
-(only that file is downloaded). ``task_name`` is either a forecast task-table
-name recorded in the db's ``meta.json`` or an autocomplete target spelled
-``"<table>/<column>"``. There is no enumerate-everything fallback: the list is
-the single source of truth for what runs.
+(only that file is downloaded). ``task_name`` is always a task recorded in the
+db's ``meta.json``: a forecast/external task, or an autocomplete task
+(``kind: autocomplete``, a manifest-only task dir whose target is a column of a
+db table). There is no enumerate-everything fallback and no on-the-fly column
+resolution: the list is the single source of truth.
 
 Curated lists ship on the Hub, e.g.
 ``stanford-star/relbench/db-task-lists/forecast.json`` (the 21-task RelBench
-benchmark) and ``stanford-star/the-join/db-task-lists/{forecast,autocomplete,all,rt-j}.json`` (the
-pretraining mixtures).
+benchmark) and ``stanford-star/the-join/db-task-lists/{forecast,autocomplete,all,rt-j}.json``
+(the pretraining mixtures).
 """
 
 from __future__ import annotations
@@ -20,14 +21,11 @@ import json
 from dataclasses import dataclass
 from pathlib import Path
 
-from rt.data.resolve import read_meta, resolve_pre_dir, resolve_repo
+from rt.data.resolve import read_meta, resolve_repo
 
 # relbench task_type -> RT task_type. Only node-level clf/reg tasks are modeled;
 # link_prediction (recommendation) tasks are skipped.
 _TASK_TYPE = {"binary_classification": "clf", "regression": "reg"}
-
-# autocomplete: which sem-type becomes which task. Text/DateTime are not targets.
-_SEM_TASK_TYPE = {"Boolean": "clf", "Number": "reg"}
 
 
 @dataclass(frozen=True)
@@ -70,17 +68,21 @@ def resolve_db_task_list(db_task_list) -> list[tuple[str, str]]:
     return out
 
 
-def get_tasks(pre_dir, db_task_list, splits, *, embedder=None) -> list[Task]:
+def get_tasks(pre_dir, db_task_list, splits, *, embedder) -> list[Task]:
     """Build full :class:`Task` objects for a db_task_list at the given splits.
 
-    Forecast task names are looked up in each db's ``meta.json`` (target column,
-    task type, available splits). Autocomplete names (``"<table>/<column>"``)
-    are emitted at the ``train`` split only; their clf/reg type is read off the
-    preprocessed nodes via ``rustler.column_sem_types``, which requires the
-    db's core files locally (``embedder`` selects the text-embedding
-    file when ``pre_dir`` is a Hub repo and the data must be fetched -- the
-    same files training/eval need anyway).
+    Every name in the list must be an explicit task recorded in the db's
+    ``meta.json`` -- there is no on-the-fly resolution of column specs.
+
+    Forecast/external tasks carry a label table per split, so they are emitted
+    once per requested split that the task actually ships. Autocomplete tasks
+    (``kind: autocomplete``) have no label table at all: the target is a column
+    of an existing db table, so they carry no splits and are emitted at the
+    ``train`` split only.
+
+    ``embedder`` is accepted for call-site compatibility and unused.
     """
+    del embedder
     pairs = resolve_db_task_list(db_task_list)
     by_db: dict[str, list[str]] = {}
     for db, name in pairs:
@@ -94,39 +96,19 @@ def get_tasks(pre_dir, db_task_list, splits, *, embedder=None) -> list[Task]:
             for t in meta.get("tasks", [])
             if _TASK_TYPE.get(t.get("task_type")) and t.get("target_col")
         }
-        sem = None
         for name in names:
-            if name in explicit:
-                t = explicit[name]
-                tt = _TASK_TYPE[t["task_type"]]
-                for split in splits:
-                    if split in t.get("splits", []):
-                        out.append(Task(db, name, t["target_col"], tt, split))
-            elif "/" in name:
-                if "train" not in splits:
-                    continue  # autocomplete is a pretraining-only signal
-                table, col = name.split("/", 1)
-                if sem is None:
-                    from rt.rustler import column_sem_types
-
-                    if embedder is None:
-                        raise ValueError(
-                            f"resolving autocomplete task {db}/{name} needs "
-                            f"embedder to fetch the db's core files"
-                        )
-                    local = resolve_pre_dir(pre_dir, [db], embedder)
-                    sem = column_sem_types(local, db)
-                tt = _SEM_TASK_TYPE.get(sem.get(f"{col} of {table}"))
-                if tt is None:
-                    raise ValueError(
-                        f"{db}: autocomplete target {name!r} is not a "
-                        f"Boolean/Number column of the preprocessed data"
-                    )
-                out.append(Task(db, table, col, tt, "train"))
-            else:
+            t = explicit.get(name)
+            if t is None:
                 raise ValueError(
-                    f"{db}: task {name!r} is neither a forecast task in "
-                    f"meta.json ({sorted(explicit)}) nor an autocomplete "
-                    f"'<table>/<column>' spec"
+                    f"{db}: task {name!r} is not a task in meta.json "
+                    f"({sorted(explicit)})"
                 )
+            tt = _TASK_TYPE[t["task_type"]]
+            if t.get("kind") == "autocomplete":
+                if "train" in splits:  # autocomplete is a pretraining-only signal
+                    out.append(Task(db, t["entity_table"], t["target_col"], tt, "train"))
+                continue
+            for split in splits:
+                if split in t.get("splits", []):
+                    out.append(Task(db, name, t["target_col"], tt, split))
     return out

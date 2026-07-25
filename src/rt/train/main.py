@@ -278,7 +278,7 @@ def main(cfg: Config) -> None:
     # underlying mmap'd data (page cache), so extra entries cost eval compute
     # only, nothing between eval points.
     val_tasks = get_tasks(cfg.eval.pre_dir, cfg.eval.db_task_list,
-                          tuple(cfg.eval.splits))
+                          tuple(cfg.eval.splits), embedder=cfg.model.embedder)
     from rt.eval import Evaluator
 
     evaluators = [
