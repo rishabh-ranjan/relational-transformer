@@ -112,6 +112,18 @@ def get_tasks(pre_dir, db_task_list, splits) -> list[Task]:
             leaks = tuple(
                 (str(tbl), str(col)) for tbl, col in t.get("remove_columns") or ()
             )
+            # A non-autocomplete task with no splits can never yield a Task at
+            # any split. Naming one is a mistake that would otherwise resolve to
+            # nothing in silence -- the shape a the-join autocomplete task takes
+            # if its `kind` goes missing from meta.json, since it ships no label
+            # parquet. (A task that simply does not ship the *requested* split is
+            # fine and stays quiet.)
+            if t.get("kind") != "autocomplete" and not t.get("splits"):
+                raise ValueError(
+                    f"{db}: task {name!r} has kind={t.get('kind')!r} and no splits, "
+                    f"so it resolves to no tasks; its meta.json entry is stale "
+                    f"(re-preprocess the db)"
+                )
             if t.get("kind") == "autocomplete":
                 if "train" in splits:  # autocomplete is a pretraining-only signal
                     out.append(Task(db, t["entity_table"], t["target_col"], tt,
