@@ -22,13 +22,14 @@
 #SBATCH --qos=il-lo
 #SBATCH --time=1-00:00:00
 #SBATCH --nodes=1
-#SBATCH --nodelist=ampere3
-#SBATCH --exclusive
+#SBATCH --nodelist=ampere1
 #SBATCH --gres=gpu:a100:8
 #SBATCH --ntasks-per-node=1
-#SBATCH --cpus-per-task=128
-# No --mem, as in single-node.sh: --exclusive plus the partition's DefMemPerGPU
-# lands on mem=2017232M, and an explicit --mem is capped lower by MaxMemPerCPU.
+# Not --exclusive: ampere1 carries an unrelated 8-CPU/32G job, so demanding the
+# whole node would just queue behind it. What it costs us is 8 of 128 cores and
+# 32G of 2050000M -- all 8 GPUs are free, and the memory left (2017232M) is
+# exactly what DefMemPerGPU asks for 8 GPUs, so the populate is unaffected.
+#SBATCH --cpus-per-task=120
 # The submit dir is node-local to the submit node, so don't try to start in it.
 #SBATCH --chdir=/tmp
 #SBATCH --propagate=MEMLOCK
