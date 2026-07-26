@@ -1251,7 +1251,6 @@ impl Sampler {
                 dataset,
                 target_node_idx,
                 target_node_idx,
-                target_node,
                 target_column,
                 columns_to_drop,
                 local_ctx_size,
@@ -1302,7 +1301,6 @@ impl Sampler {
                             dataset,
                             seed_node_idx,
                             target_node_idx,
-                            target_node,
                             target_column,
                             columns_to_drop,
                             local_ctx_size,
@@ -1329,7 +1327,6 @@ impl Sampler {
                         dataset,
                         seed_node_idx,
                         target_node_idx,
-                        target_node,
                         target_column,
                         columns_to_drop,
                         local_ctx_size,
@@ -1401,7 +1398,6 @@ impl Sampler {
                     dataset,
                     seed_node_idx,
                     target_node_idx,
-                    target_node,
                     target_column,
                     columns_to_drop,
                     local_ctx_size,
@@ -1781,7 +1777,6 @@ fn extend_with_seed_bfs(
     dataset: &Dataset,
     seed_node_idx: i32,
     target_node_idx: i32,
-    target_node: &ArchivedNode,
     target_column: i32,
     columns_to_drop: &[i32],
     local_ctx_size: usize,
@@ -1817,16 +1812,20 @@ fn extend_with_seed_bfs(
             }
             let col_idx: i32 = node.col_name_idxs[cell_i].into();
 
-            // Skip this task's leakage columns: on the target's own row, and
-            // on rows sharing its timestamp (for a label table those are the
-            // same forecast horizon). The timestamp arm needs the target to
-            // actually have one -- `None == None` otherwise makes it match
-            // every timestamp-less row, stripping the columns from the whole
-            // table instead of the rows that can leak.
-            if columns_to_drop.contains(&col_idx)
-                && (node.node_idx == target_node_idx
-                    || (target_node.timestamp.is_some() && node.timestamp == target_node.timestamp))
-            {
+            // Skip this task's leakage columns, wherever they appear. `col_idx` is
+            // interned per `(table, column)` (column_index.json keys are "<col> of
+            // <table>"), so this drops exactly the pairs the manifest names and never a
+            // same-named column of another table.
+            //
+            // This matches relbench, whose `Dataset.get_modified_db` drops each declared
+            // pair from the table outright -- one manifest, one meaning, whichever loader
+            // reads it. It is deliberately kind-agnostic: an autocomplete target *is* a db
+            // column, while a forecast/external target is *derived from* one, and the row
+            // that leaks is then the entity row the label points at, not the label row --
+            // which `node.node_idx == target_node_idx` cannot see. Narrowing this to the
+            // target's own row plus rows sharing its timestamp used to leave that case
+            // uncovered whenever the leaking table has no time column at all.
+            if columns_to_drop.contains(&col_idx) {
                 continue;
             }
 

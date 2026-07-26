@@ -37,9 +37,12 @@ class Task:
     split: str = ""  # "train" | "val" | "test"
     # ``(table, column)`` pairs to keep out of this task's context because they
     # leak the target -- ``remove_columns`` in the task's manifest.yaml, carried
-    # through to meta.json by the preprocessor. Empty for most tasks; it matters
-    # for autocomplete, whose target is a real db column sitting in a row next
-    # to columns trivially derivable from it.
+    # through to meta.json by the preprocessor. Empty for most tasks, and honored
+    # for every ``kind``: an autocomplete target *is* a real db column sitting in
+    # a row next to columns trivially derivable from it, while a forecast or
+    # external target is often *derived from* a db column (dbinfer's ``cvr`` from
+    # ``View.added_to_cart``), which leaks the same way. The sampler drops these
+    # cells wherever they appear, matching relbench's ``Dataset.get_modified_db``.
     leakage_columns: tuple[tuple[str, str], ...] = ()
 
 
@@ -81,7 +84,8 @@ def get_tasks(pre_dir, db_task_list, splits) -> list[Task]:
     ``train`` split only.
 
     A task's ``remove_columns`` becomes :attr:`Task.leakage_columns`, which the
-    dataset turns into column indices the sampler drops from every context.
+    dataset turns into column indices the sampler drops from every context. This
+    happens for every ``kind``, not just autocomplete.
     """
     pairs = resolve_db_task_list(db_task_list)
     by_db: dict[str, list[str]] = {}

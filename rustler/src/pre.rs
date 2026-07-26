@@ -110,9 +110,11 @@ struct TaskManifest {
     #[serde(default)]
     dst_entity_col: Option<String>,
     /// Columns that leak this task's target and must be kept out of its
-    /// context, as `[table, column]` pairs. Mostly an autocomplete concern:
-    /// the target is a real db column, so anything trivially derivable from
-    /// it sits right next to it in the same row.
+    /// context, as `[table, column]` pairs. Not an autocomplete-only concern:
+    /// an autocomplete target *is* a db column, so anything trivially derivable
+    /// from it sits right next to it in the same row -- but a forecast/external
+    /// target is often *derived from* a db column (dbinfer's `cvr` from
+    /// `View.added_to_cart`), which leaks the same way. Honored for every kind.
     #[serde(default)]
     remove_columns: Vec<(String, String)>,
 

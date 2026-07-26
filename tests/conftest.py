@@ -97,3 +97,50 @@ def synthetic_dataset(tmp_path):
     }
     (ds / "manifest.yaml").write_text(yaml.safe_dump(manifest))
     return ds
+
+
+@pytest.fixture()
+def synthetic_dataset_with_external_task(synthetic_dataset):
+    """:func:`synthetic_dataset` plus a ``kind: external`` task that declares
+    ``remove_columns``.
+
+    The task predicts ``spend`` for a user at a timestamp, and its label is derived from
+    ``events.amount`` -- so ``events.amount`` has to stay out of the context. This is the
+    shape ``remove_columns`` takes for a non-autocomplete task: the leaking column lives in
+    a *different* table from the label rows.
+    """
+    import polars as pl
+    import yaml
+
+    ds = synthetic_dataset
+    tdir = ds / "tasks" / "spend"
+    tdir.mkdir(parents=True)
+    rows = {
+        "train": [(i, datetime(2024, 1, 5), float(i)) for i in range(6)],
+        "val": [(i, datetime(2024, 1, 12), float(i)) for i in range(6, 8)],
+        "test": [(i, datetime(2024, 1, 16), float(i)) for i in range(8, 10)],
+    }
+    for split, recs in rows.items():
+        pl.DataFrame(
+            {
+                "user_id": [r[0] for r in recs],
+                "timestamp": [r[1] for r in recs],
+                "spend": [r[2] for r in recs],
+            }
+        ).write_parquet(tdir / f"{split}.parquet")
+    (tdir / "manifest.yaml").write_text(
+        yaml.safe_dump(
+            {
+                "name": "spend",
+                "kind": "external",
+                "task_type": "regression",
+                "entity_table": "users",
+                "entity_col": "user_id",
+                "target_col": "spend",
+                "time_col": "timestamp",
+                "remove_columns": [["events", "amount"]],
+                "manifest_version": 1,
+            }
+        )
+    )
+    return ds
