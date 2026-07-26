@@ -3,9 +3,12 @@ and the eval CLI entry (RT checkpoints)."""
 
 from __future__ import annotations
 
+import os
+from datetime import timedelta
 from pathlib import Path
 
 import torch
+import torch.distributed as dist
 
 from rt.config import Config
 from rt.data import get_tasks
@@ -13,6 +16,23 @@ from rt.eval.evaluator import Evaluator
 from rt.eval.metrics import metric_for
 from rt.eval.relbench import _emit_and_score
 from rt.model import load_rt_model
+
+
+def setup_dist():
+    """Return (device, global_rank, local_rank, world_size, ddp). Honors torchrun
+    env, exactly like ``rt.train.main.setup_dist``; without torchrun this is a
+    plain single-process run."""
+    world_size = int(os.environ.get("WORLD_SIZE", "1"))
+    if world_size > 1:
+        rank = int(os.environ["RANK"])
+        local_rank = int(os.environ["LOCAL_RANK"])
+        torch.cuda.set_device(local_rank)
+        # Same long timeout rationale as training: the first task's context build
+        # keeps other ranks parked at a collective for many minutes.
+        dist.init_process_group("nccl", timeout=timedelta(hours=2))
+        return f"cuda:{local_rank}", rank, local_rank, world_size, True
+    device = "cuda" if torch.cuda.is_available() else "cpu"
+    return device, 0, 0, 1, False
 
 
 def main(cfg: Config) -> None:
@@ -23,7 +43,7 @@ def main(cfg: Config) -> None:
         "ctx size; multi-size ctx_size_list is an in-loop training-eval feature"
     )
     ctx_size = ev_cfg.ctx_size_list[0]
-    device = "cuda" if torch.cuda.is_available() else "cpu"
+    device, global_rank, local_rank, world_size, ddp = setup_dist()
 
     checkpoint = cfg.model.load_ckpt_path
     assert checkpoint is not None, "model.load_ckpt_path is required"
@@ -31,8 +51,12 @@ def main(cfg: Config) -> None:
     net = net.to(torch.bfloat16)
     embedder = config["embedder"]
     d_text = config["d_text"]
-    print(f"loaded {config.get('name', checkpoint)} (embed={embedder}) on {device}")
-    if config.get("task_type") in ("clf", "reg"):
+    if global_rank == 0:
+        print(
+            f"loaded {config.get('name', checkpoint)} (embed={embedder}) on {device}"
+            + (f" [ddp, world_size={world_size}]" if ddp else "")
+        )
+    if global_rank == 0 and config.get("task_type") in ("clf", "reg"):
         print(
             f"warning: this checkpoint was selected/trained for "
             f"task_type={config['task_type']}; it will be evaluated on "
@@ -58,7 +82,7 @@ def main(cfg: Config) -> None:
         mismatches.append(
             f"embedder: config={cfg.model.embedder} checkpoint={embedder}"
         )
-    if mismatches:
+    if mismatches and global_rank == 0:
         print(
             "warning: model config ignored for checkpoint eval; differs from "
             "the checkpoint's own config: " + "; ".join(mismatches),
@@ -78,6 +102,10 @@ def main(cfg: Config) -> None:
         prefetch_factor=ev_cfg.prefetch_factor,
         mmap_populate=ev_cfg.mmap_populate,
         vector_db_path=ev_cfg.vector_db_path,
+        global_rank=global_rank,
+        local_rank=local_rank,
+        world_size=world_size,
+        ddp=ddp,
     )
     grid = ev_cfg.lcs_bw_pl_grid
 
@@ -102,6 +130,7 @@ def main(cfg: Config) -> None:
             csv_out_dir=ev_cfg.csv_out_dir,
             **eval_kwargs,
         )
+        _teardown_dist(ddp)
         return
 
     tasks = get_tasks(ev_cfg.pre_dir, ev_cfg.db_task_list, tuple(ev_cfg.splits))
@@ -127,6 +156,16 @@ def main(cfg: Config) -> None:
         evaluator=ev,
         embedder=embedder,
     )
+    _teardown_dist(ddp)
+
+
+def _teardown_dist(ddp):
+    """Rank 0 keeps working (scoring, CSV writes) after the last collective;
+    the barrier keeps the other ranks alive until it is done, so the process
+    group is never torn down under an in-flight peer."""
+    if ddp:
+        dist.barrier()
+        dist.destroy_process_group()
 
 
 def build_evaluator(
@@ -150,8 +189,13 @@ def build_evaluator(
     mmap_populate,
     prefetch_factor,
     vector_db_path,
+    global_rank=0,
+    local_rank=0,
+    world_size=1,
+    ddp=False,
 ):
-    """Single-process Evaluator over ``tasks`` at one context size.
+    """Evaluator over ``tasks`` at one context size (single process by default,
+    or one shard per rank under DDP).
 
     Every knob is required: a default here would silently paper over a
     misconfigured caller. ``mmap_populate=True`` pre-faults the eval data into
@@ -183,10 +227,10 @@ def build_evaluator(
         context_seed=context_seed,
         vector_db_path=vector_db_path,
         train_only_fallback=False,
-        global_rank=0,
-        local_rank=0,
-        world_size=1,
-        ddp=False,
+        global_rank=global_rank,
+        local_rank=local_rank,
+        world_size=world_size,
+        ddp=ddp,
         device=device,
     )
 
@@ -197,10 +241,14 @@ def run_and_report(
     """Run inference, write relbench submission CSVs (when ``csv_out_dir`` is
     set), score via relbench's evaluator, print per-task + mean metrics.
     Returns a results dict."""
+    # Under DDP only rank 0 receives yields from ``evaluate_raw`` (the other
+    # ranks just drive the collectives), so it alone scores and writes CSVs.
+    is_main = evaluator.global_rank == 0
     csv_out_dir = None if csv_out_dir is None else Path(csv_out_dir).expanduser()
     by_metric: dict[str, list[float]] = {}
     results = {}
-    print(f"\n{'task':40} {'metric':8} {'value':>9} {'n':>7}  {'align':>11}  debug")
+    if is_main:
+        print(f"\n{'task':40} {'metric':8} {'value':>9} {'n':>7}  {'align':>11}  debug")
     for task, _ctx, labels, preds_by_prefix, _nl, node_idxs in evaluator.evaluate_raw(
         [(model, "")], [ctx_size], with_node_idxs=True
     ):
@@ -225,6 +273,8 @@ def run_and_report(
             f"{task.db_name + '/' + task.table_name:40} {mname:8} {mval:>9.4f} {n:>7}  "
             f"{align:>11}  norm[{nm}]={nv:.4f}"
         )
+    if not is_main:
+        return results
     print(f"\n{'mean':40}")
     for name, vals in by_metric.items():
         print(f"  {name:10} {sum(vals) / len(vals):>9.4f}  (over {len(vals)} tasks)")
@@ -264,6 +314,8 @@ def run_ensemble(
     import numpy as np
 
     embedder = eval_kwargs["embedder"]
+    ddp = eval_kwargs.get("ddp", False)
+    is_main = eval_kwargs.get("global_rank", 0) == 0
 
     # ---- tune on val: best context config per task ----
     best = {}  # (db, table) -> {"cfg", "value", "task_type"}
@@ -290,6 +342,14 @@ def run_ensemble(
                 best[key] = {"cfg": cfg, "value": v, "task_type": task.task_type}
             print(f"  tune {task.db_name}/{task.table_name} cfg={cfg}: {v:.4f}")
 
+    # Only rank 0 saw the tuning metrics, so only it knows the winning configs.
+    # Every rank must group the test tasks identically -- otherwise the ranks
+    # run different task/seed sequences and hang on mismatched collectives.
+    if ddp:
+        payload = [best if is_main else None]
+        dist.broadcast_object_list(payload, src=0)
+        best = payload[0]
+
     # ---- ensemble on test: best config per task, averaged over context seeds ----
     groups = defaultdict(list)
     for t in test_tasks:
@@ -300,7 +360,10 @@ def run_ensemble(
     csv_out_dir = None if csv_out_dir is None else Path(csv_out_dir).expanduser()
     by_metric: dict[str, list[float]] = {}
     results = {}
-    print(f"\n{'task':40} {'cfg':14} {'metric':8} {'value':>9} {'n':>7}  {'align':>11}")
+    if is_main:
+        print(
+            f"\n{'task':40} {'cfg':14} {'metric':8} {'value':>9} {'n':>7}  {'align':>11}"
+        )
     for cfg, tasks in groups.items():
         lcs, bw, pl = cfg
         acc = {}  # key -> [labels, sum_preds, task, node_idxs]
@@ -345,6 +408,8 @@ def run_ensemble(
                 f"{task.db_name + '/' + task.table_name:40} {str(cfg):14} {mname:8} "
                 f"{mval:>9.4f} {n:>7}  {align:>11}"
             )
+    if not is_main:
+        return results
     print(f"\n{'mean (ensembled)':40}")
     for name, vals in by_metric.items():
         print(f"  {name:10} {sum(vals) / len(vals):>9.4f}  (over {len(vals)} tasks)")

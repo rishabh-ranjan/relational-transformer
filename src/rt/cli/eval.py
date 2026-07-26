@@ -3,8 +3,12 @@
 Loads --model.load-ckpt-path (local dir/file or Hub repo such as
 stanford-star/rt-j/classification), evaluates every RelBench task of the
 checkpoint's kind (clf/reg) via RelBench's own leaderboard evaluator, and
-writes --eval.csv-out-dir as a valid RelBench submission directory. Single-process,
-one GPU.
+writes --eval.csv-out-dir as a valid RelBench submission directory.
+
+Runs single-process on one GPU by default. Launch under torchrun for
+multi-GPU eval (``torchrun --nproc-per-node=8 -m rt.cli.eval ...``): items are
+sharded across ranks and gathered back on rank 0, which does the scoring and
+writes the submission CSVs.
 """
 
 import tyro
