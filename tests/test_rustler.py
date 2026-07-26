@@ -63,16 +63,16 @@ def test_remove_columns_reaches_the_sampler_for_a_non_autocomplete_task(
     assert drop_idx != kind_idx  # a sibling column of the same table survives
 
 
-def test_sampler_drops_remove_columns_for_a_non_autocomplete_task(
+def test_sampler_drops_remove_columns_on_the_targets_horizon(
     synthetic_dataset_with_external_task, tmp_path
 ):
-    """The dropped column really is absent from sampled contexts.
+    """The leakage column is gone from rows sharing the target's timestamp, and only those.
 
-    Samples every item twice -- once with `columns_to_drop` empty, once with the task's
-    `leakage_columns` -- and compares the column indices that actually land in a context.
-    The `kind: external` shape is the one that used to slip through: the leaking column
-    (`events.amount`) is in a different table from the label rows, so a rule keyed on the
-    target's own row or its exact timestamp could not see it.
+    Same timestamp means same forecast horizon, which is where the column encodes the
+    label; a strictly-past row carries it as legitimate history and is kept. Samples every
+    item and checks both halves of that rule against the per-cell timestamps the sampler
+    emits -- so the test fails both if the drop stops working and if it widens into a
+    whole-column removal.
     """
     import json
 
@@ -130,15 +130,20 @@ def test_sampler_drops_remove_columns_for_a_non_autocomplete_task(
             None,
             False,  # vector_db_path, train_only_fallback
         )
-        seen: set[int] = set()
+        seq_len = 64
+        cells = []  # (col_name_idx, timestamp, target_timestamp) per non-padding cell
         for batch_idx in range(sampler.num_items):
-            batch = dict(sampler.batch_py(batch_idx, 2, 64))
-            keep = ~batch["is_padding"].astype(bool)
-            seen |= {int(c) for c, k in zip(batch["col_name_idxs"], keep) if k}
-        return seen
-
-    without = context_columns([])
-    assert drop_idx in without, "fixture is not exercising the column at all"
+            batch = dict(sampler.batch_py(batch_idx, 2, seq_len))
+            cols = batch["col_name_idxs"].reshape(-1, seq_len)
+            times = batch["timestamps"].reshape(-1, seq_len)
+            pads = batch["is_padding"].reshape(-1, seq_len).astype(bool)
+            for row_cols, row_times, row_pads in zip(cols, times, pads):
+                # the target cell is always emitted first, so its timestamp leads the row
+                target_ts = int(row_times[0])
+                for col, ts, pad in zip(row_cols, row_times, row_pads):
+                    if not pad:
+                        cells.append((int(col), int(ts), target_ts))
+        return cells
 
     # resolved the way RustlerDataset does, from the task's own leakage_columns
     drops = [
@@ -146,8 +151,18 @@ def test_sampler_drops_remove_columns_for_a_non_autocomplete_task(
         for table, col in task.leakage_columns
     ]
     assert drops == [drop_idx]
+
+    without = context_columns([])
+    on_horizon = [c for c in without if c[0] == drop_idx and c[1] == c[2]]
+    in_past = [c for c in without if c[0] == drop_idx and c[1] != c[2]]
+    assert on_horizon, "fixture never puts the column on the target's horizon"
+    assert in_past, "fixture never puts the column on a past row"
+
     with_drop = context_columns(drops)
-    assert drop_idx not in with_drop  # the leakage column is gone
-    assert sibling_idx in with_drop  # a sibling column of the same table stays
-    assert target_idx in with_drop  # the target itself stays
-    assert with_drop == without - {drop_idx}  # and nothing else changed
+    # nothing on the target's horizon survives ...
+    assert not [c for c in with_drop if c[0] == drop_idx and c[1] == c[2]]
+    # ... while past rows keep it as history
+    assert [c for c in with_drop if c[0] == drop_idx and c[1] != c[2]]
+    seen = {c[0] for c in with_drop}
+    assert sibling_idx in seen  # a sibling column of the same table stays
+    assert target_idx in seen  # the target itself stays

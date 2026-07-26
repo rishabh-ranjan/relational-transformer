@@ -1251,6 +1251,7 @@ impl Sampler {
                 dataset,
                 target_node_idx,
                 target_node_idx,
+                target_node,
                 target_column,
                 columns_to_drop,
                 local_ctx_size,
@@ -1301,6 +1302,7 @@ impl Sampler {
                             dataset,
                             seed_node_idx,
                             target_node_idx,
+                            target_node,
                             target_column,
                             columns_to_drop,
                             local_ctx_size,
@@ -1327,6 +1329,7 @@ impl Sampler {
                         dataset,
                         seed_node_idx,
                         target_node_idx,
+                        target_node,
                         target_column,
                         columns_to_drop,
                         local_ctx_size,
@@ -1398,6 +1401,7 @@ impl Sampler {
                     dataset,
                     seed_node_idx,
                     target_node_idx,
+                    target_node,
                     target_column,
                     columns_to_drop,
                     local_ctx_size,
@@ -1777,6 +1781,7 @@ fn extend_with_seed_bfs(
     dataset: &Dataset,
     seed_node_idx: i32,
     target_node_idx: i32,
+    target_node: &ArchivedNode,
     target_column: i32,
     columns_to_drop: &[i32],
     local_ctx_size: usize,
@@ -1812,20 +1817,28 @@ fn extend_with_seed_bfs(
             }
             let col_idx: i32 = node.col_name_idxs[cell_i].into();
 
-            // Skip this task's leakage columns, wherever they appear. `col_idx` is
-            // interned per `(table, column)` (column_index.json keys are "<col> of
-            // <table>"), so this drops exactly the pairs the manifest names and never a
-            // same-named column of another table.
+            // Skip this task's leakage columns on the rows that can leak: rows sharing the
+            // target's timestamp, plus the target's own row. Same timestamp means same
+            // forecast horizon, which is exactly where the column encodes the label; a row
+            // strictly in the past carries it as legitimate history and is kept. The
+            // timestamp arm needs the target to actually have one -- `None == None`
+            // otherwise matches every timestamp-less row, stripping the column from a whole
+            // static table -- so the `node_idx` arm covers the target's own row for a
+            // timestamp-less target (an autocomplete task on a static table).
             //
-            // This matches relbench, whose `Dataset.get_modified_db` drops each declared
-            // pair from the table outright -- one manifest, one meaning, whichever loader
-            // reads it. It is deliberately kind-agnostic: an autocomplete target *is* a db
-            // column, while a forecast/external target is *derived from* one, and the row
-            // that leaks is then the entity row the label points at, not the label row --
-            // which `node.node_idx == target_node_idx` cannot see. Narrowing this to the
-            // target's own row plus rows sharing its timestamp used to leave that case
-            // uncovered whenever the leaking table has no time column at all.
-            if columns_to_drop.contains(&col_idx) {
+            // `col_idx` is interned per `(table, column)` (column_index.json keys are
+            // "<col> of <table>"), so this touches exactly the pairs the manifest names and
+            // never a same-named column of another table. Kind-agnostic: it is keyed on the
+            // target's timestamp, not on how the label was produced.
+            //
+            // Deliberately tighter than relbench, whose `Dataset.get_modified_db` drops the
+            // column from the table outright. It has to: `get_db` hands back one database
+            // for every label row, so it cannot mask per row. A per-item sampler can, and
+            // keeping past values of the column is worth the divergence.
+            if columns_to_drop.contains(&col_idx)
+                && (node.node_idx == target_node_idx
+                    || (target_node.timestamp.is_some() && node.timestamp == target_node.timestamp))
+            {
                 continue;
             }
 

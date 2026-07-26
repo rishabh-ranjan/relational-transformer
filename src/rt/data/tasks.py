@@ -42,7 +42,9 @@ class Task:
     # a row next to columns trivially derivable from it, while a forecast or
     # external target is often *derived from* a db column (dbinfer's ``cvr`` from
     # ``View.added_to_cart``), which leaks the same way. The sampler drops these
-    # cells wherever they appear, matching relbench's ``Dataset.get_modified_db``.
+    # cells on rows sharing the target's timestamp -- the same forecast horizon,
+    # where the column encodes the label -- and keeps strictly-past rows, which
+    # carry it as legitimate history.
     leakage_columns: tuple[tuple[str, str], ...] = ()
 
 
