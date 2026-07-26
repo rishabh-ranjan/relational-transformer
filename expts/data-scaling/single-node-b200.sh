@@ -184,12 +184,24 @@ requeue_after_wait() {
         kill -USR1 "$p" 2>/dev/null || true
     done
     echo "signalled ranks: $(echo $ranks | wc -w) candidate pids"
-    # Wait for that save to land before tearing anything down. Slurm's
-    # GraceTime is 300s, so 120s is affordable; the loop exits early as soon as
-    # resume.pt is newer than the signal.
+    # Wait for that save to land before tearing anything down -- 60s, well
+    # inside slurm's 300s GraceTime, and the loop exits as soon as resume.pt is
+    # newer than the signal or the ranks are gone.
+    # An operator scancel also lands here. Do not hold the script open waiting
+    # for a save in that case: slurm force-kills the step after KillWait and
+    # logs "JOB NOT ENDING WITH SIGNALS", and requeueing below would resurrect a
+    # job the operator just cancelled.
+    local state
+    state=$(scontrol show job "$SLURM_JOB_ID" 2>/dev/null | grep -oE "JobState=[A-Z]+" | cut -d= -f2)
+    if [[ $state == CANCELLED ]]; then
+        echo "=== cancelled by operator; exiting without requeue ==="
+        kill -TERM "$TRAIN_PID" 2>/dev/null || true
+        wait "$TRAIN_PID" || true
+        exit 0
+    fi
     local before now
     before=$( (stat -c %Y "$RESUME_PT" 2>/dev/null) || echo 0 )
-    for _ in $(seq 60); do
+    for _ in $(seq 30); do
         sleep 2
         now=$( (stat -c %Y "$RESUME_PT" 2>/dev/null) || echo 0 )
         [[ $now -gt $before ]] && break
