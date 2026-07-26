@@ -166,12 +166,24 @@ TRAIN_PID=$!
 requeue_after_wait() {
     local sig=$1
     echo "=== $(date -Is) caught $sig (preemption or time limit) ==="
-    # Signal the ranks directly, not just torchrun. Sending TERM to the agent
-    # alone lost work: the agent tore its workers down before they reached the
-    # step boundary where they write resume.pt, so a preempted run rewound to
-    # the last periodic save instead of the step it was preempted at. The ranks
-    # take SIGUSR1, set their flag, and save at the next step (sub-second).
-    pkill -USR1 -P "$TRAIN_PID" 2>/dev/null || true
+    # Signal the *rank* processes, and only those. Sending TERM to the agent
+    # alone lost work: it tore its workers down before they reached the step
+    # boundary where they write resume.pt, so a preempted run rewound to the
+    # last periodic save. `pkill -P $TRAIN_PID` did not fix it either -- pixi
+    # sits between this shell and torchrun, so $TRAIN_PID's only child is the
+    # launcher, not the ranks. Walk two levels and skip anything that is a
+    # launcher (which would start its own teardown) or a dataloader worker
+    # (SIGUSR1 has no handler there and would simply kill it).
+    local kids ranks
+    kids=$(pgrep -P "$TRAIN_PID" || true)
+    ranks=$(for k in $TRAIN_PID $kids; do pgrep -P "$k" || true; done | sort -u)
+    for p in $ranks; do
+        case "$(ps -o args= -p "$p" 2>/dev/null)" in
+            *torchrun*|*torch.distributed.run*|*pixi*) continue ;;
+        esac
+        kill -USR1 "$p" 2>/dev/null || true
+    done
+    echo "signalled ranks: $(echo $ranks | wc -w) candidate pids"
     # Wait for that save to land before tearing anything down. Slurm's
     # GraceTime is 300s, so 120s is affordable; the loop exits early as soon as
     # resume.pt is newer than the signal.
