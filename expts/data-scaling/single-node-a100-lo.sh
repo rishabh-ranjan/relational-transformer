@@ -25,9 +25,10 @@
 #SBATCH --qos=il-lo
 #SBATCH --time=1-00:00:00
 #SBATCH --nodes=1
-# Pick a node with 8 free A100s at submit time; ampere3/8 are down and the
-# others come and go. Override with --nodelist on the sbatch line if needed.
-#SBATCH --nodelist=ampere5
+# Any ampere node with 8 free A100s: they go down and get drained often enough
+# that pinning one just makes the job pend. Add --nodelist on the sbatch line to
+# force a particular node.
+#SBATCH --constraint=ampere
 #SBATCH --gres=gpu:a100:8
 #SBATCH --ntasks-per-node=1
 # Not --exclusive: these nodes usually carry unrelated CPU-only jobs, so
