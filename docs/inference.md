@@ -35,9 +35,19 @@ test split of every task in the default task list
 (`data/relbench-preprocessed/db-task-lists/forecast.json`, the 21-task RelBench
 benchmark). For each test row the sampler builds a context (a sampled
 neighborhood of the relational graph), the model does a single forward pass,
-and predictions are keyed back to each row by its seed node index. Eval is
-single-process (one GPU) so per-row predictions stay aligned regardless of eval
-row order.
+and predictions are keyed back to each row by its seed node index. Because that
+key is the seed node index and not a row position, per-row predictions stay
+aligned regardless of eval row order.
+
+Eval runs single-process on one GPU by default. For multi-GPU eval, launch it
+under torchrun:
+
+```bash
+torchrun --nproc-per-node=8 -m rt.cli.eval --model.load-ckpt-path ...
+```
+
+Rows are sharded across ranks and gathered back on rank 0, which scores them
+and writes the submission CSVs; the results are identical to a single-GPU run.
 
 **Your own database (not RelBench).** `rt.eval` is wired to the RelBench
 benchmark, but the pieces compose directly for any database — prediction is just

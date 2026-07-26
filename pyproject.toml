@@ -93,6 +93,7 @@ preprocess-many = { cmd = "python -m rt.cli.preprocess many", depends-on = ["bui
 upload = "python -m rt.cli.preprocess upload"
 # Training has no pixi task: launch rt.cli.train under torchrun yourself (see
 # docs/train.md), after `pixi run build-sampler`.
-# eval is single-process (one GPU) so per-item rows stay in task-table order.
+# eval defaults to single-process (one GPU); for multi-GPU eval launch
+# rt.cli.eval under torchrun yourself (see the module docstring).
 eval = { cmd = "python -m rt.cli.eval", depends-on = ["build-sampler"] }
 test = { cmd = "pytest", depends-on = ["build-sampler"] }
