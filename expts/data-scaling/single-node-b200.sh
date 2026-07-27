@@ -151,7 +151,11 @@ pixi install
 
 pixi run build-sampler
 
-pixi run torchrun \
+# Not plain torchrun: slurm signals every process in the job at preemption,
+# so the elastic agent starts killing ranks in the same second they are
+# told to save. The shim makes the launcher deaf to SIGTERM; the ranks
+# register their own handlers, so they still get it and save first.
+pixi run python expts/data-scaling/torchrun_shielded.py \
     --nnodes=1 --nproc-per-node=4 \
     --master-addr="$MASTER_ADDR" --master-port="$MASTER_PORT" \
     "${RT_TRAIN_SCRIPT:-expts/data-scaling/train.py}" \
