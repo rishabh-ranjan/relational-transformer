@@ -60,15 +60,14 @@ if [[ -z "${RT_RUN_ID:-}" ]]; then
 
     RT_RUN_ID=$(pixi run python -c 'from rt.config import timestamp; print(timestamp())')
 
-    # Per-node shape. ampere: 8xA100 under the default `il` QOS (within its
-    # 10-a100/user cap); 112 = non-exclusive CPU cap (8 x 14). blackwell: 8xB200
-    # is only reachable under il-lo (`il` caps b200 at 2/user); memory must be
-    # asked for explicitly or the site plugin under-defaults it.
+    # Per-node shape, both under the default `il` QOS. ampere: 8xA100 (within
+    # the 10-a100/user cap); 112 = non-exclusive CPU cap (8 x 14). blackwell:
+    # memory must be asked for explicitly or the site plugin under-defaults it.
     case "$RT_NODE" in
         ampere*)
             shape=(--gres=gpu:a100:8 --cpus-per-task=112) ;;
         blackwell*)
-            shape=(--gres=gpu:b200:8 --qos=il-lo --cpus-per-task=144 --mem=1500000M) ;;
+            shape=(--gres=gpu:b200:8 --cpus-per-task=144 --mem=1500000M) ;;
         *)
             echo "unknown RT_NODE=$RT_NODE" >&2; exit 1 ;;
     esac
