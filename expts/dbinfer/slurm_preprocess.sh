@@ -22,6 +22,12 @@
 
 #SBATCH --job-name=dbinfer-pre
 #SBATCH --partition=il
+# il-lo, not il: the `il` QOS caps a user at gres/gpu:a100=10 (and gres/gpu=10),
+# which is exactly one 8-GPU ampere node -- reserved for the eval. Preprocessing
+# needs a GPU only for the MiniLM text pass, so it takes the low-priority QOS and
+# stays off the ampere nodes entirely.
+#SBATCH --qos=il-lo
+#SBATCH --exclude=ampere[1-9],blackwell1,hyperion[1,3]
 #SBATCH --account=infolab
 #SBATCH --time=2-00:00:00
 #SBATCH --nodes=1

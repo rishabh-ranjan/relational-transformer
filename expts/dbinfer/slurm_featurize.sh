@@ -19,14 +19,21 @@
 # so a requeue or a rerun tops up whatever is missing.
 
 #SBATCH --job-name=dbinfer-feat
-#SBATCH --partition=il-cpu
-#SBATCH --qos=il-cpu-long
+# Partition il under the il-lo QOS, excluding every GPU-contended node: this is
+# CPU-only duckdb work, so it must not compete with the eval for amperes. The
+# il-cpu partition is not an option -- its only QOS, il-cpu-long, caps a user at
+# cpu=8/mem=60G in total, which a dev-node allocation already occupies.
+#SBATCH --partition=il
+#SBATCH --qos=il-lo
+#SBATCH --exclude=ampere[1-9],blackwell1,hyperion[1,3]
 #SBATCH --account=infolab
 #SBATCH --time=1-00:00:00
 #SBATCH --nodes=1
 #SBATCH --ntasks-per-node=1
-#SBATCH --cpus-per-task=8
-#SBATCH --mem=60G
+# diginetica's QueryResult is 92M rows; depth-2 DFS over it is the memory peak of
+# this stage. 16 cpus keeps 160G under MaxMemPerCPU (10700M).
+#SBATCH --cpus-per-task=16
+#SBATCH --mem=160G
 #SBATCH --chdir=/tmp
 #SBATCH --requeue
 #SBATCH --open-mode=append
@@ -37,7 +44,7 @@ LOG_DIR=/dfs/user/$USER/slurm-logs/dbinfer-feat
 PRE_DIR=${RT_PRE_DIR:-/dfs/user/$USER/pre/dbinfer-preprocessed}
 BUILD_DIR=${RT_BUILD_DIR:-}   # optional: published parquets, enables --verify-rows
 VENV=${RT_VENV:-/dfs/user/$USER/venvs/rdblearn}
-export DBB_DATASET_HOME=${DBB_DATASET_HOME:-/dfs/user/$USER/dbinfer-raw}
+export DBB_DATASET_HOME=${DBB_DATASET_HOME:-/dfs/user/$USER/share/dbinfer-raw}
 DBS=(dbinfer-amazon dbinfer-diginetica dbinfer-retailrocket dbinfer-stackexchange)
 
 # ---------------------------------------------------------------- submit side

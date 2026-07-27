@@ -134,6 +134,32 @@ def _emit_and_score(
         tf.close()
         score_path, ret_path = Path(tf.name), None
 
+    if rowidx.size < n_test:
+        # Subsampled run (eval.items_per_task < test size): relbench's evaluator
+        # refuses CSVs that do not cover the full test set, so score the
+        # subsample here with the same metric definitions it uses -- AUROC for
+        # clf; NMAE = MAE / train-split target std (ddof=1) for reg.
+        import sklearn.metrics as M
+
+        if ret_path is None:
+            Path(score_path).unlink(missing_ok=True)
+        if task.task_type == "reg":
+            mean, std = _train_stats(rtask)
+            return (
+                "nmae~",
+                float(M.mean_absolute_error(gt_vals, out_preds) / std),
+                int(rowidx.size),
+                align,
+                ret_path,
+            )
+        return (
+            "roc_auc~",
+            float(M.roc_auc_score((gt_vals > 0).astype(int), out_preds)),
+            int(rowidx.size),
+            align,
+            ret_path,
+        )
+
     metrics = evaluate_task(
         f"{task.db_name}/{task.table_name}", str(score_path), dataset=source
     )
