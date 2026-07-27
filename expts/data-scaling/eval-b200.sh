@@ -95,9 +95,6 @@ echo "clone: $PWD @ $(git rev-parse --short HEAD)"
 
 source expts/slurm-env.sh
 
-export MASTER_ADDR=127.0.0.1
-export MASTER_PORT=$((20000 + SLURM_JOB_ID % 20000))
-
 RUN_LOCK=$LOG_DIR/${RT_RUN_ID}.pixi.lock
 if [[ -f $RUN_LOCK ]]; then
     echo "reusing pixi.lock from $RUN_LOCK"
@@ -118,9 +115,10 @@ for ckpt in best_clf best_reg; do
     id="${RT_RUN_ID}-${RT_MODEL}-${ckpt}"
     start=$(date +%s)
     echo "TIMING start model=$RT_MODEL ckpt=$ckpt id=$id epoch=$start ($(date -Is))"
+    # --standalone picks a free rendezvous port, so concurrent single-GPU
+    # eval jobs on the same node cannot collide.
     pixi run torchrun \
-        --nnodes=1 --nproc-per-node=1 \
-        --master-addr="$MASTER_ADDR" --master-port="$MASTER_PORT" \
+        --standalone --nnodes=1 --nproc-per-node=1 \
         expts/data-scaling/eval.py \
         --model.load-ckpt-path "$CKPT_ROOT/$RT_MODEL/$ckpt.safetensors" \
         --logger.id "$id" \
@@ -128,6 +126,5 @@ for ckpt in best_clf best_reg; do
         "$@"
     end=$(date +%s)
     echo "TIMING end   model=$RT_MODEL ckpt=$ckpt id=$id epoch=$end elapsed_s=$((end - start))"
-    MASTER_PORT=$((MASTER_PORT + 1))
 done
 echo "=== $(date -Is) done ==="
