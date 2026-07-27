@@ -156,77 +156,43 @@ pixi run python expts/data-scaling/torchrun_shielded.py \
     "$@" &
 TRAIN_PID=$!
 
-# Slurm sends SIGTERM on preemption (GraceTime=300s) and SIGUSR1 shortly before
-# the time limit -- and, as it turns out, in the preemption grace window too, so
-# the two are indistinguishable from here. Either way: tell the ranks to save,
-# wait for resume.pt, then let the job be requeued.
-requeue_after_wait() {
-    local sig=$1
-    echo "=== $(date -Is) caught $sig (preemption or time limit) ==="
-    # Signal the *rank* processes, and only those. Sending TERM to the agent
-    # alone lost work: it tore its workers down before they reached the step
-    # boundary where they write resume.pt, so a preempted run rewound to the
-    # last periodic save. `pkill -P $TRAIN_PID` did not fix it either -- pixi
-    # sits between this shell and torchrun, so $TRAIN_PID's only child is the
-    # launcher, not the ranks. Walk two levels and skip anything that is a
-    # launcher (which would start its own teardown) or a dataloader worker
-    # (SIGUSR1 has no handler there and would simply kill it).
-    # Identify ranks by their command line: they run the train script, and they
-    # are not the launcher. Matching on "pixi" here was the bug that kept this
-    # from working -- with detached-environments off the interpreter lives at
-    # <clone>/.pixi/envs/default/bin/python, so every rank looked like the pixi
-    # wrapper and got skipped. Verified against a live `pixi run torchrun` tree.
-    local kids cands args n script_base
-    script_base=$(basename "${RT_TRAIN_SCRIPT:-expts/data-scaling/train.py}")
-    kids=$(pgrep -P "$TRAIN_PID" || true)
-    cands=$(for k in $TRAIN_PID $kids; do pgrep -P "$k" || true; done | sort -u)
-    n=0
-    for p in $cands; do
-        args=$(ps -o args= -p "$p" 2>/dev/null) || continue
-        [[ $args == *"$script_base"* ]] || continue
-        [[ $args == *torchrun* || $args == *torch.distributed.run* ]] && continue
-        kill -USR1 "$p" 2>/dev/null && n=$((n + 1))
-    done
-    echo "signalled $n rank(s) of $(echo $cands | wc -w) candidates"
-    # Wait for that save to land before tearing anything down -- 60s, well
-    # inside slurm's 300s GraceTime, and the loop exits as soon as resume.pt is
-    # newer than the signal or the ranks are gone.
-    # An operator scancel also lands here. Do not hold the script open waiting
-    # for a save in that case: slurm force-kills the step after KillWait and
-    # logs "JOB NOT ENDING WITH SIGNALS", and requeueing below would resurrect a
-    # job the operator just cancelled.
-    local state
+# ---- preemption ----
+# One mechanism, and only one: slurm signals every process in the job, the ranks
+# handle it themselves (rt.train.main installs SIGTERM/SIGUSR1 handlers and saves
+# resume.pt at the next step boundary), and torchrun_shielded.py keeps the
+# elastic agent from killing them before they get there. This script's only job
+# is to stay alive until they are done -- if it exited on the signal, slurm would
+# tear the step down mid-save.
+got_signal=0
+on_signal() {
+    got_signal=1
+    echo "=== $(date -Is) caught $1; waiting for the ranks to save ==="
+}
+trap 'on_signal SIGTERM' TERM
+trap 'on_signal SIGUSR1' USR1
+
+resume_before=$( (stat -c %Y "$RESUME_PT" 2>/dev/null) || echo 0 )
+# `wait` returns early every time a trap fires, so keep waiting until the child
+# is actually gone.
+while ! wait "$TRAIN_PID"; do
+    kill -0 "$TRAIN_PID" 2>/dev/null || break
+done
+resume_after=$( (stat -c %Y "$RESUME_PT" 2>/dev/null) || echo 0 )
+
+if (( got_signal )); then
+    if [[ $resume_after -gt $resume_before ]]; then
+        echo "=== resume.pt saved at $(date -Is -d @"$resume_after") ==="
+    else
+        echo "WARNING: resume.pt not updated; will resume from the last periodic save" >&2
+    fi
+    # Preemption requeues the job by itself; a time limit does not, and the two
+    # are indistinguishable from here, so ask either way and ignore the error.
+    # Not after an operator scancel though -- that would resurrect the job.
     state=$(scontrol show job "$SLURM_JOB_ID" 2>/dev/null | grep -oE "JobState=[A-Z]+" | cut -d= -f2)
     if [[ $state == CANCELLED ]]; then
-        echo "=== cancelled by operator; exiting without requeue ==="
-        kill -TERM "$TRAIN_PID" 2>/dev/null || true
-        wait "$TRAIN_PID" || true
-        exit 0
-    fi
-    local before now
-    before=$( (stat -c %Y "$RESUME_PT" 2>/dev/null) || echo 0 )
-    for _ in $(seq 30); do
-        sleep 2
-        now=$( (stat -c %Y "$RESUME_PT" 2>/dev/null) || echo 0 )
-        [[ $now -gt $before ]] && break
-        kill -0 "$TRAIN_PID" 2>/dev/null || break
-    done
-    if [[ $now -gt $before ]]; then
-        echo "=== resume.pt saved at $(date -Is -d @"$now") ==="
+        echo "=== cancelled by operator; not requeueing ==="
     else
-        echo "WARNING: resume.pt not updated; resuming from the last periodic save" >&2
+        echo "=== requeueing job $SLURM_JOB_ID ==="
+        scontrol requeue "$SLURM_JOB_ID" || true
     fi
-    kill -TERM "$TRAIN_PID" 2>/dev/null || true
-    wait "$TRAIN_PID" || true
-    # Preemption requeues the job by itself; a time limit does not. Requeueing
-    # an already-requeued job is a harmless no-op, and we cannot tell the two
-    # apart from here -- slurm delivers SIGUSR1 in the preemption grace window
-    # too -- so just ask and ignore the error.
-    echo "=== requeueing job $SLURM_JOB_ID ==="
-    scontrol requeue "$SLURM_JOB_ID" || true
-    exit 0
-}
-trap 'requeue_after_wait SIGTERM' TERM
-trap 'requeue_after_wait SIGUSR1' USR1
-
-wait "$TRAIN_PID"
+fi
