@@ -1,5 +1,25 @@
 # Reading these numbers
 
+## Only 2 of the 4 tasks are a valid RT-J measurement
+
+| task | valid for rt-j? | why |
+|---|---|---|
+| `stackexchange/churn` | yes | not in rt-j's training set, no label structure to exploit |
+| `stackexchange/upvote` | yes | same |
+| `retailrocket/cvr` | **no -- contaminated** | `join-retailrocket` is in `rt-j.json` (40 task-pairs), and it is the same database: bit-equal timestamp sets, `item_key == itemid` at 100% |
+| `diginetica/ctr` | **no -- leaky** | label is exactly recoverable from same-timestamp sibling labels (below) |
+
+The contamination is not a near-miss. RT-J was trained on `join-retailrocket`, which the
+audit that opened this work established is `dbinfer-retailrocket` under another name. Its
+`cvr` number measures partial memorisation, not transfer. `diginetica` and `stackexchange`
+appear nowhere in `rt-j.json`.
+
+Neither caveat touches `rdblearn_tabicl`: TabICL is trained on synthetic priors, and the
+DFS features are recomputed here from scratch.
+
+**So the headline RT-J comparison is the two `stackexchange` tasks.** The 4-task mean is
+kept below only because it is what the campaign was specified to produce.
+
 ## `dbinfer-diginetica/ctr` does not measure modeling quality
 
 RT-J scores 0.382 AUROC at ctx=256 and falls monotonically to **0.161** at ctx=8192.
