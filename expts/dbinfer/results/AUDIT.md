@@ -1,0 +1,78 @@
+# Audit: is RT-J's weak showing on 4DBInfer a harness bug?
+
+Short answer: **no bug found.** Nine hypotheses tested, all falsified. The one
+structural difference that survives is a property of the benchmark, stated at the end.
+
+## The control that settles the harness question
+
+`expts/dbinfer/eval.py` is *not* a thin wrapper around `rt/cli/eval.py` -- it bypasses
+`rt.eval.main` entirely, drives `Evaluator.evaluate_raw` itself, computes its own AUROC,
+and passes **six** ctx sizes where `rt.eval.main` asserts exactly one. That multi-ctx
+prefix sweep is exercised by nothing else in the repo, so it was the prime suspect.
+
+Running that same script, unmodified, on a RelBench task with a known RT-J number:
+
+```
+[rt] rel-stack/user-engagement (clf)
+  ctx=256 :roc_auc=0.9024 (lbl=23.9)     ctx=2048:roc_auc=0.8924 (lbl=154.4)
+  ctx=512 :roc_auc=0.8918 (lbl=44.0)     ctx=4096:roc_auc=0.9113 (lbl=293.2)
+  ctx=1024:roc_auc=0.8965 (lbl=81.5)     ctx=8192:roc_auc=0.9025 (lbl=556.5)
+```
+
+0.90 is the expected number. The harness -- checkpoint load, context construction,
+multi-ctx prefixing, metric, DDP gather, flex-attention path -- is sound.
+
+Note this control is *also* flat in context (0.9024 -> 0.9025). Flatness by itself is
+therefore not evidence of breakage.
+
+## What was checked and ruled out
+
+| # | hypothesis | verdict | evidence |
+|---|---|---|---|
+| 1 | multi-ctx prefix sweep is wrong | ✗ | control scores 0.90 through that exact path |
+| 2 | wrong embedder vs checkpoint | ✗ | ckpt declares `all-MiniLM-L12-v2` / `d_text=384`; eval uses both |
+| 3 | non-canonical context config | ✗ | `(256, 32, True)` is the default in `cli/train.py` and `cli/eval.py` |
+| 4 | `mean_labels` and RT see different prefixes | ✗ | both slice `[:, :ctx_size]`; `net.predict` matches the evaluator |
+| 5 | my `fly.rs` `remove_columns` change corrupts contexts | ✗ | predicate is gated on `columns_to_drop`, non-empty only for `cvr`; churn/upvote/ctr unaffected |
+| 6 | my `pre.rs` change altered preprocessing | ✗ | diff is doc-comment only |
+| 7 | FK remap in the port is wrong | ✗ | 6 FKs, per-parent child-count multisets bit-identical to the original tars |
+| 8 | task rows mis-mapped to entities | ✗ | per-entity row-count *and* label-sum multisets bit-identical; ids in range |
+| 9 | timestamps corrupted by the port | ✗ | per-table min/max and sorted values match the original tars |
+
+Method note for 7 and 8: the port reindexes keys to row indices and reorders rows, so
+positional comparison against the source is meaningless. Permutation-invariant
+statistics (sorted degree distributions, per-entity aggregate multisets) are what
+actually test whether the remap is a pure relabeling. It is.
+
+## What is actually different
+
+RT-J is an in-context learner. 4DBInfer gives it roughly an order of magnitude less
+in-context supervision than RelBench does:
+
+| task | train task rows | entities | rows/entity | snapshots |
+|---|---|---|---|---|
+| `rel-stack/user-engagement` | 1,360,850 | 333,784 | **4.08** | many |
+| `dbinfer-stackexchange/churn` | 142,877 | 333,784 | **0.43** | **5** |
+| `dbinfer-stackexchange/upvote` | 308,698 | 506,601 | **0.61** | -- |
+
+This shows up directly as `mean_labels` at ctx=256: 23.9 on rel-stack against 5.0 for
+churn and 1.2 for upvote. `churn` has five training snapshots in total, spanning
+2011-2019, against a test cutoff of 2023-01-01 -- so the nearest in-context label a
+target can see is four years stale.
+
+`rdblearn_tabicl` is indifferent to all of this: its DFS features aggregate the entire
+history into a fixed vector before TabICL ever sees a context. The comparison is
+between a method that samples history and a method that summarises it, on a benchmark
+whose label density strongly favours the latter.
+
+That is a result about 4DBInfer, not a defect -- but it is also the reason these numbers
+should not be read as a general statement about RT-J's context scaling.
+
+## Not ruled out
+
+* `dbinfer-diginetica` still carries its `purchase` link-prediction task table in the
+  preprocessed graph; the prune-unused-tasks step landed after that database was built.
+  Those nodes consume context slots for `ctr` targets. Affects `ctr` only, and
+  re-preprocessing diginetica (97.5M nodes) was not worth it mid-audit.
+* An absence of evidence: the checks above falsify specific mechanisms. They do not
+  prove correctness of anything untested.
