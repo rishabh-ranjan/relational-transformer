@@ -47,12 +47,12 @@ them, rather than waiting for one to finish before submitting the next:
 |---|---|---|
 | 1 preprocess | array of 3, one per db | `il-lo`, 48G GPU node, off ampere |
 | 2 featurize | array of 3, chained per db | `il-lo`, CPU-only, off ampere |
-| 3 eval `rt` | after all of stage 1 | **`il`**, 8x a100, not ampere4 |
+| 3 eval `rt`, `rt_p` | after all of stage 1 | **`il`**, 8x a100, not ampere4 |
 | 3 eval `rdblearn_tabicl` | after all of stage 2 | `il-lo`, 8x a100, not ampere4 |
 
 Stage 2 is chained per *database* (`afterok:<arrayjob>_<idx>`), so a db starts its
 DFS as soon as its own preprocess finishes rather than waiting for the slowest of
-the four.
+the three.
 
 The QOS split is forced by the cluster, not preference: the `il` QOS caps a user at
 `gres/gpu:a100=10`, which is exactly one 8-GPU node. RT-J is the priority, so it
@@ -104,7 +104,7 @@ grid. No such grid exists for 4DBInfer, so a single uniform `(256, 32, True)` is
 used for every task and both methods, with `local_ctx_size` clamped to the context
 point. The numbers are therefore untuned, equally so for both methods.
 
-**Tasks that are not here.** 4DBInfer has 12 tasks; this runs 6.
+**Tasks that are not here.** 4DBInfer has 12 tasks; this runs 4.
 
 * `dbinfer-avs/repeater` -- dropped. Its `Transaction` table is 349,655,789 rows,
   ~5x the largest table in the-join, and it is expensive in both stage 1 and
