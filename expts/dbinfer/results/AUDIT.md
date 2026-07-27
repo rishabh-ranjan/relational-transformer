@@ -120,3 +120,45 @@ than eager (0.9025 vs 0.8935). The compile setting, if anything, flatters RT. Si
 finding is that RT underperforms a DFS baseline and does not scale with context, that
 conclusion holds a fortiori under the setting that favours RT. An eager re-run could
 only widen the gap.
+
+## Correction: the label-density mechanism is weaker than stated above
+
+The section "What is actually different" argues the gap comes from 4DBInfer supplying
+~10x less in-context supervision per entity than RelBench. The *between-benchmark*
+observation stands (4.08 train task rows per entity on `rel-stack/user-engagement`
+against 0.43 on `churn`, and RT-J scores 0.90 there against ~0.6 here). But presenting
+it as **the** mechanism for the RT-vs-baseline gap *within* 4DBInfer was over-claiming,
+and the grid gives evidence against it.
+
+Each of the 30 grid configs shows RT a different number of in-context labels on the
+same task and the same 1024 val rows. If in-context supervision were the binding
+constraint, configs that show more labels should score better:
+
+| task | configs | mean_labels range | pearson r | spearman |
+|---|---|---|---|---|
+| `diginetica/ctr` | 30 | 273 - 2530 | +0.289 | +0.267 |
+| `retailrocket/cvr` | 30 | 145 - 575 | **-0.317** | -0.295 |
+| `stackexchange/churn` | 30 | 20 - 343 | +0.296 | +0.213 |
+| `stackexchange/upvote` | 30 | 23 - 213 | +0.513 | +0.483 |
+
+Three mild positives and one moderate *negative*. And across tasks the deficit does not
+shrink as labels grow -- it is the task with by far the most visible labels that has the
+largest deficit:
+
+| task | mean_labels @8192 | rt-j | baseline | deficit |
+|---|---|---|---|---|
+| `upvote` | 56 | 0.7133 | 0.8525 | 0.139 |
+| `churn` | 143 | 0.7233 | 0.8446 | 0.121 |
+| `cvr` | 381 | 0.6233 | 0.7880 | 0.165 |
+| `ctr` | 2267 | 0.2964 | 0.6836 | **0.387** |
+
+Caveat in both directions: a config that raises `mean_labels` also changes context
+composition, so this is a correlation across configs rather than a clean intervention
+on label count. But it is the best evidence available here, and it does not support a
+strong causal claim.
+
+**Honest position:** low label density is a plausible contributor and is consistent
+with the between-benchmark gap, but it is not demonstrated to be the mechanism, and
+within 4DBInfer showing RT more labels does not reliably help. What remains solid is
+everything the audit *falsified* -- no harness bug, no leakage, no data drift -- not
+the positive explanation offered for what is left.
