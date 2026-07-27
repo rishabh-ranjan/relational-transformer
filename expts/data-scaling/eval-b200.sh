@@ -3,9 +3,9 @@
 # sequentially) on 1xB200 under the il-lo QOS, following the
 # expts/rebuttal/eval-node.sh pattern: submit from a clean, pushed checkout;
 # the job clones the recorded commit fresh into /tmp and runs
-# expts/rebuttal/eval.py under torchrun with the data-scaling training-eval
-# hparams (ctx 4096, tokens_per_gpu 2**17, items_per_task 1024) on the test
-# split.
+# expts/data-scaling/eval.py under torchrun. The base config lives in that
+# eval.py; this script only sets the checkpoint, the run id, and the
+# per-checkpoint-kind task list.
 #
 #   RT_MODEL=10pct ./expts/data-scaling/eval-b200.sh
 #   RT_MODEL=32pct ./expts/data-scaling/eval-b200.sh
@@ -107,6 +107,12 @@ pixi install
 
 pixi run build-sampler
 
+# Each checkpoint is evaluated only on tasks of its own kind, via the split
+# task lists (forecast.json partitioned by task type).
+declare -A TASK_LIST=(
+    [best_clf]=expts/rebuttal/forecast-clf.json
+    [best_reg]=expts/rebuttal/forecast-reg.json
+)
 for ckpt in best_clf best_reg; do
     id="${RT_RUN_ID}-${RT_MODEL}-${ckpt}"
     start=$(date +%s)
@@ -114,13 +120,10 @@ for ckpt in best_clf best_reg; do
     pixi run torchrun \
         --nnodes=1 --nproc-per-node=1 \
         --master-addr="$MASTER_ADDR" --master-port="$MASTER_PORT" \
-        expts/rebuttal/eval.py \
+        expts/data-scaling/eval.py \
         --model.load-ckpt-path "$CKPT_ROOT/$RT_MODEL/$ckpt.safetensors" \
         --logger.id "$id" \
-        --eval.splits test \
-        --eval.ctx-size-list 4096 \
-        --eval.tokens-per-gpu 131072 \
-        --eval.items-per-task 1024 \
+        --eval.db-task-list "${TASK_LIST[$ckpt]}" \
         "$@"
     end=$(date +%s)
     echo "TIMING end   model=$RT_MODEL ckpt=$ckpt id=$id epoch=$end elapsed_s=$((end - start))"
