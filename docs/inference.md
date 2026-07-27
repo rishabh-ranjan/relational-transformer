@@ -24,7 +24,7 @@ pixi run hf download stanford-star/relbench-preprocessed --repo-type dataset \
 
 # the checkpoint still comes from the Hub, on demand
 pixi run eval --model.load-ckpt-path stanford-star/rt-j/classification \
-  --eval.pre-dir data/relbench-preprocessed --eval.csv-out-dir eval_out
+  --eval.pre-dir data/relbench-preprocessed
 ```
 
 ## Inference with default context
@@ -64,7 +64,7 @@ JSON file of pairs. To run one task:
 ```bash
 pixi run eval --model.load-ckpt-path stanford-star/rt-j/classification \
   --eval.pre-dir data/relbench-preprocessed \
-  --eval.db-task-list rel-f1 driver-top3 --eval.csv-out-dir eval_out
+  --eval.db-task-list rel-f1 driver-top3
 ```
 
 That reads just that task's data out of `--eval.pre-dir`, so it's the quickest
@@ -76,7 +76,8 @@ lists ship with the data:
 
 ## Evaluate with the RelBench evaluator
 
-`--eval.csv-out-dir` is a valid RelBench **submission directory**: one
+Eval writes a valid RelBench **submission directory** to
+`<logger.out-root>/<entity>/<project>/<id>/eval_out`: one
 `<dataset>__<task>.csv` prediction table per task, scored through **RelBench's own
 leaderboard evaluator** (`relbench.leaderboard`). Eval denormalizes regression
 predictions to the original target scale (`y = pred*std + mean`, train-split
@@ -128,7 +129,7 @@ pixi run eval \
   --model.load-ckpt-path stanford-star/rt-j/regression \
   --eval.pre-dir data/relbench-preprocessed \
   --eval.lcs-bw-pl-grid 256 32 True 512 64 True \
-  --eval.ensemble-size 1 --eval.csv-out-dir eval_out
+  --eval.ensemble-size 1
 ```
 
 ## Context ensembling
@@ -143,7 +144,7 @@ pixi run eval \
   --model.load-ckpt-path stanford-star/rt-j/regression \
   --eval.pre-dir data/relbench-preprocessed \
   --eval.lcs-bw-pl-grid 256 32 True 512 64 True \
-  --eval.ensemble-size 4 --eval.csv-out-dir eval_out
+  --eval.ensemble-size 4
 ```
 
 Tuning (on validation) and ensembling (on test) engage automatically whenever

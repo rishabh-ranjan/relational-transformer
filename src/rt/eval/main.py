@@ -43,6 +43,15 @@ def main(cfg: Config) -> None:
         "ctx size; multi-size ctx_size_list is an in-loop training-eval feature"
     )
     ctx_size = ev_cfg.ctx_size_list[0]
+    # Submission CSVs land with the run's other outputs:
+    # <out_root>/<entity>/<project>/<id>/eval_out (same layout as training).
+    csv_out_dir = (
+        Path(cfg.logger.out_root).expanduser()
+        / (cfg.logger.entity or "no-entity")
+        / cfg.logger.project
+        / cfg.logger.id
+        / "eval_out"
+    )
     device, global_rank, local_rank, world_size, ddp = setup_dist()
 
     checkpoint = cfg.model.load_ckpt_path
@@ -127,7 +136,7 @@ def main(cfg: Config) -> None:
             grid=grid,
             ensemble_size=ev_cfg.ensemble_size,
             ctx_size=ctx_size,
-            csv_out_dir=ev_cfg.csv_out_dir,
+            csv_out_dir=csv_out_dir,
             **eval_kwargs,
         )
         _teardown_dist(ddp)
@@ -152,7 +161,7 @@ def main(cfg: Config) -> None:
         tasks,
         ev_cfg.pre_dir,
         ctx_size=ctx_size,
-        csv_out_dir=ev_cfg.csv_out_dir,
+        csv_out_dir=csv_out_dir,
         evaluator=ev,
         embedder=embedder,
     )

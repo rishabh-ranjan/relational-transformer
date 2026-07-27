@@ -129,9 +129,6 @@ def main(cfg: Config) -> None:
         "in-loop eval does not ensemble; use rt.cli.eval on a saved checkpoint "
         "for eval.ensemble_size > 1"
     )
-    assert cfg.eval.csv_out_dir is None, (
-        "in-loop eval computes metrics only; submission CSVs come from rt.cli.eval"
-    )
     device, rank, local_rank, world_size, ddp = setup_dist()
     is_main = rank == 0
 

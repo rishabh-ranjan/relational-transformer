@@ -3,7 +3,8 @@
 Loads --model.load-ckpt-path (local dir/file or Hub repo such as
 stanford-star/rt-j/classification), evaluates every RelBench task of the
 checkpoint's kind (clf/reg) via RelBench's own leaderboard evaluator, and
-writes --eval.csv-out-dir as a valid RelBench submission directory.
+writes a valid RelBench submission directory to
+<logger.out-root>/<entity>/<project>/<id>/eval_out.
 
 Runs single-process on one GPU by default. Launch under torchrun for
 multi-GPU eval (``torchrun --nproc-per-node=8 -m rt.cli.eval ...``): items are
@@ -62,7 +63,6 @@ def default_config() -> Config:
             vector_db_path=None,
             lcs_bw_pl_grid=[(256, 32, True)],
             ensemble_size=1,
-            csv_out_dir="eval_out",
         ),
     )
 

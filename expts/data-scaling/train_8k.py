@@ -85,7 +85,6 @@ def default_config() -> Config:
             vector_db_path=None,
             lcs_bw_pl_grid=[(256, 32, True)],
             ensemble_size=1,
-            csv_out_dir=None,
         ),
     )
 

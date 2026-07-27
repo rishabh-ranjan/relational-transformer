@@ -108,9 +108,6 @@ class EvalConfig:
     # Number of context seeds whose test predictions are averaged; 1 = no
     # ensembling. Grid tuning and/or ensembling engage the val-tuned test path.
     ensemble_size: int
-    # Directory for per-item prediction CSVs (a RelBench submission dir).
-    # None = don't write CSVs.
-    csv_out_dir: str | None
 
 
 @dataclass
