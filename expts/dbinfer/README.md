@@ -1,16 +1,32 @@
 # 4DBInfer context scaling
 
-RT-J against a tabular baseline on the 4DBInfer tasks, over the context sweep
-256 → 8192. One table: mean AUROC over the classification tasks. There is no
-regression table -- see "Tasks that are not here".
+Two RT checkpoints against a tabular baseline on the 4DBInfer tasks, over the
+context sweep 256 → 8192. One table: mean AUROC over the classification tasks.
+There is no regression table -- see "Tasks that are not here".
 
 | | |
 |---|---|
-| methods | `rt` (RT-J) and `rdblearn_tabicl` = `precomputed_rdblearn` + `tabicl_batched` |
+| methods | `rt` (RT-J), `rt_p` (RT-P), and `rdblearn_tabicl` = `precomputed_rdblearn` + `tabicl_batched` |
 | clf tasks (4) | `dbinfer-diginetica/ctr`, `dbinfer-retailrocket/cvr`, `dbinfer-stackexchange/churn`, `dbinfer-stackexchange/upvote` |
 | reg tasks | none -- see below |
 | context points | 256, 512, 1024, 2048, 4096, 8192 |
-| test subsample | 1024 rows per task |
+| test sets | `results/subsampled1024/` (1024 rows/task) and `results/fulltest/` (whole splits) |
+
+## Results
+
+Full test sets, mean AUROC over the 4 clf tasks (higher is better):
+
+| method | 256 | 512 | 1024 | 2048 | 4096 | 8192 |
+|---|---|---|---|---|---|---|
+| `rdblearn_tabicl` | 0.5995 | 0.6652 | 0.7014 | 0.7442 | 0.7781 | **0.7922** |
+| `rt_p` | 0.5878 | 0.6012 | 0.6049 | 0.5998 | 0.6084 | 0.6366 |
+| `rt` (RT-J) | 0.5751 | 0.5793 | 0.5727 | 0.5720 | 0.5820 | 0.5891 |
+
+The baseline gains +0.19 across the sweep; neither RT checkpoint scales (`rt_p`
++0.05, `rt` +0.01). **`results/AUDIT.md` is required reading before quoting any of
+this**: the eval path was audited against `rt.cli.eval` and reproduces it exactly,
+and the gap traces to 4DBInfer supplying ~10x less in-context supervision per
+entity than RelBench, which a DFS baseline is indifferent to.
 
 Data is [`stanford-star/dbinfer`](https://huggingface.co/datasets/stanford-star/dbinfer),
 the port of the 4DBInfer benchmark rebuilt from the upstream archives.
