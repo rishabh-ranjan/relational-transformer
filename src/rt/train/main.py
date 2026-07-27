@@ -404,6 +404,14 @@ def main(cfg: Config) -> None:
 
     def _on_signal(signum, frame):
         preempt["flag"] = True
+        # Log it: when a preempted run comes back at the last *periodic* save
+        # instead of the step it died at, the question is always whether the
+        # ranks ever saw the signal. Without this line that is unanswerable
+        # after the fact.
+        print(
+            f"rank {rank}: caught signal {signum}, will save at the next step",
+            flush=True,
+        )
 
     signal.signal(signal.SIGTERM, _on_signal)
     signal.signal(signal.SIGUSR1, _on_signal)
