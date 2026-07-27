@@ -67,10 +67,9 @@ if [[ -z "${RT_COMMIT:-}" ]]; then
         exit 1
     fi
 
-    if [[ ! -d $PRE_DIR ]]; then
-        echo "WARNING: $PRE_DIR does not exist; run slurm_preprocess.sh first." >&2
-        exit 1
-    fi
+    # Deliberately no check that PRE_DIR exists: launch.sh submits this stage at the
+    # same time as stage 1 and chains it with --dependency, so the directory is
+    # created by the job this one waits on.
 
     mkdir -p "$LOG_DIR" "$DBB_DATASET_HOME"
     echo "commit:   $RT_COMMIT"
@@ -79,11 +78,23 @@ if [[ -z "${RT_COMMIT:-}" ]]; then
     echo "venv:     $VENV"
     echo "dbs:      ${DBS[*]}"
 
+    EXTRA=()
+    [[ -n ${RT_DEPEND:-} ]] && EXTRA+=(--dependency="$RT_DEPEND")
+    # One database at a time when chaining behind that database's own preprocess
+    # task, so it starts as soon as *its* input is ready rather than waiting for the
+    # slowest of the four; the whole array otherwise.
+    if [[ -n ${RT_ONLY_INDEX:-} ]]; then
+        ARRAY="$RT_ONLY_INDEX"
+    else
+        ARRAY="0-$((${#DBS[@]} - 1))%4"
+    fi
+
     strip=()
     while IFS='=' read -r k _; do strip+=(-u "$k"); done < <(env | grep -E '^(SLURM|SBATCH)_')
 
     exec env "${strip[@]}" sbatch \
-        --array="0-$((${#DBS[@]} - 1))%4" \
+        --array="$ARRAY" \
+        "${EXTRA[@]}" \
         --output="$LOG_DIR/%A_%a.out" \
         --error="$LOG_DIR/%A_%a.out" \
         --export=RT_REPO="$RT_REPO",RT_COMMIT="$RT_COMMIT",RT_BRANCH="$RT_BRANCH",RT_PRE_DIR="$PRE_DIR",RT_BUILD_DIR="$BUILD_DIR",RT_VENV="$VENV",DBB_DATASET_HOME="$DBB_DATASET_HOME" \

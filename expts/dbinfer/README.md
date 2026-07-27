@@ -15,25 +15,45 @@ the regression tasks.
 Data is [`stanford-star/dbinfer`](https://huggingface.co/datasets/stanford-star/dbinfer),
 the port of the 4DBInfer benchmark rebuilt from the upstream archives.
 
-## The four stages
+## Running it
 
 ```bash
-./expts/dbinfer/slurm_preprocess.sh              # 1. rustler format + text embeddings
-./expts/dbinfer/slurm_featurize.sh               # 2. depth-2 DFS feature matrices
-RT_METHODS=rt ./expts/dbinfer/slurm_eval.sh      # 3. the eval (rt-j first)
+./expts/dbinfer/launch.sh                              # everything, chained
+RT_SKIP_FEATURIZE=1 ./expts/dbinfer/launch.sh           # the rt-j path only
 pixi run python expts/dbinfer/reduce.py \
-    --out-dir /dfs/user/$USER/dbinfer-scaling --per-task    # 4. the tables
+    --out-dir /dfs/user/$USER/dbinfer-scaling --per-task
 ```
 
-Stage 2 is only needed for `rdblearn_tabicl`; `RT_METHODS=rt` skips straight past
-it. Every stage is idempotent and skips completed work, so a requeue after
-preemption or a rerun to mop up failures is safe and cheap.
+`launch.sh` queues all three compute stages immediately and lets slurm sequence
+them, rather than waiting for one to finish before submitting the next:
 
-Stage 3 submits one job per **(method, task)** -- 12 points, not 72. `eval.py`
-builds each target's context once at ctx=8192 and reads all six context points off
-as prefixes of it, so one job produces a task's entire row. That is what removes
-the per-ctx output directories and the column-merge step the RelBench campaign's
-launcher needed.
+| stage | shape | placement |
+|---|---|---|
+| 1 preprocess | array of 4, one per db | `il-lo`, GPU node, off ampere |
+| 2 featurize | array of 4, chained per db | `il-lo`, CPU-only, off ampere |
+| 3 eval `rt` | after all of stage 1 | **`il`**, 8x a100, not ampere4 |
+| 3 eval `rdblearn_tabicl` | after all of stage 2 | `il-lo`, 8x a100, not ampere4 |
+
+Stage 2 is chained per *database* (`afterok:<arrayjob>_<idx>`), so a db starts its
+DFS as soon as its own preprocess finishes rather than waiting for the slowest of
+the four.
+
+The QOS split is forced by the cluster, not preference: the `il` QOS caps a user at
+`gres/gpu:a100=10`, which is exactly one 8-GPU node. RT-J is the priority, so it
+takes `il` and the baseline takes `il-lo`. Everything that is not the eval stays off
+the ampere nodes so it cannot compete for them. The `il-cpu` partition is unusable
+here -- its only QOS caps a user at `cpu=8/mem=60G` in total, which a dev-node
+allocation already occupies.
+
+Stage 3 is one job per **method**, not per (method, task): `eval.py` loops the task
+list internally and builds each target's context once at ctx=8192, reading all six
+context points off as prefixes. So one job produces a whole table row -- which is
+what removes the per-ctx output directories and the column-merge step the RelBench
+campaign's launcher needed one job per (task, ctx) to work around.
+
+Every stage skips work whose output already exists, so a requeue after preemption
+or a rerun to mop up a failure is safe and cheap, and re-running `launch.sh` is the
+intended way to top up.
 
 ## Why `lbl` is in the tables
 
@@ -101,4 +121,5 @@ reordering. Run it at least once per database.
 | `featurize.py` | stage 2: DFS matrices for `PrecomputedFeaturizer` |
 | `reduce.py` | stage 4: JSONs → tables, plus the `mean_labels` check |
 | `rel2tab/` | restored from `b999183^:src/rt/rel2tab/`, pruned to this one baseline |
+| `launch.sh` | submits all stages at once, chained by slurm dependencies |
 | `slurm_*.sh` | one per stage |
