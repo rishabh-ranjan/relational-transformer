@@ -1,0 +1,31 @@
+# rt-p classification ckpt on stanford-star/rt-p/classification, forecast.json, items_per_task=1024, 2xB200, slurm job 99479, elapsed_s=971
+# NOTE: this run predates the task-type filter; both clf and reg tasks appear.
+# ~ = subsampled metric, scored locally (not the full relbench test set)
+# task	metric	value	n	align
+rel-amazon/item-churn	roc_auc~	0.7247	1024	cls=1.000
+rel-amazon/item-ltv	nmae~	0.0869	1024	|dy|<=3.5e+00
+rel-amazon/user-churn	roc_auc~	0.6430	1024	cls=1.000
+rel-amazon/user-ltv	nmae~	0.3006	1024	|dy|<=1.7e+00
+rel-avito/ad-ctr	nmae~	0.4601	1024	|dy|<=1.3e-03
+rel-avito/user-clicks	roc_auc~	0.6239	1024	cls=1.000
+rel-avito/user-visits	roc_auc~	0.5766	1024	cls=1.000
+rel-event/user-attendance	nmae~	0.4281	1024	|dy|<=1.0e-02
+rel-event/user-ignore	roc_auc~	0.8220	1024	cls=1.000
+rel-event/user-repeat	roc_auc	0.7670	246	cls=1.000
+rel-f1/driver-dnf	roc_auc	0.7968	702	cls=1.000
+rel-f1/driver-position	nmae	0.4574	760	|dy|<=2.7e-02
+rel-f1/driver-top3	roc_auc	0.8741	726	cls=1.000
+rel-hm/item-sales	nmae~	0.1387	1024	|dy|<=5.7e-03
+rel-hm/user-churn	roc_auc~	0.6478	1024	cls=1.000
+rel-stack/post-votes	nmae~	0.1646	1024	|dy|<=3.9e-03
+rel-stack/user-badge	roc_auc~	0.8347	1024	cls=1.000
+rel-stack/user-engagement	roc_auc~	0.9087	1024	cls=1.000
+rel-trial/site-success	nmae~	0.6859	1024	|dy|<=9.0e-04
+rel-trial/study-adverse	nmae~	0.1585	1024	|dy|<=4.7e+00
+rel-trial/study-outcome	roc_auc	0.6417	825	cls=1.000
+
+mean
+  roc_auc~      0.7227  (over 8 tasks)
+  nmae~         0.3029  (over 8 tasks)
+  roc_auc       0.7699  (over 4 tasks)
+  nmae          0.4574  (over 1 tasks)
