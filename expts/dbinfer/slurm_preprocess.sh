@@ -48,6 +48,9 @@ OUT_DIR=${RT_OUT_DIR:-/dfs/user/$USER/pre/dbinfer-preprocessed}
 # The corrected dbinfer collection (see provenance/dbinfer.py in the relbench repo).
 REPO_ID=${RT_HF_REPO:-stanford-star/dbinfer}
 DBS=(dbinfer-amazon dbinfer-diginetica dbinfer-retailrocket dbinfer-stackexchange)
+# RT_ARRAY narrows the array to a subset of DBS by index, for redoing one database
+# without touching the others (e.g. RT_ARRAY=0 for amazon alone).
+ARRAY=${RT_ARRAY:-0-$((${#DBS[@]} - 1))%4}
 
 # ---------------------------------------------------------------- submit side
 if [[ -z "${RT_COMMIT:-}" ]]; then
@@ -75,6 +78,7 @@ if [[ -z "${RT_COMMIT:-}" ]]; then
     echo "hf repo: $REPO_ID"
     echo "out dir: $OUT_DIR"
     echo "dbs:     ${DBS[*]}"
+    echo "array:   $ARRAY"
 
     # Deliberately NOT --export=ALL: this shell's env is fish-config'd for the
     # submit node (node-local HOME and PATH) and holds API tokens. Only the RT_*
@@ -84,8 +88,12 @@ if [[ -z "${RT_COMMIT:-}" ]]; then
     strip=()
     while IFS='=' read -r k _; do strip+=(-u "$k"); done < <(env | grep -E '^(SLURM|SBATCH)_')
 
+    EXTRA=()
+    [[ -n ${RT_DEPEND:-} ]] && EXTRA+=(--dependency="$RT_DEPEND")
+
     exec env "${strip[@]}" sbatch \
-        --array="0-$((${#DBS[@]} - 1))%4" \
+        --array="$ARRAY" \
+        "${EXTRA[@]}" \
         --output="$LOG_DIR/%A_%a.out" \
         --error="$LOG_DIR/%A_%a.out" \
         --export=RT_REPO="$RT_REPO",RT_COMMIT="$RT_COMMIT",RT_BRANCH="$RT_BRANCH",RT_OUT_DIR="$OUT_DIR",RT_HF_REPO="$REPO_ID" \
@@ -129,8 +137,41 @@ pixi install
 
 pixi run build-sampler
 
+# Stage the dataset node-locally and keep only the tasks this experiment uses.
+#
+# rustler's preprocess computes each table's column stats once and applies them
+# *positionally*, so a task whose splits carry different columns misaligns them.
+# 4DBInfer's retrieval tasks do exactly that: `purchase/train` holds positives only
+# while val/test add `label` and `query_idx`, so position 2 is a datetime in train
+# (mean=0, std=0) and int64 `label` in val -- normalizing gives (label-0)/0 = inf
+# and pre.rs panics on it. The numeric arm's zero-std guard cannot help, because the
+# stat came from the datetime arm.
+#
+# Those are link-prediction tasks, excluded from this experiment anyway, so drop
+# their directories instead of preprocessing them. Deriving the keep-list from
+# tasks.json means this needs no per-db special-casing.
+DS_ROOT=$TMPDIR/dbinfer-ds-job${SLURM_JOB_ID}
+mkdir -p "$DS_ROOT"
+pixi run hf download "$REPO_ID" --repo-type dataset \
+    --include "$DB/*" --local-dir "$DS_ROOT" >/dev/null
+DS_DIR=$DS_ROOT/$DB
+
+KEEP=$(python3 -c "
+import json, sys
+pairs = json.load(open('expts/dbinfer/tasks.json'))
+print('\n'.join(t for db, t in pairs if db == '$DB'))")
+echo "tasks kept for $DB: $(tr '\n' ' ' <<<"$KEEP")"
+for d in "$DS_DIR"/tasks/*/; do
+    [[ -d $d ]] || continue
+    name=$(basename "$d")
+    if ! grep -qx "$name" <<<"$KEEP"; then
+        echo "dropping task dir not used by this experiment: $name"
+        rm -rf "$d"
+    fi
+done
+
 pixi run python -m rt.cli.preprocess one \
-    --dataset "$REPO_ID/$DB" \
+    --dataset "$DS_DIR" \
     --out-dir "$OUT_DIR" \
     "$@"
 
