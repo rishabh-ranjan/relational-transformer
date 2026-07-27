@@ -11,6 +11,8 @@ use clap::Parser;
 use glob::glob;
 use indicatif::{ProgressBar, ProgressStyle};
 use polars::prelude::*;
+use rand::SeedableRng;
+use rand::rngs::StdRng;
 use rkyv::rancor::Error;
 use serde::Deserialize;
 use std::collections::HashMap;
@@ -246,6 +248,101 @@ fn normalize_df(df: DataFrame) -> DataFrame {
         .expect("failed to normalize column dtypes")
 }
 
+/// Name of the synthetic column added to tables that would otherwise emit no cells.
+const IDENTIFIER_COL: &str = "identifier";
+
+/// Make every table able to appear in a context.
+///
+/// A cell is only emitted for a column that is neither the primary key nor a foreign
+/// key (see the emission loop below), so a table whose columns are *all* keys emits
+/// nothing at all. Its rows still exist as nodes and still route BFS and walks, but
+/// the model never observes them -- and they consume a `bfs_width` slot while
+/// yielding nothing. That is a silent, severe loss: `PostTag` (648k rows) is the
+/// entire post-tag relation, `ProductNameToken` (942k) and `QuerySearchstringToken`
+/// are the entire search-token signal, and every materialized dimension table
+/// (`Item`, `Visitor`, `Session`, `User`, ...) is key-only by construction.
+///
+/// Two steps, in order:
+///
+/// 1. **Drop constant columns.** A column with a single distinct value (nulls
+///    included) distinguishes no two rows. The numeric arm forces `std = 1.0` when
+///    it is zero, so such a column normalizes to a constant 0.0 in every cell -- a
+///    context slot spent on nothing. Keys and the time column are structural and
+///    exempt.
+/// 2. **Add an `identifier` column** when nothing emittable is left. Values are
+///    drawn i.i.d. from N(0, 1), so rows of the table are distinguishable from one
+///    another without inventing a meaning; the column reads as an ordinary numeric
+///    feature downstream. The relational structure is untouched -- the table keeps
+///    its keys and edges -- but its rows can now enter a context and be attended to.
+///
+/// Seeded per table by name, so preprocessing is reproducible.
+fn ensure_emittable(
+    df: DataFrame,
+    table_name: &str,
+    pcol_name: &Option<String>,
+    fcol_name_to_ptable_name: &HashMap<String, String>,
+    tcol_name: &Option<String>,
+) -> DataFrame {
+    let is_structural = |name: &str| -> bool {
+        pcol_name.as_deref() == Some(name)
+            || fcol_name_to_ptable_name.contains_key(name)
+            || tcol_name.as_deref() == Some(name)
+    };
+
+    let constant: Vec<String> = df
+        .iter()
+        .filter(|s| !is_structural(s.name().as_str()))
+        .filter(|s| s.n_unique().map(|n| n <= 1).unwrap_or(false))
+        .map(|s| s.name().to_string())
+        .collect();
+    let mut df = if constant.is_empty() {
+        df
+    } else {
+        println!(
+            "  {}: dropping {} constant column(s): {:?}",
+            table_name,
+            constant.len(),
+            constant
+        );
+        df.drop_many(&constant)
+    };
+
+    // A cell is emitted for every column that is not the pkey and not an fkey; the
+    // time column does emit one, so a table carrying it is not silent.
+    let emittable = df
+        .iter()
+        .filter(|s| {
+            let n = s.name().as_str();
+            pcol_name.as_deref() != Some(n) && !fcol_name_to_ptable_name.contains_key(n)
+        })
+        .count();
+    if emittable == 0 {
+        let n = df.height();
+        let mut hasher = DefaultHasher::new();
+        std::hash::Hash::hash(table_name, &mut hasher);
+        let mut rng = StdRng::seed_from_u64(std::hash::Hasher::finish(&hasher));
+        let vals: Vec<f64> = (0..n)
+            .map(|_| {
+                // Box-Muller, so this needs no rand_distr dependency.
+                let u1: f64 = rand::Rng::random_range(&mut rng, f64::MIN_POSITIVE..1.0);
+                let u2: f64 = rand::Rng::random_range(&mut rng, 0.0..1.0);
+                (-2.0 * u1.ln()).sqrt() * (std::f64::consts::TAU * u2).cos()
+            })
+            .collect();
+        println!(
+            "  {}: all {} column(s) are keys -- adding synthetic `{}` ~ N(0,1) so its \
+             {} rows can enter a context",
+            table_name,
+            df.width(),
+            IDENTIFIER_COL,
+            n
+        );
+        df.with_column(Series::new(IDENTIFIER_COL.into(), vals))
+            .expect("failed to add identifier column");
+    }
+    df
+}
+
 #[derive(Parser)]
 pub struct Cli {
     /// Local dataset directory in relbench-3.0.0 layout: a `manifest.yaml`
@@ -393,6 +490,16 @@ pub fn main(cli: Cli) {
         let pcol_name = spec.pcol_name;
         let fcol_name_to_ptable_name = spec.fcol_name_to_ptable_name;
         let tcol_name = spec.tcol_name;
+
+        // Drop columns that can say nothing, and guarantee the table can be seen at
+        // all. Must happen before col_stats, which are positional over `df`.
+        let df = ensure_emittable(
+            df,
+            &table_name,
+            &pcol_name,
+            &fcol_name_to_ptable_name,
+            &tcol_name,
+        );
 
         println!(
             "read table {} of type {:?} with shape {:?}",
