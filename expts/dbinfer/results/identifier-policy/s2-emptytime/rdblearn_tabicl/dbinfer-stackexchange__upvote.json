@@ -1,0 +1,77 @@
+{
+  "config": {
+    "bfs_width": 32,
+    "context_seed": 0,
+    "ctx_sizes": [
+      256,
+      512,
+      1024,
+      2048,
+      4096,
+      8192
+    ],
+    "d_text": 384,
+    "embedder": "all-MiniLM-L12-v2",
+    "eval_bs": 32,
+    "features_subdir": "rdblearn_features",
+    "items_per_task": 1024,
+    "local_ctx_size": 256,
+    "method": "rdblearn_tabicl",
+    "num_walks": 10000,
+    "pre_dir": "/dfs/user/ranjanr/pre/dbinfer-pre-s2-emptytime",
+    "prefer_latest": true,
+    "shuffle_seed": 0,
+    "split": "test",
+    "tabicl": {
+      "max_batch_size": 32,
+      "min_bin_size": 64,
+      "softmax_temperature": 0.9
+    },
+    "tokens_per_gpu": 262144,
+    "walk_length": 20,
+    "world_size": 2
+  },
+  "db": "dbinfer-stackexchange",
+  "method": "rdblearn_tabicl",
+  "per_ctx": {
+    "1024": {
+      "mean_labels": 5.6923828125,
+      "metric_name": "roc_auc",
+      "metric_value": 0.7101562095675126,
+      "n": 1024
+    },
+    "2048": {
+      "mean_labels": 11.9345703125,
+      "metric_name": "roc_auc",
+      "metric_value": 0.7645858850725413,
+      "n": 1024
+    },
+    "256": {
+      "mean_labels": 1.19921875,
+      "metric_name": "roc_auc",
+      "metric_value": 0.5432530577742509,
+      "n": 1024
+    },
+    "4096": {
+      "mean_labels": 25.3349609375,
+      "metric_name": "roc_auc",
+      "metric_value": 0.8112438973898942,
+      "n": 1024
+    },
+    "512": {
+      "mean_labels": 2.7265625,
+      "metric_name": "roc_auc",
+      "metric_value": 0.6326659996204738,
+      "n": 1024
+    },
+    "8192": {
+      "mean_labels": 54.2978515625,
+      "metric_name": "roc_auc",
+      "metric_value": 0.8438163092794175,
+      "n": 1024
+    }
+  },
+  "table": "upvote",
+  "task": "dbinfer-stackexchange/upvote",
+  "task_type": "clf"
+}

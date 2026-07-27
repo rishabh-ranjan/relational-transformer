@@ -1,0 +1,73 @@
+{
+  "config": {
+    "bfs_width": 32,
+    "context_seed": 0,
+    "ctx_sizes": [
+      256,
+      512,
+      1024,
+      2048,
+      4096,
+      8192
+    ],
+    "d_text": 384,
+    "embedder": "all-MiniLM-L12-v2",
+    "eval_bs": 32,
+    "items_per_task": 1024,
+    "local_ctx_size": 256,
+    "method": "rt",
+    "num_walks": 10000,
+    "pre_dir": "/dfs/user/ranjanr/pre/dbinfer-pre-s3-threshold",
+    "prefer_latest": true,
+    "rt_clf_ckpt": "stanford-star/rt-j/classification",
+    "rt_reg_ckpt": "stanford-star/rt-j/regression",
+    "shuffle_seed": 0,
+    "split": "test",
+    "tokens_per_gpu": 262144,
+    "walk_length": 20,
+    "world_size": 1
+  },
+  "db": "dbinfer-retailrocket",
+  "method": "rt",
+  "per_ctx": {
+    "1024": {
+      "mean_labels": 63.408203125,
+      "metric_name": "roc_auc",
+      "metric_value": 0.7157370517928288,
+      "n": 1024
+    },
+    "2048": {
+      "mean_labels": 116.806640625,
+      "metric_name": "roc_auc",
+      "metric_value": 0.7529631474103585,
+      "n": 1024
+    },
+    "256": {
+      "mean_labels": 9.427734375,
+      "metric_name": "roc_auc",
+      "metric_value": 0.6376494023904382,
+      "n": 1024
+    },
+    "4096": {
+      "mean_labels": 202.2216796875,
+      "metric_name": "roc_auc",
+      "metric_value": 0.7224352589641434,
+      "n": 1024
+    },
+    "512": {
+      "mean_labels": 27.70703125,
+      "metric_name": "roc_auc",
+      "metric_value": 0.7092878486055777,
+      "n": 1024
+    },
+    "8192": {
+      "mean_labels": 341.470703125,
+      "metric_name": "roc_auc",
+      "metric_value": 0.780453187250996,
+      "n": 1024
+    }
+  },
+  "table": "cvr",
+  "task": "dbinfer-retailrocket/cvr",
+  "task_type": "clf"
+}
