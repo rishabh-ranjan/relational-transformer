@@ -1,0 +1,32 @@
+# rt-j vs rt-p, forecast tasks, items_per_task=1024, jobs 99466/99479
+# clf ckpt scored only on clf tasks, reg ckpt only on reg tasks
+# ~ = subsampled metric, scored locally (not the full relbench test set)
+
+## clf ckpt on clf tasks (AUROC, higher better)
+task                            	metric  	    n	   rt-j	   rt-p
+rel-amazon/item-churn           	roc_auc~	 1024	 0.8201	 0.7247
+rel-amazon/user-churn           	roc_auc~	 1024	 0.6838	 0.6430
+rel-avito/user-clicks           	roc_auc~	 1024	 0.5867	 0.6239
+rel-avito/user-visits           	roc_auc~	 1024	 0.5854	 0.5766
+rel-event/user-ignore           	roc_auc~	 1024	 0.8506	 0.8220
+rel-event/user-repeat           	roc_auc 	  246	 0.7521	 0.7670
+rel-f1/driver-dnf               	roc_auc 	  702	 0.8090	 0.7968
+rel-f1/driver-top3              	roc_auc 	  726	 0.9108	 0.8741
+rel-hm/user-churn               	roc_auc~	 1024	 0.6549	 0.6478
+rel-stack/user-badge            	roc_auc~	 1024	 0.7775	 0.8347
+rel-stack/user-engagement       	roc_auc~	 1024	 0.8989	 0.9087
+rel-trial/study-outcome         	roc_auc 	  825	 0.6369	 0.6417
+mean                            	        	     	 0.7472	 0.7384
+
+## reg ckpt on reg tasks (NMAE, lower better)
+task                            	metric  	    n	   rt-j	   rt-p
+rel-amazon/item-ltv             	nmae~   	 1024	 0.0668	 0.0748
+rel-amazon/user-ltv             	nmae~   	 1024	 0.2699	 0.2858
+rel-avito/ad-ctr                	nmae~   	 1024	 0.4401	 0.4328
+rel-event/user-attendance       	nmae~   	 1024	 0.3813	 0.4278
+rel-f1/driver-position          	nmae    	  760	 0.4137	 0.4663
+rel-hm/item-sales               	nmae~   	 1024	 0.0766	 0.1220
+rel-stack/post-votes            	nmae~   	 1024	 0.1412	 0.1693
+rel-trial/site-success          	nmae~   	 1024	 0.3141	 0.5090
+rel-trial/study-adverse         	nmae~   	 1024	 0.1479	 0.1537
+mean                            	        	     	 0.2502	 0.2935
