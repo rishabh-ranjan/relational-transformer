@@ -248,8 +248,18 @@ fn normalize_df(df: DataFrame) -> DataFrame {
         .expect("failed to normalize column dtypes")
 }
 
-/// Name of the synthetic column added to tables that would otherwise emit no cells.
+/// Name of the synthetic column added to tables whose rows are not identifiable.
 const IDENTIFIER_COL: &str = "identifier";
+
+/// A table needs an `identifier` when fewer than this fraction of its rows carry a
+/// distinct tuple of emitted values. 0.5 sits in a wide empty gap on the 4DBInfer
+/// databases -- the tables that fail cluster at 0.0-0.42 and the ones that pass at
+/// 0.76-1.00 -- so the exact value is not load-bearing.
+const IDENTIFIABILITY_MIN: f64 = 0.5;
+
+/// Rows sampled when estimating identifiability. Bounded so a 92M-row table
+/// (`diginetica/QueryResult`) costs the same as any other.
+const IDENTIFIABILITY_SAMPLE: usize = 1_000_000;
 
 /// Make every table able to appear in a context.
 ///
@@ -269,20 +279,41 @@ const IDENTIFIER_COL: &str = "identifier";
 ///    it is zero, so such a column normalizes to a constant 0.0 in every cell -- a
 ///    context slot spent on nothing. Keys and the time column are structural and
 ///    exempt.
-/// 2. **Add an `identifier` column** when nothing emittable is left. Values are
-///    drawn i.i.d. from N(0, 1), so rows of the table are distinguishable from one
-///    another without inventing a meaning; the column reads as an ordinary numeric
-///    feature downstream. The relational structure is untouched -- the table keeps
-///    its keys and edges -- but its rows can now enter a context and be attended to.
+/// 2. **Add an `identifier` column** when the emitted columns cannot tell the
+///    table's rows apart. Values are drawn i.i.d. from N(0, 1), so rows become
+///    distinguishable without inventing a meaning; the column reads as an ordinary
+///    numeric feature downstream. The relational structure is untouched -- the table
+///    keeps its keys and edges -- but its rows can now be told apart in a context.
+///
+/// The trigger for (2) is *measured*, not inferred from the schema shape, because
+/// schema shape gets it wrong in both directions on real data. Emitting only a time
+/// column is fine when timestamps are near-unique (`diginetica/Click` distinguishes
+/// 0.991 of its rows, `View` 0.9999) and useless when they are coarse
+/// (`retailrocket/ItemCategory`: 18 distinct values over 788k rows). Conversely a
+/// table can carry real feature columns and still identify almost nothing
+/// (`stackexchange/Vote`: 0.024 over BountyAmount/CreationDate/VoteTypeId;
+/// `retailrocket/ItemAvailability`: 36 distinct tuples over 1.5M rows;
+/// `diginetica/Product`: 0.026). So the test is the fraction of rows carrying a
+/// distinct tuple of emitted values, estimated on a bounded sample, against
+/// `IDENTIFIABILITY_MIN`.
 ///
 /// Seeded per table by name, so preprocessing is reproducible.
 fn ensure_emittable(
     df: DataFrame,
     table_name: &str,
+    table_type: &TableType,
     pcol_name: &Option<String>,
     fcol_name_to_ptable_name: &HashMap<String, String>,
     tcol_name: &Option<String>,
 ) -> DataFrame {
+    // Database tables only. A task table always emits its target, so it is never
+    // invisible; and its rows are *meant* to look alike -- a binary label under one
+    // cutoff gives two distinct tuples over a whole split. Injecting noise there
+    // would change the in-context learning setup rather than fix a visibility
+    // problem, and would spend a cell on every label row.
+    if !matches!(table_type, TableType::Db) {
+        return df;
+    }
     let is_structural = |name: &str| -> bool {
         pcol_name.as_deref() == Some(name)
             || fcol_name_to_ptable_name.contains_key(name)
@@ -308,15 +339,38 @@ fn ensure_emittable(
     };
 
     // A cell is emitted for every column that is not the pkey and not an fkey; the
-    // time column does emit one, so a table carrying it is not silent.
-    let emittable = df
+    // time column does emit one, so a table carrying it is not necessarily silent.
+    let emitted: Vec<String> = df
         .iter()
         .filter(|s| {
             let n = s.name().as_str();
             pcol_name.as_deref() != Some(n) && !fcol_name_to_ptable_name.contains_key(n)
         })
-        .count();
-    if emittable == 0 {
+        .map(|s| s.name().to_string())
+        .collect();
+
+    // Fraction of rows carrying a distinct tuple of emitted values, on a bounded
+    // sample. 0.0 when nothing is emitted at all.
+    let identifiability = if emitted.is_empty() {
+        0.0
+    } else {
+        let n_sample = df.height().min(IDENTIFIABILITY_SAMPLE);
+        if n_sample == 0 {
+            1.0
+        } else {
+            let sample = df
+                .select(emitted.iter().map(|s| s.as_str()))
+                .expect("failed to select emitted columns")
+                .head(Some(n_sample));
+            let distinct = sample
+                .unique_stable(None, UniqueKeepStrategy::First, None)
+                .map(|d| d.height())
+                .unwrap_or(n_sample);
+            distinct as f64 / n_sample as f64
+        }
+    };
+
+    if identifiability < IDENTIFIABILITY_MIN {
         let n = df.height();
         let mut hasher = DefaultHasher::new();
         std::hash::Hash::hash(table_name, &mut hasher);
@@ -330,12 +384,9 @@ fn ensure_emittable(
             })
             .collect();
         println!(
-            "  {}: all {} column(s) are keys -- adding synthetic `{}` ~ N(0,1) so its \
-             {} rows can enter a context",
-            table_name,
-            df.width(),
-            IDENTIFIER_COL,
-            n
+            "  {}: identifiability {:.4} < {} over emitted {:?} -- adding synthetic \
+             `{}` ~ N(0,1) so its {} rows can be told apart",
+            table_name, identifiability, IDENTIFIABILITY_MIN, emitted, IDENTIFIER_COL, n
         );
         df.with_column(Series::new(IDENTIFIER_COL.into(), vals))
             .expect("failed to add identifier column");
@@ -496,6 +547,7 @@ pub fn main(cli: Cli) {
         let df = ensure_emittable(
             df,
             &table_name,
+            &table_type,
             &pcol_name,
             &fcol_name_to_ptable_name,
             &tcol_name,
