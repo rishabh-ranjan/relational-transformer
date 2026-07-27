@@ -101,4 +101,22 @@ flex-attention shifts the kernel numerics by ~0.01 AUROC on 1024 rows. Neither i
 "wrong", but the reference default is eager, and the compile path applies only to
 `rt`/`rt_p` -- `build_rdblearn_tabicl` has no compile flag -- so leaving it on would
 put a known offset on exactly the numbers under scrutiny and not on the baseline.
-The reported RT results are therefore produced with `--no-compile`.
+### ...but eager is not actually runnable at ctx=8192, and that is informative
+
+Re-running the deliverable with `--no-compile` OOMs immediately. The failed
+allocation is 68,719,476,736 bytes, which is exactly `32 x 8 heads x 8192 x 8192 x
+4 B` -- a fully materialized attention score matrix, on an 80 GiB A100.
+
+`RT_MATERIALIZE_ATTN_MASKS=0` is honored (the job's own logs show the flex-attention
+path being traced), but `torch.nn.attention.flex_attention` only gets its fused kernel
+*under* `torch.compile`; run eagerly it falls back to materializing. So compile is not
+a nicety on this path, it is what makes ctx=8192 fit at all. Dropping to a batch that
+fits eagerly (`tokens_per_gpu=2**15`, eval_bs=4) would mean ~3,300 batches for churn
+alone on a slower kernel -- hours, to move a number by ~0.01.
+
+**The reported RT numbers therefore keep `--compile` (the script's default).** This is
+the right call on the merits, not just on cost: on the control, compiled scored *higher*
+than eager (0.9025 vs 0.8935). The compile setting, if anything, flatters RT. Since the
+finding is that RT underperforms a DFS baseline and does not scale with context, that
+conclusion holds a fortiori under the setting that favours RT. An eager re-run could
+only widen the gap.
