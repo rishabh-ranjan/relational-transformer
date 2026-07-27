@@ -74,7 +74,16 @@ EMBEDDER = "all-MiniLM-L12-v2"
 D_TEXT = 384
 
 CTX_SIZES = [256, 512, 1024, 2048, 4096, 8192]
-METHODS = ("rt", "rdblearn_tabicl")
+METHODS = ("rt", "rt_p", "rdblearn_tabicl")
+
+# The RT checkpoints, per method. RT-P is architecturally identical to RT-J -- same
+# 12x512 net, same all-MiniLM-L12-v2 / d_text=384 -- so it differs only in weights and
+# needs no separate code path, just a different pair of checkpoint specs and its own
+# output subdirectory. ``--rt-clf-ckpt`` / ``--rt-reg-ckpt`` still override either.
+RT_CKPTS = {
+    "rt": ("stanford-star/rt-j/classification", "stanford-star/rt-j/regression"),
+    "rt_p": ("stanford-star/rt-p/classification", "stanford-star/rt-p/regression"),
+}
 
 # Subdirectory under ``<pre_dir>/<db>/`` holding the precomputed feature matrices.
 FEATURES_SUBDIR = "rdblearn_features"
@@ -274,8 +283,9 @@ def main() -> None:
     ap.add_argument(
         "--mmap-populate", action=argparse.BooleanOptionalAction, default=True
     )
-    ap.add_argument("--rt-clf-ckpt", default="stanford-star/rt-j/classification")
-    ap.add_argument("--rt-reg-ckpt", default="stanford-star/rt-j/regression")
+    # Default to the checkpoints RT_CKPTS names for --method; None means "unset".
+    ap.add_argument("--rt-clf-ckpt", default=None)
+    ap.add_argument("--rt-reg-ckpt", default=None)
     ap.add_argument("--compile", action=argparse.BooleanOptionalAction, default=True)
     ap.add_argument("--tabicl-max-batch-size", type=int, default=32)
     ap.add_argument("--tabicl-min-bin-size", type=int, default=64)
@@ -283,6 +293,12 @@ def main() -> None:
     args = ap.parse_args()
 
     args.pre_dir = os.path.expandvars(args.pre_dir)
+    # Fill the RT checkpoints from the method unless the caller named them, so the
+    # method alone selects the weights and the output subdirectory together.
+    if args.method in RT_CKPTS:
+        clf_default, reg_default = RT_CKPTS[args.method]
+        args.rt_clf_ckpt = args.rt_clf_ckpt or clf_default
+        args.rt_reg_ckpt = args.rt_reg_ckpt or reg_default
     # torchrun sets these; single-process eval leaves them unset.
     args.global_rank = int(os.environ.get("RANK", 0))
     args.local_rank = int(os.environ.get("LOCAL_RANK", 0))
@@ -347,7 +363,7 @@ def main() -> None:
         run(model, evaluator, ctx_sizes, args.method, out_dir, config, rank0)
         return
 
-    # RT-J has separate clf and reg checkpoints, so split the task list by type and
+    # RT has separate clf and reg checkpoints, so split the task list by type and
     # make one evaluator per group -- a group's tasks all route through one net.
     config["rt_clf_ckpt"] = args.rt_clf_ckpt
     config["rt_reg_ckpt"] = args.rt_reg_ckpt
@@ -356,7 +372,9 @@ def main() -> None:
         if not group:
             continue
         if rank0:
-            print(f"\n=== rt / {task_type}: {len(group)} task(s)", flush=True)
+            print(
+                f"\n=== {args.method} / {task_type}: {len(group)} task(s)", flush=True
+            )
         model = build_rt(args, device, task_type)
         evaluator = make_evaluator(group, args, device)
         run(model, evaluator, ctx_sizes, args.method, out_dir, config, rank0)

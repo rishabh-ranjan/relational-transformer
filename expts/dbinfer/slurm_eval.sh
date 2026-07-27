@@ -38,7 +38,7 @@ set -euo pipefail
 LOG_DIR=/dfs/user/$USER/slurm-logs/dbinfer-eval
 OUT_DIR=${RT_OUT_DIR:-/dfs/user/$USER/dbinfer-scaling}
 PRE_DIR=${RT_PRE_DIR:-/dfs/user/$USER/pre/dbinfer-preprocessed}
-METHOD=${RT_METHOD:?set RT_METHOD=rt|rdblearn_tabicl}
+METHOD=${RT_METHOD:?set RT_METHOD=rt|rt_p|rdblearn_tabicl}
 
 # Resource shape, overridable, because the two methods do not want the same node.
 #

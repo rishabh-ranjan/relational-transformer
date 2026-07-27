@@ -33,7 +33,7 @@ import numpy as np
 
 CTX_SIZES = [256, 512, 1024, 2048, 4096, 8192]
 # Row order in the printed tables: the baseline first, RT-J last as the headline.
-METHOD_ORDER = ["rdblearn_tabicl", "rt"]
+METHOD_ORDER = ["rdblearn_tabicl", "rt_p", "rt"]
 DISPLAY = {"rdblearn_tabicl": "rdblearn_tabicl", "rt": "**rt-j**"}
 # `lbl` values are means of floats over the same tasks, so they should agree to the
 # last bit; allow a hair for accumulation order across separate runs.
