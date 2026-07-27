@@ -1,5 +1,5 @@
 #!/bin/bash
-# Full test-set eval of RT-J on the 3 rel-f1 forecast tasks under two walk
+# Full test-set eval of RT-J on the rel-f1, rel-trial, and rel-event forecast tasks under two walk
 # configs, (num_walks, walk_length) = (10000, 20) and (1000, 10), on 1xB200
 # under il-lo. Follows expts/data-scaling/eval-b200.sh: submit from a clean,
 # pushed checkout; the job clones the recorded commit fresh into /tmp and runs
@@ -97,8 +97,8 @@ declare -A CKPT=(
     [reg]=stanford-star/rt-j/regression
 )
 declare -A TASK_LIST=(
-    [clf]=expts/rw-timing/rel-f1-clf.json
-    [reg]=expts/rw-timing/rel-f1-reg.json
+    [clf]=expts/rw-timing/tasks-clf.json
+    [reg]=expts/rw-timing/tasks-reg.json
 )
 for walks_len in "10000 20" "1000 10"; do
     read -r walks len <<< "$walks_len"
