@@ -68,6 +68,7 @@ if [[ -z "${RT_RUN_ID:-}" ]]; then
 
     exec env "${strip[@]}" sbatch \
         --job-name="rt-ds-eval-$RT_MODEL" \
+        --nodelist=blackwell1 \
         --gres=gpu:b200:1 --cpus-per-task=36 --mem=375000M \
         --output="$LOG_DIR/${RT_RUN_ID}_${RT_MODEL}_%j.out" \
         --error="$LOG_DIR/${RT_RUN_ID}_${RT_MODEL}_%j.out" \
