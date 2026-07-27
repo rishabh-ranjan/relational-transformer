@@ -172,16 +172,23 @@ requeue_after_wait() {
     # launcher, not the ranks. Walk two levels and skip anything that is a
     # launcher (which would start its own teardown) or a dataloader worker
     # (SIGUSR1 has no handler there and would simply kill it).
-    local kids ranks
+    # Identify ranks by their command line: they run the train script, and they
+    # are not the launcher. Matching on "pixi" here was the bug that kept this
+    # from working -- with detached-environments off the interpreter lives at
+    # <clone>/.pixi/envs/default/bin/python, so every rank looked like the pixi
+    # wrapper and got skipped. Verified against a live `pixi run torchrun` tree.
+    local kids cands args n script_base
+    script_base=$(basename "${RT_TRAIN_SCRIPT:-expts/data-scaling/train.py}")
     kids=$(pgrep -P "$TRAIN_PID" || true)
-    ranks=$(for k in $TRAIN_PID $kids; do pgrep -P "$k" || true; done | sort -u)
-    for p in $ranks; do
-        case "$(ps -o args= -p "$p" 2>/dev/null)" in
-            *torchrun*|*torch.distributed.run*|*pixi*) continue ;;
-        esac
-        kill -USR1 "$p" 2>/dev/null || true
+    cands=$(for k in $TRAIN_PID $kids; do pgrep -P "$k" || true; done | sort -u)
+    n=0
+    for p in $cands; do
+        args=$(ps -o args= -p "$p" 2>/dev/null) || continue
+        [[ $args == *"$script_base"* ]] || continue
+        [[ $args == *torchrun* || $args == *torch.distributed.run* ]] && continue
+        kill -USR1 "$p" 2>/dev/null && n=$((n + 1))
     done
-    echo "signalled ranks: $(echo $ranks | wc -w) candidate pids"
+    echo "signalled $n rank(s) of $(echo $cands | wc -w) candidates"
     # Wait for that save to land before tearing anything down -- 60s, well
     # inside slurm's 300s GraceTime, and the loop exits as soon as resume.pt is
     # newer than the signal or the ranks are gone.
