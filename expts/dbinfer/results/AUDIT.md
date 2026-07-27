@@ -76,3 +76,29 @@ should not be read as a general statement about RT-J's context scaling.
   re-preprocessing diginetica (97.5M nodes) was not worth it mid-audit.
 * An absence of evidence: the checks above falsify specific mechanisms. They do not
   prove correctness of anything untested.
+
+## Postscript: my eval.py reproduces `rt.cli.eval` exactly, once compile is off
+
+Running both on `rel-stack/user-engagement`, 1024 items, ctx=8192, world_size=2:
+
+| run | ctx list | compile | roc_auc |
+|---|---|---|---|
+| reference `rt.cli.eval` | `[8192]` | eager | **0.8935** |
+| `expts/dbinfer/eval.py` | `[256..8192]` | compiled | 0.9025 |
+| `expts/dbinfer/eval.py` | `[8192]` | compiled | 0.9025 |
+| `expts/dbinfer/eval.py` | `[8192]` | **eager** | **0.8935** |
+
+Two things fall out.
+
+**The context sweep is free of side effects.** Passing six ctx sizes gives the same
+number as passing one, to four decimals -- `ctx_size_list` only feeds
+`max_eval_ctx_size`, and every shorter point is a prefix of that one context. The
+design assumption behind the whole experiment holds.
+
+**`--compile` explains the entire residual.** Eager, this script reproduces the
+reference bit-for-bit at the printed precision. `torch.compile` with bfloat16 and
+flex-attention shifts the kernel numerics by ~0.01 AUROC on 1024 rows. Neither is
+"wrong", but the reference default is eager, and the compile path applies only to
+`rt`/`rt_p` -- `build_rdblearn_tabicl` has no compile flag -- so leaving it on would
+put a known offset on exactly the numbers under scrutiny and not on the baseline.
+The reported RT results are therefore produced with `--no-compile`.
