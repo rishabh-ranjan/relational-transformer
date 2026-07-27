@@ -3,7 +3,9 @@
 #
 #   RT_METHOD=rt ./expts/dbinfer/slurm_eval.sh                     # submit one method
 #   RT_METHOD=rt RT_QOS=il ./expts/dbinfer/slurm_eval.sh            # on the priority QOS
-#   RT_METHOD=rdblearn_tabicl RT_DEPEND=afterok:12345 ./...sh       # chained behind a stage
+#   RT_METHOD=rdblearn_tabicl RT_GRES=gpu:rtx8000:4 RT_CPUS=32 \
+#     RT_CONSTRAINT= RT_EXCLUDE= RT_EXCLUSIVE=0 RT_NPROC=4 \
+#     RT_NODELIST=hyperturing1,hyperturing2 ./...sh                 # off the amperes
 #
 # Normally driven by ``launch.sh``, which submits every stage at once with the
 # right dependencies. Same submit contract as the other stages: clean pushed tree,
@@ -15,10 +17,8 @@
 # there are no per-ctx output directories and no column-merge step -- which is what
 # the RelBench campaign's launcher needed one job per (task, ctx) to work around.
 #
-# 8 a100s on one ampere node, under torchrun: `eval.py` shards items across ranks
-# and gathers on rank 0. ampere4 is excluded (it hosts the data-scaling training
-# run). The `il` QOS caps a user at gres/gpu:a100=10, i.e. exactly one such node,
-# so the second method goes on `il-lo` -- see RT_QOS.
+# Under torchrun, `eval.py` shards items across ranks and gathers on rank 0. The
+# resource shape is per method rather than fixed: see the RT_GRES block below.
 #
 # Resumability: eval.py skips a (method, task) whose JSON exists, so a requeue after
 # preemption resumes at the next task rather than redoing the row.
@@ -28,15 +28,7 @@
 #SBATCH --account=infolab
 #SBATCH --time=12:00:00
 #SBATCH --nodes=1
-#SBATCH --constraint=ampere
-#SBATCH --exclude=ampere4
-#SBATCH --exclusive
-#SBATCH --gres=gpu:a100:8
 #SBATCH --ntasks-per-node=1
-#SBATCH --cpus-per-task=128
-# No --mem: the partition caps at MaxMemPerCPU (10700M x 128), so --mem=0 is
-# rejected outright, while --exclusive plus DefMemPerGPU=240000 lands on the whole
-# node anyway and nothing else can run there.
 #SBATCH --chdir=/tmp
 #SBATCH --requeue
 #SBATCH --open-mode=append
@@ -47,7 +39,25 @@ LOG_DIR=/dfs/user/$USER/slurm-logs/dbinfer-eval
 OUT_DIR=${RT_OUT_DIR:-/dfs/user/$USER/dbinfer-scaling}
 PRE_DIR=${RT_PRE_DIR:-/dfs/user/$USER/pre/dbinfer-preprocessed}
 METHOD=${RT_METHOD:?set RT_METHOD=rt|rdblearn_tabicl}
+
+# Resource shape, overridable, because the two methods do not want the same node.
+#
+# `rt` casts the network to bfloat16, which Turing (rtx8000, 2080ti) has no native
+# support for, so it needs an ampere -- a whole one, exclusively, since it is the
+# priority result. ampere4 is excluded; it hosts the data-scaling run.
+#
+# `rdblearn_tabicl` never loads RT: its predictor is TabICL in fp32 (use_amp=False)
+# against precomputed features. It runs anywhere with a GPU, so it should not queue
+# behind whole ampere nodes it does not need -- point it at the rtx8000 boxes, which
+# sit far emptier, and take a slice rather than the whole machine.
 NPROC=${RT_NPROC:-8}
+GRES=${RT_GRES:-gpu:a100:8}
+CPUS=${RT_CPUS:-128}
+CONSTRAINT=${RT_CONSTRAINT-ampere}
+EXCLUDE=${RT_EXCLUDE-ampere4}
+NODELIST=${RT_NODELIST-}
+EXCLUSIVE=${RT_EXCLUSIVE:-1}
+MEM=${RT_MEM-}
 
 # ---------------------------------------------------------------- submit side
 if [[ -z "${RT_COMMIT:-}" ]]; then
@@ -71,9 +81,18 @@ if [[ -z "${RT_COMMIT:-}" ]]; then
 
     mkdir -p "$LOG_DIR" "$OUT_DIR"
 
-    EXTRA=()
+    EXTRA=(--gres="$GRES" --cpus-per-task="$CPUS")
     [[ -n ${RT_QOS:-} ]] && EXTRA+=(--qos="$RT_QOS")
     [[ -n ${RT_DEPEND:-} ]] && EXTRA+=(--dependency="$RT_DEPEND")
+    [[ -n $CONSTRAINT ]] && EXTRA+=(--constraint="$CONSTRAINT")
+    [[ -n $EXCLUDE ]] && EXTRA+=(--exclude="$EXCLUDE")
+    [[ -n $NODELIST ]] && EXTRA+=(--nodelist="$NODELIST")
+    [[ -n $MEM ]] && EXTRA+=(--mem="$MEM")
+    # Exclusive for the ampere job (DefMemPerGPU then hands it the whole node, and
+    # nothing else could share it anyway); a slice for the rtx8000 job, whose nodes
+    # have other users on them.
+    [[ $EXCLUSIVE == 1 ]] && EXTRA+=(--exclusive)
+    echo "resources: gres=$GRES cpus=$CPUS constraint=${CONSTRAINT:-any} exclude=${EXCLUDE:-none} nproc=$NPROC"
 
     strip=()
     while IFS='=' read -r k _; do strip+=(-u "$k"); done < <(env | grep -E '^(SLURM|SBATCH)_')
