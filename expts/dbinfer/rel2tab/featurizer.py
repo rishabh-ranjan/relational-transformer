@@ -11,7 +11,7 @@ def load_table_info(db: str, pre_dir: str) -> dict:
 
     from huggingface_hub import hf_hub_download
 
-    from rt.data import resolve_repo
+    from rt_tasks import resolve_repo
 
     repo_id, subdir = resolve_repo(pre_dir)
     filename = f"{subdir}/{db}/table_info.json" if subdir else f"{db}/table_info.json"

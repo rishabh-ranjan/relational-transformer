@@ -140,11 +140,6 @@ pixi run --manifest-path "$FEAT_ENV/pyproject.toml" python -c "
 import sys, rdblearn, fastdfs, pandas
 print('env ok: python', sys.version.split()[0], 'pandas', pandas.__version__)"
 
-# featurize.py imports rt.data (for get_tasks / table_info resolution) from the
-# clone, so put the repo's src on the path rather than installing the package into
-# the rdblearn env, which would drag relbench-hf back in.
-export PYTHONPATH="$PWD/src:${PYTHONPATH:-}"
-
 VERIFY=()
 [[ -n ${RT_BUILD_DIR:-} ]] && VERIFY=(--verify-rows "$RT_BUILD_DIR")
 
