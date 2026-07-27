@@ -26,7 +26,7 @@
 # than 1000 -- it queues behind and is preempted first -- but blackwell1 has
 # capacity, and the requeue machinery below covers preemption.
 #SBATCH --qos=il-lo
-#SBATCH --time=1-00:00:00
+#SBATCH --time=21-00:00:00
 #SBATCH --nodes=1
 #SBATCH --nodelist=blackwell1
 #SBATCH --gres=gpu:b200:4
@@ -44,7 +44,6 @@
 #SBATCH --propagate=MEMLOCK
 #SBATCH --requeue
 #SBATCH --open-mode=append
-#SBATCH --signal=B:SIGUSR1@300
 
 set -euo pipefail
 
@@ -129,10 +128,6 @@ echo "clone: $PWD @ $(git rev-parse --short HEAD)"
 # tokens); see expts/slurm-env.sh. Nothing env-related is set per job script.
 source expts/slurm-env.sh
 
-# Where the ranks write their preemption checkpoint; the trap below waits for
-# it. Mirrors rt.train.main: <out_root>/<entity>/<project>/<id>/resume.pt.
-RESUME_PT=/dfs/user/ranjanr/ckpts/rtv2/2026-07-24/$RT_RUN_ID/resume.pt
-
 # Static rendezvous with a per-job port (dynamic c10d has wedged under load).
 export MASTER_ADDR=127.0.0.1
 export MASTER_PORT=$((20000 + SLURM_JOB_ID % 20000))
@@ -164,42 +159,13 @@ pixi run python expts/data-scaling/torchrun_shielded.py \
 TRAIN_PID=$!
 
 # ---- preemption ----
-# One mechanism, and only one: slurm signals every process in the job, the ranks
-# handle it themselves (rt.train.main installs SIGTERM/SIGUSR1 handlers and saves
-# resume.pt at the next step boundary), and torchrun_shielded.py keeps the
-# elastic agent from killing them before they get there. This script's only job
-# is to stay alive until they are done -- if it exited on the signal, slurm would
-# tear the step down mid-save.
-got_signal=0
-on_signal() {
-    got_signal=1
-    echo "=== $(date -Is) caught $1; waiting for the ranks to save ==="
-}
-trap 'on_signal SIGTERM' TERM
-trap 'on_signal SIGUSR1' USR1
-
-resume_before=$( (stat -c %Y "$RESUME_PT" 2>/dev/null) || echo 0 )
-# `wait` returns early every time a trap fires, so keep waiting until the child
-# is actually gone.
-while ! wait "$TRAIN_PID"; do
-    kill -0 "$TRAIN_PID" 2>/dev/null || break
-done
-resume_after=$( (stat -c %Y "$RESUME_PT" 2>/dev/null) || echo 0 )
-
-if (( got_signal )); then
-    if [[ $resume_after -gt $resume_before ]]; then
-        echo "=== resume.pt saved at $(date -Is -d @"$resume_after") ==="
-    else
-        echo "WARNING: resume.pt not updated; will resume from the last periodic save" >&2
-    fi
-    # Preemption requeues the job by itself; a time limit does not, and the two
-    # are indistinguishable from here, so ask either way and ignore the error.
-    # Not after an operator scancel though -- that would resurrect the job.
-    state=$(scontrol show job "$SLURM_JOB_ID" 2>/dev/null | grep -oE "JobState=[A-Z]+" | cut -d= -f2)
-    if [[ $state == CANCELLED ]]; then
-        echo "=== cancelled by operator; not requeueing ==="
-    else
-        echo "=== requeueing job $SLURM_JOB_ID ==="
-        scontrol requeue "$SLURM_JOB_ID" || true
-    fi
-fi
+# Slurm signals every process in the job, so the ranks get SIGTERM and save
+# resume.pt at the next step boundary (rt.train.main installs the handler; the
+# save is fsync'd to a temp file and renamed, so a kill mid-write cannot corrupt
+# the previous checkpoint). torchrun_shielded.py stops the elastic agent from
+# killing the ranks before they get there, and ignoring the signal here stops
+# slurm tearing the step down before they finish. Slurm then requeues the job
+# itself (PreemptMode=REQUEUE + --requeue above) and the fixed run id makes the
+# next attempt resume from that checkpoint.
+trap '' TERM USR1
+wait "$TRAIN_PID"
