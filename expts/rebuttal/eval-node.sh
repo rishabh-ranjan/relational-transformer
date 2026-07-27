@@ -129,8 +129,17 @@ pixi install
 pixi run build-sampler
 
 NPROC=${SLURM_GPUS_ON_NODE:-8}
+# Each checkpoint is evaluated only on tasks of its own kind, via the split
+# task lists (forecast.json partitioned by task type) -- unless the caller
+# passed an explicit --eval.db-task-list, which then applies to both phases.
+declare -A TASK_LIST=(
+    [classification]=expts/rebuttal/forecast-clf.json
+    [regression]=expts/rebuttal/forecast-reg.json
+)
 for task_type in classification regression; do
     id="${RT_RUN_ID}-${RT_MODEL}-${task_type}"
+    list_arg=(--eval.db-task-list "${TASK_LIST[$task_type]}")
+    case " $* " in *" --eval.db-task-list"*) list_arg=() ;; esac
     start=$(date +%s)
     echo "TIMING start model=$RT_MODEL ckpt=$task_type id=$id epoch=$start ($(date -Is))"
     pixi run torchrun \
@@ -139,6 +148,7 @@ for task_type in classification regression; do
         expts/rebuttal/eval.py \
         --model.load-ckpt-path "stanford-star/$RT_MODEL/$task_type" \
         --logger.id "$id" \
+        "${list_arg[@]}" \
         "$@"
     end=$(date +%s)
     echo "TIMING end   model=$RT_MODEL ckpt=$task_type id=$id epoch=$end elapsed_s=$((end - start))"
