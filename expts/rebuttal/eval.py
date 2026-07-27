@@ -48,14 +48,14 @@ def default_config() -> Config:
         train=None,
         eval=EvalConfig(
             splits=["test"],
-            db_task_list="/dfs/user/ranjanr/pre/relbench-preprocessed/db-task-lists/forecast.json",
+            db_task_list="/dfs/user/ranjanr/pre/relbench-preprocessed/db-task-lists/all.json",
             pre_dir="/dfs/user/ranjanr/pre/relbench-preprocessed",
             tokens_per_gpu=2**18,  # 2**19 overflows RT-J eval kernel @ctx=8192
             num_workers=2,
             prefetch_factor=2,
             num_walks=10_000,
             walk_length=20,
-            items_per_task=10_000_000,
+            items_per_task=1_000_000_000,
             ctx_size_list=[8192],
             mmap_populate=True,
             shuffle_seed=0,
