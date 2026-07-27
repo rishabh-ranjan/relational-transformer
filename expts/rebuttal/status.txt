@@ -6,7 +6,7 @@ M1, plurel, inference
 
 M2.1, data scaling, inference
 
-M4, cost + label budget, harness + measure on rel-f1
+M4, cost + label budget, tabulate on rel-f1
 
 R2-W3, random walk, measure rustler vs forward pass at inference
 
