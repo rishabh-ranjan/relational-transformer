@@ -147,19 +147,22 @@ at pipeline time** -- `HandleDummyTable()` is the first step of
 followed by `FillMissingPrimaryKey()` which expands PK tables to cover FK-referenced
 values. Same tables, same rows, different moment. No asymmetry.
 
-They are also cheap for RT and load-bearing rather than dead weight -- each is a
-key-only table, so a node contributes one cell, and without a shared `Item` node two
-`View` rows on the same item have no path between them at all:
+They also cost RT **nothing** in context budget. `rustler/src/pre.rs:592` skips the
+primary-key column when emitting cells, and foreign-key columns are consumed to build
+the p2f adjacency rather than emitted as content -- so a key-only table has no
+emitted columns and its nodes contribute **zero cells**:
 
-| database | materialized nodes | share of db nodes | columns each |
+| database | materialized nodes | share of db nodes | cells contributed |
 |---|---|---|---|
-| `diginetica` | 706,016 (`Orders`, `Session`, `Token`, `User`) | 0.73% | 1 |
-| `retailrocket` | 1,874,368 (`Item`, `Visitor`) | 7.53% | 1 |
-| `stackexchange` | **none** | 0% | -- |
+| `diginetica` | 706,016 (`Orders`, `Session`, `Token`, `User`) | 0.73% | **0** |
+| `retailrocket` | 1,874,368 (`Item`, `Visitor`) | 7.53% | **0** |
+| `stackexchange` | none | 0% | 0 |
 
-`stackexchange` has none of them and is where RT loses most clearly, so context-budget
-dilution from materialized nodes cannot be the explanation. Retailrocket's 7.5% is the
-only case where it is even plausibly material, and `cvr` is RT's *closest* task.
+They are pure routing nodes, and load-bearing at that: without a shared `Item` node,
+two `View` rows on the same item have no path between them at all. The only budget
+they can touch is `bfs_width` -- a materialized node selected at a BFS level occupies
+one of that level's slots while yielding no cells -- which is a traversal
+inefficiency, not context dilution.
 
 So on the two axes where the methods differ, RT has *more* information, not less, and
 still loses. That direction matters: it means the gap cannot be explained away as the
