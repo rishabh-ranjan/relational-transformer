@@ -120,10 +120,19 @@ echo "clone: $PWD @ $(git rev-parse --short HEAD)"
 
 source expts/slurm-env.sh
 
-# The rdblearn env, built once and shared. Serialize creation across array tasks:
-# four of them starting at the same second would otherwise race on the same dir.
+# The rdblearn env, built once and shared across the four databases. Serialize
+# creation: they start within a second of each other and would otherwise race on
+# the same directory.
+#
+# Python 3.12 because rdblearn requires >=3.12,<3.13. (3.11 was wrong -- that pin
+# came from the RDBPFN stack, which needs pydantic 1.x, not from rdblearn.)
+#
+# Completion is tracked with a stamp file rather than "does bin/python exist":
+# a run that dies during `uv pip install` leaves a valid interpreter and no
+# packages, and the next job would then skip the install and fail on the import.
 mkdir -p "$(dirname "$VENV")"
 exec 9>"$(dirname "$VENV")/.rdblearn-venv.lock"; flock 9
+
 # uv is not on the job's PATH: slurm-env.sh exports only $PIXI_HOME/bin, and this
 # stage deliberately does not build the repo's pixi env (which is where the
 # project's uv lives). Install it globally -- node-local, idempotent, and on the
@@ -138,16 +147,22 @@ else
 fi
 echo "uv: ${UV[*]}"
 
-if [[ ! -x $VENV/bin/python ]]; then
-    echo "creating $VENV"
-    "${UV[@]}" venv --python 3.11 "$VENV"
-    # rdblearn pulls fastdfs (the DFS engine) and relbench 1.1.0; the pin on
-    # pandas is fastdfs's -- featuretools/woodwork do not tolerate pandas 3.
+STAMP=$VENV/.rdblearn-installed
+if [[ ! -f $STAMP ]]; then
+    echo "building $VENV"
+    rm -rf "$VENV"
+    "${UV[@]}" venv --python 3.12 "$VENV"
+    # rdblearn pulls fastdfs (the DFS engine) and relbench; pandas is capped
+    # because featuretools/woodwork do not tolerate pandas 3.
     "${UV[@]}" pip install --python "$VENV/bin/python" \
         rdblearn fastdfs duckdb pyarrow "pandas<3" scikit-learn loguru
+    "$VENV/bin/python" -c "import rdblearn, fastdfs"
+    touch "$STAMP"
 fi
 flock -u 9
-"$VENV/bin/python" -c "import rdblearn, fastdfs; print('rdblearn', rdblearn.__version__ if hasattr(rdblearn,'__version__') else 'ok')"
+"$VENV/bin/python" -c "
+import rdblearn, fastdfs, pandas
+print('env ok: pandas', pandas.__version__)"
 
 # featurize.py imports rt.data (for get_tasks / table_info resolution) from the
 # clone, so put the repo's src on the path rather than installing the package into
