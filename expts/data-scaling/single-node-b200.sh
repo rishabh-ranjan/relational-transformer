@@ -159,13 +159,34 @@ pixi run python expts/data-scaling/torchrun_shielded.py \
 TRAIN_PID=$!
 
 # ---- preemption ----
-# Slurm signals every process in the job, so the ranks get SIGTERM and save
-# resume.pt at the next step boundary (rt.train.main installs the handler; the
-# save is fsync'd to a temp file and renamed, so a kill mid-write cannot corrupt
-# the previous checkpoint). torchrun_shielded.py stops the elastic agent from
-# killing the ranks before they get there, and ignoring the signal here stops
-# slurm tearing the step down before they finish. Slurm then requeues the job
-# itself (PreemptMode=REQUEUE + --requeue above) and the fixed run id makes the
-# next attempt resume from that checkpoint.
-trap '' TERM USR1
-wait "$TRAIN_PID"
+# Slurm's SIGTERM reaches this script, not the ranks: the ranks only ever saw it
+# because torchrun's agent forwarded it *while killing them*, which is what
+# torchrun_shielded.py deliberately prevents. So the script tells them itself and
+# then waits -- they save resume.pt at the next step boundary (atomically, see
+# rt.train.main) and exit, and slurm requeues the job (PreemptMode=REQUEUE).
+tell_ranks_to_save() {
+    echo "=== $(date -Is) caught $1; telling the ranks to save ===" >&2
+    local script_base pids p kids args n=0
+    script_base=$(basename "${RT_TRAIN_SCRIPT:-expts/data-scaling/train.py}")
+    # Walk the whole tree: pixi -> shield -> agent -> ranks is four levels deep,
+    # and only the ranks run the train script (the shield's own name contains
+    # "torchrun", which is how it is excluded). Dataloader workers are forked
+    # from the ranks so they match too; SIGUSR1 is harmless there.
+    pids=("$TRAIN_PID")
+    while ((${#pids[@]})); do
+        p=${pids[0]}; pids=("${pids[@]:1}")
+        kids=$(pgrep -P "$p" 2>/dev/null || true)
+        [[ -n $kids ]] && pids+=($kids)
+        args=$(ps -o args= -p "$p" 2>/dev/null) || continue
+        [[ $args == *"$script_base"* && $args != *torchrun* ]] || continue
+        kill -USR1 "$p" 2>/dev/null && n=$((n + 1))
+    done
+    echo "=== signalled $n process(es) ===" >&2
+}
+trap 'tell_ranks_to_save SIGTERM' TERM
+trap 'tell_ranks_to_save SIGUSR1' USR1
+
+# `wait` returns every time a trap fires, so keep waiting for the real exit.
+while ! wait "$TRAIN_PID"; do
+    kill -0 "$TRAIN_PID" 2>/dev/null || break
+done
