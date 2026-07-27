@@ -5,9 +5,14 @@
 #
 # Same submit contract as slurm_preprocess.sh (clean pushed tree, recorded commit,
 # fresh clone per array task), with one difference that forces a separate script:
-# **this stage does not run in the repo's pixi env.** rdblearn pins relbench==1.1.0
-# and pulls autogluon, which conflict with this repo's relbench-hf, so the stage
-# gets its own uv venv -- cached on shared storage and reused across array tasks.
+# **this stage does not run in the repo's pixi env.** rdblearn requires Python
+# >=3.12,<3.13 and pulls relbench 2.1.2, which conflict with this repo's 3.14
+# interpreter and its relbench-hf, so the stage
+# gets its own pixi project, expts/dbinfer/featurize-env/, installed inside the
+# job's clone exactly as the data-scaling jobs install theirs: node-local, unshared,
+# and removed with the clone. Nothing is cached on /dfs -- pixi's package cache is
+# node-local, so a shared target would turn every install into an NFS copy and then
+# charge NFS latency on every import.
 #
 # CPU-only: fastdfs's dfs2sql engine is duckdb, not a GPU workload.
 #
@@ -43,7 +48,6 @@ set -euo pipefail
 LOG_DIR=/dfs/user/$USER/slurm-logs/dbinfer-feat
 PRE_DIR=${RT_PRE_DIR:-/dfs/user/$USER/pre/dbinfer-preprocessed}
 BUILD_DIR=${RT_BUILD_DIR:-}   # optional: published parquets, enables --verify-rows
-VENV=${RT_VENV:-/dfs/user/$USER/venvs/rdblearn}
 export DBB_DATASET_HOME=${DBB_DATASET_HOME:-/dfs/user/$USER/share/dbinfer-raw}
 DBS=(dbinfer-amazon dbinfer-diginetica dbinfer-retailrocket dbinfer-stackexchange)
 
@@ -75,7 +79,6 @@ if [[ -z "${RT_COMMIT:-}" ]]; then
     echo "commit:   $RT_COMMIT"
     echo "pre dir:  $PRE_DIR"
     echo "archives: $DBB_DATASET_HOME"
-    echo "venv:     $VENV"
     echo "dbs:      ${DBS[*]}"
 
     EXTRA=()
@@ -97,7 +100,7 @@ if [[ -z "${RT_COMMIT:-}" ]]; then
         "${EXTRA[@]}" \
         --output="$LOG_DIR/%A_%a.out" \
         --error="$LOG_DIR/%A_%a.out" \
-        --export=RT_REPO="$RT_REPO",RT_COMMIT="$RT_COMMIT",RT_BRANCH="$RT_BRANCH",RT_PRE_DIR="$PRE_DIR",RT_BUILD_DIR="$BUILD_DIR",RT_VENV="$VENV",DBB_DATASET_HOME="$DBB_DATASET_HOME" \
+        --export=RT_REPO="$RT_REPO",RT_COMMIT="$RT_COMMIT",RT_BRANCH="$RT_BRANCH",RT_PRE_DIR="$PRE_DIR",RT_BUILD_DIR="$BUILD_DIR",DBB_DATASET_HOME="$DBB_DATASET_HOME" \
         "$0" "$@"
 fi
 
@@ -120,49 +123,22 @@ echo "clone: $PWD @ $(git rev-parse --short HEAD)"
 
 source expts/slurm-env.sh
 
-# The rdblearn env, built once and shared across the four databases. Serialize
-# creation: they start within a second of each other and would otherwise race on
-# the same directory.
-#
-# Python 3.12 because rdblearn requires >=3.12,<3.13. (3.11 was wrong -- that pin
-# came from the RDBPFN stack, which needs pydantic 1.x, not from rdblearn.)
-#
-# Completion is tracked with a stamp file rather than "does bin/python exist":
-# a run that dies during `uv pip install` leaves a valid interpreter and no
-# packages, and the next job would then skip the install and fail on the import.
-mkdir -p "$(dirname "$VENV")"
-exec 9>"$(dirname "$VENV")/.rdblearn-venv.lock"; flock 9
+# Build the stage's env inside the clone. The manifest pins Python 3.12 (rdblearn
+# requires >=3.12,<3.13) and the two load-bearing caps underneath featuretools:
+# pandas <3 and setuptools <81. Solved into the clone, so it dies with it -- no
+# shared environment, nothing for a half-built env to break.
+FEAT_ENV=expts/dbinfer/featurize-env
+RUN_LOCK=$LOG_DIR/featurize.pixi.lock
+if [[ -f $RUN_LOCK ]]; then
+    echo "reusing pixi.lock from $RUN_LOCK"
+    cp "$RUN_LOCK" "$FEAT_ENV/pixi.lock"
+fi
+pixi install --manifest-path "$FEAT_ENV/pyproject.toml"
+[[ -f $RUN_LOCK ]] || cp "$FEAT_ENV/pixi.lock" "$RUN_LOCK"
 
-# uv is not on the job's PATH: slurm-env.sh exports only $PIXI_HOME/bin, and this
-# stage deliberately does not build the repo's pixi env (which is where the
-# project's uv lives). Install it globally -- node-local, idempotent, and on the
-# PATH slurm-env.sh already set -- falling back to a throwaway `pixi exec` env.
-if ! command -v uv >/dev/null 2>&1; then
-    pixi global install uv >/dev/null 2>&1 || true
-fi
-if command -v uv >/dev/null 2>&1; then
-    UV=(uv)
-else
-    UV=(pixi exec --spec uv -- uv)
-fi
-echo "uv: ${UV[*]}"
-
-STAMP=$VENV/.rdblearn-installed
-if [[ ! -f $STAMP ]]; then
-    echo "building $VENV"
-    rm -rf "$VENV"
-    "${UV[@]}" venv --python 3.12 "$VENV"
-    # rdblearn pulls fastdfs (the DFS engine) and relbench; pandas is capped
-    # because featuretools/woodwork do not tolerate pandas 3.
-    "${UV[@]}" pip install --python "$VENV/bin/python" \
-        rdblearn fastdfs duckdb pyarrow "pandas<3" scikit-learn loguru
-    "$VENV/bin/python" -c "import rdblearn, fastdfs"
-    touch "$STAMP"
-fi
-flock -u 9
-"$VENV/bin/python" -c "
-import rdblearn, fastdfs, pandas
-print('env ok: pandas', pandas.__version__)"
+pixi run --manifest-path "$FEAT_ENV/pyproject.toml" python -c "
+import sys, rdblearn, fastdfs, pandas
+print('env ok: python', sys.version.split()[0], 'pandas', pandas.__version__)"
 
 # featurize.py imports rt.data (for get_tasks / table_info resolution) from the
 # clone, so put the repo's src on the path rather than installing the package into
@@ -172,7 +148,7 @@ export PYTHONPATH="$PWD/src:${PYTHONPATH:-}"
 VERIFY=()
 [[ -n ${RT_BUILD_DIR:-} ]] && VERIFY=(--verify-rows "$RT_BUILD_DIR")
 
-"$VENV/bin/python" expts/dbinfer/featurize.py \
+pixi run --manifest-path "$FEAT_ENV/pyproject.toml" python expts/dbinfer/featurize.py \
     --db "$DB" \
     --pre-dir "$PRE_DIR" \
     "${VERIFY[@]}" \
