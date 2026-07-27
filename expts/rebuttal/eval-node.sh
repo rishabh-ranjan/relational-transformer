@@ -92,7 +92,7 @@ if [[ -z "${RT_RUN_ID:-}" ]]; then
         "${shape[@]}" \
         --output="$LOG_DIR/${RT_RUN_ID}_${RT_MODEL}_%j.out" \
         --error="$LOG_DIR/${RT_RUN_ID}_${RT_MODEL}_%j.out" \
-        --export=RT_REPO="$RT_REPO",RT_COMMIT="$RT_COMMIT",RT_BRANCH="$RT_BRANCH",RT_RUN_ID="$RT_RUN_ID",RT_MODEL="$RT_MODEL" \
+        --export=RT_REPO="$RT_REPO",RT_COMMIT="$RT_COMMIT",RT_BRANCH="$RT_BRANCH",RT_RUN_ID="$RT_RUN_ID",RT_MODEL="$RT_MODEL",RT_CKPTS="${RT_CKPTS:-}" \
         "$0" "$@"
 fi
 
@@ -116,7 +116,12 @@ echo "clone: $PWD @ $(git rev-parse --short HEAD)"
 source expts/slurm-env.sh
 
 export MASTER_ADDR=127.0.0.1
-export MASTER_PORT=$((20000 + SLURM_JOB_ID % 20000))
+# A free port per launch, asked from the kernel. The job-id arithmetic the
+# training scripts use collided here: jobs N and N+1 on one node clash as soon
+# as job N's second phase computes port(N)+1 == port(N+1) (jobs 99539/99540).
+free_port() {
+    python3 -c 'import socket; s=socket.socket(); s.bind(("",0)); print(s.getsockname()[1])'
+}
 
 RUN_LOCK=$LOG_DIR/${RT_RUN_ID}.pixi.lock
 if [[ -f $RUN_LOCK ]]; then
@@ -136,10 +141,14 @@ declare -A TASK_LIST=(
     [classification]=expts/rebuttal/forecast-clf.json
     [regression]=expts/rebuttal/forecast-reg.json
 )
-for task_type in classification regression; do
+# RT_CKPTS overrides which checkpoints run (e.g. RT_CKPTS=regression to redo
+# just one phase).
+for task_type in ${RT_CKPTS:-classification regression}; do
     id="${RT_RUN_ID}-${RT_MODEL}-${task_type}"
     list_arg=(--eval.db-task-list "${TASK_LIST[$task_type]}")
     case " $* " in *" --eval.db-task-list"*) list_arg=() ;; esac
+    MASTER_PORT=$(free_port)
+    export MASTER_PORT
     start=$(date +%s)
     echo "TIMING start model=$RT_MODEL ckpt=$task_type id=$id epoch=$start ($(date -Is))"
     pixi run torchrun \
@@ -152,7 +161,5 @@ for task_type in classification regression; do
         "$@"
     end=$(date +%s)
     echo "TIMING end   model=$RT_MODEL ckpt=$task_type id=$id epoch=$end elapsed_s=$((end - start))"
-    # Fresh port for the second launch; the first one's may linger in TIME_WAIT.
-    MASTER_PORT=$((MASTER_PORT + 1))
 done
 echo "=== $(date -Is) done ==="
