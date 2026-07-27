@@ -124,12 +124,26 @@ source expts/slurm-env.sh
 # four of them starting at the same second would otherwise race on the same dir.
 mkdir -p "$(dirname "$VENV")"
 exec 9>"$(dirname "$VENV")/.rdblearn-venv.lock"; flock 9
+# uv is not on the job's PATH: slurm-env.sh exports only $PIXI_HOME/bin, and this
+# stage deliberately does not build the repo's pixi env (which is where the
+# project's uv lives). Install it globally -- node-local, idempotent, and on the
+# PATH slurm-env.sh already set -- falling back to a throwaway `pixi exec` env.
+if ! command -v uv >/dev/null 2>&1; then
+    pixi global install uv >/dev/null 2>&1 || true
+fi
+if command -v uv >/dev/null 2>&1; then
+    UV=(uv)
+else
+    UV=(pixi exec --spec uv -- uv)
+fi
+echo "uv: ${UV[*]}"
+
 if [[ ! -x $VENV/bin/python ]]; then
     echo "creating $VENV"
-    uv venv --python 3.11 "$VENV"
+    "${UV[@]}" venv --python 3.11 "$VENV"
     # rdblearn pulls fastdfs (the DFS engine) and relbench 1.1.0; the pin on
     # pandas is fastdfs's -- featuretools/woodwork do not tolerate pandas 3.
-    uv pip install --python "$VENV/bin/python" \
+    "${UV[@]}" pip install --python "$VENV/bin/python" \
         rdblearn fastdfs duckdb pyarrow "pandas<3" scikit-learn loguru
 fi
 flock -u 9
