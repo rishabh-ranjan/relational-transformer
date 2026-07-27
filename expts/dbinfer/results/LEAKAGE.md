@@ -70,3 +70,90 @@ The baseline's advantage is real. It is not an artifact to be explained away, an
 the RT-vs-baseline gap has to be explained on the modelling side -- see `AUDIT.md`,
 which locates it in 4DBInfer supplying ~10x less in-context supervision per entity
 than RelBench, which DFS aggregates are indifferent to.
+
+---
+
+# Part 2: does the *data source* differ between the two methods?
+
+A sharper version of the leakage question, since the two methods do not read the same
+files. `rdblearn`/`fastdfs` reads the original 4DBInfer tars via
+`RDBDataset.from_4dbinfer`; RT reads the rustler-preprocessed `stanford-star/dbinfer`
+port. Any drift between those is indistinguishable from leakage in the results.
+
+## The danger: raw parquets carry undeclared columns
+
+The raw files hold columns `metadata.yaml` never declares, and they are exactly the
+incriminating ones:
+
+| table | undeclared columns in the raw parquet |
+|---|---|
+| `Posts` | **`Score`**, `ViewCount`, `AnswerCount`, `CommentCount`, `FavoriteCount`, `ClosedDate`, `Tags`, … (13) |
+| `Users` | **`Reputation`, `UpVotes`, `DownVotes`, `Views`**, `AccountId`, `DisplayName`, … (8) |
+| `Comments` | **`Score`**, `ContentLicense`, `UserDisplayName` |
+
+`stackexchange/upvote`'s label is derived from `Posts.Score`. `churn` is user activity,
+which `Users.UpVotes`/`Reputation` encode almost directly. Had `fastdfs` read the
+parquets as-is, the whole comparison would be void.
+
+## It does not. Verified by running the adapter, not by reading it
+
+`DBInferAdapter.load()` yields exactly the metadata-declared set:
+
+```
+Posts:    AcceptedAnswerId, Body, CreationDate, Id, LastEditorUserId,
+          OwnerUserId, ParentId, PostTypeId, Title
+Users:    AboutMe, CreationDate, Id, Location
+Comments: CreationDate, Id, PostId, Text, UserId
+```
+
+No `Score`, no `Reputation`, no `UpVotes`, no `DownVotes`, no `ViewCount`.
+
+Exhaustively, over all 21 tables of all 3 databases:
+
+| check | result |
+|---|---|
+| undeclared columns reaching the adapter | **0 / 21 tables** |
+| adapter column set vs port column set | **identical, 21 / 21** |
+| row counts, raw vs port | **identical, 21 / 21** |
+| non-key value multisets, adapter vs port | **identical** (one false positive, below) |
+
+Row order and key encoding differ between source and port, so the value check compares
+permutation-invariant multiset signatures rather than positions.
+
+The single flag, `retailrocket/ItemAvailability.available`, was the checker's fault:
+raw stores it as str `'0'/'1'`, the port as float64 `0.0/1.0`, counts identical
+(863,086 / 640,553). Metadata declares the column `float`, so the port's encoding is
+the correct one.
+
+## The asymmetry that does exist runs *against* RT
+
+`rdblearn/estimator.py:298` applies `FilterColumn(drop_dtypes=["text"])`. **Every text
+column is dropped before DFS ever runs.** RT embeds all of them with
+`all-MiniLM-L12-v2` and carries them in context.
+
+| database | text columns rdblearn drops, RT sees |
+|---|---|
+| `stackexchange` | 9 of 48 declared -- `Posts.{Body,Title}`, `Comments.Text`, `PostHistory.{Comment,Text}`, `Users.{AboutMe,Location}`, `Badges.Name`, `Tag.TagName` |
+| `retailrocket` | 1 -- `ItemProperty.value` |
+| `diginetica` | 0 |
+
+The port also adds materialized dimension tables (`User`, `Session`, `Token`, `Orders`,
+`Item`, `Visitor`) that only RT sees -- though note `stackexchange` has none of them,
+and it is where RT loses most clearly, so extra structure is not the explanation
+either.
+
+So on the two axes where the methods differ, RT has *more* information, not less, and
+still loses. That direction matters: it means the gap cannot be explained away as the
+baseline seeing something RT does not.
+
+## Angles still open
+
+* **DFS depth vs walk depth.** `max_depth=2`: rdblearn aggregates 2 hops *exhaustively*;
+  RT reaches further but only along sampled walks. Exhaustive-shallow versus
+  sampled-deep is a real asymmetry in access pattern, not in content, and on
+  low-label-density tasks the exhaustive side is favoured.
+* **Semantic-type hints.** The adapter assigns `category_t`/`float_t`/`datetime_t` from
+  metadata; rustler infers its own. A column read as category by one and numeric by the
+  other carries the same information in a different representation.
+* **`dbinfer-diginetica` still carries its `purchase` task table** in the preprocessed
+  graph, consuming RT's context budget on `ctr` with no analogue on the rdblearn side.
