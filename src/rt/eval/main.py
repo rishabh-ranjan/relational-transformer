@@ -35,6 +35,13 @@ def setup_dist():
     return device, 0, 0, 1, False
 
 
+def _filter_type(tasks, task_type):
+    """Keep only tasks of ``task_type`` ('clf'/'reg'); None keeps everything."""
+    if task_type is None:
+        return tasks
+    return [t for t in tasks if t.task_type == task_type]
+
+
 def main(cfg: Config) -> None:
     ev_cfg = cfg.eval
     assert cfg.logger.wandb_disabled, "standalone eval does not log to wandb"
@@ -65,11 +72,14 @@ def main(cfg: Config) -> None:
             f"loaded {config.get('name', checkpoint)} (embed={embedder}) on {device}"
             + (f" [ddp, world_size={world_size}]" if ddp else "")
         )
-    if global_rank == 0 and config.get("task_type") in ("clf", "reg"):
+    # A clf/reg-selected checkpoint is only evaluated on tasks of its own kind.
+    ckpt_task_type = config.get("task_type")
+    if ckpt_task_type not in ("clf", "reg"):
+        ckpt_task_type = None
+    if global_rank == 0 and ckpt_task_type:
         print(
-            f"warning: this checkpoint was selected/trained for "
-            f"task_type={config['task_type']}; it will be evaluated on "
-            f"both clf and reg tasks",
+            f"checkpoint selected for task_type={ckpt_task_type}; "
+            f"evaluating only {ckpt_task_type} tasks",
             flush=True,
         )
     # The checkpoint's own config drives model construction; cfg.model dims
@@ -124,8 +134,12 @@ def main(cfg: Config) -> None:
             "eval.context_seed only applies to single-config runs"
         )
 
-        val_tasks = get_tasks(ev_cfg.pre_dir, ev_cfg.db_task_list, ("val",))
-        test_tasks = get_tasks(ev_cfg.pre_dir, ev_cfg.db_task_list, ("test",))
+        val_tasks = _filter_type(
+            get_tasks(ev_cfg.pre_dir, ev_cfg.db_task_list, ("val",)), ckpt_task_type
+        )
+        test_tasks = _filter_type(
+            get_tasks(ev_cfg.pre_dir, ev_cfg.db_task_list, ("test",)), ckpt_task_type
+        )
         if not test_tasks:
             raise SystemExit(f"no tasks found in {ev_cfg.pre_dir}")
         run_ensemble(
@@ -142,7 +156,10 @@ def main(cfg: Config) -> None:
         _teardown_dist(ddp)
         return
 
-    tasks = get_tasks(ev_cfg.pre_dir, ev_cfg.db_task_list, tuple(ev_cfg.splits))
+    tasks = _filter_type(
+        get_tasks(ev_cfg.pre_dir, ev_cfg.db_task_list, tuple(ev_cfg.splits)),
+        ckpt_task_type,
+    )
     if not tasks:
         raise SystemExit(f"no tasks found in {ev_cfg.pre_dir}")
     lcs, bw, pl = grid[0]
