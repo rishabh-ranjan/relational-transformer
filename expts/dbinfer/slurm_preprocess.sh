@@ -52,6 +52,9 @@ LOG_DIR=/dfs/user/$USER/slurm-logs/dbinfer-pre
 OUT_DIR=${RT_OUT_DIR:-/dfs/user/$USER/pre/dbinfer-preprocessed}
 # The corrected dbinfer collection (see provenance/dbinfer.py in the relbench repo).
 REPO_ID=${RT_HF_REPO:-stanford-star/dbinfer}
+# Which tables get a synthetic `identifier` column: none|empty|empty_or_time|threshold.
+# Read by rustler pre; travels to the job so the three policies can be compared.
+IDENT_POLICY=${RT_IDENTIFIER_POLICY:-threshold}
 DBS=(dbinfer-diginetica dbinfer-retailrocket dbinfer-stackexchange)
 # RT_ARRAY narrows the array to a subset of DBS by index, for redoing one database
 # without touching the others (e.g. RT_ARRAY=0 for amazon alone).
@@ -84,6 +87,7 @@ if [[ -z "${RT_COMMIT:-}" ]]; then
     echo "out dir: $OUT_DIR"
     echo "dbs:     ${DBS[*]}"
     echo "array:   $ARRAY"
+    echo "ident:   $IDENT_POLICY"
 
     # Deliberately NOT --export=ALL: this shell's env is fish-config'd for the
     # submit node (node-local HOME and PATH) and holds API tokens. Only the RT_*
@@ -101,7 +105,7 @@ if [[ -z "${RT_COMMIT:-}" ]]; then
         "${EXTRA[@]}" \
         --output="$LOG_DIR/%A_%a.out" \
         --error="$LOG_DIR/%A_%a.out" \
-        --export=RT_REPO="$RT_REPO",RT_COMMIT="$RT_COMMIT",RT_BRANCH="$RT_BRANCH",RT_OUT_DIR="$OUT_DIR",RT_HF_REPO="$REPO_ID" \
+        --export=RT_REPO="$RT_REPO",RT_COMMIT="$RT_COMMIT",RT_BRANCH="$RT_BRANCH",RT_OUT_DIR="$OUT_DIR",RT_HF_REPO="$REPO_ID",RT_IDENTIFIER_POLICY="$IDENT_POLICY" \
         "$0" "$@"
 fi
 

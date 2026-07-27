@@ -261,6 +261,37 @@ const IDENTIFIABILITY_MIN: f64 = 0.5;
 /// (`diginetica/QueryResult`) costs the same as any other.
 const IDENTIFIABILITY_SAMPLE: usize = 1_000_000;
 
+/// When to give a database table a synthetic `identifier` column. Set with
+/// `RT_IDENTIFIER_POLICY`; `threshold` is the default and the one the audit
+/// supports. The narrower policies exist so the three can be compared empirically
+/// rather than argued about.
+#[derive(Debug, Clone, Copy, PartialEq)]
+enum IdentifierPolicy {
+    /// Never. Reproduces preprocessing from before any of this existed.
+    None,
+    /// Only when the table emits no cells at all.
+    Empty,
+    /// Also when the only emitted column is the time column.
+    EmptyOrTime,
+    /// When measured identifiability falls below `IDENTIFIABILITY_MIN`.
+    Threshold,
+}
+
+impl IdentifierPolicy {
+    fn from_env() -> Self {
+        match std::env::var("RT_IDENTIFIER_POLICY").as_deref() {
+            Ok("none") => Self::None,
+            Ok("empty") => Self::Empty,
+            Ok("empty_or_time") => Self::EmptyOrTime,
+            Ok("threshold") | Err(_) => Self::Threshold,
+            Ok(other) => panic!(
+                "unknown RT_IDENTIFIER_POLICY {other:?}; \
+                 expected none|empty|empty_or_time|threshold"
+            ),
+        }
+    }
+}
+
 /// Make every table able to appear in a context.
 ///
 /// A cell is only emitted for a column that is neither the primary key nor a foreign
@@ -370,7 +401,18 @@ fn ensure_emittable(
         }
     };
 
-    if identifiability < IDENTIFIABILITY_MIN {
+    let policy = IdentifierPolicy::from_env();
+    let only_time = !emitted.is_empty()
+        && emitted.len() == 1
+        && tcol_name.as_deref() == Some(emitted[0].as_str());
+    let needs_identifier = match policy {
+        IdentifierPolicy::None => false,
+        IdentifierPolicy::Empty => emitted.is_empty(),
+        IdentifierPolicy::EmptyOrTime => emitted.is_empty() || only_time,
+        IdentifierPolicy::Threshold => identifiability < IDENTIFIABILITY_MIN,
+    };
+
+    if needs_identifier {
         let n = df.height();
         let mut hasher = DefaultHasher::new();
         std::hash::Hash::hash(table_name, &mut hasher);
@@ -384,9 +426,9 @@ fn ensure_emittable(
             })
             .collect();
         println!(
-            "  {}: identifiability {:.4} < {} over emitted {:?} -- adding synthetic \
+            "  {}: policy={:?} identifiability={:.4} emitted={:?} -- adding synthetic \
              `{}` ~ N(0,1) so its {} rows can be told apart",
-            table_name, identifiability, IDENTIFIABILITY_MIN, emitted, IDENTIFIER_COL, n
+            table_name, policy, identifiability, emitted, IDENTIFIER_COL, n
         );
         df.with_column(Series::new(IDENTIFIER_COL.into(), vals))
             .expect("failed to add identifier column");
