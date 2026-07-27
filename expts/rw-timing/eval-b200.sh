@@ -1,6 +1,6 @@
 #!/bin/bash
 # Full test-set eval of RT-J on the rel-f1, rel-trial, and rel-event forecast tasks under two walk
-# configs, (num_walks, walk_length) = (10000, 20) and (1000, 10), on 1xB200
+# configs, (num_walks, walk_length) in {10000,1000} x {20,10}, 3 context seeds each, on 1xB200
 # under il-lo. Follows expts/data-scaling/eval-b200.sh: submit from a clean,
 # pushed checkout; the job clones the recorded commit fresh into /tmp and runs
 # rt.cli.eval per (checkpoint kind, walk config). Metrics land in the slurm
@@ -12,7 +12,7 @@
 #SBATCH --partition=il
 #SBATCH --account=infolab
 #SBATCH --qos=il-lo
-#SBATCH --time=12:00:00
+#SBATCH --time=1-00:00:00
 #SBATCH --nodes=1
 #SBATCH --ntasks-per-node=1
 #SBATCH --chdir=/tmp
@@ -100,12 +100,13 @@ declare -A TASK_LIST=(
     [clf]=expts/rw-timing/tasks-clf.json
     [reg]=expts/rw-timing/tasks-reg.json
 )
-for walks_len in "10000 10" "1000 20"; do
+for walks_len in "10000 20" "10000 10" "1000 20" "1000 10"; do
     read -r walks len <<< "$walks_len"
     for kind in clf reg; do
-        id="${RT_RUN_ID}-${kind}-w${walks}-l${len}"
+    for seed in 0 1 2; do
+        id="${RT_RUN_ID}-${kind}-w${walks}-l${len}-s${seed}"
         start=$(date +%s)
-        echo "TIMING start kind=$kind num_walks=$walks walk_length=$len id=$id epoch=$start ($(date -Is))"
+        echo "TIMING start kind=$kind num_walks=$walks walk_length=$len seed=$seed id=$id epoch=$start ($(date -Is))"
         pixi run torchrun \
             --standalone --nnodes=1 --nproc-per-node=1 \
             -m rt.cli.eval \
@@ -115,9 +116,11 @@ for walks_len in "10000 10" "1000 20"; do
             --eval.db-task-list "${TASK_LIST[$kind]}" \
             --eval.num-walks "$walks" \
             --eval.walk-length "$len" \
+            --eval.context-seed "$seed" \
             "$@"
         end=$(date +%s)
-        echo "TIMING end   kind=$kind num_walks=$walks walk_length=$len id=$id epoch=$end elapsed_s=$((end - start))"
+        echo "TIMING end   kind=$kind num_walks=$walks walk_length=$len seed=$seed id=$id epoch=$end elapsed_s=$((end - start))"
+    done
     done
 done
 echo "=== $(date -Is) done ==="
