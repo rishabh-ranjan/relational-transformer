@@ -135,6 +135,19 @@ pixi install
 
 pixi run build-sampler
 
+# TabICL is not in the repo env -- it was a dependency of the old rt-cleanup tree,
+# not this one -- and only the rdblearn_tabicl predictor needs it. Install it into
+# this job's own pixi env rather than adding it to the repo's manifest: the env is
+# node-local and dies with the clone, so nothing else is disturbed and the shared
+# pixi.lock stays valid. torch is untouched (2.13 already satisfies torch>=2.2).
+if [[ $METHOD == rdblearn_tabicl ]]; then
+    if ! command -v uv >/dev/null 2>&1; then
+        pixi global install uv >/dev/null 2>&1 || true
+    fi
+    uv pip install --python .pixi/envs/default/bin/python tabicl
+    pixi run python -c "import tabicl; print('tabicl', tabicl.__version__ if hasattr(tabicl,'__version__') else 'ok')"
+fi
+
 # ctx=8192 with materialized attention masks is O(ctx^2) memory; the flex-attention
 # path is the one that fits, same as the RelBench long-context runs.
 export RT_MATERIALIZE_ATTN_MASKS=0
