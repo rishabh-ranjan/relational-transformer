@@ -100,7 +100,7 @@ declare -A TASK_LIST=(
     [clf]=expts/rw-timing/tasks-clf.json
     [reg]=expts/rw-timing/tasks-reg.json
 )
-for walks_len in "10000 20" "1000 10"; do
+for walks_len in "10000 10" "1000 20"; do
     read -r walks len <<< "$walks_len"
     for kind in clf reg; do
         id="${RT_RUN_ID}-${kind}-w${walks}-l${len}"
