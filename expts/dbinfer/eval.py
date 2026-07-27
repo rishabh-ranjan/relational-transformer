@@ -151,7 +151,7 @@ def build_rdblearn_tabicl(args, device):
         featurizer=PrecomputedFeaturizerConfig(
             pre_dir=args.pre_dir,
             db_task_list=args.db_task_list,
-            eval_splits=["test"],
+            eval_splits=[args.split],
             features_subdir=FEATURES_SUBDIR,
         ),
         predictor=TabICLBatchedPredictorConfig(
@@ -262,6 +262,9 @@ def main() -> None:
         "--db-task-list", default=str(Path(__file__).resolve().parent / "tasks.json")
     )
     ap.add_argument("--tasks", nargs="+", default=None, help="db or db/table filter")
+    # val is what a context-config grid search scores against; test is the
+    # deliverable. Both go through the identical path -- only the split changes.
+    ap.add_argument("--split", default="test", choices=["val", "test"])
     ap.add_argument("--ctx-sizes", nargs="+", type=int, default=CTX_SIZES)
     # 1024-row test subsample, identical for both methods: the sampler picks it
     # from (task, items_per_task, shuffle_seed) alone, nothing model-dependent.
@@ -312,7 +315,7 @@ def main() -> None:
         torch.cuda.set_device(args.local_rank)
     device = f"cuda:{args.local_rank}" if torch.cuda.is_available() else "cpu"
 
-    all_tasks = get_tasks(args.pre_dir, args.db_task_list, ["test"])
+    all_tasks = get_tasks(args.pre_dir, args.db_task_list, [args.split])
     sel = set(args.tasks) if args.tasks else None
     tasks = [
         t
@@ -334,6 +337,7 @@ def main() -> None:
 
     config = {
         "method": args.method,
+        "split": args.split,
         "ctx_sizes": ctx_sizes,
         "items_per_task": args.items_per_task,
         "local_ctx_size": args.local_ctx_size,
