@@ -27,19 +27,21 @@ Job 100046 (`eval-b200.sh`): rt.cli.eval at default batch size
 (tokens_per_gpu=2^18, bs=32 @ ctx 8192), 4 walk configs x 3 context seeds
 (0, 1, 2); RT-J classification checkpoint on the clf tasks, regression
 checkpoint on the reg tasks. All rel-f1, rel-trial, and rel-event forecast
-tasks, test split. Cells are mean ± std over the 3 seeds.
+tasks, test split. Cells are mean ± std over the 3 seeds. Bold marks best-per-row: a
+column is best when its mean ± std interval reaches every other column's
+mean -/+ std bound (so ties are shared).
 
 | task | metric | (10000, 20) | (10000, 10) | (1000, 20) | (1000, 10) |
 |---|---|---|---|---|---|
-| rel-f1/driver-dnf | roc_auc ^ | 0.8137 ± 0.0041 | 0.8148 ± 0.0033 | 0.8129 ± 0.0041 | 0.8136 ± 0.0027 |
-| rel-f1/driver-top3 | roc_auc ^ | 0.9103 ± 0.0007 | 0.9084 ± 0.0034 | 0.9071 ± 0.0034 | 0.9022 ± 0.0035 |
-| rel-event/user-ignore | roc_auc ^ | 0.8331 ± 0.0030 | 0.8292 ± 0.0033 | 0.8280 ± 0.0007 | 0.8305 ± 0.0050 |
-| rel-event/user-repeat | roc_auc ^ | 0.7433 ± 0.0174 | 0.7346 ± 0.0116 | 0.7380 ± 0.0080 | 0.7339 ± 0.0138 |
-| rel-trial/study-outcome | roc_auc ^ | 0.6195 ± 0.0152 | 0.5664 ± 0.0079 | 0.5395 ± 0.0074 | 0.5162 ± 0.0101 |
-| rel-f1/driver-position | nmae v | 0.4143 ± 0.0006 | 0.4208 ± 0.0007 | 0.4239 ± 0.0011 | 0.4280 ± 0.0012 |
-| rel-event/user-attendance | nmae v | 0.3568 ± 0.0009 | 0.3578 ± 0.0013 | 0.3584 ± 0.0011 | 0.3587 ± 0.0017 |
-| rel-trial/site-success | nmae v | 0.3142 ± 0.0009 | 0.3127 ± 0.0005 | 0.3562 ± 0.0001 | 0.3866 ± 0.0015 |
-| rel-trial/study-adverse | nmae v | 0.1550 ± 0.0006 | 0.1594 ± 0.0004 | 0.1627 ± 0.0008 | 0.1683 ± 0.0002 |
+| rel-f1/driver-dnf | roc_auc ^ | **0.8137 ± 0.0041** | **0.8148 ± 0.0033** | **0.8129 ± 0.0041** | **0.8136 ± 0.0027** |
+| rel-f1/driver-top3 | roc_auc ^ | **0.9103 ± 0.0007** | **0.9084 ± 0.0034** | **0.9071 ± 0.0034** | 0.9022 ± 0.0035 |
+| rel-event/user-ignore | roc_auc ^ | **0.8331 ± 0.0030** | **0.8292 ± 0.0033** | 0.8280 ± 0.0007 | **0.8305 ± 0.0050** |
+| rel-event/user-repeat | roc_auc ^ | **0.7433 ± 0.0174** | **0.7346 ± 0.0116** | **0.7380 ± 0.0080** | **0.7339 ± 0.0138** |
+| rel-trial/study-outcome | roc_auc ^ | **0.6195 ± 0.0152** | 0.5664 ± 0.0079 | 0.5395 ± 0.0074 | 0.5162 ± 0.0101 |
+| rel-f1/driver-position | nmae v | **0.4143 ± 0.0006** | 0.4208 ± 0.0007 | 0.4239 ± 0.0011 | 0.4280 ± 0.0012 |
+| rel-event/user-attendance | nmae v | **0.3568 ± 0.0009** | **0.3578 ± 0.0013** | **0.3584 ± 0.0011** | **0.3587 ± 0.0017** |
+| rel-trial/site-success | nmae v | 0.3142 ± 0.0009 | **0.3127 ± 0.0005** | 0.3562 ± 0.0001 | 0.3866 ± 0.0015 |
+| rel-trial/study-adverse | nmae v | **0.1550 ± 0.0006** | 0.1594 ± 0.0004 | 0.1627 ± 0.0008 | 0.1683 ± 0.0002 |
 
 rel-f1 and rel-event are essentially insensitive to cheaper walk configs
 (differences within ~1-2 std). rel-trial degrades monotonically as walks
