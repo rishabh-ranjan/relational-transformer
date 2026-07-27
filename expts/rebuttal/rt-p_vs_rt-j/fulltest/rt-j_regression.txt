@@ -1,0 +1,13 @@
+# rt-j regression ckpt (stanford-star/rt-j/regression), full relbench test set,
+# type-matched task list (forecast-reg.json), scored by relbench.leaderboard, 2xB200, slurm job 100058, elapsed_s=14459
+# task	metric	value	n	align
+rel-amazon/item-ltv	nmae	0.0846	178334	|dy|<=2.3e+02
+rel-amazon/user-ltv	nmae	0.2867	351885	|dy|<=1.9e+01
+rel-avito/ad-ctr	nmae	0.4586	1816	|dy|<=1.3e-03
+rel-event/user-attendance	nmae	0.3578	1958	|dy|<=1.4e-02
+rel-f1/driver-position	nmae	0.4137	760	|dy|<=2.7e-02
+rel-hm/item-sales	nmae	0.1057	105542	|dy|<=9.9e-02
+rel-stack/post-votes	nmae	0.1417	160903	|dy|<=6.2e-02
+rel-trial/site-success	nmae	0.3141	22617	|dy|<=1.2e-03
+rel-trial/study-adverse	nmae	0.1543	3098	|dy|<=6.9e+00
+mean	nmae	0.2575	-	-

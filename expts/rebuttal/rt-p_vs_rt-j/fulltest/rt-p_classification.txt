@@ -1,0 +1,16 @@
+# rt-p classification ckpt (stanford-star/rt-p/classification), full relbench test set,
+# type-matched task list (forecast-clf.json), scored by relbench.leaderboard, 2xB200, slurm job 99540, elapsed_s=19362
+# task	metric	value	n	align
+rel-amazon/item-churn	roc_auc	0.7051	166842	cls=1.000
+rel-amazon/user-churn	roc_auc	0.6478	351885	cls=1.000
+rel-avito/user-clicks	roc_auc	0.5102	47996	cls=1.000
+rel-avito/user-visits	roc_auc	0.5887	36129	cls=1.000
+rel-event/user-ignore	roc_auc	0.8069	1958	cls=1.000
+rel-event/user-repeat	roc_auc	0.7670	246	cls=1.000
+rel-f1/driver-dnf	roc_auc	0.7968	702	cls=1.000
+rel-f1/driver-top3	roc_auc	0.8741	726	cls=1.000
+rel-hm/user-churn	roc_auc	0.6149	74575	cls=1.000
+rel-stack/user-badge	roc_auc	0.8300	255360	cls=1.000
+rel-stack/user-engagement	roc_auc	0.8700	88137	cls=1.000
+rel-trial/study-outcome	roc_auc	0.6417	825	cls=1.000
+mean	roc_auc	0.7211	-	-
