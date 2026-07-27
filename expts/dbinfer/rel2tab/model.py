@@ -4,6 +4,8 @@ import torch
 from torch import nn
 from tqdm.auto import tqdm
 
+from rt.model.net import SEM_TYPE_BOOLEAN
+
 
 def _fmt(secs):
     m, s = divmod(int(secs), 60)
@@ -17,7 +19,7 @@ class Rel2TabModel(nn.Module):
         self.predictor = predictor
         self.featurize_batch_size = featurize_batch_size
 
-    def _extract_task_nodes(self, batch, val_key):
+    def _extract_task_nodes(self, batch):
         """Find unique task nodes in the batch (vectorized on GPU).
 
         Returns (item_idxs, positions, node_idxs, labels, is_target, f2ps) — all 1D
@@ -55,7 +57,17 @@ class Rel2TabModel(nn.Module):
         )
         lc_b, lc_s = is_label_cell.nonzero(as_tuple=True)
         lc_node = node_idxs[lc_b, lc_s]
-        lc_label = batch[f"{val_key}_values"][lc_b, lc_s, 0]
+        # Read each label from the channel its own semantic type names, exactly as
+        # Evaluator does for the ground truth it scores against: boolean-typed
+        # targets live in boolean_values, everything else in number_values. The
+        # stored value is identical either way, so this is a per-cell lookup and
+        # not a mode -- which is why the old `bool_as_num` flag is gone.
+        vals = torch.where(
+            (batch["sem_types"] == SEM_TYPE_BOOLEAN).unsqueeze(-1),
+            batch["boolean_values"],
+            batch["number_values"],
+        ).squeeze(-1)
+        lc_label = vals[lc_b, lc_s]
         lc_is_target = lc_node == target_node_per_b[lc_b]
         lc_f2p = batch["f2p_nbr_idxs"][lc_b, lc_s]
 
@@ -140,8 +152,11 @@ class Rel2TabModel(nn.Module):
 
         return preds
 
-    def predict(self, batch, eval_ctx_sizes, device, task, bool_as_num):
+    def predict(self, batch, eval_ctx_sizes, device, task):
         """Eval-mode predictions at multiple context sizes.
+
+        Signature matches ``rt.model.net.Net.predict`` -- Evaluator calls both
+        through the same line and cannot tell them apart.
 
         Returns (bs,) per ctx. Rustler lays real rows at indices 0..true_bs-1
         and leaves the rest as phantoms (batch_mask=False), so we fill only
@@ -151,12 +166,11 @@ class Rel2TabModel(nn.Module):
         bs = batch["is_targets"].size(0)
         true_bs = int(batch["is_targets"].any(dim=1).sum().item())
         task_type = task.task_type
-        val_key = "boolean" if task_type == "clf" and not bool_as_num else "number"
 
         # 1. Extract task nodes
         tic = time.time()
         item_idxs, positions, node_idxs, labels, is_target, f2ps = (
-            self._extract_task_nodes(batch, val_key)
+            self._extract_task_nodes(batch)
         )
         N = item_idxs.shape[0]
         t_extract = time.time() - tic

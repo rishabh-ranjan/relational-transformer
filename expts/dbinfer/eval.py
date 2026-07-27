@@ -20,8 +20,7 @@ which that script cannot do:
 3. **Per-(method, task) JSON output**, written atomically and skipped when
    present, so slurm array tasks can shard the task list and resume freely.
 
-Two methods share one ``.predict(batch, ctx_sizes, device, task, bool_as_num)``
-interface:
+Two methods share one ``.predict(batch, ctx_sizes, device, task)`` interface:
 
 * ``rt`` -- RT-J, routed through the clf checkpoint for clf-type tasks and the reg
   checkpoint for reg-type ones.
