@@ -34,8 +34,8 @@ class TimingConfig:
     split: str = "test"
     # context (token) size fed to the model
     ctx_size: int = 8192
-    # rows per batch; eval CLI default is tokens_per_gpu // ctx_size = 2**18 // 8192
-    batch_size: int = 32
+    # rows per batch
+    batch_size: int = 1
     # rustler context-construction knobs (eval defaults)
     local_ctx_size: int = 256
     bfs_width: int = 32
