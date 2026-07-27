@@ -137,10 +137,29 @@ column is dropped before DFS ever runs.** RT embeds all of them with
 | `retailrocket` | 1 -- `ItemProperty.value` |
 | `diginetica` | 0 |
 
-The port also adds materialized dimension tables (`User`, `Session`, `Token`, `Orders`,
-`Item`, `Visitor`) that only RT sees -- though note `stackexchange` has none of them,
-and it is where RT loses most clearly, so extra structure is not the explanation
-either.
+### Materialized dimension tables are *not* an RT-only artifact
+
+Several 4DBInfer foreign keys point at tables that do not exist in the raw data
+(`View.visitorid` with no `Visitor` table, and so on), so any valid relational schema
+has to materialize them. The port does it at port time; **rdblearn does the same thing
+at pipeline time** -- `HandleDummyTable()` is the first step of
+`rdblearn/estimator.py`, "Create dummy tables for missing primary key references",
+followed by `FillMissingPrimaryKey()` which expands PK tables to cover FK-referenced
+values. Same tables, same rows, different moment. No asymmetry.
+
+They are also cheap for RT and load-bearing rather than dead weight -- each is a
+key-only table, so a node contributes one cell, and without a shared `Item` node two
+`View` rows on the same item have no path between them at all:
+
+| database | materialized nodes | share of db nodes | columns each |
+|---|---|---|---|
+| `diginetica` | 706,016 (`Orders`, `Session`, `Token`, `User`) | 0.73% | 1 |
+| `retailrocket` | 1,874,368 (`Item`, `Visitor`) | 7.53% | 1 |
+| `stackexchange` | **none** | 0% | -- |
+
+`stackexchange` has none of them and is where RT loses most clearly, so context-budget
+dilution from materialized nodes cannot be the explanation. Retailrocket's 7.5% is the
+only case where it is even plausibly material, and `cvr` is RT's *closest* task.
 
 So on the two axes where the methods differ, RT has *more* information, not less, and
 still loses. That direction matters: it means the gap cannot be explained away as the
