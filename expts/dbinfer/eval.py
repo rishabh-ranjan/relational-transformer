@@ -65,39 +65,7 @@ torch.multiprocessing.set_sharing_strategy("file_system")
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))  # local rel2tab/
 
-from rt_tasks import get_tasks  # noqa: E402  (vendored; see _check_task_resolution)
-
-
-def _check_task_resolution(pre_dir, db_task_list, splits) -> None:
-    """Fail if the vendored task resolution has drifted from the repo's.
-
-    Stage 2 cannot import ``rt`` (its env has no torch or rustler), so
-    ``rt_tasks`` is a copy of ``rt.data.tasks``. This process *can* import both, so
-    it is the one place the copy can be checked -- and it must be, or the featurizer
-    could silently iterate a different task set than the eval scores.
-    """
-    from rt.data import get_tasks as upstream
-
-    mine = get_tasks(pre_dir, db_task_list, splits)
-    theirs = upstream(pre_dir, db_task_list, splits)
-    key = lambda ts: sorted(  # noqa: E731
-        (
-            t.db_name,
-            t.table_name,
-            t.target_column,
-            t.task_type,
-            t.split,
-            t.leakage_columns,
-        )
-        for t in ts
-    )
-    if key(mine) != key(theirs):
-        raise RuntimeError(
-            "expts/dbinfer/rt_tasks.py has drifted from rt.data.tasks:\n"
-            f"  vendored: {key(mine)}\n"
-            f"  upstream: {key(theirs)}\n"
-            "re-copy src/rt/data/tasks.py into expts/dbinfer/rt_tasks.py"
-        )
+from rt.data import get_tasks  # noqa: E402
 
 
 # The rel2tab baseline is featurized against these text embeddings, and RT-J's own
@@ -329,7 +297,6 @@ def main() -> None:
         torch.cuda.set_device(args.local_rank)
     device = f"cuda:{args.local_rank}" if torch.cuda.is_available() else "cpu"
 
-    _check_task_resolution(args.pre_dir, args.db_task_list, ["test"])
     all_tasks = get_tasks(args.pre_dir, args.db_task_list, ["test"])
     sel = set(args.tasks) if args.tasks else None
     tasks = [

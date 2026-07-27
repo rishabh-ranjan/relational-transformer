@@ -46,6 +46,8 @@ MAX_DEPTH = 2
 MAX_TRAIN_SAMPLES = 0
 FEATURES_SUBDIR = "rdblearn_features"
 SPLITS = ("train", "val", "test")
+# Same mapping rt.data.tasks uses; only node-level clf/reg tasks are modelled.
+TASK_TYPE = {"binary_classification": "clf", "regression": "reg"}
 
 
 def verify_rows(build_dir: Path, db: str, table: str, split_labels: dict) -> None:
@@ -134,15 +136,32 @@ def main() -> None:
 
     from rel2tab.featurizers import RDBLearnFeaturizer
 
+    # clf/reg per task, straight out of the preprocessed meta.json -- the featurizer
+    # only needs it to pick a base estimator. Reading three fields here is what lets
+    # this stage import nothing from `rt`, whose package init pulls torch and the
+    # compiled rustler extension that its env deliberately lacks.
+    meta = json.loads((Path(pre_dir).expanduser() / args.db / "meta.json").read_text())
+    by_name = {t["name"]: t for t in meta.get("tasks", [])}
+    task_types = []
+    for t in pending:
+        if t not in by_name:
+            sys.exit(f"{args.db}: task {t!r} not in meta.json ({sorted(by_name)})")
+        tt = TASK_TYPE.get(by_name[t].get("task_type"))
+        if tt is None:
+            sys.exit(
+                f"{args.db}/{t}: unmodelled task_type {by_name[t].get('task_type')!r}"
+            )
+        task_types.append((t, tt))
+    print(f"task types: {task_types}", flush=True)
+
     # The featurizer keys its cache by (db, table) and precomputes everything at
     # init, so one construction covers this db's whole task list.
     featurizer = RDBLearnFeaturizer(
         pre_dir=pre_dir,
-        db_task_list=[[args.db, t] for t in pending],
-        eval_splits=list(SPLITS),
+        db_name=args.db,
+        tasks=task_types,
         max_depth=args.max_depth,
         max_train_samples=MAX_TRAIN_SAMPLES,
-        db=None,
     )
 
     if args.verify_rows:

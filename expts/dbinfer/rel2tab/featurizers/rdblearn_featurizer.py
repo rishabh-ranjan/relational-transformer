@@ -17,22 +17,27 @@ class RDBLearnFeaturizerConfig:
     upstream 4DBInfer archives that ``dbinfer_bench`` downloads), not
     ``from_relbench``. Set ``DBB_DATASET_HOME`` to a directory of extracted
     archives to avoid re-downloading them.
+
+    ``tasks`` is an explicit ``[(table_name, task_type), ...]``. The upstream version
+    took a ``db_task_list`` and re-resolved it through ``rt.data.get_tasks``, which
+    meant importing ``rt`` -- and this stage runs in an env with no torch and no
+    compiled rustler, precisely because rdblearn's dependencies conflict with the
+    repo's. The caller already knows the task list, so it passes it in.
     """
 
     pre_dir: str
-    db_task_list: list[tuple[str, str]] | str
-    eval_splits: list[str]
+    db_name: str
+    tasks: list[tuple[str, str]]
     max_depth: int
     max_train_samples: int
 
     def build(self, device):
         return RDBLearnFeaturizer(
             pre_dir=self.pre_dir,
-            db_task_list=self.db_task_list,
-            eval_splits=self.eval_splits,
+            db_name=self.db_name,
+            tasks=self.tasks,
             max_depth=self.max_depth,
             max_train_samples=self.max_train_samples,
-            db=None,
         )
 
 
@@ -44,9 +49,7 @@ class RDBLearnFeaturizer(Featurizer):
     by node_idx.
     """
 
-    def __init__(
-        self, pre_dir, db_task_list, eval_splits, max_depth, max_train_samples, db
-    ):
+    def __init__(self, pre_dir, db_name, tasks, max_depth, max_train_samples):
         import time
 
         import fastdfs
@@ -54,7 +57,6 @@ class RDBLearnFeaturizer(Featurizer):
         from rdblearn.config import RDBLearnConfig
         from rdblearn.datasets import RDBDataset
         from rdblearn.estimator import RDBLearnEstimator
-        from rt_tasks import get_tasks
         from sklearn.impute import SimpleImputer
         from sklearn.linear_model import LogisticRegression, Ridge
         from sklearn.pipeline import make_pipeline
@@ -86,18 +88,12 @@ class RDBLearnFeaturizer(Featurizer):
             predict_batch_size=5000,
         )
 
-        all_tasks = get_tasks(pre_dir, db_task_list, tuple(eval_splits))
-        if db is not None:
-            all_tasks = [t for t in all_tasks if db in t.db_name]
-
-        # Deduplicate eval tasks by (db_name, table_name).
-        seen: set[tuple[str, str]] = set()
-        for task in all_tasks:
-            key = (task.db_name, task.table_name)
-            if key in seen:
+        seen: set[str] = set()
+        for table_name, task_type in tasks:
+            if table_name in seen:
                 continue
-            seen.add(key)
-            db_name, table_name = key
+            seen.add(table_name)
+            key = (db_name, table_name)
 
             tic = time.time()
 
@@ -167,7 +163,7 @@ class RDBLearnFeaturizer(Featurizer):
             y = combined_df[target_col]
 
             # Fit estimator on all rows and extract DFS features.
-            base_model = LogisticRegression() if task.task_type == "clf" else Ridge()
+            base_model = LogisticRegression() if task_type == "clf" else Ridge()
             estimator = RDBLearnEstimator(
                 base_estimator=make_pipeline(
                     SimpleImputer(strategy="constant", fill_value=0),
