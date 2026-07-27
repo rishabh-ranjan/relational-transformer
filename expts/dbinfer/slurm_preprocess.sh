@@ -28,6 +28,11 @@
 # stays off the ampere nodes entirely.
 #SBATCH --qos=il-lo
 #SBATCH --exclude=ampere[1-9],blackwell1,hyperion[1,3]
+# 48G picks the rtx8000 nodes over the 12G 2080tis. The MiniLM pass is the memory
+# peak, and amazon's 21.2M texts include long review bodies: at batch_size 1024 it
+# OOMed on a 10.58 GiB 2080ti. Excluding the amperes (so the eval owns them) leaves
+# only these two GPU sizes, so the larger one has to be asked for explicitly.
+#SBATCH --constraint=48G
 #SBATCH --account=infolab
 #SBATCH --time=2-00:00:00
 #SBATCH --nodes=1
@@ -170,9 +175,13 @@ for d in "$DS_DIR"/tasks/*/; do
     fi
 done
 
+# Smaller embedding batches than the 1024 default: the peak is text length, not
+# row count, and amazon's reviews are long. 256 fits comfortably on a 48G card and
+# costs little -- MiniLM saturates neither GPU at this size.
 pixi run python -m rt.cli.preprocess one \
     --dataset "$DS_DIR" \
     --out-dir "$OUT_DIR" \
+    --batch-size "${RT_EMBED_BATCH:-256}" \
     "$@"
 
 echo "=== $(date -Is) $DB done ==="
