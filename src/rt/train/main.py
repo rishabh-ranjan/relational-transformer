@@ -443,19 +443,33 @@ def main(cfg: Config) -> None:
         # only (never distributed), used solely to resume a preempted run.
         if not is_main:
             return
-        tmp = out_dir / "resume.pt.tmp"
-        torch.save(
-            {
-                "model": raw_net.state_dict(),
-                "optimizers": [o.state_dict() for o in opts],
-                "schedulers": [s.state_dict() for s in scheds],
-                "swa": swa.state_dict(),
-                "step": step,
-                "best": best,
-            },
-            tmp,
-        )
-        os.replace(tmp, resume_path)  # atomic
+        # Write beside the target and rename: rename(2) is atomic, so a reader
+        # (or the next attempt) sees either the previous checkpoint or the new
+        # one, never a half-written file -- being SIGKILLed mid-write only
+        # leaves a stale .tmp behind. The pid in the name keeps two writers from
+        # interleaving into the same temporary if a run is ever double-started.
+        # fsync before the rename so the bytes are on the server, not just in
+        # the client's cache, when the directory entry flips.
+        tmp = out_dir / f"resume.pt.{os.getpid()}.tmp"
+        try:
+            with open(tmp, "wb") as f:
+                torch.save(
+                    {
+                        "model": raw_net.state_dict(),
+                        "optimizers": [o.state_dict() for o in opts],
+                        "schedulers": [s.state_dict() for s in scheds],
+                        "swa": swa.state_dict(),
+                        "step": step,
+                        "best": best,
+                    },
+                    f,
+                )
+                f.flush()
+                os.fsync(f.fileno())
+            os.replace(tmp, resume_path)  # atomic
+        except BaseException:
+            tmp.unlink(missing_ok=True)
+            raise
 
     def checkpoint(step):
         if not is_main:
