@@ -68,6 +68,18 @@ The 1024-row test subsample is part of the same guarantee: the sampler picks it
 from `(task, items_per_task, shuffle_seed)` alone, so both methods score the same
 1024 rows.
 
+**`world_size` is part of that contract too.** `Evaluator` runs a whole number of
+passes of `world_size * eval_bs` rows and drops the remainder, so a job scores
+`floor(items / (world_size * eval_bs)) * world_size * eval_bs` rows -- not `items`.
+At `eval_bs=32`, 1024 items over 8 GPUs scores all 1024, but over 5 GPUs scores only
+960. Nothing else in the config differs, so the two methods would be scored on
+different row sets with every seed matching. `reduce.py`'s `check_scored_rows` fails
+the run when `n` differs across methods; keep `world_size * eval_bs` a divisor of
+`items_per_task`, and identical across methods when it is not.
+
+That is why the baseline runs one job per task at 4 GPUs rather than one job at 5:
+4 x 32 divides 1024 and 5 x 32 does not.
+
 ## Choices worth knowing about
 
 **Untuned context config.** The RelBench campaign selected

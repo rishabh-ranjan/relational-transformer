@@ -26,6 +26,7 @@ from __future__ import annotations
 
 import argparse
 import json
+from collections import defaultdict
 from pathlib import Path
 
 import numpy as np
@@ -106,6 +107,38 @@ def table(
     for m in order:
         lines.append(f"  {m}: n={aggs[m]['n']}  {', '.join(aggs[m]['tasks'])}")
     return "\n".join(lines) + "\n"
+
+
+def check_scored_rows(per_method: dict) -> list:
+    """Every method must have scored the *same number of rows* for a given task.
+
+    ``Evaluator`` runs a whole number of passes of ``world_size * eval_bs`` rows and
+    drops the remainder, so ``n`` is ``floor(items / (world_size * eval_bs))`` rows,
+    not ``items``. Two methods run at different ``world_size`` therefore score
+    different-sized prefixes of the same subsample -- 1024 items at ws=8 scores all
+    1024, at ws=5 only 960 -- and their metrics are then computed over different row
+    sets while every seed and config field still matches.
+
+    ``mean_labels`` does catch this (a shorter prefix has a different mean), but only
+    as a puzzling fifth-decimal drift. Say what it actually is.
+    """
+    problems = []
+    by_task = defaultdict(dict)
+    for method, recs in per_method.items():
+        for r in recs:
+            for ctx, e in r["per_ctx"].items():
+                by_task[(r["task"], ctx)][method] = (e["n"], r["config"]["world_size"])
+    for (task, ctx), got in sorted(by_task.items()):
+        if len({n for n, _ in got.values()}) > 1:
+            problems.append(
+                f"{task} ctx={ctx}: methods scored different row counts ("
+                + ", ".join(
+                    f"{m}: n={n} at world_size={ws}" for m, (n, ws) in got.items()
+                )
+                + ") -- world_size * eval_bs must divide items_per_task, and must "
+                "match across methods"
+            )
+    return problems
 
 
 def check_labels(per_method: dict, ctxs: list) -> list:
@@ -207,14 +240,19 @@ def main() -> int:
         Path(args.tsv).expanduser().write_text("\n".join(rows) + "\n")
         print(f"wrote {args.tsv}")
 
-    problems = check_labels(per_method, ctxs)
+    # Row counts first: a mismatch there explains any mean_labels drift, so
+    # reporting it second would bury the cause under the symptom.
+    problems = check_scored_rows(per_method) + check_labels(per_method, ctxs)
     if problems:
         print("\nFAIRNESS CHECK FAILED")
         for p in problems:
             print(f"  - {p}")
         return 1
     if len(per_method) > 1:
-        print("\nfairness check: mean_labels agree across all methods at every ctx")
+        print(
+            "\nfairness check: same rows scored, and mean_labels agree, "
+            "across all methods at every ctx"
+        )
     return 0
 
 
