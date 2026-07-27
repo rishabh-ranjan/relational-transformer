@@ -1,6 +1,4 @@
 [
-  ["dbinfer-amazon", "churn"],
-  ["dbinfer-amazon", "rating"],
   ["dbinfer-diginetica", "ctr"],
   ["dbinfer-retailrocket", "cvr"],
   ["dbinfer-stackexchange", "churn"],

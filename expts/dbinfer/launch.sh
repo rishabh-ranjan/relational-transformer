@@ -36,7 +36,7 @@ if [[ -n "$(git status --porcelain)" ]]; then
     exit 1
 fi
 
-NDBS=4  # keep in step with DBS in the stage scripts
+NDBS=3  # keep in step with DBS in the stage scripts
 
 echo "=== stage 1: preprocess"
 PRE_ARGS=(); [[ -n ${RT_PRE_ARGS:-} ]] && read -r -a PRE_ARGS <<<"$RT_PRE_ARGS"

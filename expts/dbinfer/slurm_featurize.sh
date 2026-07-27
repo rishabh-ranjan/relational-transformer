@@ -49,7 +49,7 @@ LOG_DIR=/dfs/user/$USER/slurm-logs/dbinfer-feat
 PRE_DIR=${RT_PRE_DIR:-/dfs/user/$USER/pre/dbinfer-preprocessed}
 BUILD_DIR=${RT_BUILD_DIR:-}   # optional: published parquets, enables --verify-rows
 export DBB_DATASET_HOME=${DBB_DATASET_HOME:-/dfs/user/$USER/share/dbinfer-raw}
-DBS=(dbinfer-amazon dbinfer-diginetica dbinfer-retailrocket dbinfer-stackexchange)
+DBS=(dbinfer-diginetica dbinfer-retailrocket dbinfer-stackexchange)
 
 # ---------------------------------------------------------------- submit side
 if [[ -z "${RT_COMMIT:-}" ]]; then

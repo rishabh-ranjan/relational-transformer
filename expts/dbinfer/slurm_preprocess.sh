@@ -52,7 +52,7 @@ LOG_DIR=/dfs/user/$USER/slurm-logs/dbinfer-pre
 OUT_DIR=${RT_OUT_DIR:-/dfs/user/$USER/pre/dbinfer-preprocessed}
 # The corrected dbinfer collection (see provenance/dbinfer.py in the relbench repo).
 REPO_ID=${RT_HF_REPO:-stanford-star/dbinfer}
-DBS=(dbinfer-amazon dbinfer-diginetica dbinfer-retailrocket dbinfer-stackexchange)
+DBS=(dbinfer-diginetica dbinfer-retailrocket dbinfer-stackexchange)
 # RT_ARRAY narrows the array to a subset of DBS by index, for redoing one database
 # without touching the others (e.g. RT_ARRAY=0 for amazon alone).
 ARRAY=${RT_ARRAY:-0-$((${#DBS[@]} - 1))%4}

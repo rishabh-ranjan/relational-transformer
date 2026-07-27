@@ -1,14 +1,14 @@
 # 4DBInfer context scaling
 
 RT-J against a tabular baseline on the 4DBInfer tasks, over the context sweep
-256 → 8192. Two tables: mean AUROC over the classification tasks, mean NMAE over
-the regression tasks.
+256 → 8192. One table: mean AUROC over the classification tasks. There is no
+regression table -- see "Tasks that are not here".
 
 | | |
 |---|---|
 | methods | `rt` (RT-J) and `rdblearn_tabicl` = `precomputed_rdblearn` + `tabicl_batched` |
-| clf tasks (5) | `dbinfer-amazon/churn`, `dbinfer-diginetica/ctr`, `dbinfer-retailrocket/cvr`, `dbinfer-stackexchange/churn`, `dbinfer-stackexchange/upvote` |
-| reg tasks (1) | `dbinfer-amazon/rating` |
+| clf tasks (4) | `dbinfer-diginetica/ctr`, `dbinfer-retailrocket/cvr`, `dbinfer-stackexchange/churn`, `dbinfer-stackexchange/upvote` |
+| reg tasks | none -- see below |
 | context points | 256, 512, 1024, 2048, 4096, 8192 |
 | test subsample | 1024 rows per task |
 
@@ -29,8 +29,8 @@ them, rather than waiting for one to finish before submitting the next:
 
 | stage | shape | placement |
 |---|---|---|
-| 1 preprocess | array of 4, one per db | `il-lo`, GPU node, off ampere |
-| 2 featurize | array of 4, chained per db | `il-lo`, CPU-only, off ampere |
+| 1 preprocess | array of 3, one per db | `il-lo`, 48G GPU node, off ampere |
+| 2 featurize | array of 3, chained per db | `il-lo`, CPU-only, off ampere |
 | 3 eval `rt` | after all of stage 1 | **`il`**, 8x a100, not ampere4 |
 | 3 eval `rdblearn_tabicl` | after all of stage 2 | `il-lo`, 8x a100, not ampere4 |
 
@@ -81,6 +81,12 @@ point. The numbers are therefore untuned, equally so for both methods.
 * `dbinfer-avs/repeater` -- dropped. Its `Transaction` table is 349,655,789 rows,
   ~5x the largest table in the-join, and it is expensive in both stage 1 and
   stage 2.
+* `dbinfer-amazon/{churn,rating}` -- dropped on cost. Preprocessing amazon means
+  embedding 21.2M texts, and its review bodies are long: measured at ~808 texts/s
+  on a 2080ti, that is ~7 h for the MiniLM pass alone, against ~12 min for
+  diginetica and retailrocket. It was the only regression task in the collection,
+  so **the regression table goes with it** -- 4DBInfer's other non-clf tasks are
+  2 link-prediction and 2 multiclass, none of which RT has a head for.
 * `dbinfer-outbrain-small/ctr` -- dropped. The upstream subsample has almost no
   referential integrity: 58 of 69,543 distinct train entities exist in `Event`. The
   number it yields would describe the defect, not a method.
@@ -89,12 +95,11 @@ point. The numbers are therefore untuned, equally so for both methods.
   4DBInfer's MRR-over-supplied-candidates protocol, which is not what RelBench's
   link metric computes.
 
-That leaves one regression task, so Table 2's "mean NMAE" is a mean of one. It is
-reported with `n_reg=1` stated rather than dropped.
+So this measures 4 of 4DBInfer's 12 tasks, all classification. `reduce.py` still
+emits the regression table; with no reg tasks present it prints "(no reg tasks)".
 
-**Label leakage, both sides.** Two tasks take their label from a column that is
-also in the database (`retailrocket/cvr` ← `View.added_to_cart`, `amazon/rating` ←
-`Review.rating`). RT's sampler drops such a column on rows sharing the target's
+**Label leakage, both sides.** One task takes its label from a column that is also
+in the database (`retailrocket/cvr` ← `View.added_to_cart`). RT's sampler drops such a column on rows sharing the target's
 timestamp and keeps strictly-past ones. fastdfs aggregates with a strict `<`
 against the task cutoff (`include_cutoff_time=False`, pinned in
 `rel2tab/featurizers/rdblearn_featurizer.py` so an upstream default flip cannot
