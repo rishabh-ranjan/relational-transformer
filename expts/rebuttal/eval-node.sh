@@ -62,12 +62,13 @@ if [[ -z "${RT_RUN_ID:-}" ]]; then
 
     # Per-node shape, both under the default `il` QOS. ampere: 8xA100 (within
     # the 10-a100/user cap); 112 = non-exclusive CPU cap (8 x 14). blackwell:
+    # `il` caps b200 at 2/user (QOSMaxGRESPerUser; 8xB200 needs il-lo), and
     # memory must be asked for explicitly or the site plugin under-defaults it.
     case "$RT_NODE" in
         ampere*)
             shape=(--gres=gpu:a100:8 --cpus-per-task=112) ;;
         blackwell*)
-            shape=(--gres=gpu:b200:8 --cpus-per-task=144 --mem=1500000M) ;;
+            shape=(--gres=gpu:b200:2 --cpus-per-task=72 --mem=750000M) ;;
         *)
             echo "unknown RT_NODE=$RT_NODE" >&2; exit 1 ;;
     esac
