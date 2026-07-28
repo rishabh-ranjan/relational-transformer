@@ -76,6 +76,18 @@ RelBench test split (ctx 4096). 10% caveat: that run failed at step
 | rel-trial/study-adverse | 16.65 | 17.21 | **16.28** |
 | **mean** | 29.43 | 27.39 | **26.48** |
 
+Val-set numbers, from the training runs' in-loop eval on wandb (val split,
+1024 items/task, ctx 4096; only task-type means were logged, no per-task
+breakdown). These are the values that selected the best_clf/best_reg
+checkpoints: max mean AUROC / min mean NMAE over all eval steps, live and
+SWA variants.
+
+| model | best val AUROC % (step, variant) | best val NMAE % (step, variant) |
+|---|---|---|
+| 10pct | 68.07 (6000, swa) | 28.29 (8000, live) |
+| 32pct | 70.26 (100001, swa) | 26.64 (64000, swa) |
+| rt-j | **71.90** (8000, swa) | **25.78** (46000, swa) |
+
 ## M2.2. Relational access
 
 TODO
