@@ -37,3 +37,12 @@ Task-wise quality below.
 ## R3-W3. Computational cost
 
 Compute scaling results below.
+
+% of full pretraining | Avg. AUROC % $\uparrow$ | Avg. nMAE % $\downarrow$
+--- | --- | ---
+10 | 69.98 | 35.95
+20 | 69.17 | 32.26
+30 | 69.24 | 30.83
+40 | 70.51 | 30.04
+50 | 71.08 | 28.96
+100 | 72.18 | 27.91
