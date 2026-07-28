@@ -1,6 +1,40 @@
 ## M1. RT pretrained on PluRel data with the same recipe
 
-RT-P vs RT-J task-wise results below.
+RT-P vs RT-J task-wise results below. Full RelBench test split, scored by
+`relbench.leaderboard` (bold = better).
+
+Classification checkpoint on the 12 clf tasks (AUROC %, higher better):
+
+| task | rt-j | rt-p |
+|---|---|---|
+| rel-amazon/item-churn | **79.56** | 70.51 |
+| rel-amazon/user-churn | **67.82** | 64.78 |
+| rel-avito/user-clicks | **53.03** | 51.02 |
+| rel-avito/user-visits | 55.91 | **58.87** |
+| rel-event/user-ignore | **83.25** | 80.69 |
+| rel-event/user-repeat | 75.21 | **76.70** |
+| rel-f1/driver-dnf | **80.90** | 79.68 |
+| rel-f1/driver-top3 | **91.08** | 87.41 |
+| rel-hm/user-churn | **63.57** | 61.49 |
+| rel-stack/user-badge | 80.82 | **83.00** |
+| rel-stack/user-engagement | 84.79 | **87.00** |
+| rel-trial/study-outcome | 63.69 | **64.17** |
+| **mean** | **73.30** | 72.11 |
+
+Regression checkpoint on the 9 reg tasks (NMAE %, lower better):
+
+| task | rt-j | rt-p |
+|---|---|---|
+| rel-amazon/item-ltv | **8.46** | 9.34 |
+| rel-amazon/user-ltv | **28.67** | 30.55 |
+| rel-avito/ad-ctr | 45.86 | **45.11** |
+| rel-event/user-attendance | **35.78** | 40.97 |
+| rel-f1/driver-position | **41.37** | 46.63 |
+| rel-hm/item-sales | **10.57** | 16.68 |
+| rel-stack/post-votes | **14.17** | 17.71 |
+| rel-trial/site-success | **31.41** | 50.51 |
+| rel-trial/study-adverse | **15.43** | 16.00 |
+| **mean** | **25.75** | 30.39 |
 
 ## M2.1. Attribution of gains: corpus scale
 
