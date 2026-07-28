@@ -110,3 +110,63 @@ something derivable in principle from its context but not materialised in it.
 `rt` on `churn` is the one regression (-0.0382) while `rt_p` gained +0.0445 on
 identical data -- four injected columns displaced ~6 labelled rows of context and RT-J
 did not convert them. Unexplained, and it does not disturb the headline.
+
+---
+
+# Experiment 1: give RT the aggregate. It closes the gap.
+
+Cutoff-respecting counts injected as task-table columns -- each row counts only child
+rows strictly before *its own* cutoff, so no future information enters. (A static
+degree column would have counted the whole history, which measurably manufactures a
+0.13 AUROC leak on `upvote`: 0.9551 against 0.8245 for the honest version.)
+
+| method | task | before | +counts | delta |
+|---|---|---|---|---|
+| `rt` | `upvote` | 0.6488 | **0.8293** | **+0.1804** |
+| `rt_p` | `upvote` | 0.6757 | **0.8344** | **+0.1587** |
+| `rt_p` | `churn` | 0.7963 | **0.8407** | +0.0445 |
+| `rt` | `churn` | 0.7232 | 0.6850 | -0.0382 |
+| `rdblearn_tabicl` | `churn` | 0.8563 | 0.8525 | -0.0039 |
+| `rdblearn_tabicl` | `upvote` | 0.8382 | 0.8411 | +0.0030 |
+
+Gap to the baseline, best RT variant:
+
+| task | before | after |
+|---|---|---|
+| `churn` | +0.0601 | **+0.0117** |
+| `upvote` | +0.1624 | **+0.0067** |
+
+The baseline moves within noise, which is the control working: it already held these
+counts as DFS features, so putting them on the task table tells it nothing. RT gains
+despite *paying* for them -- the injected columns consume context, and `mean_labels`
+falls 139.4 -> 133.6 on `churn` and 53.9 -> 52.9 on `upvote`. Offsets were verified
+unchanged across all 15 tables before the DFS features were carried over, so the
+baseline arm is correctly aligned rather than silently scrambled.
+
+## Reconciling the two experiments
+
+They look contradictory. They are not, and the retraction written above over-corrected.
+
+* **Exp 2 asked whether the *baseline* needs counts.** No -- it carries several
+  redundant aggregates (count, max, mode, recency) encoding the same signal, so
+  deleting one class costs 0.003-0.009.
+* **Exp 1 asked whether *RT* needs an aggregate.** Yes -- it had none at all, and
+  supplying one closes a 0.16 gap to 0.007.
+
+So the accurate statement is neither "counting is the differentiator" nor "aggregates
+do not matter". It is: **RT's shortfall on these tasks is the absence of any
+precomputed aggregate reduction over the child set.** Any sufficient aggregate closes
+it; the baseline happens to hold several interchangeable ones, which is why removing
+one class does not hurt it.
+
+Running only one of the two would have supported a wrong conclusion in either
+direction.
+
+## Open
+
+`rt` (RT-J) on `churn` is the one regression, -0.0382, on data where `rt_p` gained
++0.0445. Four injected columns displaced roughly six labelled rows of context and RT-J
+did not convert them; RT-P did. Unexplained.
+
+This also puts the earlier `identifier` fix in the same family: both are cases where
+RT lacked something derivable in principle from its context but not materialised in it.
