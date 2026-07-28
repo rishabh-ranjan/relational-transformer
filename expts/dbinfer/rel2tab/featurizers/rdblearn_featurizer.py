@@ -67,6 +67,8 @@ class RDBLearnFeaturizer(Featurizer):
         self._features: dict[tuple[str, str], tuple[torch.Tensor, int]] = {}
         # (db, table) -> {split: label Series}, for row-order verification only
         self._split_labels: dict[tuple[str, str], dict] = {}
+        # (db, table) -> DFS column names, in matrix column order
+        self._feature_names: dict[tuple[str, str], list[str]] = {}
 
         dfs_cfg = DFSConfig(
             max_depth=max_depth,
@@ -190,6 +192,10 @@ class RDBLearnFeaturizer(Featurizer):
                 config=estimator.config.dfs or DFSConfig(),
             )
             X_transformed = estimator.preprocessor_.transform(X_dfs)
+            # Keep the DFS column names: they are what makes a feature ablation
+            # possible (e.g. dropping every COUNT(...) aggregate) without guessing
+            # which column is which from the numbers alone.
+            self._feature_names[key] = [str(c) for c in X_transformed.columns]
             feats = X_transformed.fillna(0).values.astype(np.float32)
             feats_tensor = torch.from_numpy(feats)
 
@@ -216,3 +222,12 @@ class RDBLearnFeaturizer(Featurizer):
 
     def featurize(self, train_labels, train_f2ps, target_f2p, train_feats, test_feat):
         return train_feats, train_labels, test_feat
+
+    def get_feature_names(self, db_name, table):
+        """DFS column names for ``(db, table)``, in matrix column order.
+
+        Written into the feature meta so a later ablation can select columns by
+        what they *are* -- e.g. every ``COUNT(...)`` aggregate -- rather than by
+        guessing from the values.
+        """
+        return self._feature_names.get((db_name, table), [])

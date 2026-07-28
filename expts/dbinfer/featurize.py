@@ -176,6 +176,7 @@ def main() -> None:
             json.dumps(
                 {
                     "n_features": int(arr.shape[1]),
+                    "feature_names": featurizer.get_feature_names(db, table),
                     "min_offset": int(min_offset),
                     "total_nodes": int(arr.shape[0]),
                     "max_depth": args.max_depth,

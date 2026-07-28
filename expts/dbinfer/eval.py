@@ -152,7 +152,7 @@ def build_rdblearn_tabicl(args, device):
             pre_dir=args.pre_dir,
             db_task_list=args.db_task_list,
             eval_splits=[args.split],
-            features_subdir=FEATURES_SUBDIR,
+            features_subdir=args.features_subdir,
         ),
         predictor=TabICLBatchedPredictorConfig(
             max_batch_size=args.tabicl_max_batch_size,
@@ -265,6 +265,9 @@ def main() -> None:
     # val is what a context-config grid search scores against; test is the
     # deliverable. Both go through the identical path -- only the split changes.
     ap.add_argument("--split", default="test", choices=["val", "test"])
+    # Which precomputed feature matrix rdblearn_tabicl reads. A second
+    # subdir holds ablated variants (e.g. COUNT features removed).
+    ap.add_argument("--features-subdir", default=FEATURES_SUBDIR)
     ap.add_argument("--ctx-sizes", nargs="+", type=int, default=CTX_SIZES)
     # 1024-row test subsample, identical for both methods: the sampler picks it
     # from (task, items_per_task, shuffle_seed) alone, nothing model-dependent.
@@ -356,7 +359,7 @@ def main() -> None:
     }
 
     if args.method == "rdblearn_tabicl":
-        config["features_subdir"] = FEATURES_SUBDIR
+        config["features_subdir"] = args.features_subdir
         config["tabicl"] = {
             "max_batch_size": args.tabicl_max_batch_size,
             "min_bin_size": args.tabicl_min_bin_size,
