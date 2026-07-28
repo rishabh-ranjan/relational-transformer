@@ -4,7 +4,43 @@ RT-P vs RT-J task-wise results below.
 
 ## M2.1. Attribution of gains: corpus scale
 
-Data scaling results below.
+Data scaling results below. Best-val checkpoints of RT pretrained on 10%,
+32%, and 100% (rt-j) of the pretraining corpus, evaluated on the full
+RelBench test split (ctx 4096). 10% caveat: that run failed at step
+44000/100001, best-val ckpts from steps 6000/8000.
+
+**Classification (ROC-AUC %, higher is better)**
+
+| task | 10pct | 32pct | rt-j |
+|---|---|---|---|
+| rel-amazon/item-churn | 77.14 | **79.86** | 77.98 |
+| rel-amazon/user-churn | 64.82 | **68.12** | 67.49 |
+| rel-avito/user-clicks | 46.48 | **53.84** | 51.91 |
+| rel-avito/user-visits | 51.96 | 54.79 | **58.64** |
+| rel-event/user-ignore | 79.77 | **84.22** | 83.80 |
+| rel-event/user-repeat | 69.57 | 64.93 | **75.63** |
+| rel-f1/driver-dnf | 77.77 | 79.88 | **80.82** |
+| rel-f1/driver-top3 | 84.92 | **89.68** | 88.18 |
+| rel-hm/user-churn | 57.99 | **62.28** | 60.76 |
+| rel-stack/user-badge | **79.45** | 76.70 | 76.82 |
+| rel-stack/user-engagement | 85.82 | 85.32 | **87.03** |
+| rel-trial/study-outcome | 58.72 | 61.05 | **62.97** |
+| **mean** | 69.53 | 71.72 | **72.67** |
+
+**Regression (normalized MAE %, lower is better)**
+
+| task | 10pct | 32pct | rt-j |
+|---|---|---|---|
+| rel-amazon/item-ltv | 9.70 | **8.55** | 9.19 |
+| rel-amazon/user-ltv | 31.98 | **28.79** | 29.79 |
+| rel-avito/ad-ctr | 46.31 | 47.46 | **43.38** |
+| rel-event/user-attendance | **36.71** | 39.63 | 39.46 |
+| rel-f1/driver-position | 49.25 | 43.33 | **40.46** |
+| rel-hm/item-sales | 16.24 | 12.75 | **12.71** |
+| rel-stack/post-votes | 17.86 | 15.23 | **14.76** |
+| rel-trial/site-success | 40.15 | 33.55 | **32.31** |
+| rel-trial/study-adverse | 16.65 | 17.21 | **16.28** |
+| **mean** | 29.43 | 27.39 | **26.48** |
 
 ## M2.2. Relational access
 
