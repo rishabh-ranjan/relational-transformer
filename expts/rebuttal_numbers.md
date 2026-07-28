@@ -123,7 +123,7 @@ Results below.
 Timings below.
 
 ms/item per example on 1x B200 GPU with 1x AMD EPYC 9565 CPU.
-Mean $\pm$ std. dev. over 3 runs.
+Mean $\pm$ std. dev. over 10 measured steps after 3 warmup steps.
 
 Stage | (W,K) = (10k, 20) | (W,K) = (10k, 10) | (W,K) = (1k, 20) | (W,K) = (1k, 10)
 --- | --- | --- | --- | ---
