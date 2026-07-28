@@ -61,3 +61,52 @@ that.
 
 This predicts experiment 1 (injecting cutoff-respecting counts as task-table columns)
 will *not* close the gap, since it supplies one aggregate the baseline barely needs.
+
+## Experiment 1: inject cutoff-respecting counts into RT's context
+
+Counts added as columns on the task table (leak-free: each row counts only child rows
+strictly before *its own* cutoff). Node offsets verified unchanged across all 15
+tables before the DFS features were carried over.
+
+| method | task | before | +counts | delta |
+|---|---|---|---|---|
+| `rt` | `upvote` | 0.6488 | **0.8293** | **+0.1804** |
+| `rt_p` | `upvote` | 0.6757 | **0.8344** | **+0.1587** |
+| `rt_p` | `churn` | 0.7963 | **0.8407** | +0.0445 |
+| `rt` | `churn` | 0.7232 | 0.6850 | -0.0382 |
+| `rdblearn_tabicl` | `churn` | 0.8563 | 0.8525 | -0.0039 |
+| `rdblearn_tabicl` | `upvote` | 0.8382 | 0.8411 | +0.0030 |
+
+Gap to the baseline, best RT variant:
+
+| task | before | after |
+|---|---|---|
+| `churn` | +0.0601 | **+0.0117** |
+| `upvote` | +0.1624 | **+0.0067** |
+
+It closes, and closes *despite* the injected columns costing context -- `mean_labels`
+falls 139.38 -> 133.55 on `churn` and 53.86 -> 52.86 on `upvote`. The baseline moves
+within noise, which is the control working: it already had these aggregates.
+
+## Reconciling the two
+
+They look contradictory and are not. I predicted, from experiment 2, that experiment 1
+would fail. That prediction was wrong, and the error was in the question being asked:
+
+* **Exp 2** asks whether the *baseline* needs counts. It does not -- it carries several
+  interchangeable aggregates (count, max, mode, recency) over the same child set, so
+  deleting one class leaves the signal intact.
+* **Exp 1** asks whether *RT* needs an aggregate. It does -- it had none at all, and
+  supplying one closes a 0.16 gap to 0.007.
+
+So the conclusion is neither "counting is the differentiator" (exp 2 refutes it) nor
+"aggregates do not matter" (exp 1 refutes that): **RT's shortfall on these tasks is the
+absence of any precomputed aggregate reduction over the child set. Any sufficient
+aggregate closes it; the baseline happens to carry several redundant ones.**
+
+Note this is the same shape as the `identifier` fix: in both cases RT was missing
+something derivable in principle from its context but not materialised in it.
+
+`rt` on `churn` is the one regression (-0.0382) while `rt_p` gained +0.0445 on
+identical data -- four injected columns displaced ~6 labelled rows of context and RT-J
+did not convert them. Unexplained, and it does not disturb the headline.
