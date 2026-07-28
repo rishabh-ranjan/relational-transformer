@@ -87,6 +87,26 @@ Griffin doesn't support ICL.
 RDB-PFN doesn't support regression.
 RDB-PFN classification numbers below.
 
+Context-scaling sweep on the 12 clf tasks, mean AUROC % (higher better;
+bold = best in column). Same protocol and x-axis as the paper's
+context-scaling figures: subsampled test split, per-task context config,
+single seed, no tuning. RDB-PFN features are its own `dfs-2` linearization,
+regenerated from RelBench through its own preprocessing pipeline.
+
+| ctx size | 256 | 512 | 1024 | 2048 | 4096 | 8192 |
+|---|---|---|---|---|---|---|
+| mean in-context labels | 8.9 | 13.1 | 19.0 | 31.8 | 61.1 | 123.4 |
+| rt-j | **68.28** | **70.12** | **71.57** | **72.41** | **72.86** | **73.25** |
+| sql_tabicl | 65.68 | 68.00 | 69.71 | 70.68 | 71.71 | 72.59 |
+| rdblearn_tabicl | 65.67 | 67.69 | 69.54 | 70.28 | 71.46 | 72.26 |
+| rdblearn_xgboost | 64.04 | 65.77 | 66.78 | 67.73 | 68.16 | 68.54 |
+| sql_xgboost | 63.96 | 65.76 | 66.94 | 66.84 | 67.21 | 67.05 |
+| rdb-pfn | 65.46 | 65.81 | 65.62 | 65.01 | 63.65 | 62.53 |
+
+RDB-PFN is the only method whose accuracy *falls* as in-context labels grow:
+it peaks at ctx=512 and ends 2.9 points below its own start, while every
+other method rises monotonically (rt-j +5.0).
+
 ## M4. Wall-clock and label budget for tuning
 
 Argue with train/val sizes and tuning effect on rel-f1. TODO
