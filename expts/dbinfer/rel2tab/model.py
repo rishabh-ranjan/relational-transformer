@@ -4,8 +4,6 @@ import torch
 from torch import nn
 from tqdm.auto import tqdm
 
-from rt.model.net import SEM_TYPE_BOOLEAN
-
 
 def _fmt(secs):
     m, s = divmod(int(secs), 60)
@@ -56,6 +54,12 @@ class Rel2TabModel(nn.Module):
             & (col_name_idxs == target_col)
         )
         lc_b, lc_s = is_label_cell.nonzero(as_tuple=True)
+        # Imported here, not at module scope: featurize.py loads rel2tab in the
+        # stage-2 pixi env, which has rdblearn/fastdfs but deliberately not `rt`.
+        # A module-level import of rt.model would make the featurizer unloadable
+        # there for a constant only the eval path needs.
+        from rt.model.net import SEM_TYPE_BOOLEAN
+
         lc_node = node_idxs[lc_b, lc_s]
         # Read each label from the channel its own semantic type names, exactly as
         # Evaluator does for the ground truth it scores against: boolean-typed
