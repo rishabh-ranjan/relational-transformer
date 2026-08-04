@@ -110,6 +110,6 @@ def test_job_env_is_not_inherited():
     carries everything it needs."""
     import inspect as _inspect
 
-    from rt.slurm import submit as submit_mod
+    from rt.slurm.submit import submit as submit_fn
 
-    assert '"--export=NONE"' in _inspect.getsource(submit_mod.submit)
+    assert '"--export=NONE"' in _inspect.getsource(submit_fn)
