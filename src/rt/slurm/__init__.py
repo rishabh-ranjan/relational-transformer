@@ -11,7 +11,7 @@ saving a resumable checkpoint; slurm requeues, and the same run id resumes it.
 """
 
 from rt.slurm.resources import Resources
-from rt.slurm.run import resolve
+from rt.slurm.target import resolve
 from rt.slurm.submit import Job, check_args, submit, timestamp
 
 __all__ = ["Job", "Resources", "check_args", "resolve", "submit", "timestamp"]

@@ -13,21 +13,9 @@ import os
 import socket
 import subprocess
 import sys
-from importlib import import_module
 from pathlib import Path
-from typing import Any, Callable
 
-
-def resolve(target: str) -> Callable[..., Any]:
-    """`"rt.train:main"` -> the function. Explicit `module:attr`, so a module
-    that happens to share a name with a function is never ambiguous."""
-    module, sep, attr = target.partition(":")
-    if not sep:
-        raise ValueError(f"target must be 'module:attr', got {target!r}")
-    fn = getattr(import_module(module), attr)
-    if not callable(fn):
-        raise TypeError(f"{target} is not callable")
-    return fn
+from rt.slurm.target import resolve
 
 
 def set_torch_dist_env() -> None:

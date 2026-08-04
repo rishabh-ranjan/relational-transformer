@@ -23,7 +23,7 @@ from typing import Any, get_type_hints
 from beartype.door import die_if_unbearable
 
 from rt.slurm.resources import Resources
-from rt.slurm.run import resolve
+from rt.slurm.target import resolve
 
 
 def timestamp() -> str:
