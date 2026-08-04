@@ -38,20 +38,23 @@ if [[ -z "${RT_RUN_ID:-}" ]]; then
         # the whole node bar its reserve. An explicit --mem is capped lower by
         # MaxMemPerCPU (10700M x 128), and --mem=0 is rejected outright.
         res=(--job-name=rt-ds-ampere --qos=il --time=7-00:00:00
-             --constraint=ampere --exclusive --gres=gpu:a100:8 --cpus-per-task=128) ;;
+             --constraint=ampere --exclusive --gres=gpu:a100:8 --cpus-per-task=128)
+        export RT_NPROC=8 ;;
     ampere-lo)
         # Not --exclusive: these nodes usually carry unrelated CPU-only jobs, so
         # demanding the whole node would just queue behind them. 112 CPUs is the
         # site cap of 14 per GPU for non-exclusive ampere jobs.
         res=(--job-name=rt-ds-ampere-lo --qos=il-lo --time=21-00:00:00
-             --constraint=ampere --gres=gpu:a100:8 --cpus-per-task=112) ;;
+             --constraint=ampere --gres=gpu:a100:8 --cpus-per-task=112)
+        export RT_NPROC=8 ;;
     blackwell)
         # Memory is explicit here: the site plugin would default this node to
         # 565G for 4 GPUs, below what the mixture needs in page cache, and
         # 1500000M is the most MaxMemPerCPU allows at 144 CPUs.
         res=(--job-name=rt-ds-blackwell --qos=il-lo --time=21-00:00:00
              --nodelist=blackwell1 --gres=gpu:b200:4 --cpus-per-task=144
-             --mem=1500000M) ;;
+             --mem=1500000M)
+        export RT_NPROC=4 ;;
     *)
         echo "unknown profile: $profile (ampere | ampere-lo | blackwell)" >&2
         exit 1 ;;
@@ -93,10 +96,9 @@ export MASTER_PORT=$((20000 + SLURM_JOB_ID % 20000))
 # Not plain torchrun: slurm signals every process in the job at preemption, so
 # the elastic agent starts killing ranks in the same second they are told to
 # save. The shim makes the launcher deaf to SIGTERM; the ranks register their
-# own handlers, so they still get it and save first. --nproc-per-node=gpu picks
-# up whatever the profile allocated.
+# own handlers, so they still get it and save first.
 pixi run python expts/data-scaling/torchrun_shielded.py \
-    --nnodes=1 --nproc-per-node=gpu \
+    --nnodes=1 --nproc-per-node="$RT_NPROC" \
     --master-addr="$MASTER_ADDR" --master-port="$MASTER_PORT" \
     "${RT_TRAIN_SCRIPT:-expts/data-scaling/train.py}" \
     --logger.id "$RT_RUN_ID" \

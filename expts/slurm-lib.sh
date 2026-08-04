@@ -63,6 +63,7 @@ rt_submit() {
     local exports="RT_REPO=$RT_REPO,RT_COMMIT=$RT_COMMIT,RT_BRANCH=$RT_BRANCH,RT_RUN_ID=$RT_RUN_ID"
     [[ -n ${RT_TRAIN_SCRIPT:-} ]] && exports+=",RT_TRAIN_SCRIPT=$RT_TRAIN_SCRIPT"
     [[ -n ${RT_MODEL:-} ]] && exports+=",RT_MODEL=$RT_MODEL"
+    [[ -n ${RT_NPROC:-} ]] && exports+=",RT_NPROC=$RT_NPROC"
 
     if [[ -n ${RT_DRY_RUN:-} ]]; then
         echo "DRY RUN: sbatch ${sbatch_args[*]} --export=$exports $*"
