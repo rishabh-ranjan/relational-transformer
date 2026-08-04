@@ -1,7 +1,7 @@
 # Pretrain
 
 Self-supervised pretraining of a Relational Transformer over the tasks in
-`--train.db-task-list` (the Join). Includes Muon+AdamW
+`db_task_list` (the Join). Includes Muon+AdamW
 optimization, stochastic weight averaging (SWA), periodic validation against
 RelBench, checkpointing, and automatic selection of the best clf / reg checkpoint
 by mean validation metric.
@@ -10,14 +10,14 @@ Checkpoints land in the per-run directory
 `<out-root>/<entity>/<project>/<id>/` as `steps=<N>.safetensors` (live) and
 `swa_steps=<N>.safetensors` (SWA); at the end the run copies the best classifier
 and regressor to `best_clf.safetensors` / `best_reg.safetensors`. Multi-GPU is
-automatic under `torchrun`, and a run relaunched with the same `--logger.id`
+automatic under `torchrun`, and a run relaunched with the same `run_id`
 resumes automatically from `resume.pt` in that same directory
 (preemption-safe).
 
 ## Prerequisite: preprocessed data
 
-Pretraining takes a `--train.pre-dir` of preprocessed pretraining data (the
-Join) and an `--eval.pre-dir` of preprocessed RelBench for validation. Both are
+Pretraining takes a `pre_dir` of preprocessed pretraining data (the
+Join) and an `eval_pre_dir` of preprocessed RelBench for validation. Both are
 **local directories** — either produced by [preprocess.md](preprocess.md) or
 downloaded up front; nothing is fetched on demand (see
 [downloads.md](downloads.md) for why, and for how to fetch a subset):
@@ -29,12 +29,12 @@ pixi run hf download stanford-star/relbench-preprocessed --repo-type dataset \
   --local-dir data/relbench-preprocessed
 ```
 
-Those two paths are the defaults (`--train.pre-dir data/the-join-preprocessed`,
-`--eval.pre-dir data/relbench-preprocessed`). The full preprocessed Join is
+Those two paths are what `examples/train.py` passes (`pre_dir="data/the-join-preprocessed"`,
+`eval_pre_dir="data/relbench-preprocessed"`). The full preprocessed Join is
 ~1.5 TiB, so on a cluster fetch it **once** to shared storage and point every
 run at that path.
 
-The task mixture is given by `--train.db-task-list` — `(db, task)` pairs as a
+The task mixture is given by `db_task_list` — `(db, task)` pairs as a
 JSON file. Every name must be a task the db actually ships (recorded in its
 `meta.json`). The curated lists ship with the data, under
 `<pre_dir>/db-task-lists/`: `forecast.json` (every forecast task in the Join),
@@ -42,57 +42,65 @@ JSON file. Every name must be a task the db actually ships (recorded in its
 table, train-split only), `all.json` (both), and `rt-j.json` (the curated RT-J
 mixture, forecast + autocomplete).
 
-## Single-GPU training
+## Running a training script
 
-Training always runs under `torchrun`; there is no pixi task for it, so build
-the sampler once (`pixi run build-sampler`) and launch it yourself.
-`--nproc-per-node=auto` uses every visible GPU, so pin it to one for a
-single-GPU run:
+There is no CLI. `rt.train.main` is a function that takes every knob as a
+required argument; a run is a script that calls it. Copy
+[`examples/train.py`](../examples/train.py) — it passes the released RT-J
+values — and edit what you want. Build the sampler once first
+(`pixi run build-sampler`).
 
 ```bash
-CUDA_VISIBLE_DEVICES=0 pixi run torchrun --standalone --nproc-per-node=auto \
-  -m rt.cli.train \
-  --train.pre-dir data/the-join-preprocessed \
-  --eval.pre-dir data/relbench-preprocessed \
-  --logger.out-root ~/ckpts
+CUDA_VISIBLE_DEVICES=0 pixi run python examples/train.py    # one GPU
 ```
 
 ## Multi-GPU single-node training
 
-Same command without the device pin — `--nproc-per-node=auto` picks up all GPUs
-on the node, and the model is replicated per GPU via DDP (full model + optimizer
-on every rank, no sharding):
+One process per GPU, each told who it is; the model is replicated per rank (full
+model + optimizer on every rank, no sharding). Under slurm that is one line:
 
 ```bash
-pixi run torchrun --standalone --nproc-per-node=auto -m rt.cli.train \
-  --train.pre-dir data/the-join-preprocessed \
-  --eval.pre-dir data/relbench-preprocessed \
-  --logger.out-root ~/ckpts
+srun --ntasks-per-node=8 --gres=gpu:8 pixi run python examples/train.py
 ```
+
+`rt.slurm.run` translates slurm's `SLURM_PROCID`/`SLURM_LOCALID`/`SLURM_NTASKS`
+into torch's `RANK`/`LOCAL_RANK`/`WORLD_SIZE`, so nothing else is needed — and
+because each rank is a slurm task, a preemption signal reaches all of them.
+Outside slurm, `torchrun --standalone --nproc-per-node=auto examples/train.py`
+works the same way.
 
 Give the process as much of the node's RAM as you can: by default each run
 populates the preprocessed mixture into the page cache at startup
-(`--train.mmap-populate`, on by default) so the GPUs are fed instead of cold-faulting
+(`mmap_populate=True`) so the GPUs are fed instead of cold-faulting
 the (large) data from shared storage per item.
 
-## Multi-node training
+## On a cluster
 
-Multi-node runs are plain `torchrun` — one launcher per node, each spawning one
-worker per GPU:
+`rt.slurm` submits a function to slurm and handles the rest: it refuses a dirty
+or unpushed tree, records the commit, checks your arguments against the target's
+signature, and hands slurm a script that clones that commit, builds the
+environment on the node, and starts one rank per GPU.
 
-```bash
-# on every node (rank 0 on the head node):
-torchrun --nnodes=<N> --nproc-per-node=<GPUS> \
-  --node-rank=<i> --master-addr=<head-node> --master-port=<port> \
-  -m rt.cli.train --train.pre-dir ... --eval.pre-dir ... --logger.out-root ...
+```python
+from rt.slurm import Resources, submit
+
+submit("examples.train:train",
+       args={"pre_dir": ..., "eval_pre_dir": ..., "out_root": ...},
+       resources=Resources(partition=..., account=..., qos=..., time="7-00:00:00",
+                           gpus="a100:8", cpus_per_task=16, exclusive=True,
+                           mem=None, constraint="ampere", nodelist=None),
+       name="rt-j", repo_root=..., log_root=..., clone_root=..., secrets_dir=...)
 ```
 
-Wrap this in your cluster's launcher (Slurm, k8s, ...). Hard-won notes for
-writing that wrapper:
+See [`expts/data_scaling/`](../expts/data_scaling/) for a worked experiment: a
+`site.py` with the cluster's paths and presets, a `train.py` with the recipe, and
+a `submit.py` whose loop *is* the experiment. Hard-won notes if you write your
+own launcher instead:
 
-- **Name a run you may want to resume.** `--logger.id` names the output
-  directory `<out-root>/<entity>/<project>/<id>/`; pass the same value again to
-  pick the run's `resume.pt` back up. Resuming *requires* an explicit id:
+- **Name a run you may want to resume.** `run_id` names the output
+  directory `<out_root>/<entity>/<project>/<run_id>/`; pass the same value again
+  to pick the run's `resume.pt` back up (`rt.slurm.submit` mints one and reuses
+  it across requeues). Resuming *requires* an explicit id:
   unset, it defaults to a per-rank timestamp, which names a fresh directory
   with nothing to resume from. Rank 0 is the only rank that writes there.
 - **Static rendezvous.** Pass a fixed `--master-addr`/`--master-port` (derive a
@@ -120,22 +128,22 @@ writing that wrapper:
 run preempted on 4×8 GPUs can resume on a single 4-GPU node with the same
 `OUT_DIR` — the data stream is re-seeded by the resumed step, so nothing is
 replayed and determinism holds across the world-size change. A time-based dump
-every `--train.resume-save-mins` minutes (default 20) bounds lost progress.
+every `resume_save_mins` minutes (20 in the examples) bounds lost progress.
 
 ## Avoiding data loading during debug iterations
 
 By default each run re-populates the preprocessed data into RAM at startup. When
 iterating on training code, that reload is wasted work on every restart. Lock the
 data into the page cache **once** with a long-lived holder
-(`rt.cli.mlock`), then train with `--no-train.mmap-populate` so reads hit the
+(`rt.data.mlock_main`), then train with `mmap_populate=False` so reads hit the
 locked cache:
 
 ```bash
 # terminal 1: hold the data resident (Ctrl-C to release)
-pixi run python -m rt.cli.mlock --pre-dir <PRE_DIR> --workers 32
+pixi run python -c "from rt.data import mlock_main; mlock_main(pre_dir='<PRE_DIR>', workers=32)"
 # terminal 2 (same node): train without re-populating
-pixi run torchrun --standalone --nproc-per-node=auto -m rt.cli.train \
-  --train.pre-dir <PRE_DIR> --logger.out-root ~/ckpts --no-train.mmap-populate
+# terminal 2 (same node): train with mmap_populate=False in your script
+pixi run python examples/train.py
 ```
 
 This is purely a convenience for repeated local runs; it is **not required**.

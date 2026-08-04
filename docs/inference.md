@@ -43,7 +43,7 @@ Eval runs single-process on one GPU by default. For multi-GPU eval, launch it
 under torchrun:
 
 ```bash
-torchrun --nproc-per-node=8 -m rt.cli.eval --model.load-ckpt-path ...
+srun --ntasks-per-node=8 --gres=gpu:8 pixi run python examples/eval.py
 ```
 
 Rows are sharded across ranks and gathered back on rank 0, which scores them
@@ -165,32 +165,31 @@ maturin develop --release --features vecdb
 
 The released checkpoints of the earlier papers use their original
 architectures, kept verbatim in `rt.model.legacy` (state-dict compatible with
-the published `.pt` files). Dedicated eval CLIs reproduce the published
+the published `.pt` files). [`examples/eval_legacy.py`](../examples/eval_legacy.py) reproduces the published
 context configuration (ctx 1024, one BFS neighborhood around the seed,
-bfs_width 256, no random-walk tier) and write RelBench leaderboard submission
+bfs_width 256, no random-walk tier) and writes RelBench leaderboard submission
 dirs:
 
-```bash
-# RT-v1 (ICLR 2026): task-wise pretrain_<db>_<task>.pt from stanford-star/rt-v1
-pixi run python -m rt.cli.legacy.eval_v1 --out-dir v1_sub
+```python
+from examples.eval_legacy import eval_plurel, eval_v1
 
-# RT-PluRel (ICML 2026), stanford-star/rt-plurel:
-pixi run python -m rt.cli.legacy.eval_plurel --mode synth      --out-dir plurel_synth_sub
-pixi run python -m rt.cli.legacy.eval_plurel --mode synth-real --out-dir plurel_sr_sub
+eval_v1()                      # RT-v1 (ICLR 2026), task-wise checkpoints
+eval_plurel(mode="synth")      # RT-PluRel (ICML 2026), one synthetic-only checkpoint
+eval_plurel(mode="synth-real") # ... or the task-wise continued-pretraining ones
 ```
 
-`--mode synth` uses the best synthetic-only pretraining checkpoint (same for
-all tasks); `--mode synth-real` uses the task-wise continued-pretraining
+`synth` uses the best synthetic-only pretraining checkpoint (same for
+all tasks); `synth-real` uses the task-wise continued-pretraining
 checkpoints. All three are in-context: no checkpoint ever trained on the
 target task's database (v1, synth) or task (synth-real).
 
 `data/relbench-preprocessed/legacy` (from
 `stanford-star/relbench-preprocessed`, subdir `legacy/`) holds RelBench re-preprocessed
-with `rt.cli.legacy.preprocess`, which applies the RT-v1-era boolean-typing
+with the RT-v1-era boolean-typing
 rules (binary targets and a few db columns become a real Boolean semantic
 type instead of z-scored numbers) before the regular pipeline. The legacy
 nets read classification targets from their BCE-trained boolean head, so this
-is the data they need; both CLIs default to it. `eval_plurel` additionally
-defaults to the paper's bfs_width 128. Metrics reproduce the papers within noise except
+is the data they need; `examples/eval_legacy.py` points at it. `eval_plurel`
+additionally uses the paper's bfs_width 128. Metrics reproduce the papers within noise except
 RT-v1 on rel-avito, which degrades for sampler-level reasons outside these
 configs.

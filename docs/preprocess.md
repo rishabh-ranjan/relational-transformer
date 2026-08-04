@@ -12,7 +12,7 @@ multithreaded (rayon).
 ## Preprocess one database in RelBench format
 
 ```bash
-pixi run preprocess --dataset stanford-star/relbench/rel-f1 --out-dir ~/scratch/pre
+`examples/preprocess.py`
 ```
 
 This writes `~/scratch/pre/rel-f1/` containing rustler artifacts,
@@ -29,8 +29,8 @@ and push in one step).
 To preprocess a whole Hub collection (e.g. the 650-database [the Join](https://huggingface.co/datasets/stanford-star/the-join)):
 
 ```bash
-pixi run python -m rt.cli.preprocess list --repo stanford-star/the-join   # inspect specs
-pixi run preprocess-many \
+pixi run python -c "from rt.preprocess import ls; ls(repo='stanford-star/the-join', revision=None)"
+`examples/preprocess.py`
   --repo stanford-star/the-join --out-dir ~/scratch/the-join-pre \
   --shard 0 --num-shards 1 --skip-existing
 ```
