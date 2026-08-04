@@ -164,6 +164,11 @@ def submit(
         "--propagate=MEMLOCK",
         "--requeue",
         "--open-mode=append",
+        # Nothing from this shell belongs in the job: its env points at a home
+        # that does not exist on the compute node and holds API tokens, which
+        # --export=ALL (sbatch's default) would copy into slurm's job record.
+        # The script carries everything it needs.
+        "--export=NONE",
         f"--output={log}",
         f"--error={log}",
     ]

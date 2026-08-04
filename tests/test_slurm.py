@@ -102,3 +102,14 @@ def test_bootstrap_template_placeholders_are_all_filled():
     import re
 
     assert set(re.findall(r"@[A-Z_]+@", script)) == expected
+
+
+def test_job_env_is_not_inherited():
+    """--export=ALL is sbatch's default and would copy this shell's home, PATH
+    and API tokens into the job (and slurm's job record); the batch script
+    carries everything it needs."""
+    import inspect as _inspect
+
+    from rt.slurm import submit as submit_mod
+
+    assert '"--export=NONE"' in _inspect.getsource(submit_mod.submit)
