@@ -13,11 +13,6 @@ and consumed from there.
 
 Subcommands::
 
-    python -m rt.cli.preprocess one   --dataset <spec> --out-dir <dir> [--upload-repo <repo>] ...
-    python -m rt.cli.preprocess many  --repo <hf repo> --out-dir <dir> [--shard i --num-shards N] ...
-    python -m rt.cli.preprocess list  --repo <hf repo>
-    python -m rt.cli.preprocess upload --pre-dir <dir>/<name> --repo <repo>          # one dataset
-    python -m rt.cli.preprocess upload --pre-dir <dir> --repo <repo> --bulk          # whole collection
 
 Recommended sharing workflow for a large collection (e.g. the 650-dataset Join):
 preprocess everything locally with ``many`` (skipping uploads), then push the whole
@@ -33,7 +28,6 @@ from __future__ import annotations
 
 import json
 import sys
-from dataclasses import dataclass
 from pathlib import Path
 
 
@@ -241,118 +235,62 @@ def list_datasets(repo: str, revision: str | None = None) -> list[str]:
     return [f"{repo}/{d}" for d in subdirs]
 
 
-# --------------------------------------------------------------------------- #
-# Configs (defaults live only in rt.cli.preprocess)
-# --------------------------------------------------------------------------- #
-@dataclass
-class OneConfig:
-    """Preprocess a single dataset."""
-
-    dataset: str
-    """Local path or org/repo[/subdir]."""
-    out_dir: str
-    """Preprocessed-data output root."""
-    embedder: str
-    """Sentence-transformers model for text embeddings."""
-    batch_size: int
-    """Embedding batch size."""
-    skip_tasks: bool
-    """Ingest db tables only."""
-    embed: bool
-    """Skip text embeddings."""
-    upload_repo: str | None
-    """Hub repo to upload result to."""
-    public: bool
-    """Make uploaded repo public."""
-    revision: str | None
-    """Hub revision to download."""
-
-
-@dataclass
-class ManyConfig:
-    """Preprocess all datasets in a collection repo."""
-
-    repo: str
-    """Hub collection repo, e.g. stanford-star/the-join."""
-    out_dir: str
-    """Preprocessed-data output root."""
-    shard: int
-    """This shard index."""
-    num_shards: int
-    """Total shards (for slurm arrays)."""
-    skip_existing: bool
-    """Skip datasets whose output meta.json already exists."""
-    embedder: str
-    """Sentence-transformers model for text embeddings."""
-    batch_size: int
-    """Embedding batch size."""
-    skip_tasks: bool
-    """Ingest db tables only."""
-    embed: bool
-    """Skip text embeddings."""
-    upload_repo: str | None
-    """Hub repo to upload result to."""
-    public: bool
-    """Make uploaded repo public."""
-    revision: str | None
-    """Hub revision to download."""
-
-
-@dataclass
-class ListConfig:
-    """List dataset specs in a collection repo."""
-
-    repo: str
-    """Hub collection repo."""
-    revision: str | None
-    """Hub revision to list."""
-
-
-@dataclass
-class UploadConfig:
-    """Upload an already-preprocessed dataset dir."""
-
-    pre_dir: str
-    """Path to <out_dir>/<name>, or the whole <out_dir> with --bulk."""
-    repo: str
-    """Hub repo to upload to."""
-    public: bool
-    """Make uploaded repo public."""
-    bulk: bool
-    """Upload the whole out-dir (all datasets) in one resumable
-    upload_large_folder pass -- recommended for big collections."""
-
-
-def run_one(cfg: OneConfig) -> None:
+def one(
+    *,
+    dataset: str,
+    out_dir: str,
+    embedder: str,
+    batch_size: int,
+    skip_tasks: bool,
+    embed: bool,
+    upload_repo: str | None,
+    public: bool,
+    revision: str | None,
+) -> None:
+    """Preprocess a single dataset (a local path or ``org/repo[/subdir]``)."""
     preprocess_one(
-        cfg.dataset,
-        Path(cfg.out_dir).expanduser(),
-        embedder=cfg.embedder,
-        batch_size=cfg.batch_size,
-        skip_tasks=cfg.skip_tasks,
-        embed=cfg.embed,
-        upload_repo=cfg.upload_repo,
-        private=not cfg.public,
-        revision=cfg.revision,
+        dataset,
+        Path(out_dir).expanduser(),
+        embedder=embedder,
+        batch_size=batch_size,
+        skip_tasks=skip_tasks,
+        embed=embed,
+        upload_repo=upload_repo,
+        private=not public,
+        revision=revision,
     )
 
 
-def run_many(cfg: ManyConfig) -> None:
-    specs = list_datasets(cfg.repo, revision=cfg.revision)
-    assert 0 <= cfg.shard < cfg.num_shards, (
-        f"shard must be in [0, num_shards); got shard={cfg.shard} "
-        f"num_shards={cfg.num_shards}"
+def many(
+    *,
+    repo: str,
+    out_dir: str,
+    shard: int,
+    num_shards: int,
+    skip_existing: bool,
+    embedder: str,
+    batch_size: int,
+    skip_tasks: bool,
+    embed: bool,
+    upload_repo: str | None,
+    public: bool,
+    revision: str | None,
+) -> None:
+    """Preprocess every dataset in a Hub collection, or this job's shard of them."""
+    specs = list_datasets(repo, revision=revision)
+    assert 0 <= shard < num_shards, (
+        f"shard must be in [0, num_shards); got shard={shard} num_shards={num_shards}"
     )
-    shard = specs[cfg.shard :: cfg.num_shards]
+    shard = specs[shard::num_shards]
     print(
-        f"shard {cfg.shard}/{cfg.num_shards}: {len(shard)} of {len(specs)} datasets",
+        f"shard {shard}/{num_shards}: {len(shard)} of {len(specs)} datasets",
         flush=True,
     )
-    out_dir = Path(cfg.out_dir).expanduser()
+    out_dir = Path(out_dir).expanduser()
     failures = []
     for i, spec in enumerate(shard):
         name = spec.rsplit("/", 1)[-1]
-        if cfg.skip_existing and _embeddings_done(out_dir / name):
+        if skip_existing and _embeddings_done(out_dir / name):
             print(f"[{i + 1}/{len(shard)}] skip existing {name}", flush=True)
             continue
         print(f"[{i + 1}/{len(shard)}] {spec}", flush=True)
@@ -360,13 +298,13 @@ def run_many(cfg: ManyConfig) -> None:
             preprocess_one(
                 spec,
                 out_dir,
-                embedder=cfg.embedder,
-                batch_size=cfg.batch_size,
-                skip_tasks=cfg.skip_tasks,
-                embed=cfg.embed,
-                upload_repo=cfg.upload_repo,
-                private=not cfg.public,
-                revision=cfg.revision,
+                embedder=embedder,
+                batch_size=batch_size,
+                skip_tasks=skip_tasks,
+                embed=embed,
+                upload_repo=upload_repo,
+                private=not public,
+                revision=revision,
             )
         except Exception as e:  # one bad dataset shouldn't sink the shard
             print(
@@ -380,27 +318,16 @@ def run_many(cfg: ManyConfig) -> None:
         sys.exit(1)
 
 
-def run_list(cfg: ListConfig) -> None:
-    for spec in list_datasets(cfg.repo, revision=cfg.revision):
+def ls(*, repo: str, revision: str | None) -> None:
+    """Print the dataset specs in a Hub collection."""
+    for spec in list_datasets(repo, revision=revision):
         print(spec)
 
 
-def run_upload(cfg: UploadConfig) -> None:
-    pre_dir = Path(cfg.pre_dir).expanduser()
-    if cfg.bulk:
-        bulk_upload(pre_dir, cfg.repo, private=not cfg.public)
+def upload(*, pre_dir: str, repo: str, bulk: bool, public: bool) -> None:
+    """Upload one preprocessed dataset, or a whole collection with ``bulk``."""
+    path = Path(pre_dir).expanduser()
+    if bulk:
+        bulk_upload(path, repo, private=not public)
     else:
-        upload_dataset(pre_dir, cfg.repo, private=not cfg.public)
-
-
-def main(cfg: OneConfig | ManyConfig | ListConfig | UploadConfig) -> None:
-    if isinstance(cfg, OneConfig):
-        run_one(cfg)
-    elif isinstance(cfg, ManyConfig):
-        run_many(cfg)
-    elif isinstance(cfg, ListConfig):
-        run_list(cfg)
-    elif isinstance(cfg, UploadConfig):
-        run_upload(cfg)
-    else:
-        raise TypeError(f"unknown config type: {type(cfg).__name__}")
+        upload_dataset(path, repo, private=not public)

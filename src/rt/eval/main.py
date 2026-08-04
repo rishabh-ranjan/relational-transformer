@@ -10,7 +10,6 @@ from pathlib import Path
 import torch
 import torch.distributed as dist
 
-from rt.config import Config
 from rt.data import get_tasks
 from rt.eval.evaluator import Evaluator
 from rt.eval.metrics import metric_for
@@ -35,26 +34,62 @@ def setup_dist():
     return device, 0, 0, 1, False
 
 
-def main(cfg: Config) -> None:
-    ev_cfg = cfg.eval
-    assert cfg.logger.wandb_disabled, "standalone eval does not log to wandb"
-    assert len(ev_cfg.ctx_size_list) == 1, (
+def main(
+    *,
+    # model: the checkpoint carries its own dims, so only what selects it
+    load_ckpt_path: str,
+    embedder: str,
+    d_text: int,
+    num_blocks: int,
+    d_model: int,
+    num_heads: int,
+    d_ff: int,
+    # what to evaluate
+    splits: list[str],
+    db_task_list: list[tuple[str, str]] | str,
+    pre_dir: str,
+    tokens_per_gpu: int,
+    num_workers: int,
+    prefetch_factor: int,
+    num_walks: int,
+    walk_length: int,
+    items_per_task: int,
+    ctx_size_list: list[int],
+    mmap_populate: bool,
+    shuffle_seed: int,
+    context_seed: int,
+    vector_db_path: str | None,
+    lcs_bw_pl_grid: list[tuple[int, int, bool]],
+    ensemble_size: int,
+    # where it lands
+    run_id: str,
+    project: str,
+    entity: str | None,
+    out_root: str,
+    wandb_disabled: bool,
+) -> None:
+    """Evaluate a checkpoint and write a RelBench submission.
+
+    Every argument is required; the arguments are the record of the evaluation.
+    """
+    assert wandb_disabled, "standalone eval does not log to wandb"
+    assert len(ctx_size_list) == 1, (
         "standalone eval writes one submission per run and needs exactly one "
         "ctx size; multi-size ctx_size_list is an in-loop training-eval feature"
     )
-    ctx_size = ev_cfg.ctx_size_list[0]
+    ctx_size = ctx_size_list[0]
     # Submission CSVs land with the run's other outputs:
     # <out_root>/<entity>/<project>/<id>/eval_out (same layout as training).
     csv_out_dir = (
-        Path(cfg.logger.out_root).expanduser()
-        / (cfg.logger.entity or "no-entity")
-        / cfg.logger.project
-        / cfg.logger.id
+        Path(out_root).expanduser()
+        / (entity or "no-entity")
+        / project
+        / run_id
         / "eval_out"
     )
     device, global_rank, local_rank, world_size, ddp = setup_dist()
 
-    checkpoint = cfg.model.load_ckpt_path
+    checkpoint = load_ckpt_path
     assert checkpoint is not None, "model.load_ckpt_path is required"
     net, config = load_rt_model(checkpoint, device=device, compile=False)
     net = net.to(torch.bfloat16)
@@ -72,25 +107,23 @@ def main(cfg: Config) -> None:
             f"both clf and reg tasks",
             flush=True,
         )
-    # The checkpoint's own config drives model construction; cfg.model dims
+    # The checkpoint carries the dims that built it; the arguments here
     # are ignored here. Warn when they disagree so a stale CLI default is
     # visible rather than silently shadowed.
     ckpt_model = config.get("model", {})
     mismatches = [
         f"{k}: config={v} checkpoint={ckpt_model[k]}"
         for k, v in (
-            ("num_blocks", cfg.model.num_blocks),
-            ("d_model", cfg.model.d_model),
-            ("d_text", cfg.model.d_text),
-            ("num_heads", cfg.model.num_heads),
-            ("d_ff", cfg.model.d_ff),
+            ("num_blocks", num_blocks),
+            ("d_model", d_model),
+            ("d_text", d_text),
+            ("num_heads", num_heads),
+            ("d_ff", d_ff),
         )
         if k in ckpt_model and ckpt_model[k] != v
     ]
-    if cfg.model.embedder != embedder:
-        mismatches.append(
-            f"embedder: config={cfg.model.embedder} checkpoint={embedder}"
-        )
+    if embedder != embedder:
+        mismatches.append(f"embedder: config={embedder} checkpoint={embedder}")
     if mismatches and global_rank == 0:
         print(
             "warning: model config ignored for checkpoint eval; differs from "
@@ -102,39 +135,39 @@ def main(cfg: Config) -> None:
         embedder=embedder,
         d_text=d_text,
         device=device,
-        num_walks=ev_cfg.num_walks,
-        walk_length=ev_cfg.walk_length,
-        tokens_per_gpu=ev_cfg.tokens_per_gpu,
-        items_per_task=ev_cfg.items_per_task,
-        num_workers=ev_cfg.num_workers,
-        shuffle_seed=ev_cfg.shuffle_seed,
-        prefetch_factor=ev_cfg.prefetch_factor,
-        mmap_populate=ev_cfg.mmap_populate,
-        vector_db_path=ev_cfg.vector_db_path,
+        num_walks=num_walks,
+        walk_length=walk_length,
+        tokens_per_gpu=tokens_per_gpu,
+        items_per_task=items_per_task,
+        num_workers=num_workers,
+        shuffle_seed=shuffle_seed,
+        prefetch_factor=prefetch_factor,
+        mmap_populate=mmap_populate,
+        vector_db_path=vector_db_path,
         global_rank=global_rank,
         local_rank=local_rank,
         world_size=world_size,
         ddp=ddp,
     )
-    grid = ev_cfg.lcs_bw_pl_grid
+    grid = lcs_bw_pl_grid
 
-    if len(grid) > 1 or ev_cfg.ensemble_size > 1:
-        assert ev_cfg.context_seed == 0, (
+    if len(grid) > 1 or ensemble_size > 1:
+        assert context_seed == 0, (
             "ensembling sweeps context seeds 0..ensemble_size-1; a fixed "
             "eval.context_seed only applies to single-config runs"
         )
 
-        val_tasks = get_tasks(ev_cfg.pre_dir, ev_cfg.db_task_list, ("val",))
-        test_tasks = get_tasks(ev_cfg.pre_dir, ev_cfg.db_task_list, ("test",))
+        val_tasks = get_tasks(pre_dir, db_task_list, ("val",))
+        test_tasks = get_tasks(pre_dir, db_task_list, ("test",))
         if not test_tasks:
-            raise SystemExit(f"no tasks found in {ev_cfg.pre_dir}")
+            raise SystemExit(f"no tasks found in {pre_dir}")
         run_ensemble(
             net,
-            ev_cfg.pre_dir,
+            pre_dir,
             val_tasks,
             test_tasks,
             grid=grid,
-            ensemble_size=ev_cfg.ensemble_size,
+            ensemble_size=ensemble_size,
             ctx_size=ctx_size,
             csv_out_dir=csv_out_dir,
             **eval_kwargs,
@@ -142,24 +175,24 @@ def main(cfg: Config) -> None:
         _teardown_dist(ddp)
         return
 
-    tasks = get_tasks(ev_cfg.pre_dir, ev_cfg.db_task_list, tuple(ev_cfg.splits))
+    tasks = get_tasks(pre_dir, db_task_list, tuple(splits))
     if not tasks:
-        raise SystemExit(f"no tasks found in {ev_cfg.pre_dir}")
+        raise SystemExit(f"no tasks found in {pre_dir}")
     lcs, bw, pl = grid[0]
     ev = build_evaluator(
         tasks,
-        ev_cfg.pre_dir,
+        pre_dir,
         ctx_size=ctx_size,
         local_ctx_size=lcs,
         bfs_width=bw,
         prefer_latest=pl,
-        context_seed=ev_cfg.context_seed,
+        context_seed=context_seed,
         **eval_kwargs,
     )
     run_and_report(
         net,
         tasks,
-        ev_cfg.pre_dir,
+        pre_dir,
         ctx_size=ctx_size,
         csv_out_dir=csv_out_dir,
         evaluator=ev,

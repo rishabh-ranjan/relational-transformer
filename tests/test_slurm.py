@@ -113,3 +113,13 @@ def test_job_env_is_not_inherited():
     from rt.slurm.submit import submit as submit_fn
 
     assert '"--export=NONE"' in _inspect.getsource(submit_fn)
+
+
+def test_bootstrap_lets_srun_inherit_the_job_environment():
+    """--export=NONE (which keeps the submit shell out of the job) also stops
+    srun from passing the job's own environment to its tasks, so `pixi` is not
+    on their PATH; SLURM_EXPORT_ENV=ALL puts it back."""
+    from importlib.resources import files
+
+    script = files("rt.slurm").joinpath("bootstrap.sh").read_text()
+    assert "export SLURM_EXPORT_ENV=ALL" in script

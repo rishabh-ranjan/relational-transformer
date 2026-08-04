@@ -1,22 +1,18 @@
-"""Preprocess relbench-format datasets into rustler's on-disk training format."""
+"""Turn relbench-format datasets into the tensors RT trains on.
+
+Entry points take their arguments directly -- there is no CLI; see
+examples/preprocess.py for a script that calls them.
+"""
 
 from rt.preprocess.embed import TextEmbedder, embed_texts
-from rt.preprocess.main import (
-    ListConfig,
-    ManyConfig,
-    OneConfig,
-    UploadConfig,
-    main,
-    preprocess_one,
-)
+from rt.preprocess.main import ls, many, one, preprocess_one, upload
 
 __all__ = [
-    "ListConfig",
-    "ManyConfig",
-    "OneConfig",
     "TextEmbedder",
-    "UploadConfig",
     "embed_texts",
-    "main",
+    "ls",
+    "many",
+    "one",
     "preprocess_one",
+    "upload",
 ]
