@@ -12,6 +12,7 @@ import inspect
 import json
 import os
 import subprocess
+import sys
 import time
 from dataclasses import dataclass
 from datetime import datetime
@@ -124,6 +125,11 @@ def submit(
     checkpoint it wrote earlier.
     """
     os.chdir(repo_root)
+    # The job runs from the repo root, so targets are importable relative to it
+    # (examples.foo:main). Match that here, or the submit-time check would fail
+    # on targets the job can import perfectly well.
+    if str(repo_root) not in sys.path:
+        sys.path.insert(0, str(repo_root))
     repo, commit = preflight()
     run_id = run_id or timestamp()
     if "run_id" in inspect.signature(resolve(target)).parameters:
