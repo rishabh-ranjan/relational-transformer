@@ -122,4 +122,4 @@ def test_bootstrap_lets_srun_inherit_the_job_environment():
     from importlib.resources import files
 
     script = files("rt.slurm").joinpath("bootstrap.sh").read_text()
-    assert "export SLURM_EXPORT_ENV=ALL" in script
+    assert "srun --export=ALL" in script

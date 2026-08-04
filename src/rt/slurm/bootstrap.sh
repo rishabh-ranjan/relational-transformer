@@ -41,13 +41,12 @@ pixi run build-sampler
 # reaches every rank directly. They save resume.pt at the next step boundary and
 # exit; this script only has to outlive them, hence the ignored trap. Slurm
 # requeues the job itself, and the run id is fixed, so the next attempt resumes.
-# --export=NONE on the sbatch line also sets SLURM_EXPORT_ENV=NONE, which makes
-# srun start its tasks with a minimal environment -- without the PATH this
-# script just built, so `pixi` is not found. The submit-side environment is
-# already excluded; what the tasks need is *this* script's environment.
-export SLURM_EXPORT_ENV=ALL
-
 trap '' TERM USR1
-srun --label --kill-on-bad-exit=1 \
+# --export=ALL here is not the same as sbatch's: that one kept the *submit
+# shell* out of the job, this one lets the tasks inherit the environment this
+# script just built. Without it srun starts them nearly empty (--export=NONE
+# sets SLURM_EXPORT_ENV=NONE) and they find neither pixi nor the tokens, caches
+# and node-local HOME that env.sh set up.
+srun --export=ALL --label --kill-on-bad-exit=1 \
     pixi run python -m rt.slurm.run "@TARGET@" "@ARGS@" &
 wait $!
