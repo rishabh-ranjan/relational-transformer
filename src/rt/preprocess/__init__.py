@@ -5,7 +5,7 @@ examples/preprocess.py for a script that calls them.
 """
 
 from rt.preprocess.embed import TextEmbedder, embed_texts
-from rt.preprocess.main import ls, many, one, preprocess_one, upload
+from rt.preprocess._preprocess import ls, many, one, preprocess_one, upload
 
 __all__ = [
     "TextEmbedder",

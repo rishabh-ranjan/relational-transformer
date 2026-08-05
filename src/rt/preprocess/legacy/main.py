@@ -137,11 +137,11 @@ def preprocess_one_legacy(
     private: bool,
     revision: str | None,
 ) -> Path:
-    """Legacy variant of :func:`rt.preprocess.main.preprocess_one`: resolve the
+    """Legacy variant of :func:`rt.preprocess._preprocess.preprocess_one`: resolve the
     dataset, apply the RT-v1 boolean transform, run the regular rustler `pre` +
     embedding pipeline, and (optionally) upload under ``legacy/<name>`` of
     ``upload_repo``."""
-    from rt.preprocess.main import (
+    from rt.preprocess._preprocess import (
         dataset_name,
         embed_dataset,
         resolve_dataset_dir,

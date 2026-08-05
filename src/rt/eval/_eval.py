@@ -19,7 +19,7 @@ from rt.model import load_rt_model
 
 def setup_dist():
     """Return (device, global_rank, local_rank, world_size, ddp). Honors torchrun
-    env, exactly like ``rt.train.main.setup_dist``; without torchrun this is a
+    env, exactly like ``rt.train._train.setup_dist``; without torchrun this is a
     plain single-process run."""
     world_size = int(os.environ.get("WORLD_SIZE", "1"))
     if world_size > 1:

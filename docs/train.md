@@ -44,7 +44,7 @@ mixture, forecast + autocomplete).
 
 ## Running a training script
 
-There is no CLI. `rt.train.main` is a function that takes every knob as a
+There is no CLI. `rt.train._train` is a function that takes every knob as a
 required argument; a run is a script that calls it. Copy
 [`examples/train.py`](../examples/train.py) — it passes the released RT-J
 values — and edit what you want. Build the sampler once first

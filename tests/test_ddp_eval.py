@@ -233,11 +233,11 @@ def _run_ensemble_worker(rank, port, ret):
     os.environ["MASTER_PORT"] = str(port)
     import sys
 
-    import rt.eval.main  # noqa: F401
+    import rt.eval._eval  # noqa: F401
 
-    # ``rt.eval.main`` the attribute is the *function* re-exported by the
+    # ``rt.eval._eval`` the attribute is the *function* re-exported by the
     # package __init__; the module itself lives in sys.modules.
-    m = sys.modules["rt.eval.main"]
+    m = sys.modules["rt.eval._eval"]
 
     dist.init_process_group("gloo", rank=rank, world_size=WORLD_SIZE)
 

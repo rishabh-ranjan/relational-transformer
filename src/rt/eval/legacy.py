@@ -11,7 +11,7 @@ from pathlib import Path
 import torch
 
 from rt.data import get_tasks
-from rt.eval.main import build_evaluator
+from rt.eval._eval import build_evaluator
 from rt.eval.metrics import metric_for
 from rt.eval.relbench import _emit_and_score
 from rt.model.legacy._common import LEGACY_EMBEDDER

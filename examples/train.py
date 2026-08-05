@@ -1,7 +1,7 @@
 """Pretrain a Relational Transformer on the Join -- the released RT-J recipe.
 
 There is no CLI: copy this file, change what you want, run it. The arguments
-here are the ones the released runs used; ``rt.train.main`` requires all of
+here are the ones the released runs used; ``rt.train._train`` requires all of
 them, so nothing is hidden in a default you did not choose.
 
     pixi run python examples/train.py                      # one process

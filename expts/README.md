@@ -36,5 +36,5 @@ submissions, resumed run ids, whatever the experiment needs.
   (see [docs/downloads.md](../docs/downloads.md)); point `pre_dir` at a path
   every node can read, and expect a job's first minutes to go on populating it
   into the page cache.
-- **Entry points take every argument explicitly.** `rt.train.main` has no
+- **Entry points take every argument explicitly.** `rt.train._train` has no
   defaults; [`examples/`](../examples/) has the released values to start from.

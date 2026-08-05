@@ -1,7 +1,7 @@
 """Evaluate a checkpoint on RelBench and write a submission.
 
 No CLI: copy, edit, run. The defaults below are the published RT-J evaluation
-setup; ``rt.eval.main`` requires every argument, so nothing is implicit.
+setup; ``rt.eval._eval`` requires every argument, so nothing is implicit.
 
     pixi run python examples/eval.py
 
