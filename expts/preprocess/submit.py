@@ -231,6 +231,24 @@ def submit_embed(name: str, expected_bytes: int, after: str | None = None):
     )
 
 
+def check_tree_is_submittable() -> None:
+    """Fail loudly, here, on the one thing that stops a sweep silently.
+
+    `submit()` refuses a dirty or unpushed tree -- jobs clone the commit you
+    submit from -- and raises once per database, deep in a loop, after printing
+    a plan that says work is about to be submitted. Run unattended behind a log
+    that trims output, that reads as a queue with nothing in it.
+    """
+    dirty = subprocess.run(
+        ["git", "status", "--porcelain"], cwd=REPO_ROOT, capture_output=True, text=True
+    ).stdout.strip()
+    if dirty:
+        raise SystemExit(
+            "the working tree is dirty, so no job can be submitted "
+            "(jobs clone the commit you submit from):\n" + dirty
+        )
+
+
 def main(dry_run: bool = False) -> None:
     """Submit whatever each database needs next.
 
@@ -240,6 +258,8 @@ def main(dry_run: bool = False) -> None:
     stages at once, and the GPU queue fills behind the cpu one without any
     dependency to declare.
     """
+    if not dry_run:
+        check_tree_is_submittable()
     sizes, out = load_sizes(), Path(OUT_DIR)
     names = datasets()
     ready = fully_downloaded(names)

@@ -148,6 +148,59 @@ The `stuck` line is databases that are neither finished nor being retried — no
 every job that ever failed, which would keep reporting a database that failed
 once and succeeded on resubmit.
 
+## What the stages actually cost
+
+Measured over this build, from the `= <db>: ...` line each job prints. Numbers
+are cpu/GPU seconds of real work, not wall clock — with hundreds of jobs at once
+the sweep finishes far faster than these totals suggest.
+
+| | rustler | embed |
+|---|---|---|
+| total | 3.8 h | 10.6 h |
+| share of the work | **26%** | **74%** |
+| median database | 2 s | 4 s |
+| mean | 47 s | 128 s |
+| slowest | 1743 s | 7173 s |
+
+**Both stages are dominated by a handful of databases, but not the same ones.**
+
+| | rustler | embed |
+|---|---|---|
+| top 1 database | 12.9% | 18.9% |
+| top 5 | 46.5% | **68.5%** |
+| top 10 | 64.5% | **87.9%** |
+| top 20 | 79.7% | 93.1% |
+| top 50 | 95.2% | 96.4% |
+
+The embed stage is the more skewed and the more expensive: ten databases are 88%
+of it. And the two rank differently, because they scale on different things:
+
+* **rustler tracks output size.** Slowest are `join-se-electronics` (81 GiB out,
+  1743 s), `join-tpch` (72 GiB, 1332 s), `join-se-english` (57 GiB, 1225 s).
+* **embed tracks text volume**, which output size predicts poorly. Slowest are
+  `join-open-food-facts` (7173 s from only 10 GiB of output),
+  `join-bird-codebase-comments` (5983 s, 14 GiB), `join-unpaywall` (4727 s,
+  13 GiB). `join-overture-maps` has 8 GiB of `text.json` and took over four
+  hours.
+
+Two consequences worth keeping in mind:
+
+1. **`sizes.json` is a good predictor for rustler and a poor one for embed.** It
+   is what sizes both stages' resources, which is why the embed tiers are
+   generous rather than tight — a database with modest output and enormous text
+   is exactly the case that gets under-provisioned, and every embed failure in
+   this build (two OOMs and a timeout) was one of those. If this is ever tuned
+   properly, size the embed stage on `text.json` bytes, which are known once
+   rustler has run.
+2. **The tail is free.** The median database costs 2 s + 4 s. Roughly 590 of the
+   639 together are a few percent of the work, so effort spent scheduling them
+   more cleverly buys nothing; all of the makespan is in the top ~20.
+
+For a whole-collection estimate: ~14.5 hours of single-stream work, which at the
+concurrency these five nodes allow (cpus for rustler, ~40 GPUs for embed) lands
+in well under an hour of wall clock once the raw data is present. The raw
+download is the longer pole and is not parallelisable — see `download.py`.
+
 ## Publishing
 
 `finalize.py upload` verifies, regenerates `db-task-lists/`, pushes with

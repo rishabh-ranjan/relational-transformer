@@ -1,6 +1,7 @@
 """Fetch the raw Join once, to a directory every node can read.
 
-    pixi run python expts/preprocess/download.py
+    pixi run python expts/preprocess/download.py            # fetch
+    pixi run python expts/preprocess/download.py --repair   # check and mend
 
 Once, and not per job: the collection is 639 databases in 28k files, and a job
 that resolved its own database from the Hub would be one of 639 clients doing it
@@ -75,5 +76,60 @@ def download(repo: str = SOURCE_REPO, local_dir: str = RAW_DIR) -> None:
     print(f"{n} databases in {d}")
 
 
+def repair(repo: str = SOURCE_REPO, local_dir: str = RAW_DIR) -> int:
+    """Bring the raw directory to exactly what the Hub says it is.
+
+    Every file is checked against the Hub's recorded size and only mismatches
+    are touched, so this is safe to run at any time and cheap when there is
+    nothing wrong. Try `download()` first when there are many to mend -- git-lfs
+    fetches in bulk, while this fetches one file at a time and thousands of
+    those is what gets rate limited.
+
+    Needed because a raw file can be the right name and the wrong content: an
+    interrupted fetch truncates one, and an LFS pointer is a 130-byte file
+    standing in for a parquet. `submit.py` refuses to preprocess a database in
+    that state, so the symptom is a sweep that stops making progress rather
+    than bad output -- and this is the fix.
+    """
+    from huggingface_hub import HfApi, hf_hub_download
+
+    d = Path(local_dir)
+    info = HfApi().repo_info(repo, repo_type="dataset", files_metadata=True)
+    want = {f.rfilename: (f.size or 0) for f in info.siblings if "/" in f.rfilename}
+
+    def wrong(rel: str, size: int) -> bool:
+        p = d / rel
+        return not p.is_file() or p.stat().st_size != size
+
+    bad = [r for r, s in want.items() if wrong(r, s)]
+    print(f"{len(want)} files in the collection, {len(bad)} wrong or missing")
+    if not bad:
+        return 0
+
+    for i, rel in enumerate(bad, 1):
+        for attempt in range(3):
+            try:
+                hf_hub_download(
+                    repo,
+                    rel,
+                    repo_type="dataset",
+                    local_dir=str(d),
+                    force_download=True,
+                )
+                break
+            except Exception as e:
+                if attempt == 2:
+                    print(f"  FAILED {rel}: {type(e).__name__}: {str(e)[:70]}")
+                time.sleep(5 * (attempt + 1))
+        if i % 200 == 0:
+            print(f"  {i}/{len(bad)}", flush=True)
+
+    still = [r for r, s in want.items() if wrong(r, s)]
+    print(f"{len(still)} files still wrong or missing")
+    return len(still)
+
+
 if __name__ == "__main__":
+    if "--repair" in sys.argv:
+        sys.exit(1 if repair() else 0)
     download()
