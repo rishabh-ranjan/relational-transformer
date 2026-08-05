@@ -45,6 +45,19 @@ def gib(n: float) -> str:
     return f"{n / 2**30:,.1f} GiB"
 
 
+# Both stages, because a database is "being worked on" in either. Reading only
+# one prefix is how a database whose embed job is running gets reported as a
+# failure, on the strength of a superseded rustler job from before a fix.
+STAGES = ("pre-", "emb-")
+
+
+def _strip_stage(name: str) -> str | None:
+    for s in STAGES:
+        if name.startswith(s):
+            return name[len(s) :]
+    return None
+
+
 def squeue_states() -> dict[str, int]:
     out = subprocess.run(
         ["squeue", "-h", "-o", "%j %t", "--name=" + ",".join(_job_names())],
@@ -53,13 +66,17 @@ def squeue_states() -> dict[str, int]:
     )
     states: dict[str, int] = {}
     for line in out.stdout.splitlines():
-        if line.startswith("pre-"):
+        if _strip_stage(line):
             states[line.split()[1]] = states.get(line.split()[1], 0) + 1
     return states
 
 
 def _job_names() -> list[str]:
-    return [f"pre-{p.parent.name}" for p in Path(RAW_DIR).glob("*/manifest.yaml")]
+    return [
+        f"{s}{p.parent.name}"
+        for p in Path(RAW_DIR).glob("*/manifest.yaml")
+        for s in STAGES
+    ]
 
 
 def running_now() -> list[tuple[str, str]]:
@@ -82,8 +99,9 @@ def running_now() -> list[tuple[str, str]]:
     rows = []
     for line in out.stdout.splitlines():
         name, elapsed, node = (line.split("|") + ["", ""])[:3]
-        if name.startswith("pre-"):
-            rows.append((name[4:], f"{elapsed} on {node}"))
+        db = _strip_stage(name)
+        if db:
+            rows.append((db, f"{name[:3]} {elapsed} on {node}"))
     return rows
 
 
@@ -102,7 +120,7 @@ def _queued() -> set[str]:
         capture_output=True,
         text=True,
     )
-    return {n[4:] for n in out.stdout.split() if n.startswith("pre-")}
+    return {db for n in out.stdout.split() if (db := _strip_stage(n))}
 
 
 def stuck(done: set[str], limit: int = 8) -> list[str]:
@@ -134,9 +152,9 @@ def stuck(done: set[str], limit: int = 8) -> list[str]:
     bad = []
     for line in out.stdout.splitlines():
         name, _, state = line.partition("|")
-        if not name.startswith("pre-") or not state:
+        db = _strip_stage(name) if state else None
+        if not db:
             continue
-        db = name[4:]
         if db in done or db in live:
             continue
         if state.split()[0] not in {
@@ -148,7 +166,14 @@ def stuck(done: set[str], limit: int = 8) -> list[str]:
             "SUSPENDED",
         }:
             bad.append(f"{db}: {state}")
-    return bad[-limit:]
+    # A database is stuck once, however many attempts it took to get there.
+    seen, unique = set(), []
+    for entry in reversed(bad):
+        db = entry.split(":", 1)[0]
+        if db not in seen:
+            seen.add(db)
+            unique.append(entry)
+    return unique[:limit]
 
 
 # An ETA from one or two finished databases is arithmetic, not information:

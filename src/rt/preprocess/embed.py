@@ -86,9 +86,14 @@ def embed_texts(
     init_device = device[0] if isinstance(device, list) else device
 
     text_path = f"{pre_dir}/{dataset_name}/text.json"
-    with open(text_path) as f:
+    # Read as bytes and drop them the moment they are parsed. Holding `raw`
+    # alongside the parsed list doubles the peak for no reason, and these files
+    # are not small -- join-overture-maps' text.json is 8 GiB, which is enough
+    # for the difference to be an out-of-memory kill rather than a slow moment.
+    with open(text_path, "rb") as f:
         raw = f.read()
     text_list = orjson.loads(raw)
+    del raw
     print(f"Loaded {len(text_list)} texts from {text_path}")
 
     text_embedder = TextEmbedder(batch_size, embedder, init_device)

@@ -78,9 +78,17 @@ TIERS = (
     (1 << 62, "1-00:00:00", BIG_NODES),
 )
 
-# The embedding stage is uniform and short -- seconds to a couple of minutes --
-# so one shape fits every database. It wants a GPU and almost nothing else.
-EMBED = dict(cpus=4, mem="40G", walltime="2:00:00")
+# The embedding stage wants a GPU, four cpus, and -- the part that is not
+# uniform -- host memory to hold the database's text. `embed_texts` parses the
+# whole of text.json into a python list, and text.json is 8 GiB for
+# join-overture-maps, so a flat 40G was an out-of-memory kill on the text-heavy
+# databases. Sized from expected output, generously: the stage is capped at
+# ~40 concurrent by GPUs anyway, so memory it does not use costs nothing.
+EMBED_CPUS = 4
+EMBED_WALLTIME = "4:00:00"
+EMBED_MEM_FLOOR = 64 << 30
+EMBED_MEM_FACTOR = 8
+EMBED_MEM_CAP = 400 << 30
 
 
 def resources_for(expected_bytes: int) -> Resources:
@@ -105,18 +113,19 @@ def resources_for(expected_bytes: int) -> Resources:
     )
 
 
-def embed_resources() -> Resources:
+def embed_resources(expected_bytes: int) -> Resources:
     """The GPU stage. A bare count, not a type: these nodes carry rtx8000s and
     2080tis and MiniLM does not care which."""
+    mem = min(EMBED_MEM_CAP, max(EMBED_MEM_FLOOR, EMBED_MEM_FACTOR * expected_bytes))
     return Resources(
         partition="il",
         account="infolab",
         qos="il-lo",
-        time=EMBED["walltime"],
+        time=EMBED_WALLTIME,
         gpus="1",
-        cpus_per_task=EMBED["cpus"],
+        cpus_per_task=EMBED_CPUS,
         exclusive=False,
-        mem=EMBED["mem"],
+        mem=f"{mem // 2**30}G",
         constraint=None,
         nodelist=EMBED_NODES,
     )
@@ -153,41 +162,49 @@ def datasets() -> list[str]:
 
 
 def fully_downloaded(names: list[str]) -> set[str]:
-    """Databases whose raw files are all present, per the Hub's own listing.
+    """Databases whose raw files are all present *and the right size*.
 
-    A directory with a manifest.yaml in it is not the same as a downloaded
-    database: `download.py` fetches 28k files across 639 directories, so at any
-    moment most of them are partly there. Preprocessing one of those would
+    A directory with a manifest.yaml in it is not a downloaded database: the raw
+    collection is 28k files across 639 directories, so at any moment during a
+    download most of them are partly there. Preprocessing one of those would
     quietly build a database short a few task tables and mark it finished, and
-    nothing downstream would notice. One listing call is the only authority on
-    what "all of it" means -- and checking makes this safe to run while the
-    download is still going, which is the point: the cluster need not idle until
-    the last byte lands.
+    nothing downstream would notice.
+
+    Sizes, not just presence, because both ways of fetching this can leave a
+    file that exists and is wrong: a git checkout holds LFS pointers (a couple
+    of hundred bytes) until `git lfs pull` replaces them, and an interrupted
+    download can leave a partial file. One metadata call answers it for the
+    whole collection, and makes it safe to submit while the fetch is still
+    running -- the cluster need not idle until the last byte lands.
     """
     from collections import defaultdict
 
     from huggingface_hub import HfApi
 
-    remote: dict[str, set[str]] = defaultdict(set)
-    for f in HfApi().list_repo_files(SOURCE_REPO, repo_type="dataset"):
-        if "/" in f:
-            db, rest = f.split("/", 1)
-            remote[db].add(rest)
+    remote: dict[str, dict[str, int]] = defaultdict(dict)
+    info = HfApi().repo_info(SOURCE_REPO, repo_type="dataset", files_metadata=True)
+    for f in info.siblings:
+        if "/" in f.rfilename:
+            db, rest = f.rfilename.split("/", 1)
+            remote[db][rest] = f.size or 0
 
     ready = set()
     for name in names:
         d = Path(RAW_DIR) / name
-        local = {
-            str(p.relative_to(d))
-            for p in d.rglob("*")
-            if p.is_file() and ".cache" not in p.parts
-        }
-        if remote[name] and local >= remote[name]:
+        want = remote.get(name)
+        if not want:
+            continue
+        if all(
+            (d / rel).is_file() and (d / rel).stat().st_size == size
+            for rel, size in want.items()
+        ):
             ready.add(name)
     return ready
 
 
-def submit_embed(name: str, after: str | None = None):
+def submit_embed(name: str, expected_bytes: int, after: str | None = None):
+    """The GPU stage for one database, optionally held until its rustler job
+    succeeds -- which is how the two stages are submitted in one pass."""
     return submit(
         "expts.preprocess.preprocess:embed",
         args={
@@ -196,7 +213,7 @@ def submit_embed(name: str, after: str | None = None):
             "embedder": EMBEDDER,
             "batch_size": BATCH_SIZE,
         },
-        resources=embed_resources(),
+        resources=embed_resources(expected_bytes),
         name=f"emb-{name}",
         setup=SETUP,
         repo_root=REPO_ROOT,
@@ -244,9 +261,10 @@ def main(dry_run: bool = False) -> None:
 
     for name in to_embed:
         if dry_run:
-            print(f"  embed   {name:44s} 1 gpu  {EMBED['cpus']} cpu  {EMBED['mem']}")
+            r = embed_resources(sizes.get(name, 1 << 35))
+            print(f"  embed   {name:44s} 1 gpu  {r.cpus_per_task} cpu  {r.mem}")
             continue
-        submit_embed(name)
+        submit_embed(name, sizes.get(name, 1 << 35))
 
     for name in to_rustle:
         expected = sizes.get(name, 1 << 62)  # unknown is not the same as small
@@ -278,7 +296,7 @@ def main(dry_run: bool = False) -> None:
         # Queued now, held by slurm until its rustler stage succeeds: the GPU
         # queue fills itself behind the cpu one, with nothing to poll and no
         # second pass to remember to run.
-        submit_embed(name, after=job.id)
+        submit_embed(name, expected, after=job.id)
 
 
 if __name__ == "__main__":
