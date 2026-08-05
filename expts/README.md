@@ -38,7 +38,3 @@ submissions, resumed run ids, whatever the experiment needs.
   into the page cache.
 - **Entry points take every argument explicitly.** `rt.train.main` has no
   defaults; [`examples/`](../examples/) has the released values to start from.
-
-`submit()` checks `args` against the target's signature — names and types —
-before it queues anything, so a typo fails in a second rather than forty minutes
-into a job.
