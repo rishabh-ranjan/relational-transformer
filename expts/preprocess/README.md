@@ -13,7 +13,9 @@ df -h /dfs/user/$USER
 # 1. fetch the raw collection once (~28 GiB, ~30 min)
 pixi run python expts/preprocess/download.py
 
-# 2. submit one job per database (re-run any time; it submits only what is left)
+# 2. submit one job per database (re-run any time; it submits only what is left,
+#    and only databases whose raw files have all arrived -- so it is safe to
+#    start this while step 1 is still running, and to re-run as more land)
 pixi run python expts/preprocess/submit.py --dry-run    # see the plan first
 pixi run python expts/preprocess/submit.py
 
@@ -49,6 +51,12 @@ edit.
 complete and those already queued or running, and submits the rest. That covers
 a failed job, a job killed for running out of memory, a node going down, and a
 sweep interrupted half-way.
+
+`submit.py` submits a database only once every one of its raw files is present,
+checked against the Hub's own listing. A directory with a `manifest.yaml` is not
+a downloaded database -- the download fetches 28k files across 639 directories --
+and preprocessing a half-arrived one would build a database short a few task
+tables and mark it finished.
 
 A database is complete when its `meta.json` names an embedding file that exists.
 Not when its directory exists — rustler writes its artifacts before the

@@ -105,22 +105,61 @@ def datasets() -> list[str]:
     return sorted(names, key=lambda n: -sizes.get(n, 0))
 
 
+def fully_downloaded(names: list[str]) -> set[str]:
+    """Databases whose raw files are all present, per the Hub's own listing.
+
+    A directory with a manifest.yaml in it is not the same as a downloaded
+    database: `download.py` fetches 28k files across 639 directories, so at any
+    moment most of them are partly there. Preprocessing one of those would
+    quietly build a database short a few task tables and mark it finished, and
+    nothing downstream would notice. One listing call is the only authority on
+    what "all of it" means -- and checking makes this safe to run while the
+    download is still going, which is the point: the cluster need not idle until
+    the last byte lands.
+    """
+    from collections import defaultdict
+
+    from huggingface_hub import HfApi
+
+    remote: dict[str, set[str]] = defaultdict(set)
+    for f in HfApi().list_repo_files(SOURCE_REPO, repo_type="dataset"):
+        if "/" in f:
+            db, rest = f.split("/", 1)
+            remote[db].add(rest)
+
+    ready = set()
+    for name in names:
+        d = Path(RAW_DIR) / name
+        local = {
+            str(p.relative_to(d))
+            for p in d.rglob("*")
+            if p.is_file() and ".cache" not in p.parts
+        }
+        if remote[name] and local >= remote[name]:
+            ready.add(name)
+    return ready
+
+
 def main(dry_run: bool = False) -> None:
     sizes, out = load_sizes(), Path(OUT_DIR)
     names = datasets()
     running = queued_names()
-    print(f"{len(names)} databases in {RAW_DIR}")
+    ready = fully_downloaded(names)
+    print(f"{len(names)} databases in {RAW_DIR}, {len(ready)} fully downloaded")
 
-    todo, done, busy = [], 0, 0
+    todo, done, busy, waiting = [], 0, 0, 0
     for name in names:
         if is_done(out / name, EMBEDDER):
             done += 1
         elif name in running:
             busy += 1
+        elif name not in ready:
+            waiting += 1
         else:
             todo.append(name)
     print(
-        f"  {done} already preprocessed, {busy} queued or running, {len(todo)} to submit"
+        f"  {done} already preprocessed, {busy} queued or running, "
+        f"{waiting} still downloading, {len(todo)} to submit"
     )
 
     unsized = [n for n in todo if n not in sizes]
