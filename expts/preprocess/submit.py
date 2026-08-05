@@ -85,7 +85,10 @@ TIERS = (
 # databases. Sized from expected output, generously: the stage is capped at
 # ~40 concurrent by GPUs anyway, so memory it does not use costs nothing.
 EMBED_CPUS = 4
-EMBED_WALLTIME = "4:00:00"
+# Walltime scales for the same reason memory does. join-overture-maps' 8 GiB of
+# text was still embedding when a flat 4h cut it off, and a timeout costs the
+# whole stage: the run has to start over from the first text.
+EMBED_WALLTIMES = ((1 << 30, "2:00:00"), (8 << 30, "8:00:00"), (1 << 62, "1-00:00:00"))
 EMBED_MEM_FLOOR = 64 << 30
 EMBED_MEM_FACTOR = 8
 EMBED_MEM_CAP = 400 << 30
@@ -117,11 +120,14 @@ def embed_resources(expected_bytes: int) -> Resources:
     """The GPU stage. A bare count, not a type: these nodes carry rtx8000s and
     2080tis and MiniLM does not care which."""
     mem = min(EMBED_MEM_CAP, max(EMBED_MEM_FLOOR, EMBED_MEM_FACTOR * expected_bytes))
+    for limit, walltime in EMBED_WALLTIMES:
+        if expected_bytes < limit:
+            break
     return Resources(
         partition="il",
         account="infolab",
         qos="il-lo",
-        time=EMBED_WALLTIME,
+        time=walltime,
         gpus="1",
         cpus_per_task=EMBED_CPUS,
         exclusive=False,
