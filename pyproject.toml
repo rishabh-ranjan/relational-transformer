@@ -38,8 +38,8 @@ manifest-path = "rustler/Cargo.toml"
 module-name = "rt.rustler"
 # `pre` bundles the polars preprocess pyfunction; FAISS (`vecdb`) stays source-only.
 features = ["pyo3/extension-module", "pre"]
-# rt.slurm ships a batch-script template and the node env setup alongside its .py
-include = ["src/rt/slurm/*.sh"]
+# roach.slurm ships a batch-script template and the node env setup alongside its .py
+include = ["src/roach/slurm/*.sh"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
@@ -58,10 +58,6 @@ beartype = ">=0.22.9,<0.23"
 
 [tool.pixi.pypi-dependencies]
 relational-transformer = { path = ".", editable = true }
-# Job submission (roach.slurm). Deliberately unpinned here: submitting records
-# the roach commit that did it and the job clones exactly that, so a queued run
-# cannot change under you -- the pin belongs to the submission, not the manifest.
-roach = { git = "https://github.com/rishabh-ranjan/roach" }
 torch = "*"
 safetensors = "*"
 sentence-transformers = "*"
