@@ -58,7 +58,9 @@ A database is preprocessed by **two jobs**, not one:
   over 200 databases: `TotalCPU` equals `Elapsed` on every one, so the stage is
   single-threaded, and `MaxRSS` is about twice a database's output. It is ~70%
   of the work and near-100% on the big ones.
-* **`embed`** — one GPU, four cpus, host memory sized to the database's text.
+* **`embed`** — **six GPUs in one job**, 24 cpus, memory per GPU.
+  sentence-transformers runs a worker per device, so one rank wants all of them
+  (`ntasks=1`), not a rank each.
 
 Together in one job they get neither. The first sweep asked for 8–48 cpus and
 80–500 G per database and used **one cpu and 1.5–62 G**: 562 cpus allocated
@@ -107,11 +109,13 @@ Every one of these cost real time; none of them is hypothetical.
 |---|---|---|
 | `HTTP 429` fetching raw data | the Hub's file API is one call per file, and this is 28k files | `download.py` uses git-lfs, whose batch API is orders of magnitude fewer calls. **Do not add downloader processes** — the limit is the Hub's, and three extra processes rate-limited it to a standstill |
 | `HTTP 429` fetching the embedder | 50 embed jobs each downloading the same model | prefetched in `setup`, which the shared clone runs once per node |
-| `torch.OutOfMemoryError` in embed | SBERT kept every embedding on the GPU until the whole list was done | `rt.preprocess.embed` encodes in chunks; peak no longer scales with the database |
+| `torch.OutOfMemoryError` in embed | SBERT kept every embedding on the GPU until the whole list was done | `rt.preprocess.embed` encodes in chunks — **both** paths, since the multi-process one accumulates fp32 in host memory instead (~120 GiB for join-overture-maps) |
 | `Out Of Memory` (host) in embed | `text.json` is 8 GiB for `join-overture-maps` and is parsed whole | embed memory scales with expected output; the raw bytes are dropped once parsed |
 | `uncorrectable ECC error` | failing GPU hardware on hyperturing1 | `EMBED_NODES` excludes it. **Put it back when the card is fixed** |
 | `cpus-per-task set by two different environment variables` | a stale `SLURM_CPUS_PER_TASK` reaching the job | roach's `bootstrap.sh` unsets it before `srun` |
 | a database built short a few tables | preprocessing a half-downloaded database | `submit.py` checks every raw file against the Hub's **size**, not just presence |
+| `Requested node configuration is not available` on an idle node | `DefMemPerGPU` caps GPUs per job and `--mem` does not lift it | `mem_per_gpu` on `Resources` (see the cluster section) |
+| an embed that would take ~44h on one GPU | the stage was one card per database | six GPUs per job, ~4× |
 
 That last one is the important one. A `manifest.yaml` is not a downloaded
 database, and a git checkout holds LFS pointers that are the right *name* and
@@ -135,6 +139,34 @@ writing the output there is not the bottleneck. `MaxMemPerCPU` is 10700M but is
 not enforced against a per-node `--mem` (checked with `sbatch --test-only`: a
 1-cpu job may ask for 200G), which is why the rustler stage can take one cpu
 regardless of how much memory it needs.
+
+**`DefMemPerGPU=240000M` limits how many GPUs a job can have, and `--mem` does
+not lift it.** The partition applies that default when deciding whether a job
+fits, so the most GPUs a job can hold is `RealMemory / 240000M` — **3** on a
+754G turing, **6** on turing3, **8** on a hyperturing — however little memory it
+actually asks for. It looks like contention (`Requested node configuration is
+not available` on a node with nothing running on it) and is not. Use
+`--mem-per-gpu`, which replaces the default: with it, an idle 754G node accepts
+a request for 8 GPUs.
+
+### Embedding throughput, measured
+
+2M texts, same data on both node types:
+
+| | 1 GPU | 6 GPUs | speedup | efficiency |
+|---|---|---|---|---|
+| hyperturing2 — Quadro RTX 8000 | 929 texts/s | 3,769 texts/s | 4.06× | 68% |
+| turing3 — GeForce RTX 2080 Ti | 849 texts/s | 3,643 texts/s | 4.29× | 71% |
+
+Two things follow. **Six GPUs are worth about four**, which is why the stage
+takes a node's worth rather than one card — the ten databases that are 88% of
+the stage each finish in a quarter of the time instead of queueing behind a
+single GPU. And **the card barely matters**: 9% between an RTX 8000 and a 2080
+Ti, so there is nothing to gain by routing text-heavy databases at the better
+hardware.
+
+The 68–71% efficiency is per-chunk fan-out overhead. Larger `CHUNK` in
+`rt.preprocess.embed` would recover some of it, at the cost of peak memory.
 
 ## Progress and ETA
 
