@@ -11,7 +11,7 @@ sharded across a slurm array), ``ls`` prints what is in a collection, and
 
 from __future__ import annotations
 
-from rt.preprocess import ls, many, one, upload  # noqa: F401
+from rt.preprocess import ls, many, one, upload
 
 
 def preprocess_one_dataset() -> None:
@@ -44,6 +44,20 @@ def preprocess_a_collection() -> None:
         upload_repo=None,
         public=False,
         revision=None,
+    )
+
+
+def list_a_collection() -> None:
+    ls(repo="stanford-star/the-join", revision=None)
+
+
+def upload_result() -> None:
+    """One preprocessed dataset, or a whole output root with ``bulk=True``."""
+    upload(
+        pre_dir="data/relbench-preprocessed/rel-f1",
+        repo="your-org/your-preprocessed",
+        bulk=False,
+        public=False,
     )
 
 
