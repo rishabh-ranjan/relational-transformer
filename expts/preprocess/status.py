@@ -27,7 +27,13 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from expts.preprocess.preprocess import is_done  # noqa: E402
 from expts.preprocess.sizes import load as load_sizes  # noqa: E402
-from expts.preprocess.submit import EMBEDDER, LOG_ROOT, OUT_DIR, RAW_DIR  # noqa: E402
+from expts.preprocess.submit import (  # noqa: E402
+    EMBEDDER,
+    LOG_ROOT,
+    OUT_DIR,
+    RAW_DIR,
+    SOURCE_REPO,
+)
 
 # Only rate samples inside this window are used, so an ETA reflects how the
 # sweep is going now rather than averaging in a slow start or a stall.
@@ -81,7 +87,32 @@ def running_now() -> list[tuple[str, str]]:
     return rows
 
 
-def recent_failures(limit: int = 8) -> list[str]:
+def _queued() -> set[str]:
+    out = subprocess.run(
+        [
+            "squeue",
+            "-h",
+            "-u",
+            subprocess.run(
+                ["id", "-un"], capture_output=True, text=True
+            ).stdout.strip(),
+            "-o",
+            "%j",
+        ],
+        capture_output=True,
+        text=True,
+    )
+    return {n[4:] for n in out.stdout.split() if n.startswith("pre-")}
+
+
+def stuck(done: set[str], limit: int = 8) -> list[str]:
+    """Databases whose last attempt failed and that nothing is retrying.
+
+    Not "jobs that failed today": a database that failed, was resubmitted and
+    succeeded would be reported as broken forever, which trains you to ignore
+    the line. What matters is whether it is finished or on its way -- a failure
+    with a successful retry behind it is history, not a problem.
+    """
     out = subprocess.run(
         [
             "sacct",
@@ -99,10 +130,16 @@ def recent_failures(limit: int = 8) -> list[str]:
         capture_output=True,
         text=True,
     )
+    live = {name for name, _ in (r for r in running_now())} | _queued()
     bad = []
     for line in out.stdout.splitlines():
         name, _, state = line.partition("|")
-        if name.startswith("pre-") and state.split()[0] not in {
+        if not name.startswith("pre-") or not state:
+            continue
+        db = name[4:]
+        if db in done or db in live:
+            continue
+        if state.split()[0] not in {
             "COMPLETED",
             "RUNNING",
             "PENDING",
@@ -110,11 +147,17 @@ def recent_failures(limit: int = 8) -> list[str]:
             "RESIZING",
             "SUSPENDED",
         }:
-            bad.append(f"{name[4:]}: {state}")
+            bad.append(f"{db}: {state}")
     return bad[-limit:]
 
 
-def sample(done_bytes: int) -> tuple[float, int] | None:
+# An ETA from one or two finished databases is arithmetic, not information:
+# extrapolating the first minutes of a sweep whose work spans three orders of
+# magnitude gives answers off by weeks. Say so instead.
+MIN_COMPLETIONS = 5
+
+
+def sample(done_bytes: int, done_count: int) -> tuple[float, int, int] | None:
     """Append a sample; return the oldest one inside the window, if any."""
     now = time.time()
     SAMPLES.parent.mkdir(parents=True, exist_ok=True)
@@ -123,18 +166,39 @@ def sample(done_bytes: int) -> tuple[float, int] | None:
         for line in SAMPLES.read_text().splitlines():
             try:
                 row = json.loads(line)
-                history.append((row["t"], row["bytes"]))
+                history.append((row["t"], row["bytes"], row.get("n", 0)))
             except (json.JSONDecodeError, KeyError):
                 continue
     with SAMPLES.open("a") as f:
-        f.write(json.dumps({"t": now, "bytes": done_bytes}) + "\n")
+        f.write(json.dumps({"t": now, "bytes": done_bytes, "n": done_count}) + "\n")
     inside = [h for h in history if now - h[0] <= WINDOW.total_seconds()]
     return (inside or history or [None])[0]
 
 
+def collection() -> list[str]:
+    """Every database the build will contain, downloaded yet or not.
+
+    Taken from the source repo rather than from what has landed locally: while
+    the download is still running, a local count makes the total grow under you
+    and the percentage go backwards.
+    """
+    try:
+        from huggingface_hub import HfApi
+
+        return sorted(
+            {
+                f.split("/", 1)[0]
+                for f in HfApi().list_repo_files(SOURCE_REPO, repo_type="dataset")
+                if f.count("/") >= 1 and f.startswith("join-")
+            }
+        )
+    except Exception:  # offline: fall back to what is on disk
+        return sorted(p.parent.name for p in Path(RAW_DIR).glob("*/manifest.yaml"))
+
+
 def report() -> None:
     sizes = load_sizes()
-    names = sorted(p.parent.name for p in Path(RAW_DIR).glob("*/manifest.yaml"))
+    names = collection()
     out = Path(OUT_DIR)
     # A database the previous build never had has no expected size; charge it
     # the median so it is neither invisible nor dominant.
@@ -153,18 +217,28 @@ def report() -> None:
         f"  ({done_bytes / max(total_bytes, 1):.1%})"
     )
 
-    earlier = sample(done_bytes)
+    earlier = sample(done_bytes, len(done))
     if earlier and done_bytes > earlier[1]:
         elapsed = time.time() - earlier[0]
         rate = (done_bytes - earlier[1]) / elapsed
-        remaining = (total_bytes - done_bytes) / rate
-        print(f"rate      : {gib(rate * 3600)}/h over the last {elapsed / 60:.0f} min")
+        finished = len(done) - earlier[2]
         print(
-            f"eta       : {timedelta(seconds=int(remaining))}"
-            f"  -> {datetime.now() + timedelta(seconds=remaining):%a %H:%M}"
+            f"rate      : {gib(rate * 3600)}/h over the last {elapsed / 60:.0f} min"
+            f"  ({finished} databases)"
         )
+        if finished >= MIN_COMPLETIONS:
+            remaining = (total_bytes - done_bytes) / rate
+            print(
+                f"eta       : {timedelta(seconds=int(remaining))}"
+                f"  -> {datetime.now() + timedelta(seconds=remaining):%a %H:%M}"
+            )
+        else:
+            print(
+                f"eta       : too early -- needs {MIN_COMPLETIONS} databases finished "
+                f"inside the window, has {finished}"
+            )
     else:
-        print("rate      : not enough samples yet (run again in a few minutes)")
+        print("rate      : nothing finished yet (run again in a few minutes)")
 
     states = squeue_states()
     if states:
@@ -174,9 +248,11 @@ def report() -> None:
         print(f"running   : {len(live)}")
         for name, where in sorted(live, key=lambda r: -weight.get(r[0], 0))[:8]:
             print(f"            {name:42s} {gib(weight.get(name, 0)):>12s}  {where}")
-    failures = recent_failures()
+    failures = stuck(set(done))
     if failures:
-        print(f"failures  : {len(failures)} today (resubmit with submit.py)")
+        print(
+            f"stuck     : {len(failures)} not done and not retrying (re-run submit.py)"
+        )
         for f in failures:
             print(f"            {f}")
 
