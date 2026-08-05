@@ -9,7 +9,7 @@ from pathlib import Path
 import pytest
 import torch
 
-from rt.slurm import timestamp
+from roach.slurm import timestamp
 
 PRE_DIR = "/dfs/user/ranjanr/pre/relbench-preprocessed"
 

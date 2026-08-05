@@ -63,7 +63,7 @@ model + optimizer on every rank, no sharding). Under slurm that is one line:
 srun --ntasks-per-node=8 --gres=gpu:8 pixi run python examples/train.py
 ```
 
-`rt.slurm.run` translates slurm's `SLURM_PROCID`/`SLURM_LOCALID`/`SLURM_NTASKS`
+`roach.slurm.run` translates slurm's `SLURM_PROCID`/`SLURM_LOCALID`/`SLURM_NTASKS`
 into torch's `RANK`/`LOCAL_RANK`/`WORLD_SIZE`, so nothing else is needed — and
 because each rank is a slurm task, a preemption signal reaches all of them.
 Outside slurm, `torchrun --standalone --nproc-per-node=auto examples/train.py`
@@ -76,20 +76,19 @@ the (large) data from shared storage per item.
 
 ## On a cluster
 
-`rt.slurm` submits a function to slurm and handles the rest: it refuses a dirty
+`roach.slurm` submits a function to slurm and handles the rest: it refuses a dirty
 or unpushed tree, records the commit, checks your arguments against the target's
 signature, and hands slurm a script that clones that commit, builds the
 environment on the node, and starts one rank per GPU.
 
 ```python
-from rt.slurm import Resources, submit
+from roach.slurm import AMPERE, submit   # roach.slurm is a separate package
 
 submit("examples.train:train",
        args={"pre_dir": ..., "eval_pre_dir": ..., "out_root": ...},
-       resources=Resources(partition=..., account=..., qos=..., time="7-00:00:00",
-                           gpus="a100:8", cpus_per_task=16, exclusive=True,
-                           mem=None, constraint="ampere", nodelist=None),
-       name="rt-j", repo_root=..., log_root=..., clone_root=..., secrets_dir=...)
+       resources=AMPERE,   # or Resources(...) for a shape roach does not ship
+       name="rt-j", setup=("pixi run build-sampler",),
+       repo_root=..., log_root=..., clone_root=..., secrets_dir=...)
 ```
 
 See [`expts/data_scaling/`](../expts/data_scaling/) for a worked experiment: a
@@ -99,7 +98,7 @@ own launcher instead:
 
 - **Name a run you may want to resume.** `run_id` names the output
   directory `<out_root>/<entity>/<project>/<run_id>/`; pass the same value again
-  to pick the run's `resume.pt` back up (`rt.slurm.submit` mints one and reuses
+  to pick the run's `resume.pt` back up (`roach.slurm.submit` mints one and reuses
   it across requeues). Resuming *requires* an explicit id:
   unset, it defaults to a per-rank timestamp, which names a fresh directory
   with nothing to resume from. Rank 0 is the only rank that writes there.

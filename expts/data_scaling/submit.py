@@ -9,9 +9,9 @@ from, so this file is also the record of what was run.
 
 from __future__ import annotations
 
-from rt.slurm import AMPERE, BLACKWELL, submit
+from roach.slurm import AMPERE, BLACKWELL, submit
 
-# Where this cluster keeps things. rt.slurm has no idea about any of it.
+# Where this cluster keeps things. roach.slurm has no idea about any of it.
 REPO_ROOT = "/lfs/hyperturing1/0/ranjanr/clones/rishabh-ranjan/relational-transformer"
 CLONE_ROOT = "/tmp/ranjanr/clones"
 SECRETS_DIR = "/dfs/user/ranjanr/.secrets"
@@ -51,6 +51,8 @@ def main() -> None:
             args={**BASE, "db_task_list": task_list},
             resources=resources,
             name=f"ds-{arm}",
+            # the rustler sampler is a compiled extension; build it in the clone
+            setup=("pixi run build-sampler",),
             **WHERE,
         )
 

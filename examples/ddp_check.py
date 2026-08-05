@@ -1,6 +1,6 @@
 """Cluster sanity check: does DDP come up under srun, and do signals reach ranks?
 
-Run it through rt.slurm (see the bottom of this file). Two things are being
+Run it through roach.slurm (see the bottom of this file). Two things are being
 checked, both of which the training jobs depend on:
 
 * every rank joins the process group and an all-reduce returns the expected sum,

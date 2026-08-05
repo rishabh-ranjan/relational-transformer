@@ -9,12 +9,12 @@ them, so nothing is hidden in a default you did not choose.
 
 Data is a local directory -- download it first (see docs/downloads.md). For
 running this on a cluster without writing any slurm boilerplate, see
-rt.slurm.submit and expts/data_scaling/submit.py.
+roach.slurm.submit and expts/data_scaling/submit.py.
 """
 
 from __future__ import annotations
 
-from rt.slurm import timestamp
+from roach.slurm import timestamp
 from rt.train import main
 
 

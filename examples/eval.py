@@ -12,7 +12,7 @@ on demand); the data is a local directory (see docs/downloads.md).
 from __future__ import annotations
 
 from rt.eval import main
-from rt.slurm import timestamp
+from roach.slurm import timestamp
 
 
 def evaluate(pre_dir: str, out_root: str, checkpoint: str, run_id: str) -> None:

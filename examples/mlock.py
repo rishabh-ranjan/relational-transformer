@@ -8,7 +8,7 @@ Lock the data once with this (Ctrl-C releases it), and pass
     pixi run python examples/mlock.py     # terminal 1, on the node you train on
 
 Needs a high RLIMIT_MEMLOCK (`ulimit -l unlimited`, or slurm's
-`--propagate=MEMLOCK`, which rt.slurm sets) to lock the whole mixture.
+`--propagate=MEMLOCK`, which roach.slurm sets) to lock the whole mixture.
 """
 
 from __future__ import annotations

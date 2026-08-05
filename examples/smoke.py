@@ -9,10 +9,10 @@ A GPU is required. The model attends with ``flex_attention``, which has no CPU
 backward ("FlexAttention does not support backward on CPU"), so there is no
 CPU-only training path to fall back on; ``tests/test_smoke.py`` skips itself
 when there is no CUDA device, and the same function runs on a GPU through
-rt.slurm.
+roach.slurm.
 
     python examples/smoke.py                      # from a checkout, on a GPU
-    from examples.smoke import smoke; smoke(...)  # or submitted with rt.slurm
+    from examples.smoke import smoke; smoke(...)  # or submitted with roach.slurm
 """
 
 from __future__ import annotations
@@ -89,7 +89,7 @@ def smoke(
 
 
 if __name__ == "__main__":
-    from rt.slurm import timestamp
+    from roach.slurm import timestamp
 
     smoke(
         pre_dir="/dfs/user/ranjanr/pre/relbench-preprocessed",
