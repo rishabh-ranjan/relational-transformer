@@ -58,9 +58,10 @@ beartype = ">=0.22.9,<0.23"
 
 [tool.pixi.pypi-dependencies]
 relational-transformer = { path = ".", editable = true }
-# Job submission (roach.slurm). Pinned to a commit for the same reason a job
-# pins this repo's: a run should not change because a dependency moved.
-roach = { git = "https://github.com/rishabh-ranjan/roach", rev = "c7137d3a594583a24e09e4fade9bd0112f0f8a91" }
+# Job submission (roach.slurm). Deliberately unpinned here: submitting records
+# the roach commit that did it and the job clones exactly that, so a queued run
+# cannot change under you -- the pin belongs to the submission, not the manifest.
+roach = { git = "https://github.com/rishabh-ranjan/roach" }
 torch = "*"
 safetensors = "*"
 sentence-transformers = "*"
