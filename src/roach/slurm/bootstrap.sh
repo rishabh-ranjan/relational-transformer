@@ -135,6 +135,12 @@ cp pixi.lock "@LOG_ROOT@/@RUN_ID@.pixi.lock"
 # exit; this script only has to outlive them, hence the ignored trap. Slurm
 # requeues the job itself, and the run id is fixed, so the next attempt resumes.
 trap '' TERM USR1
+# srun refuses to start when SLURM_CPUS_PER_TASK disagrees with the allocation's
+# SLURM_TRES_PER_TASK ("cpus-per-task set by two different environment
+# variables"), and a stale value reaches a job easily enough -- a submitting
+# shell that is itself inside an allocation is one way. The allocation is the
+# authority, so drop the environment's opinion and let srun read it.
+unset SLURM_CPUS_PER_TASK
 # --export=ALL here is not the same as sbatch's: that one kept the *submit
 # shell* out of the job, this one lets the tasks inherit the environment this
 # script just built. Without it srun starts them nearly empty (--export=NONE

@@ -37,12 +37,26 @@ SECRETS_DIR = "/dfs/user/ranjanr/.secrets"
 EMBEDDER = "all-MiniLM-L12-v2"
 BATCH_SIZE = 1024
 
+# Every job runs `setup`, but the shared clone means it runs once per commit per
+# node -- which is the right number of times to fetch the embedder. Left to the
+# embed jobs, 50 of them start at once and each asks the Hub for the same model,
+# and the Hub answers most of them with 429.
+SETUP = (
+    "pixi run build-sampler",
+    f'pixi run python -c "from huggingface_hub import snapshot_download;'
+    f" snapshot_download('sentence-transformers/{EMBEDDER}')\"",
+)
+
 # hyperturing1/2 have 2 TiB of memory and 252 cpus; the turings have 754 GiB
 # (turing3 1.4 TiB) and 80. Everything can run on all five; the largest
 # databases are held to the hyperturings, where one can have half a terabyte
 # without leaving the node unable to run anything alongside it.
 ALL_NODES = "hyperturing1,hyperturing2,turing1,turing2,turing3"
 BIG_NODES = "hyperturing1,hyperturing2"
+# hyperturing1's GPUs threw "uncorrectable ECC error" on 18 jobs; the cpu stage
+# is unaffected, so only the GPU stage avoids it. Drop this back to ALL_NODES
+# once the card is replaced or the node is drained.
+EMBED_NODES = "hyperturing2,turing1,turing2,turing3"
 
 # The rustler stage takes ONE cpu. Measured: TotalCPU equals Elapsed on every
 # database, so it is single-threaded and a wider request buys nothing while
@@ -104,7 +118,7 @@ def embed_resources() -> Resources:
         exclusive=False,
         mem=EMBED["mem"],
         constraint=None,
-        nodelist=ALL_NODES,
+        nodelist=EMBED_NODES,
     )
 
 
@@ -184,7 +198,7 @@ def submit_embed(name: str, after: str | None = None):
         },
         resources=embed_resources(),
         name=f"emb-{name}",
-        setup=("pixi run build-sampler",),
+        setup=SETUP,
         repo_root=REPO_ROOT,
         log_root=LOG_ROOT,
         clone_root=CLONE_ROOT,
@@ -254,7 +268,7 @@ def main(dry_run: bool = False) -> None:
             },
             resources=resources,
             name=f"pre-{name}",
-            setup=("pixi run build-sampler",),
+            setup=SETUP,
             repo_root=REPO_ROOT,
             log_root=LOG_ROOT,
             clone_root=CLONE_ROOT,

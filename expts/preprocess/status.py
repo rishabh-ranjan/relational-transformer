@@ -1,7 +1,7 @@
 """Where the sweep is, and when it will finish.
 
-    pixi run python expts/preprocess/status.py           # one report
-    pixi run python expts/preprocess/status.py --watch   # refresh every 60s
+    pixi run python expts/preprocess/status.py
+    watch -n60 pixi run python expts/preprocess/status.py   # if you want it live
 
 Progress is measured in bytes, not in databases. Counting databases would say
 this sweep was 97% done while a quarter of the work remained, because 20 of the
@@ -258,9 +258,4 @@ def report() -> None:
 
 
 if __name__ == "__main__":
-    while True:
-        report()
-        if "--watch" not in sys.argv:
-            break
-        time.sleep(60)
-        print()
+    report()
