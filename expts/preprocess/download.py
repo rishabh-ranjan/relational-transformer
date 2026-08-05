@@ -6,9 +6,16 @@ Once, and not per job: the collection is 639 databases in 28k files, and a job
 that resolved its own database from the Hub would be one of 639 clients doing
 it at the same time. The Hub answers that with HTTP 429 long before it finishes.
 
-Retried in a loop because it hands out 429s even at eight workers, and because
-`snapshot_download` resumes -- a retry re-checks what is already on disk and
-fetches the rest, so the loop converges rather than starting over.
+Retried in a loop because the Hub hands out 429s, and because `snapshot_download`
+resumes -- a retry re-checks what is already on disk and fetches the rest, so the
+loop converges rather than starting over.
+
+Four workers, and no second downloader alongside it. Concurrency past that does
+not go faster: the limit is the Hub's, and exceeding it turns a slow download
+into 429s on every request, which is slower still -- measured, three extra
+processes at eight workers each rate-limited the whole thing until the retry
+loop gave up. The backoff is exponential to five minutes, because a 429 means
+come back later rather than come back immediately.
 """
 
 from __future__ import annotations
@@ -21,8 +28,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from expts.preprocess.submit import RAW_DIR, SOURCE_REPO  # noqa: E402
 
-ATTEMPTS = 20
-WORKERS = 8
+ATTEMPTS = 60
+WORKERS = 4
 
 
 def download(repo: str = SOURCE_REPO, local_dir: str = RAW_DIR) -> None:
@@ -36,7 +43,7 @@ def download(repo: str = SOURCE_REPO, local_dir: str = RAW_DIR) -> None:
             break
         except Exception as e:
             print(f"attempt {attempt}: {type(e).__name__}: {str(e)[:160]}", flush=True)
-            time.sleep(min(60, 5 * attempt))
+            time.sleep(min(300, 10 * attempt))
     else:
         sys.exit(f"{repo} did not finish downloading in {ATTEMPTS} attempts")
 
