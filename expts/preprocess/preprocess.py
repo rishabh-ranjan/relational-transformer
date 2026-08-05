@@ -21,6 +21,16 @@ import json
 import time
 from pathlib import Path
 
+# Imported here rather than inside preprocess(): submit.py imports this module,
+# so a name that has moved is a submit-time error instead of a job that queues,
+# waits, starts and only then finds out.
+from rt.preprocess import (
+    dataset_name,
+    embed_dataset,
+    run_rustler_pre,
+    update_meta_with_embeddings,
+)
+
 
 def is_done(pre_dataset_dir: Path, embedder: str) -> bool:
     """True once `meta.json` records this embedder's file and the file is there.
@@ -60,13 +70,6 @@ def preprocess(
     repo the raw directory was downloaded from, not the local path it was read
     through.
     """
-    from rt.preprocess.main import (
-        dataset_name,
-        embed_dataset,
-        run_rustler_pre,
-        update_meta_with_embeddings,
-    )
-
     out_root, raw = Path(out_dir), Path(raw_dir) / dataset
     pre_dataset_dir = out_root / dataset
 
