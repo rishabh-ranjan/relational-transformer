@@ -13,7 +13,10 @@ from roach.slurm import AMPERE, BLACKWELL, submit
 
 # Where this cluster keeps things. roach.slurm has no idea about any of it.
 REPO_ROOT = "/lfs/hyperturing1/0/ranjanr/clones/rishabh-ranjan/relational-transformer"
-CLONE_ROOT = "/tmp/ranjanr/clones"
+# The node's own big disk, not /tmp (which is the 280G root filesystem): clones
+# are shared per commit and hold the pixi env, which pixi hardlinks from the
+# package cache only when the two are on the same filesystem.
+CLONE_ROOT = "/lfs/local/0/roach_clones"
 SECRETS_DIR = "/dfs/user/ranjanr/.secrets"
 LOG_ROOT = "/dfs/user/ranjanr/slurm-logs/data-scaling"
 OUT_ROOT = "/dfs/user/ranjanr/ckpts"
@@ -25,6 +28,10 @@ WHERE = dict(
     clone_root=CLONE_ROOT,
     secrets_dir=SECRETS_DIR,
     log_root=LOG_ROOT,
+    # a clone survives a week unused before a later job sweeps it; these runs
+    # are long, so the arms that follow one another reuse the same one
+    clone_ttl_days=7,
+    omp_num_threads=8,
 )
 
 ARMS = {
