@@ -33,7 +33,13 @@ class Resources:
     scarcest thing on a node, and a job that keeps one idle is capping how many
     of its siblings can run."""
     cpus_per_task: int
-    """Per rank, not per node -- srun starts one task per GPU."""
+    """Per rank, not per node -- srun starts one task per GPU by default."""
+    ntasks: int | None
+    """Ranks to start. None means one per GPU, which is what DDP wants and what
+    roach.slurm.run assumes. Set it to 1 to give a single process several GPUs:
+    a stage that parallelises inside one process (sentence-transformers spawning
+    a worker per device, say) wants all of them visible to one rank, not one
+    rank each."""
     exclusive: bool
     mem: str | None
     """None leaves it to the partition default, which is usually what you want;
@@ -51,10 +57,14 @@ class Resources:
             raise ValueError(f"no GPUs is '0', not a type with none: {self.gpus!r}")
         if self.cpus_per_task < 1:
             raise ValueError(f"cpus_per_task must be >= 1, got {self.cpus_per_task}")
+        if self.ntasks is not None and self.ntasks < 1:
+            raise ValueError(f"ntasks must be >= 1 or None, got {self.ntasks}")
 
     @property
-    def ntasks(self) -> int:
-        """One rank per GPU, or a single rank when the job asks for none."""
+    def ranks(self) -> int:
+        """How many tasks srun starts: `ntasks` if given, else one per GPU."""
+        if self.ntasks is not None:
+            return self.ntasks
         return max(1, int(self.gpus.rpartition(":")[2]))
 
     def sbatch_flags(self) -> list[str]:
@@ -64,7 +74,7 @@ class Resources:
             f"--qos={self.qos}",
             f"--time={self.time}",
             "--nodes=1",
-            f"--ntasks-per-node={self.ntasks}",
+            f"--ntasks-per-node={self.ranks}",
             f"--cpus-per-task={self.cpus_per_task}",
         ]
         if self.gpus != "0":
@@ -92,6 +102,7 @@ AMPERE = Resources(
     time="7-00:00:00",  # the `il` QOS caps wall clock here; the partition allows 21d under il-lo
     gpus="a100:8",
     cpus_per_task=16,  # 128 cores / 8 ranks
+    ntasks=None,
     exclusive=True,  # the mixture is populated into the page cache: take the node's memory
     mem=None,  # --exclusive + DefMemPerGPU gives 2017232M; an explicit --mem is capped lower
     constraint="ampere",
@@ -106,6 +117,7 @@ AMPERE_LO = Resources(
     time="21-00:00:00",
     gpus="a100:8",
     cpus_per_task=14,  # the site allows 14 cpus per gpu when not --exclusive
+    ntasks=None,
     exclusive=False,  # these nodes carry unrelated cpu-only jobs; demanding the node just queues
     mem=None,
     constraint="ampere",
@@ -121,6 +133,7 @@ BLACKWELL = Resources(
     time="21-00:00:00",
     gpus="b200:4",
     cpus_per_task=36,
+    ntasks=None,
     exclusive=False,
     mem="1500000M",  # the node's default for 4 gpus is below what the mixture needs resident
     constraint=None,

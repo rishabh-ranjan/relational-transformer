@@ -56,6 +56,7 @@ def ampere(**over) -> Resources:
         time="7-00:00:00",
         gpus="a100:8",
         cpus_per_task=16,
+        ntasks=None,
         exclusive=True,
         mem=None,
         constraint="ampere",
@@ -69,7 +70,7 @@ def test_gpus_may_name_a_type_or_just_a_count():
     naming a type pins the job to the nodes that have it, which for a sweep that
     should land anywhere free is an artificial constraint."""
     assert "--gres=gpu:2" in ampere(gpus="2").sbatch_flags()
-    assert ampere(gpus="2").ntasks == 2
+    assert ampere(gpus="2").ranks == 2
     assert "--gres=gpu:a100:8" in ampere().sbatch_flags()
     for bad in ("", ":4", "a100:", "a100"):
         with pytest.raises(ValueError, match="gpus must be"):
@@ -84,14 +85,26 @@ def test_a_cpu_only_stage_asks_for_no_gpu():
     flags = ampere(gpus="0").sbatch_flags()
     assert not [f for f in flags if f.startswith("--gres")]
     assert "--ntasks-per-node=1" in flags
-    assert ampere(gpus="0").ntasks == 1
+    assert ampere(gpus="0").ranks == 1
     with pytest.raises(ValueError, match="no GPUs is"):
         ampere(gpus="a100:0")
 
 
 def test_one_task_per_gpu():
-    assert ampere().ntasks == 8
-    assert ampere(gpus="b200:4").ntasks == 4
+    assert ampere().ranks == 8
+    assert ampere(gpus="b200:4").ranks == 4
+
+
+def test_ntasks_overrides_one_rank_per_gpu():
+    """One rank per GPU is what DDP wants, not a law. A stage that parallelises
+    inside one process -- sentence-transformers spawning a worker per device --
+    needs every GPU visible to a single rank, and got one GPU each instead."""
+    r = ampere(gpus="10", ntasks=1)
+    assert r.ranks == 1
+    assert "--ntasks-per-node=1" in r.sbatch_flags()
+    assert "--gres=gpu:10" in r.sbatch_flags()
+    with pytest.raises(ValueError, match="ntasks must be"):
+        ampere(ntasks=0)
 
 
 def test_sbatch_flags():
@@ -182,8 +195,8 @@ def test_presets_are_one_rank_per_gpu():
     from roach.slurm import AMPERE, AMPERE_LO, BLACKWELL
 
     for preset in (AMPERE, AMPERE_LO, BLACKWELL):
-        assert preset.ntasks == int(preset.gpus.rpartition(":")[2])
-        assert preset.ntasks * preset.cpus_per_task <= 288  # the widest node here
+        assert preset.ranks == int(preset.gpus.rpartition(":")[2])
+        assert preset.ranks * preset.cpus_per_task <= 288  # the widest node here
 
 
 def test_a_dependent_job_is_cancelled_when_its_dependency_fails():

@@ -109,6 +109,7 @@ def resources_for(expected_bytes: int) -> Resources:
         # sweep at the 50 GPUs these five nodes have between them.
         gpus="0",
         cpus_per_task=RUSTLER_CPUS,
+        ntasks=None,
         exclusive=False,
         mem=f"{mem // 2**30}G",
         constraint=None,
@@ -130,6 +131,7 @@ def embed_resources(expected_bytes: int) -> Resources:
         time=walltime,
         gpus="1",
         cpus_per_task=EMBED_CPUS,
+        ntasks=None,
         exclusive=False,
         mem=f"{mem // 2**30}G",
         constraint=None,
