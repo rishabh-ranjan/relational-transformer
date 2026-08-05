@@ -60,7 +60,7 @@ beartype = ">=0.22.9,<0.23"
 relational-transformer = { path = ".", editable = true }
 # Job submission (roach.slurm). Pinned to a commit for the same reason a job
 # pins this repo's: a run should not change because a dependency moved.
-roach = { git = "https://github.com/rishabh-ranjan/roach", rev = "d28181d311243477e01c64c83590a20de509e151" }
+roach = { git = "https://github.com/rishabh-ranjan/roach", rev = "c7137d3a594583a24e09e4fade9bd0112f0f8a91" }
 torch = "*"
 safetensors = "*"
 sentence-transformers = "*"
