@@ -71,9 +71,22 @@ def test_gpus_may_name_a_type_or_just_a_count():
     assert "--gres=gpu:2" in ampere(gpus="2").sbatch_flags()
     assert ampere(gpus="2").ntasks == 2
     assert "--gres=gpu:a100:8" in ampere().sbatch_flags()
-    for bad in ("", ":4", "a100:", "a100", "a100:0"):
+    for bad in ("", ":4", "a100:", "a100"):
         with pytest.raises(ValueError, match="gpus must be"):
             ampere(gpus=bad)
+
+
+def test_a_cpu_only_stage_asks_for_no_gpu():
+    """A pipeline stage that does not use an accelerator must not hold one. GPUs
+    are the scarcest thing on these nodes, so a cpu-only job that keeps one idle
+    caps how many of its siblings can run -- which is a throughput bug that
+    looks like a scheduling one."""
+    flags = ampere(gpus="0").sbatch_flags()
+    assert not [f for f in flags if f.startswith("--gres")]
+    assert "--ntasks-per-node=1" in flags
+    assert ampere(gpus="0").ntasks == 1
+    with pytest.raises(ValueError, match="no GPUs is"):
+        ampere(gpus="a100:0")
 
 
 def test_one_task_per_gpu():
@@ -171,3 +184,12 @@ def test_presets_are_one_rank_per_gpu():
     for preset in (AMPERE, AMPERE_LO, BLACKWELL):
         assert preset.ntasks == int(preset.gpus.rpartition(":")[2])
         assert preset.ntasks * preset.cpus_per_task <= 288  # the widest node here
+
+
+def test_a_dependent_job_is_cancelled_when_its_dependency_fails():
+    """`after` chains a pipeline's stages in one submission pass. Without
+    --kill-on-invalid-dep the second stage of a failed first stage sits PENDING
+    forever, which looks like a slow queue rather than a failure."""
+    src = inspect.getsource(submit_fn)
+    assert '"--dependency=afterok:{after}"' in src or "--dependency=afterok:" in src
+    assert "--kill-on-invalid-dep=yes" in src

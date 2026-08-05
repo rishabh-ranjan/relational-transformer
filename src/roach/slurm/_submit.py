@@ -120,6 +120,7 @@ def submit(
     clone_ttl_days: int,
     setup: tuple[str, ...] = (),
     run_id: str | None = None,
+    after: str | None = None,
 ) -> Job:
     """Run ``target(**args)`` on ``resources``, one rank per GPU.
 
@@ -131,6 +132,11 @@ def submit(
     before a later job sweeps it. It is required for the same reason
     ``Resources`` has no defaults: the job reads nothing from the environment,
     so a value nobody passed would be roach choosing on the experiment's behalf.
+
+    ``after`` is the id of a job this one waits for, so a pipeline whose stages
+    want different hardware can be submitted in one pass instead of polling for
+    the first stage to finish. The wait is on success: if the dependency fails,
+    slurm cancels this job rather than leaving it pending forever.
     """
     os.chdir(repo_root)
     # The job runs from the repo root, so targets are importable relative to it
@@ -186,6 +192,10 @@ def submit(
         f"--output={log}",
         f"--error={log}",
     ]
+    if after:
+        # kill-on-invalid-dep, or a dependency that can never be satisfied
+        # leaves this job pending until someone notices it by hand.
+        flags += [f"--dependency=afterok:{after}", "--kill-on-invalid-dep=yes"]
     # Slurm env vars outrank command-line flags when submitting from inside an
     # allocation, which would silently impose that job's shape on this one.
     env = {

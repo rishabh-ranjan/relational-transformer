@@ -23,7 +23,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from roach.slurm import Resources, submit  # noqa: E402
 
-from expts.preprocess.preprocess import is_done  # noqa: E402
+from expts.preprocess.preprocess import is_done, is_rustler_done  # noqa: E402
 from expts.preprocess.sizes import load as load_sizes  # noqa: E402
 
 REPO_ROOT = "/lfs/hyperturing1/0/ranjanr/clones/rishabh-ranjan/relational-transformer"
@@ -44,39 +44,72 @@ BATCH_SIZE = 1024
 ALL_NODES = "hyperturing1,hyperturing2,turing1,turing2,turing3"
 BIG_NODES = "hyperturing1,hyperturing2"
 
-# (max expected output bytes, cpus, mem, wall clock, nodes). Memory is bounded
-# by the site's MaxMemPerCPU of 10700M -- asking for more than cpus x 10700M is
-# rejected, which is why the wide tiers are wide in cpus as well.
+# The rustler stage takes ONE cpu. Measured: TotalCPU equals Elapsed on every
+# database, so it is single-threaded and a wider request buys nothing while
+# costing a slot someone else's database could have had. How many run at once is
+# then how many cpus the five nodes have -- which is the point.
+#
+# Only memory varies, and it comes from measurement too: MaxRSS ran to about
+# twice a database's output, so this asks for three times with a floor. (The
+# site's MaxMemPerCPU of 10700M is not enforced against a per-node --mem here;
+# checked with sbatch --test-only, a 1-cpu job may ask for 200G.)
+RUSTLER_CPUS = 1
+MEM_FLOOR = 8 << 30
+MEM_FACTOR = 3
+# (max expected output bytes, wall clock, nodes)
 TIERS = (
-    (1 << 30, 8, "80G", "2:00:00", ALL_NODES),
-    (8 << 30, 16, "160G", "6:00:00", ALL_NODES),
-    (25 << 30, 24, "250G", "12:00:00", ALL_NODES),
-    (1 << 62, 48, "500G", "1-00:00:00", BIG_NODES),
+    (1 << 30, "2:00:00", ALL_NODES),
+    (16 << 30, "8:00:00", ALL_NODES),
+    (40 << 30, "16:00:00", ALL_NODES),
+    (1 << 62, "1-00:00:00", BIG_NODES),
 )
+
+# The embedding stage is uniform and short -- seconds to a couple of minutes --
+# so one shape fits every database. It wants a GPU and almost nothing else.
+EMBED = dict(cpus=4, mem="40G", walltime="2:00:00")
 
 
 def resources_for(expected_bytes: int) -> Resources:
-    for limit, cpus, mem, walltime, nodes in TIERS:
+    """The cpu-only rustler stage: one cpu, memory from the expected output."""
+    for limit, walltime, nodes in TIERS:
         if expected_bytes < limit:
             break
+    mem = max(MEM_FLOOR, MEM_FACTOR * expected_bytes)
     return Resources(
         partition="il",
         account="infolab",
         qos="il-lo",
         time=walltime,
-        # A bare count, not a type: these five nodes carry rtx8000s and 2080tis
-        # and this job does not care which. Naming one would halve the pool.
-        gpus="1",
-        cpus_per_task=cpus,
+        # No GPU: this stage never touches one, and holding it would cap the
+        # sweep at the 50 GPUs these five nodes have between them.
+        gpus="0",
+        cpus_per_task=RUSTLER_CPUS,
         exclusive=False,
-        mem=mem,
+        mem=f"{mem // 2**30}G",
         constraint=None,
         nodelist=nodes,
     )
 
 
-def queued_names() -> set[str]:
-    """Databases already queued or running, so re-running submit.py is safe."""
+def embed_resources() -> Resources:
+    """The GPU stage. A bare count, not a type: these nodes carry rtx8000s and
+    2080tis and MiniLM does not care which."""
+    return Resources(
+        partition="il",
+        account="infolab",
+        qos="il-lo",
+        time=EMBED["walltime"],
+        gpus="1",
+        cpus_per_task=EMBED["cpus"],
+        exclusive=False,
+        mem=EMBED["mem"],
+        constraint=None,
+        nodelist=ALL_NODES,
+    )
+
+
+def queued_names(prefix: str) -> set[str]:
+    """Databases already queued or running in a stage, so re-running is safe."""
     out = subprocess.run(
         [
             "squeue",
@@ -91,7 +124,7 @@ def queued_names() -> set[str]:
         capture_output=True,
         text=True,
     )
-    return {n[4:] for n in out.stdout.split() if n.startswith("pre-")}
+    return {n[len(prefix) :] for n in out.stdout.split() if n.startswith(prefix)}
 
 
 def datasets() -> list[str]:
@@ -140,53 +173,84 @@ def fully_downloaded(names: list[str]) -> set[str]:
     return ready
 
 
+def submit_embed(name: str, after: str | None = None):
+    return submit(
+        "expts.preprocess.preprocess:embed",
+        args={
+            "dataset": name,
+            "out_dir": OUT_DIR,
+            "embedder": EMBEDDER,
+            "batch_size": BATCH_SIZE,
+        },
+        resources=embed_resources(),
+        name=f"emb-{name}",
+        setup=("pixi run build-sampler",),
+        repo_root=REPO_ROOT,
+        log_root=LOG_ROOT,
+        clone_root=CLONE_ROOT,
+        secrets_dir=SECRETS_DIR,
+        clone_ttl_days=7,
+        after=after,
+    )
+
+
 def main(dry_run: bool = False) -> None:
+    """Submit whatever each database needs next.
+
+    Two stages, one pass: a database with no rustler output gets a cpu-only
+    rustler job, one that has it but no embeddings gets a GPU embed job. Because
+    each is decided from what is on disk, re-running this is the resume for both
+    stages at once, and the GPU queue fills behind the cpu one without any
+    dependency to declare.
+    """
     sizes, out = load_sizes(), Path(OUT_DIR)
     names = datasets()
-    running = queued_names()
     ready = fully_downloaded(names)
+    pre_running, emb_running = queued_names("pre-"), queued_names("emb-")
     print(f"{len(names)} databases in {RAW_DIR}, {len(ready)} fully downloaded")
 
-    todo, done, busy, waiting = [], 0, 0, 0
+    to_rustle, to_embed, done, busy, waiting = [], [], 0, 0, 0
     for name in names:
-        if is_done(out / name, EMBEDDER):
+        d = out / name
+        if is_done(d, EMBEDDER):
             done += 1
-        elif name in running:
+        elif is_rustler_done(d):
+            if name in emb_running:
+                busy += 1
+            else:
+                to_embed.append(name)
+        elif name in pre_running:
             busy += 1
         elif name not in ready:
             waiting += 1
         else:
-            todo.append(name)
-    print(
-        f"  {done} already preprocessed, {busy} queued or running, "
-        f"{waiting} still downloading, {len(todo)} to submit"
-    )
+            to_rustle.append(name)
+    print(f"  {done} complete, {busy} queued or running, {waiting} still downloading")
+    print(f"  submitting {len(to_rustle)} rustler + {len(to_embed)} embed")
 
-    unsized = [n for n in todo if n not in sizes]
-    if unsized:
-        # New databases get the largest tier: unknown is not the same as small,
-        # and guessing small is the failure that wastes a whole job.
-        print(f"  {len(unsized)} not in sizes.json, submitted at the largest tier")
+    for name in to_embed:
+        if dry_run:
+            print(f"  embed   {name:44s} 1 gpu  {EMBED['cpus']} cpu  {EMBED['mem']}")
+            continue
+        submit_embed(name)
 
-    for i, name in enumerate(todo, 1):
-        expected = sizes.get(name, 1 << 62)
+    for name in to_rustle:
+        expected = sizes.get(name, 1 << 62)  # unknown is not the same as small
         resources = resources_for(expected)
         if dry_run:
             print(
-                f"  [{i}/{len(todo)}] {name:42s} {expected / 2**30:8.2f} GiB  "
+                f"  rustler {name:44s} {expected / 2**30:8.2f} GiB  "
                 f"{resources.cpus_per_task:3d} cpu  {resources.mem:>5s}  "
-                f"{resources.time:>10s}  {resources.nodelist}"
+                f"{resources.time:>10s}   -> embed on afterok"
             )
             continue
-        submit(
-            "expts.preprocess.preprocess:preprocess",
+        job = submit(
+            "expts.preprocess.preprocess:rustler",
             args={
                 "dataset": name,
                 "raw_dir": RAW_DIR,
                 "out_dir": OUT_DIR,
                 "source_repo": SOURCE_REPO,
-                "embedder": EMBEDDER,
-                "batch_size": BATCH_SIZE,
             },
             resources=resources,
             name=f"pre-{name}",
@@ -195,10 +259,12 @@ def main(dry_run: bool = False) -> None:
             log_root=LOG_ROOT,
             clone_root=CLONE_ROOT,
             secrets_dir=SECRETS_DIR,
-            # every job in the sweep is the same commit, so the clone is built
-            # once per node and reused; a week outlives the sweep comfortably
             clone_ttl_days=7,
         )
+        # Queued now, held by slurm until its rustler stage succeeds: the GPU
+        # queue fills itself behind the cpu one, with nothing to poll and no
+        # second pass to remember to run.
+        submit_embed(name, after=job.id)
 
 
 if __name__ == "__main__":

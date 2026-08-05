@@ -26,7 +26,12 @@ class Resources:
     """`<type>:<count>`, e.g. "a100:8", or a bare `<count>` for any type the
     eligible nodes offer -- which is what lets one job shape be scheduled across
     nodes that carry different cards. The count is also the number of ranks: one
-    task per GPU, which is what makes DDP work (see roach.slurm.run)."""
+    task per GPU, which is what makes DDP work (see roach.slurm.run).
+
+    `"0"` asks for no GPU at all, and runs a single rank. A cpu-only stage of a
+    pipeline that wants no accelerator should not have to hold one: GPUs are the
+    scarcest thing on a node, and a job that keeps one idle is capping how many
+    of its siblings can run."""
     cpus_per_task: int
     """Per rank, not per node -- srun starts one task per GPU."""
     exclusive: bool
@@ -38,17 +43,19 @@ class Resources:
 
     def __post_init__(self) -> None:
         kind, sep, count = self.gpus.rpartition(":")
-        if (sep and not kind) or not count.isdigit() or int(count) < 1:
+        if (sep and not kind) or not count.isdigit():
             raise ValueError(
                 f"gpus must be '<count>' or '<type>:<count>', got {self.gpus!r}"
             )
+        if sep and int(count) == 0:
+            raise ValueError(f"no GPUs is '0', not a type with none: {self.gpus!r}")
         if self.cpus_per_task < 1:
             raise ValueError(f"cpus_per_task must be >= 1, got {self.cpus_per_task}")
 
     @property
     def ntasks(self) -> int:
-        """One rank per GPU."""
-        return int(self.gpus.rpartition(":")[2])
+        """One rank per GPU, or a single rank when the job asks for none."""
+        return max(1, int(self.gpus.rpartition(":")[2]))
 
     def sbatch_flags(self) -> list[str]:
         flags = [
@@ -58,9 +65,10 @@ class Resources:
             f"--time={self.time}",
             "--nodes=1",
             f"--ntasks-per-node={self.ntasks}",
-            f"--gres=gpu:{self.gpus}",
             f"--cpus-per-task={self.cpus_per_task}",
         ]
+        if self.gpus != "0":
+            flags.append(f"--gres=gpu:{self.gpus}")
         if self.exclusive:
             flags.append("--exclusive")
         if self.mem:
