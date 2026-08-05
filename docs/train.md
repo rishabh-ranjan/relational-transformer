@@ -135,12 +135,13 @@ every `resume_save_mins` minutes (20 in the examples) bounds lost progress.
 By default each run re-populates the preprocessed data into RAM at startup. When
 iterating on training code, that reload is wasted work on every restart. Lock the
 data into the page cache **once** with a long-lived holder
-(`rt.data.mlock_main`), then train with `mmap_populate=False` so reads hit the
+([`examples/mlock.py`](../examples/mlock.py)), then train with
+`mmap_populate=False` so reads hit the
 locked cache:
 
 ```bash
 # terminal 1: hold the data resident (Ctrl-C to release)
-pixi run python -c "from rt.data import mlock_main; mlock_main(pre_dir='<PRE_DIR>', workers=32)"
+pixi run python examples/mlock.py
 # terminal 2 (same node): train without re-populating
 # terminal 2 (same node): train with mmap_populate=False in your script
 pixi run python examples/train.py

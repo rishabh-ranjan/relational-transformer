@@ -7,7 +7,7 @@ from rt.data.datasets import (
     TrainDataset,
     process_batch,
 )
-from rt.data.mlock import MlockConfig, mlock_main
+from rt.data.mlock import mlock_main
 from rt.data.resolve import (
     CORE_FILES,
     METADATA_FILES,
@@ -24,7 +24,6 @@ __all__ = [
     "CORE_FILES",
     "EvalDataset",
     "METADATA_FILES",
-    "MlockConfig",
     "RustlerDataset",
     "Task",
     "TrainDataset",

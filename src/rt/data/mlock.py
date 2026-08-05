@@ -7,7 +7,6 @@ import ctypes.util
 import os
 import signal
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from dataclasses import dataclass
 
 from tqdm import tqdm
 
@@ -49,31 +48,28 @@ def mlock_file(path: str) -> int:
     return size
 
 
-@dataclass
-class MlockConfig:
-    db_task_list: list[tuple[str, str]] | str
-    """(db, task) pairs, or a path to a JSON file of pairs (the released lists
-    ship with the data, as <pre_dir>/db-task-lists/<name>.json); the referenced
-    dbs are locked."""
+def mlock_main(
+    *,
+    db_task_list: list[tuple[str, str]] | str,
+    pre_dir: str,
+    embedder_ref: str,
+    workers: int,
+) -> None:
+    """Hold a preprocessed mixture resident in the page cache until interrupted.
 
-    pre_dir: str
-
-    embedder_ref: str
-
-    workers: int
-    """parallel mlock workers; networked filesystems typically scale with
-    concurrency, so more workers populate the cache faster."""
-
-
-def mlock_main(cfg: MlockConfig) -> None:
-    db_names = sorted({db for db, _ in resolve_db_task_list(cfg.db_task_list)})
+    ``db_task_list`` names the dbs to lock -- pairs, or a path to a JSON file of
+    them (the released lists ship with the data, as
+    ``<pre_dir>/db-task-lists/<name>.json``). ``workers`` is the mlock
+    concurrency: networked filesystems typically populate faster with more.
+    """
+    db_names = sorted({db for db, _ in resolve_db_task_list(db_task_list)})
     print(f"mlock: {len(db_names)} unique dbs", flush=True)
 
     def db_paths(db: str) -> list[str]:
-        base = os.path.join(cfg.pre_dir, db)
+        base = os.path.join(pre_dir, db)
         return [
             os.path.join(base, "nodes.rkyv"),
-            os.path.join(base, f"text_emb_{cfg.embedder_ref}.bin"),
+            os.path.join(base, f"text_emb_{embedder_ref}.bin"),
             os.path.join(base, "p2f_adj.rkyv"),
         ]
 
@@ -132,7 +128,7 @@ def mlock_main(cfg: MlockConfig) -> None:
     t0 = time.time()
     pbar = tqdm(total=total_size, unit="B", unit_scale=True, unit_divisor=1024)
     pbar.set_postfix_str(f"footprint={fmt_size(total_footprint)}")
-    with ThreadPoolExecutor(max_workers=cfg.workers) as ex:
+    with ThreadPoolExecutor(max_workers=workers) as ex:
         futures = [ex.submit(lock_db, db) for db in pending]
         for fut in as_completed(futures):
             db, n, err = fut.result()
