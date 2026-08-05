@@ -28,42 +28,50 @@ class TextEmbedder:
         self.chunk = chunk
 
     def __call__(self, text_list, device):
-        if isinstance(device, list):
-            # Multi-process path returns fp32 numpy regardless of flags.
-            emb = self.model.encode(
-                text_list,
-                batch_size=self.batch_size,
-                show_progress_bar=True,
-                device=device,
-            )
-            return emb.astype(bfloat16)
-        # In chunks, each moved off the device before the next is encoded.
-        # `convert_to_tensor` keeps every embedding on the GPU until the whole
-        # list is done, so a database with a lot of text needs the entire output
-        # resident at once -- join-inaturalist's 698 MB of text wanted ~21 GiB
-        # and died on a 12 GiB card, an hour of rustler work already behind it.
-        # Chunked, the ceiling is CHUNK rows regardless of the database.
+        """Encode in chunks, moving each off the device before the next.
+
+        Both paths chunk, for the same reason: whether the result accumulates on
+        one GPU (`convert_to_tensor`) or in host memory (the multi-process
+        path), holding the whole output at once means peak memory scales with
+        the database. join-overture-maps has 8 GiB of text; unchunked that is
+        ~21 GiB on a card, or ~120 GiB of fp32 in RAM, and both of those have
+        killed a job here with an hour of rustler work already behind them.
+        Chunked, the ceiling is CHUNK rows whatever the database.
+        """
         out = []
         for i in range(0, len(text_list), self.chunk):
+            piece = text_list[i : i + self.chunk]
+            if isinstance(device, list):
+                # Multi-process path: a worker per device, fp32 numpy back
+                # regardless of flags. ~4x on six GPUs, measured.
+                emb = self.model.encode(
+                    piece,
+                    batch_size=self.batch_size,
+                    show_progress_bar=True,
+                    device=device,
+                )
+                out.append(emb.astype(bfloat16))
+                continue
             emb = self.model.encode(
-                text_list[i : i + self.chunk],
+                piece,
                 batch_size=self.batch_size,
                 convert_to_numpy=False,
                 convert_to_tensor=True,
                 show_progress_bar=True,
                 device=device,
             )
-            # bf16 → int16 bitcast so torch .numpy() accepts it, then relabel as
-            # bf16. On CPU the SBERT model loaded with fp32 (line 15), so cast
-            # first — the bitcast on raw fp32 silently misinterprets 4-byte
-            # floats as 2×bf16 garbage and writes a .bin with NaN/inf patterns.
+            # bf16 -> int16 bitcast so torch .numpy() accepts it, then relabel
+            # as bf16. On CPU the SBERT model loaded with fp32, so cast first --
+            # the bitcast on raw fp32 silently misinterprets 4-byte floats as
+            # 2xbf16 garbage and writes a .bin full of NaN/inf bit patterns.
             out.append(emb.to(torch.bfloat16).cpu().view(torch.int16).numpy())
             del emb
             if torch.device(device).type == "cuda":
                 torch.cuda.empty_cache()
         if not out:
             return np.empty((0, 0), dtype=bfloat16)
-        return np.concatenate(out).view(bfloat16)
+        stacked = np.concatenate(out)
+        return stacked if stacked.dtype == bfloat16 else stacked.view(bfloat16)
 
 
 def embed_texts(

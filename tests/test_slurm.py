@@ -59,6 +59,7 @@ def ampere(**over) -> Resources:
         ntasks=None,
         exclusive=True,
         mem=None,
+        mem_per_gpu=None,
         constraint="ampere",
         nodelist=None,
     )
@@ -206,3 +207,15 @@ def test_a_dependent_job_is_cancelled_when_its_dependency_fails():
     src = inspect.getsource(submit_fn)
     assert '"--dependency=afterok:{after}"' in src or "--dependency=afterok:" in src
     assert "--kill-on-invalid-dep=yes" in src
+
+
+def test_mem_per_gpu_is_how_a_job_gets_a_whole_node_of_gpus():
+    """A partition with DefMemPerGPU applies it when deciding whether a job
+    fits, and --mem does not displace it: the most GPUs a job can hold becomes
+    RealMemory / DefMemPerGPU however little memory it wants. Here that is 3
+    GPUs on a 770G node. --mem-per-gpu replaces the default and lifts it."""
+    flags = ampere(gpus="8", mem=None, mem_per_gpu="20G").sbatch_flags()
+    assert "--mem-per-gpu=20G" in flags
+    assert not [f for f in flags if f.startswith("--mem=")]
+    with pytest.raises(ValueError, match="not both"):
+        ampere(mem="10G", mem_per_gpu="10G")

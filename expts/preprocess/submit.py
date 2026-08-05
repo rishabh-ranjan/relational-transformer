@@ -78,20 +78,27 @@ TIERS = (
     (1 << 62, "1-00:00:00", BIG_NODES),
 )
 
-# The embedding stage wants a GPU, four cpus, and -- the part that is not
-# uniform -- host memory to hold the database's text. `embed_texts` parses the
-# whole of text.json into a python list, and text.json is 8 GiB for
-# join-overture-maps, so a flat 40G was an out-of-memory kill on the text-heavy
-# databases. Sized from expected output, generously: the stage is capped at
-# ~40 concurrent by GPUs anyway, so memory it does not use costs nothing.
-EMBED_CPUS = 4
+# The embedding stage takes SEVERAL GPUs in one job. sentence-transformers runs
+# a worker per device, and measured on 2M texts that is 4.06x on six RTX8000s
+# (68% efficiency) and 4.29x on six 2080Tis (71%) -- so the stage's own skew
+# stops mattering: ten databases are 88% of it, and each of those now finishes
+# in a quarter of the time instead of queueing behind one card.
+#
+# Card type barely matters: one RTX8000 does 929 texts/s against a 2080Ti's 849,
+# a 9% gap, so there is nothing to route.
+#
+# Memory is per GPU, not per node, and that is not a detail: the partition sets
+# DefMemPerGPU=240000M and applies it when deciding whether a job fits, so with
+# --mem the most GPUs a job can hold is RealMemory/240000M -- 3 on a turing, 8
+# on a hyperturing -- however little memory it asks for. --mem-per-gpu replaces
+# that default and lifts the limit.
+EMBED_GPUS = 6
+EMBED_MEM_PER_GPU = "40G"
+EMBED_CPUS = 24
 # Walltime scales for the same reason memory does. join-overture-maps' 8 GiB of
 # text was still embedding when a flat 4h cut it off, and a timeout costs the
 # whole stage: the run has to start over from the first text.
 EMBED_WALLTIMES = ((1 << 30, "2:00:00"), (8 << 30, "8:00:00"), (1 << 62, "1-00:00:00"))
-EMBED_MEM_FLOOR = 64 << 30
-EMBED_MEM_FACTOR = 8
-EMBED_MEM_CAP = 400 << 30
 
 
 def resources_for(expected_bytes: int) -> Resources:
@@ -112,6 +119,7 @@ def resources_for(expected_bytes: int) -> Resources:
         ntasks=None,
         exclusive=False,
         mem=f"{mem // 2**30}G",
+        mem_per_gpu=None,
         constraint=None,
         nodelist=nodes,
     )
@@ -120,7 +128,6 @@ def resources_for(expected_bytes: int) -> Resources:
 def embed_resources(expected_bytes: int) -> Resources:
     """The GPU stage. A bare count, not a type: these nodes carry rtx8000s and
     2080tis and MiniLM does not care which."""
-    mem = min(EMBED_MEM_CAP, max(EMBED_MEM_FLOOR, EMBED_MEM_FACTOR * expected_bytes))
     for limit, walltime in EMBED_WALLTIMES:
         if expected_bytes < limit:
             break
@@ -129,11 +136,14 @@ def embed_resources(expected_bytes: int) -> Resources:
         account="infolab",
         qos="il-lo",
         time=walltime,
-        gpus="1",
+        gpus=str(EMBED_GPUS),
         cpus_per_task=EMBED_CPUS,
-        ntasks=None,
+        # One rank with every GPU visible to it, not a rank per GPU:
+        # sentence-transformers does the fan-out itself.
+        ntasks=1,
         exclusive=False,
-        mem=f"{mem // 2**30}G",
+        mem=None,
+        mem_per_gpu=EMBED_MEM_PER_GPU,
         constraint=None,
         nodelist=EMBED_NODES,
     )
@@ -290,7 +300,10 @@ def main(dry_run: bool = False) -> None:
     for name in to_embed:
         if dry_run:
             r = embed_resources(sizes.get(name, 1 << 35))
-            print(f"  embed   {name:44s} 1 gpu  {r.cpus_per_task} cpu  {r.mem}")
+            print(
+                f"  embed   {name:44s} {r.gpus} gpu  {r.cpus_per_task} cpu  "
+                f"{r.mem_per_gpu}/gpu  {r.time}"
+            )
             continue
         submit_embed(name, sizes.get(name, 1 << 35))
 

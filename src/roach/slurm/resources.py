@@ -44,6 +44,16 @@ class Resources:
     mem: str | None
     """None leaves it to the partition default, which is usually what you want;
     an explicit value is capped by the site's MaxMemPerCPU."""
+    mem_per_gpu: str | None
+    """Memory per GPU, as an alternative to `mem`.
+
+    Needed wherever a partition sets DefMemPerGPU: that default is applied when
+    working out whether a job fits, and `--mem` does not displace it, so the
+    most GPUs a job can hold is RealMemory / DefMemPerGPU however little memory
+    it actually wants. On this cluster (DefMemPerGPU=240000M) that is 3 GPUs on
+    a 770G node and 8 on a 2T one -- a job that wants a whole node's cards
+    cannot ask for them with `mem` at all. `--mem-per-gpu` replaces the default
+    and lifts it."""
     constraint: str | None
     nodelist: str | None
 
@@ -59,6 +69,8 @@ class Resources:
             raise ValueError(f"cpus_per_task must be >= 1, got {self.cpus_per_task}")
         if self.ntasks is not None and self.ntasks < 1:
             raise ValueError(f"ntasks must be >= 1 or None, got {self.ntasks}")
+        if self.mem and self.mem_per_gpu:
+            raise ValueError("give mem or mem_per_gpu, not both")
 
     @property
     def ranks(self) -> int:
@@ -83,6 +95,8 @@ class Resources:
             flags.append("--exclusive")
         if self.mem:
             flags.append(f"--mem={self.mem}")
+        if self.mem_per_gpu:
+            flags.append(f"--mem-per-gpu={self.mem_per_gpu}")
         if self.constraint:
             flags.append(f"--constraint={self.constraint}")
         if self.nodelist:
@@ -105,6 +119,7 @@ AMPERE = Resources(
     ntasks=None,
     exclusive=True,  # the mixture is populated into the page cache: take the node's memory
     mem=None,  # --exclusive + DefMemPerGPU gives 2017232M; an explicit --mem is capped lower
+    mem_per_gpu=None,
     constraint="ampere",
     nodelist=None,
 )
@@ -120,6 +135,7 @@ AMPERE_LO = Resources(
     ntasks=None,
     exclusive=False,  # these nodes carry unrelated cpu-only jobs; demanding the node just queues
     mem=None,
+    mem_per_gpu=None,
     constraint="ampere",
     nodelist=None,
 )
@@ -136,6 +152,7 @@ BLACKWELL = Resources(
     ntasks=None,
     exclusive=False,
     mem="1500000M",  # the node's default for 4 gpus is below what the mixture needs resident
+    mem_per_gpu=None,
     constraint=None,
     nodelist="blackwell1",
 )
