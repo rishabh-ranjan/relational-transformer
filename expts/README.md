@@ -22,11 +22,21 @@ from roach.slurm import BLACKWELL, submit
 
 submit("expts.<name>.<module>:<function>", args={...}, resources=BLACKWELL,
        name=..., setup=("pixi run build-sampler",),
-       repo_root=..., log_root=..., clone_root=..., secrets_dir=...)
+       repo_root=..., log_root=..., clone_root=..., secrets_dir=...,
+       clone_ttl_days=...)
 ```
 
 A sweep is a python loop around that call — conditional resources, staggered
 submissions, resumed run ids, whatever the experiment needs.
+
+**Design the entry point to write nowhere but the paths you pass it.** A clone
+is shared by every job at that commit on a node, so the checkout is read-only
+while jobs run — a relative output path, a checkpoint saved next to the code, or
+a scratch file named after the dataset rather than the run is now two processes
+writing one file. Take an output root as an argument and put everything under
+it. Roach cannot enforce this, and breaking it shows up as corrupt output rather
+than an error; the [read-only section](https://github.com/rishabh-ranjan/roach/blob/main/roach/slurm/README.md#the-clone-is-read-only)
+has the details.
 
 ## What is specific to this repo
 

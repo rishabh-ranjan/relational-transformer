@@ -31,7 +31,6 @@ WHERE = dict(
     # a clone survives a week unused before a later job sweeps it; these runs
     # are long, so the arms that follow one another reuse the same one
     clone_ttl_days=7,
-    omp_num_threads=8,
 )
 
 ARMS = {
