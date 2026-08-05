@@ -39,12 +39,9 @@ submissions, resumed run ids, whatever the experiment needs.
 - **Entry points take every argument explicitly.** `rt.train.main` has no
   defaults; [`examples/`](../examples/) has the released values to start from.
 
-## Before you submit
+## Checking without submitting
 
-`check_args` runs the same signature and type check `submit()` does, without
-touching the scheduler:
-
-```python
-from roach.slurm import check_args
-check_args("expts.<name>.<module>:<function>", args)
-```
+`submit()` already checks `args` against the target's signature — names and
+types — before it queues anything, so a typo fails in a second rather than forty
+minutes into a job. To see what it would submit without doing it, pass
+`dry_run=True`: same checks, prints the sbatch line, queues nothing.
