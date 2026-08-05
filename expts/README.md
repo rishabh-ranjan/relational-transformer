@@ -1,48 +1,50 @@
 # Experiments
 
-One directory per experiment. Each holds the recipe, the sweep that submits it,
-and whatever data lists it needs — nothing else, and no slurm boilerplate.
+One directory per experiment, laid out however that experiment wants. The only
+convention is that something in it submits jobs, and that it is committed —
+jobs clone the commit you submit from, so the directory is the record of what
+was run.
 
-```
-expts/data_scaling/
-  train.py     # the recipe: one function, calling rt.train.main with fixed arguments
-  submit.py    # the sweep: cluster paths, and a loop that varies one thing
-  *.json       # the task lists this experiment defines
-```
+`data_scaling/` happens to split into a recipe (`train.py`), a sweep
+(`submit.py`) and its task lists; an experiment that runs one job, or evaluates
+checkpoints, or sweeps a grid, will look different. Nothing here enforces a
+shape.
 
 ## Submitting
 
 Jobs go through [`roach.slurm`](https://github.com/rishabh-ranjan/roach/blob/main/roach/slurm/README.md)
-— read that first; it explains `submit()`, the resource presets, and how a run
-survives preemption. It is a pinned dependency (see `pyproject.toml`), so a run
-cannot change because roach moved.
+— read that first; it covers `submit()`, resource presets, and how a run
+survives preemption. The job clones the roach that submitted it, so upgrading
+roach cannot change a job already queued.
 
-```bash
-pixi run python expts/data_scaling/submit.py
+```python
+from roach.slurm import BLACKWELL, submit
+
+submit("expts.<name>.<module>:<function>", args={...}, resources=BLACKWELL,
+       name=..., setup=("pixi run build-sampler",),
+       repo_root=..., log_root=..., clone_root=..., secrets_dir=...)
 ```
 
-Two things that are specific to this repo:
+A sweep is a python loop around that call — conditional resources, staggered
+submissions, resumed run ids, whatever the experiment needs.
+
+## What is specific to this repo
 
 - **`setup=("pixi run build-sampler",)`** — the rustler sampler is a compiled
-  extension, so every job builds it inside its clone. Experiments here must pass
-  this.
-- **Data is a local directory.** Nothing is fetched from the Hub at run time;
-  see [docs/downloads.md](../docs/downloads.md). Point `pre_dir` at a path every
-  node can read (`/dfs/...` here), and expect the first minutes of a job to be
-  spent populating it into the page cache.
+  extension, so a job has to build it inside its clone.
+- **Data is a local directory.** Nothing is fetched from the Hub at run time
+  (see [docs/downloads.md](../docs/downloads.md)); point `pre_dir` at a path
+  every node can read, and expect a job's first minutes to go on populating it
+  into the page cache.
+- **Entry points take every argument explicitly.** `rt.train.main` has no
+  defaults; [`examples/`](../examples/) has the released values to start from.
 
-## Starting a new experiment
+## Before you submit
 
-1. `mkdir expts/<name>`, add `train.py` with one function that calls the library
-   (`rt.train.main` takes every knob as a required argument — see
-   [`examples/train.py`](../examples/train.py) for the released values to start from).
-2. Add `submit.py`: the cluster paths at the top, the sweep as a plain loop.
-3. Run it from a clean, pushed checkout. The job clones that commit, so the
-   sweep file is the record of what was run.
-
-Check the wiring without touching the scheduler:
+`check_args` runs the same signature and type check `submit()` does, without
+touching the scheduler:
 
 ```python
 from roach.slurm import check_args
-check_args("expts.<name>.train:train", {**BASE, "run_id": "x"})
+check_args("expts.<name>.<module>:<function>", args)
 ```
