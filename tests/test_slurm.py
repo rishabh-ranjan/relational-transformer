@@ -123,3 +123,13 @@ def test_bootstrap_lets_srun_inherit_the_job_environment():
 
     script = files("rt.slurm").joinpath("bootstrap.sh").read_text()
     assert "srun --export=ALL" in script
+
+
+def test_presets_are_one_rank_per_gpu():
+    """The preset's cpus_per_task is per rank, so a preset that quietly asked
+    for a node's worth of cores per rank would be rejected at submit."""
+    from rt.slurm import AMPERE, AMPERE_LO, BLACKWELL
+
+    for preset in (AMPERE, AMPERE_LO, BLACKWELL):
+        assert preset.ntasks == int(preset.gpus.rpartition(":")[2])
+        assert preset.ntasks * preset.cpus_per_task <= 288  # the widest node here

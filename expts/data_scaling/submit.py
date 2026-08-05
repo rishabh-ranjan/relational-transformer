@@ -9,15 +9,22 @@ from, so this file is also the record of what was run.
 
 from __future__ import annotations
 
-from rt.slurm import submit
+from rt.slurm import AMPERE, BLACKWELL, submit
 
-from expts.data_scaling.site import (
-    AMPERE,
-    BLACKWELL,
-    EVAL_PRE_DIR,
-    OUT_ROOT,
-    PRE_DIR,
-    SITE,
+# Where this cluster keeps things. rt.slurm has no idea about any of it.
+REPO_ROOT = "/lfs/hyperturing1/0/ranjanr/clones/rishabh-ranjan/relational-transformer"
+CLONE_ROOT = "/tmp/ranjanr/clones"
+SECRETS_DIR = "/dfs/user/ranjanr/.secrets"
+LOG_ROOT = "/dfs/user/ranjanr/slurm-logs/data-scaling"
+OUT_ROOT = "/dfs/user/ranjanr/ckpts"
+PRE_DIR = "/dfs/user/ranjanr/pre/the-join-preprocessed"
+EVAL_PRE_DIR = "/dfs/user/ranjanr/pre/relbench-preprocessed"
+
+WHERE = dict(
+    repo_root=REPO_ROOT,
+    clone_root=CLONE_ROOT,
+    secrets_dir=SECRETS_DIR,
+    log_root=LOG_ROOT,
 )
 
 ARMS = {
@@ -44,7 +51,7 @@ def main() -> None:
             args={**BASE, "db_task_list": task_list},
             resources=resources,
             name=f"ds-{arm}",
-            **SITE,
+            **WHERE,
         )
 
 

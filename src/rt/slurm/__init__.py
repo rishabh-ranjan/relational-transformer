@@ -10,8 +10,18 @@ node, and calls the target in every rank. Preemption is handled by the target
 saving a resumable checkpoint; slurm requeues, and the same run id resumes it.
 """
 
-from rt.slurm.resources import Resources
+from rt.slurm.resources import AMPERE, AMPERE_LO, BLACKWELL, Resources
 from rt.slurm.target import resolve
 from rt.slurm.submit import Job, check_args, submit, timestamp
 
-__all__ = ["Job", "Resources", "check_args", "resolve", "submit", "timestamp"]
+__all__ = [
+    "AMPERE",
+    "AMPERE_LO",
+    "BLACKWELL",
+    "Job",
+    "Resources",
+    "check_args",
+    "resolve",
+    "submit",
+    "timestamp",
+]
