@@ -113,3 +113,8 @@ pixi run test        # or train, eval, preprocess, ...
 | [Preprocess](docs/preprocess.md) | Convert RelBench-format databases into RT's on-disk format |
 | [Inference](docs/inference.md) | Run a trained checkpoint; evaluate, engineer, tune, and ensemble contexts |
 | [Pretrain](docs/train.md) | Train RT from scratch, single-GPU to multi-node |
+| [Experiments](expts/README.md) | How experiments in `expts/` are laid out and submitted to slurm |
+
+There is no CLI: RT is a library, and a run is a script that calls it. Copy
+something from [`examples/`](examples/) and edit it — every entry point takes
+its arguments explicitly, so nothing is hidden in a default you did not choose.

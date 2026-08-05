@@ -76,10 +76,12 @@ the (large) data from shared storage per item.
 
 ## On a cluster
 
-`roach.slurm` submits a function to slurm and handles the rest: it refuses a dirty
-or unpushed tree, records the commit, checks your arguments against the target's
-signature, and hands slurm a script that clones that commit, builds the
-environment on the node, and starts one rank per GPU.
+Submission lives in [`roach.slurm`](https://github.com/rishabh-ranjan/roach/blob/main/roach/slurm/README.md),
+a pinned dependency; that README is the reference for how a job is built and how
+it survives preemption. In short: it refuses a dirty or unpushed tree, records
+the commit, checks your arguments against the target's signature, and hands
+slurm a script that clones that commit, builds the environment on the node, and
+starts one rank per GPU.
 
 ```python
 from roach.slurm import AMPERE, submit   # roach.slurm is a separate package
@@ -91,10 +93,9 @@ submit("examples.train:train",
        repo_root=..., log_root=..., clone_root=..., secrets_dir=...)
 ```
 
-See [`expts/data_scaling/`](../expts/data_scaling/) for a worked experiment: a
-`site.py` with the cluster's paths and presets, a `train.py` with the recipe, and
-a `submit.py` whose loop *is* the experiment. Hard-won notes if you write your
-own launcher instead:
+See [`expts/README.md`](../expts/README.md) for how experiments in this repo are
+laid out, and [`expts/data_scaling/`](../expts/data_scaling/) for a worked one.
+Hard-won notes if you write your own launcher instead:
 
 - **Name a run you may want to resume.** `run_id` names the output
   directory `<out_root>/<entity>/<project>/<run_id>/`; pass the same value again
