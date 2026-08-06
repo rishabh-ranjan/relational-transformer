@@ -96,7 +96,7 @@ def main(use_interactive: bool = False) -> None:
             eval_vector_db_path=None,
             eval_lcs_bw_pl_grid=[(8192, 256, True)],
             # logging
-            project="2026-08-05-fine-tune",
+            project="2026-08-05-fine_tune",
             entity="rtv2",
             run_name=None,
             wandb_disabled=False,
@@ -109,7 +109,7 @@ def main(use_interactive: bool = False) -> None:
         overlap=held,
         name="ft-rel-f1-driver-top3-scratch",
         repo_root="/lfs/hyperturing1/0/ranjanr/clones/rishabh-ranjan/relational-transformer",
-        log_root="/dfs/user/ranjanr/slurm-logs/fine-tune",
+        log_root="/dfs/user/ranjanr/slurm-logs/rishabh-ranjan/relational-transformer/expts/fine-tune",
         # the node's own big disk, not /tmp (the 280G root filesystem): clones
         # are shared per commit and hold the pixi env, which pixi hardlinks from
         # the package cache only when the two are on the same filesystem

@@ -67,52 +67,9 @@ seed_lock() {  # in the new clone, before pixi install
     fi
 }
 
-env_prefix() {  # <dir> -- where pixi keeps that project's environment, or nothing
-    # Never fails: this is an optimization, and `set -e` would turn "pixi cannot
-    # say" into a dead job rather than a slow one.
-    local out
-    out=$( (cd "$1" && pixi info --json) 2>/dev/null ) || return 0
-    printf '%s' "$out" | grep -o '"prefix": *"[^"]*"' | head -1 | cut -d'"' -f4 ||
-        return 0
-}
-
-seed_env() {
-    # The environment is the expensive part, and pixi keys it on the *project
-    # path*: detached-environments puts it in the cache under a hash of that
-    # path, so a per-commit clone means a per-commit environment -- 8.5 GiB
-    # materialized and ~50s paid, for a commit that changed one python file.
-    # (Measured: 33 environments for 5 live clones.)
-    #
-    # Hardlink one from a clone with a byte-identical lock instead. Same package
-    # cache, same files, seconds instead of a minute. `pixi install` still runs
-    # afterwards and reconciles what it finds, so a copy that is wrong in any
-    # way is repaired rather than trusted -- and the editable install of *this*
-    # clone is rewritten by the build in `setup`, which is what points the
-    # environment at this commit's code.
-    local dst src d
-    dst=$(env_prefix .)
-    [[ -n $dst && ! -e $dst ]] || return 0
-    for d in "@CLONE_ROOT@"/*/; do
-        [[ -f $d/.roach-ready ]] || continue
-        cmp -s pixi.lock "$d/pixi.lock" || continue
-        src=$(env_prefix "$d")
-        [[ -n $src && -d $src ]] || continue
-        mkdir -p "$(dirname "$dst")"
-        if cp -al "$src" "$dst" 2>/dev/null; then
-            echo "prepare: hardlinked env from $src"
-        else
-            # different filesystem, or a partial copy: leave nothing behind for
-            # pixi to reconcile against
-            rm -rf "$dst"
-        fi
-        return 0
-    done
-}
-
 prepare_repo() {
     local t
     t=$SECONDS; seed_lock; echo "prepare: seed_lock $((SECONDS - t))s"
-    t=$SECONDS; seed_env; echo "prepare: seed_env $((SECONDS - t))s"
     # The lock (seeded or solved here) lives in the clone, so every later job at
     # this commit inherits it.
     t=$SECONDS; pixi install; echo "prepare: pixi install $((SECONDS - t))s"
@@ -123,17 +80,19 @@ prepare_repo() {
     # line after the first would break out and run as garbage.
     @SETUP@
     echo "prepare: setup $((SECONDS - t))s"
-    # An environment seeded from another clone starts out pointing at *that*
-    # clone's code, and the build in `setup` is what re-points it here. If that
-    # ever stops being true, the job would run a different commit than the one
-    # it reports -- silently, and forever after for every job at this commit,
-    # since the clone gets published either way. So prove it, and refuse to
-    # publish a clone that cannot.
-    local imported
-    imported=$(pixi run --frozen python -c "import rt; print(rt.__file__)")
+    # The package is installed editable, which means the environment holds a
+    # path to *some* clone -- and a job that imported another commit's code
+    # would report this commit and run that one, silently, for every job at this
+    # commit thereafter. Cheap to prove, so prove it, and do not publish a clone
+    # that cannot. Resolved on both sides with -m (which does not require the
+    # path to exist): /lfs/local is a symlink to /lfs/<node>, so a correct clone
+    # answers to two names and a plain string compare rejects it.
+    local imported here
+    imported=$(realpath -m "$(pixi run --frozen python -c "import rt; print(rt.__file__)")")
+    here=$(realpath -m .)
     case $imported in
-        "$PWD"/*) echo "prepare: imports rt from this clone" ;;
-        *) echo "prepare: FATAL rt resolves to $imported, not $PWD" >&2; exit 1 ;;
+        "$here"/*) echo "prepare: imports rt from this clone" ;;
+        *) echo "prepare: FATAL rt resolves to $imported, not $here" >&2; exit 1 ;;
     esac
 }
 

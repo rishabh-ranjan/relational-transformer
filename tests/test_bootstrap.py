@@ -186,23 +186,6 @@ def test_a_new_commit_inherits_the_previous_solve(rig):
     assert (rig.clones / f"repo-{rig.commit()}" / "pixi.lock").read_text() == lock
 
 
-def test_a_new_commit_inherits_the_previous_environment(rig):
-    """The environment is the expensive part -- 8.5 GiB and ~50s on the real
-    project -- and pixi keys it on the project path, so a per-commit clone means
-    a per-commit environment for a commit that changed one python file. It is
-    hardlinked from a clone with an identical lock instead."""
-    first = rig.commit()
-    rig.run(rig.job("first", first), 1001)
-    marker = rig.clones / f"repo-{first}" / ".pixi/envs/default/marker"
-    assert marker.is_file()
-
-    out = rig.run(rig.job("second", rig.churn()), 1002)
-    assert "hardlinked env from" in out.stdout, out.stdout
-    # the same files, not a second copy of them
-    seeded = rig.clones / f"repo-{rig.commit()}" / ".pixi/envs/default/marker"
-    assert seeded.stat().st_ino == marker.stat().st_ino
-
-
 def test_a_clone_whose_env_points_elsewhere_is_never_published(rig):
     """A seeded environment starts out pointing at the clone it came from, and
     the build in `setup` is what re-points it. If that ever stops working the
