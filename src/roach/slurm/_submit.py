@@ -114,10 +114,15 @@ def launch(
 
     One rank per GPU either way; what differs is whose allocation they run in.
 
-    `--export=ALL` is not sbatch's: that one kept the submitting shell out of the
-    job, this one lets the tasks inherit the environment the script just built.
-    Without it srun starts them nearly empty and they find neither pixi nor the
-    tokens, caches and node-local HOME that env.sh set up.
+    `--export=ALL`, on both. There is one rule, applied at two layers: **nothing
+    from the submitting shell, everything from the job's own environment.** These
+    sruns are the second layer -- they run *inside* the job, after env.sh has
+    built the node-local HOME, the caches, the PATH to pixi and the tokens, and
+    without ALL they would start the ranks nearly empty and find none of it. The
+    calls that cross from the submitting shell (`sbatch --export=NONE`, and the
+    driver step in `_overlap`) are the first layer, and they say the opposite,
+    for the same reason: that shell's HOME does not exist on the node and its
+    environment holds API tokens slurm would record.
 
     `--frozen`: the clone is shared, so a rank that re-solved would rewrite
     pixi.lock underneath every other job at this commit.
@@ -302,12 +307,15 @@ def _overlap(
         "--ntasks=1",
         "--cpus-per-task=1",
         "--chdir=/tmp",
-        # Nothing from this shell, for the same reason the batch path passes
-        # --export=NONE: its HOME does not exist on the node and its environment
-        # holds API tokens. Not NONE itself, though -- sbatch gives a batch
-        # script a default PATH and srun gives a step nothing at all, so the
-        # step could not even find bash. Two variables, spelled out: the script
-        # builds the rest.
+        # Nothing from this shell, exactly as the batch path's --export=NONE:
+        # its HOME does not exist on the node and its environment holds API
+        # tokens slurm would record. Not NONE itself, though, and this is the
+        # one place the two layers cannot be spelled the same way: sbatch gives
+        # a batch script a default environment with a PATH, while srun execve's
+        # the step with what you exported and nothing else -- NONE here died at
+        # `execve(): bash: No such file or directory`, before a line of the
+        # script ran. So: the two variables that get bash started, and the
+        # script builds the rest.
         f"--export=PATH=/usr/local/bin:/usr/bin:/bin,USER={os.environ.get('USER', '')}",
     ]
     env = {

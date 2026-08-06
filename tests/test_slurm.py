@@ -12,7 +12,7 @@ import inspect
 import pytest
 
 from roach.slurm import Resources, check_args, resolve, timestamp
-from roach.slurm._submit import launch
+from roach.slurm._submit import _overlap, launch
 from roach.slurm._submit import submit as submit_fn
 
 
@@ -181,6 +181,17 @@ def test_job_env_is_not_inherited():
     and API tokens into the job (and slurm's job record); the batch script
     carries everything it needs."""
     assert '"--export=NONE"' in inspect.getsource(submit_fn)
+
+
+def test_a_call_that_crosses_from_the_submitting_shell_exports_almost_nothing():
+    """One rule, two layers: nothing from the submitting shell, everything from
+    the job's own environment. sbatch says NONE; the driver step of an
+    overlapping run cannot, because srun execve's a step with exactly what you
+    exported and NONE could not even find bash -- so it names the two variables
+    that get bash started, and nothing that came from this shell."""
+    src = inspect.getsource(_overlap)
+    assert "--export=ALL" not in src
+    assert "--export=PATH=" in src and "USER=" in src
 
 
 def test_the_launcher_lets_srun_inherit_the_job_environment():
