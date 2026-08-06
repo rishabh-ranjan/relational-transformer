@@ -99,14 +99,21 @@ def move(batch, device):
 
 @torch.inference_mode()
 def eval_avg_metrics(evaluator, nets_with_prefix, ctx_size_list):
-    """Mean val metric per net prefix: {prefix: {"clf": auc, "reg": mae}}.
+    """Mean metric per net prefix and eval split::
+
+        {prefix: {split: {"clf": auc, "reg": mae}}}
+
+    Splits are kept apart: an evaluator built with ``eval_splits=["val",
+    "test"]`` yields both, and averaging them together would both hide the
+    test curve and contaminate val-driven checkpoint selection.
 
     Averaged over both eval tasks and the requested eval ctx sizes -- each
     evaluate_raw yield is one (task, ctx_size) slice, so passing the full
     ctx-size list means the mean spans all of them.
     """
 
-    acc = {p: {"clf": [], "reg": []} for _, p in nets_with_prefix}
+    splits = evaluator.eval_splits
+    acc = {p: {s: {"clf": [], "reg": []} for s in splits} for _, p in nets_with_prefix}
     for task, _ctx, labels, preds_by_prefix, _nl in evaluator.evaluate_raw(
         nets_with_prefix, ctx_size_list
     ):
@@ -116,10 +123,16 @@ def eval_avg_metrics(evaluator, nets_with_prefix, ctx_size_list):
             except ValueError:
                 # e.g. a single-class slice -> ROC AUC undefined; skip this task.
                 continue
-            acc[prefix][task.task_type].append(v)
+            # setdefault: a task with an empty split is absent from
+            # ``eval_splits`` but still yielded, and still worth a curve.
+            by_split = acc[prefix].setdefault(task.split, {"clf": [], "reg": []})
+            by_split[task.task_type].append(v)
     return {
-        p: {k: (float(np.mean(vs)) if vs else None) for k, vs in d.items()}
-        for p, d in acc.items()
+        p: {
+            s: {k: (float(np.mean(vs)) if vs else None) for k, vs in d.items()}
+            for s, d in by_split.items()
+        }
+        for p, by_split in acc.items()
     }
 
 
@@ -547,11 +560,14 @@ def main(
             )
 
     def consider(metrics, step):
+        # Selection is val-only: a test split may be evaluated alongside for
+        # its curves, but must never pick the checkpoint. With no val split
+        # configured, nothing is selected.
         for prefix, kind in [("", "live"), ("swa_", "swa")]:
-            if prefix not in metrics:
+            if prefix not in metrics or "val" not in metrics[prefix]:
                 continue
             for tt, better in [("clf", max), ("reg", min)]:
-                v = metrics[prefix].get(tt)
+                v = metrics[prefix]["val"].get(tt)
                 if v is None:
                     continue
                 cur = best[tt]
@@ -582,24 +598,27 @@ def main(
                     json.dumps({"step": step, "swa_n": swa.n, "metrics": metrics})
                     + "\n"
                 )
-            for prefix, m in metrics.items():
+            for prefix, by_split in metrics.items():
                 label = prefix.rstrip("_") or "live"
-                log(
-                    indent=1,
-                    new_best=label,
-                    step=step,
-                    clf_auc=m["clf"],
-                    mae=m["reg"],
-                )
+                for split, m in by_split.items():
+                    log(
+                        indent=1,
+                        eval_model=label,
+                        split=split,
+                        step=step,
+                        clf_auc=m["clf"],
+                        mae=m["reg"],
+                    )
             if use_wandb:
                 wandb.log(
                     {
                         "step": step,
                         **{
-                            f"val/{p}{tt}": metrics[p][tt]
-                            for p in metrics
-                            for tt in metrics[p]
-                            if metrics[p][tt] is not None
+                            f"{split}/{p}{tt}": v
+                            for p, by_split in metrics.items()
+                            for split, m in by_split.items()
+                            for tt, v in m.items()
+                            if v is not None
                         },
                     }
                 )
