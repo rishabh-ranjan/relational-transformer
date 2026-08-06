@@ -66,17 +66,21 @@ away and neither is right for everything.
 | | `clone_by="commit"` | `clone_by="branch"` |
 |---|---|---|
 | clone directory | `repo-<sha>` | `repo-<branch>` |
-| a queued job can change under you | no | **yes** |
+| checked out at | the submitted sha, pinned | the branch, at its tip when the job starts |
+| what a later push does to a queued job | nothing | **it runs the newer code** |
 | cost of a new commit | a fresh environment and a full build | whatever actually changed |
 
-Both check the working tree is clean and pushed, and both check out **the
-submitted sha** -- a branch clone is not tracking a moving branch, it is a
-directory named after one. What "branch" buys is that the environment, the cargo
-target dir and everything else the clone has built survive to the next commit;
-on this project that is 50-100s of `pixi install` plus a full cargo build, per
-commit, and it is why iteration should use it. What it costs is that submitting
-again moves the checkout under any job still running from that clone. Use
-`"commit"` for a sweep whose results you will read days later.
+Both refuse a dirty or unpushed tree, and both record the submitted commit. They
+differ in what the clone is checked out at. A commit clone is pinned: a job
+queued on Monday runs Monday's code on Thursday. A branch clone follows the
+branch -- every job fetches and moves the clone to the tip before building -- so
+the environment, the cargo target dir and everything else it has built survive
+from one commit to the next. On this project that saves 50-100s of `pixi install`
+plus a full cargo build per commit, which is why iteration should use it.
+
+The two things "branch" gives up: a job may run code newer than the commit you
+submitted from, and a later job moves the checkout under one that is still
+running. Use `"commit"` for a sweep whose results you will read days later.
 
 The rest of this section describes what is true either way. It used to be one per job, thrown away at exit, and that cost far
 more than the disk: pixi keys an environment on the project path (a detached

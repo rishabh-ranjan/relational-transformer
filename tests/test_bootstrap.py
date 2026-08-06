@@ -88,13 +88,15 @@ def rig(tmp_path: Path):
         sha: str,
         setup: str = "echo built > built.txt",
         key: str = "",
+        by: str = "commit",
     ) -> Path:
         filled = script
-        for key, value in {
+        for placeholder, value in {
             "@REPO@": str(origin),
             "@COMMIT@": sha,
             "@BRANCH@": "main",
             "@CLONE_KEY@": key or sha,
+            "@CLONE_BY@": by,
             "@CLONE_ROOT@": str(tmp_path / "clones"),
             "@LOG_ROOT@": str(tmp_path / "logs"),
             "@SECRETS_DIR@": str(tmp_path / "secrets"),
@@ -109,7 +111,7 @@ def rig(tmp_path: Path):
                 " -m roach.slurm.run pkg:main args.json"
             ),
         }.items():
-            filled = filled.replace(key, value)
+            filled = filled.replace(placeholder, value)
         path = tmp_path / "work" / f"{run_id}.sh"
         path.write_text(filled)
         return path
@@ -179,30 +181,47 @@ def test_a_new_commit_inherits_the_previous_solve(rig):
     assert (rig.clones / f"repo-{rig.commit()}" / "pixi.lock").read_text() == lock
 
 
-def test_a_branch_clone_moves_to_the_submitted_commit(rig):
-    """Keyed by branch, one clone serves every commit on it -- which is the
-    point (the environment and the build survive) and the risk (the checkout
-    moves). Either way the job must run the commit it was submitted from, not
-    whatever the directory happened to hold."""
+def test_a_branch_clone_follows_the_branch(rig):
+    """A branch clone is checked out at the *branch*, not at the sha the job was
+    submitted from, and is brought to the tip whenever a job arrives. So a job
+    submitted at an older commit still runs what the branch says now -- which is
+    what makes one clone (and one environment, and one target dir) serve a whole
+    session of commits."""
     first = rig.commit()
-    rig.run(rig.job("first", first, key="mybranch"), 1001)
+    rig.run(rig.job("first", first, key="mybranch", by="branch"), 1001)
     clone = rig.clones / "repo-mybranch"
     assert clone.is_dir()
 
+    # somebody pushes; this job still names the *old* commit
     second = rig.churn()
-    out = rig.run(rig.job("second", second, key="mybranch"), 1002)
+    out = rig.run(rig.job("second", first, key="mybranch", by="branch"), 1002)
     assert out.returncode == 0, out.stderr
     assert "moving" in out.stdout, out.stdout
-    # one clone, at the new commit -- and no second directory for the new commit
-    assert not (rig.clones / f"repo-{second}").exists()
+    assert not (rig.clones / f"repo-{second}").exists()  # still one clone
     head = subprocess.run(
         ["git", "-C", str(clone), "rev-parse", "HEAD"], capture_output=True, text=True
     ).stdout.strip()
-    assert head == second
+    assert head == second, "a branch clone must follow the branch, not the sha"
 
-    # a job at the commit the clone already holds does not move anything
-    out = rig.run(rig.job("third", second, key="mybranch"), 1003)
+    # nothing new pushed: nothing moves, and nothing is rebuilt
+    out = rig.run(rig.job("third", first, key="mybranch", by="branch"), 1003)
     assert "moving" not in out.stdout, out.stdout
+
+
+def test_a_commit_clone_stays_at_its_commit(rig):
+    """The other half of the choice: a commit clone is pinned, so a later push
+    cannot change what a queued job runs."""
+    first = rig.commit()
+    rig.run(rig.job("first", first), 1001)
+    rig.churn()  # somebody pushes
+    out = rig.run(rig.job("second", first), 1002)
+    assert "moving" not in out.stdout, out.stdout
+    head = subprocess.run(
+        ["git", "-C", str(rig.clones / f"repo-{first}"), "rev-parse", "HEAD"],
+        capture_output=True,
+        text=True,
+    ).stdout.strip()
+    assert head == first
 
 
 def test_a_finished_job_leaves_the_clone_for_the_next_one(rig):

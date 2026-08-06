@@ -191,10 +191,12 @@ def submit(
       per commit, so every commit pays for its own environment and its own build
       (measured on this project: 50-100s of ``pixi install``, plus a full cargo
       build inside it).
-    * ``"branch"`` -- one clone per branch, moved to each submitted commit. The
-      environment and the cargo target dir survive from one commit to the next,
-      which is most of that cost gone. The price is real: **a later submission
-      moves the checkout under a job that is still running from it.** Fine while
+    * ``"branch"`` -- one clone per branch, checked out at the branch and
+      brought to its tip whenever a job arrives. The environment and the cargo
+      target dir survive from one commit to the next, which is most of that cost
+      gone. Two prices, both real: the job runs **what the branch says when it
+      starts**, which may be newer than the commit you submitted from, and a
+      later job moves the checkout under one that is still running. Fine while
       iterating, wrong for a sweep you will read results from days later.
 
     ``overlap`` is the id of an allocation somebody is *holding* (see
@@ -233,6 +235,7 @@ def submit(
         "@COMMIT@": commit,
         "@BRANCH@": branch,
         "@CLONE_KEY@": clone_key,
+        "@CLONE_BY@": clone_by,
         "@RUN_ID@": run_id,
         "@NAME@": name,
         "@TARGET@": target,

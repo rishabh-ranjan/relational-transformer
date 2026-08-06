@@ -41,9 +41,12 @@ mkdir -p "@CLONE_ROOT@"
 #           commit -- and a later submission moves the checkout under a job that
 #           is still running from it.
 #
-# Either way the job runs the commit that was submitted: the checkout below is
-# by sha, not by branch name, so "the branch" is only what the directory is
-# called.
+# The key is also what the clone is checked out at, which is the whole of the
+# difference: a commit clone is pinned to the sha that was submitted, a branch
+# clone follows the branch and is brought to its tip every time a job arrives.
+# So a branch job runs what the branch says now, which may be newer than the
+# commit it was submitted from -- that is the point of it, and the reason it is
+# for iterating rather than for a sweep you will read later.
 # --------------------------------------------------------------------------- #
 REPO_DIR=@CLONE_ROOT@/repo-@CLONE_KEY@
 
@@ -53,21 +56,34 @@ git_auth() {  # <git args...>
         "$@"
 }
 
-git_clone() {  # <url> <commit> <dir>
-    git_auth clone --quiet "$1" "$3"
-    git -C "$3" checkout --quiet "$2"
+# What this clone is supposed to be at: a fixed sha, or wherever the branch has
+# got to. The branch case is resolved fresh on every job, which is how a branch
+# clone picks up commits pushed since the job was submitted.
+want_ref() {  # <dir> -> sha
+    if [[ @CLONE_BY@ == branch ]]; then
+        ( cd "$1" && git_auth fetch --quiet origin @BRANCH@ )
+        git -C "$1" rev-parse FETCH_HEAD
+    else
+        echo @COMMIT@
+    fi
 }
 
-# A branch-keyed clone outlives the commit it was built for, so bring it to the
-# one this job submitted. A no-op when the key is the commit (HEAD already
-# matches) and when a previous job at this same commit got here first.
-sync_to_commit() {  # <dir> <commit>; prints whether anything moved
-    local dir=$1 commit=$2 head
-    head=$(git -C "$dir" rev-parse HEAD)
-    if [[ $head == "$commit" ]]; then return 1; fi
-    echo "clone: moving $dir from ${head:0:7} to ${commit:0:7}"
-    ( cd "$dir" && git_auth fetch --quiet origin "$commit" )
-    git -C "$dir" checkout --quiet --force "$commit"
+git_clone() {  # <url> <dir>
+    git_auth clone --quiet "$1" "$2"
+}
+
+# Bring the clone to what it should be at. Returns 0 if it moved, so the caller
+# knows to build again; 1 if it was already there, which is every job after the
+# first at a commit, and every job at all in commit mode.
+sync_to_ref() {  # <dir>
+    local dir=$1 want head
+    want=$(want_ref "$dir")
+    head=$(git -C "$dir" rev-parse HEAD 2>/dev/null || echo none)
+    if [[ $head == "$want" ]]; then return 1; fi
+    if [[ $head != none ]]; then
+        echo "clone: moving $dir from ${head:0:7} to ${want:0:7}"
+    fi
+    git -C "$dir" checkout --quiet --force "$want"
     return 0
 }
 
@@ -134,19 +150,20 @@ prepare_repo() {
 # editable path dependency -- for a maturin project, a full recompile, done by
 # every rank at once, colliding in uv's shared build cache. Atomicity is the
 # marker's job; the directory itself never moves.
-clone_at_commit() {  # <dir> <url> <commit> <prepare-fn>
-    local dir=$1 url=$2 commit=$3 prepare=$4
+clone_at_commit() {  # <dir> <url> <prepare-fn>
+    local dir=$1 url=$2 prepare=$3
     exec 9>"$dir.lock"
     flock 9
     if [[ ! -f $dir/.roach-ready ]]; then
         echo "preparing $dir"
         rm -rf "$dir"
         local t=$SECONDS
-        git_clone "$url" "$commit" "$dir"
+        git_clone "$url" "$dir"
+        sync_to_ref "$dir" || true
         echo "prepare: git clone $((SECONDS - t))s"
         ( cd "$dir" && "$prepare" )
         touch "$dir/.roach-ready"
-    elif sync_to_commit "$dir" "$commit"; then
+    elif sync_to_ref "$dir"; then
         # The code changed under a clone that is already built, so build again:
         # the environment is keyed on this path and survives, and everything
         # that did not change is a cache hit rather than work.
@@ -157,7 +174,7 @@ clone_at_commit() {  # <dir> <url> <commit> <prepare-fn>
     echo "clone: $dir @ $(git -C "$dir" rev-parse --short HEAD)"
 }
 
-clone_at_commit "$REPO_DIR" "@REPO@" "@COMMIT@" prepare_repo
+clone_at_commit "$REPO_DIR" "@REPO@" prepare_repo
 
 cd "$REPO_DIR"
 # What this run's environment actually was, next to its logs. A record, not a
