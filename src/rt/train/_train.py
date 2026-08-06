@@ -211,6 +211,7 @@ def main(
     eval_lcs_bw_pl_grid: list[tuple[int, int, bool]],
     # logging
     run_id: str,
+    ceilings: dict[str, float],
     project: str,
     entity: str | None,
     run_name: str | None,
@@ -799,6 +800,11 @@ def main(
                         "train/grad_norm": float(norm),
                         "train/sec_per_step": step_time,
                         "train/load_time": load_time,
+                        # A constant per metric key, logged every step, so it
+                        # draws as a horizontal line across the whole x-range
+                        # of the panel its metric lives in -- wandb has no
+                        # reference-line primitive, a flat series is the line.
+                        **{f"{k}/ceiling": v for k, v in ceilings.items()},
                     }
                 )
 

@@ -80,6 +80,7 @@ def smoke(
         eval_lcs_bw_pl_grid=[(64, 8, True)],
         # logging
         run_id=run_id,
+        ceilings={},
         project="smoke",
         entity=None,
         run_name=None,

@@ -42,6 +42,58 @@ TASKS = (
     # ("rel-avito", "user-visits"),
 )
 
+# The best published number per (metric, split, task) -- the best of every
+# model in expts/fine_tune/results.md, over both the default and the HPO arm.
+# In the raw units `rt.train` logs (AUC as a fraction, MAE unnormalized), not
+# results.md's percentages, so a value sits on the same axis as the curve it
+# bounds. A run logs its own task's entries at every step, which draws them as
+# horizontal lines in the metric's panel (wandb has no reference-line
+# primitive); `workspace.py` is what puts curve and ceiling in one panel.
+CEILINGS = {
+    "auc/test/rel-amazon/item-churn": 0.830527,
+    "auc/test/rel-amazon/user-churn": 0.704596,
+    "auc/test/rel-avito/user-clicks": 0.679955,
+    "auc/test/rel-avito/user-visits": 0.669391,
+    "auc/test/rel-event/user-ignore": 0.884695,
+    "auc/test/rel-event/user-repeat": 0.78496,
+    "auc/test/rel-f1/driver-dnf": 0.730298,
+    "auc/test/rel-f1/driver-top3": 0.811207,
+    "auc/test/rel-hm/user-churn": 0.70569,
+    "auc/test/rel-stack/user-badge": 0.888748,
+    "auc/test/rel-stack/user-engagement": 0.907587,
+    "auc/test/rel-trial/study-outcome": 0.755003,
+    "auc/val/rel-amazon/item-churn": 0.824893,
+    "auc/val/rel-amazon/user-churn": 0.706883,
+    "auc/val/rel-avito/user-clicks": 0.672679,
+    "auc/val/rel-avito/user-visits": 0.703479,
+    "auc/val/rel-event/user-ignore": 0.8774,
+    "auc/val/rel-event/user-repeat": 0.746042,
+    "auc/val/rel-f1/driver-dnf": 0.685578,
+    "auc/val/rel-f1/driver-top3": 0.73869,
+    "auc/val/rel-hm/user-churn": 0.707665,
+    "auc/val/rel-stack/user-badge": 0.900339,
+    "auc/val/rel-stack/user-engagement": 0.90639,
+    "auc/val/rel-trial/study-outcome": 0.706512,
+    "mae/test/rel-amazon/item-ltv": 46.7891,
+    "mae/test/rel-amazon/user-ltv": 14.3119,
+    "mae/test/rel-avito/ad-ctr": 0.0310402,
+    "mae/test/rel-event/user-attendance": 0.234435,
+    "mae/test/rel-f1/driver-position": 3.74971,
+    "mae/test/rel-hm/item-sales": 0.0531676,
+    "mae/test/rel-stack/post-votes": 0.0648983,
+    "mae/test/rel-trial/site-success": 0.324851,
+    "mae/test/rel-trial/study-adverse": 40.3657,
+    "mae/val/rel-amazon/item-ltv": 43.235,
+    "mae/val/rel-amazon/user-ltv": 12.022,
+    "mae/val/rel-avito/ad-ctr": 0.0291652,
+    "mae/val/rel-event/user-attendance": 0.228424,
+    "mae/val/rel-f1/driver-position": 3.50024,
+    "mae/val/rel-hm/item-sales": 0.0640494,
+    "mae/val/rel-stack/post-votes": 0.058982,
+    "mae/val/rel-trial/site-success": 0.339356,
+    "mae/val/rel-trial/study-adverse": 42.9937,
+}
+
 
 def b200(qos: str, time: str) -> Resources:
     """One B200. 36 cpus is blackwell1's 288 cores split eight ways, and the
@@ -193,6 +245,9 @@ def submit_one(db: str, task: str, resources: Resources):
             eval_vector_db_path=None,
             eval_lcs_bw_pl_grid=[(1024, 1024, True)],
             # logging
+            # only this run's task: a ceiling for a task it never evaluates
+            # would draw a line in a panel that has no curve
+            ceilings={k: v for k, v in CEILINGS.items() if k.endswith(f"/{db}/{task}")},
             project="2026-08-06-fine_tune",
             entity="rtv2",
             run_name=f"{db}/{task}",

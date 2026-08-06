@@ -29,6 +29,7 @@ dependencies = [
     "torch",
     "tqdm",
     "wandb",
+    "wandb-workspaces",
     "xgboost",
 ]
 

@@ -75,6 +75,7 @@ def train(pre_dir: str, eval_pre_dir: str, out_root: str, run_id: str) -> None:
         # logging: the run id names the output directory and the wandb run, and
         # reusing it is how a preempted run resumes
         run_id=run_id,
+        ceilings={},
         project="rt-train",
         entity=None,
         run_name=None,
