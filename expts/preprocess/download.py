@@ -1,7 +1,7 @@
 """Fetch the raw Join once, to a directory every node can read.
 
-    pixi run python expts/preprocess/download.py <collection>
-    pixi run python expts/preprocess/download.py <collection> --repair
+    pixi run python expts/preprocess/download.py
+    pixi run python expts/preprocess/download.py --repair
 
 Once, and not per job: the collection is 639 databases in 28k files, and a job
 that resolved its own database from the Hub would be one of 639 clients doing it
@@ -28,7 +28,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
-from expts.preprocess.collection import Collection, pick  # noqa: E402
+from expts.preprocess.submit import RAW_DIR, SOURCE_REPO  # noqa: E402
 
 ATTEMPTS = 20
 # git-lfs opens this many transfers; the batch API is not what rate-limits, so
@@ -54,8 +54,8 @@ def _pointers(d: Path) -> list[Path]:
     return out
 
 
-def download(c: Collection) -> None:
-    d, repo = Path(c.raw_dir), c.source_repo
+def download() -> None:
+    d, repo = Path(RAW_DIR), SOURCE_REPO
     url = f"https://huggingface.co/datasets/{repo}"
 
     if not (d / ".git").is_dir():
@@ -100,7 +100,7 @@ def download(c: Collection) -> None:
     print(f"{n} databases in {d}")
 
 
-def repair(c: Collection) -> int:
+def repair() -> int:
     """Bring the raw directory to exactly what the Hub says it is.
 
     Every file is checked against the Hub's recorded size and only mismatches
@@ -117,7 +117,7 @@ def repair(c: Collection) -> int:
     """
     from huggingface_hub import HfApi, hf_hub_download
 
-    d, repo = Path(c.raw_dir), c.source_repo
+    d, repo = Path(RAW_DIR), SOURCE_REPO
     info = HfApi().repo_info(repo, repo_type="dataset", files_metadata=True)
     want = {f.rfilename: (f.size or 0) for f in info.siblings if "/" in f.rfilename}
 
@@ -154,7 +154,6 @@ def repair(c: Collection) -> int:
 
 
 if __name__ == "__main__":
-    c = pick(sys.argv)
     if "--repair" in sys.argv:
-        sys.exit(1 if repair(c) else 0)
-    download(c)
+        sys.exit(1 if repair() else 0)
+    download()

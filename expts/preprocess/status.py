@@ -1,7 +1,7 @@
 """Where the sweep is, and when it will finish.
 
-    pixi run python expts/preprocess/status.py <collection>
-    watch -n60 pixi run python expts/preprocess/status.py <collection>
+    pixi run python expts/preprocess/status.py
+    watch -n60 pixi run python expts/preprocess/status.py
 
 Progress is measured in estimated *seconds of work*, per stage. Counting
 databases would say a sweep was 97% done with a quarter of the work left, and
@@ -25,10 +25,16 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
-from expts.preprocess.collection import Collection, pick  # noqa: E402
 from expts.preprocess.preprocess import is_done, is_rustler_done  # noqa: E402
-from expts.preprocess.sizes import load as load_sizes  # noqa: E402
-from expts.preprocess.submit import EMBEDDER, log_root  # noqa: E402
+from expts.preprocess.submit import (  # noqa: E402
+    EMBEDDER,
+    LOG_ROOT,
+    NAME,
+    OUT_DIR,
+    RAW_DIR,
+    SOURCE_REPO,
+    load_sizes,
+)
 
 # Only rate samples inside this window are used, so an ETA reflects how the
 # sweep is going now rather than averaging in a slow start or a stall.
@@ -64,9 +70,9 @@ def _strip_stage(name: str) -> str | None:
     return None
 
 
-def squeue_states(c: Collection) -> dict[str, int]:
+def squeue_states() -> dict[str, int]:
     out = subprocess.run(
-        ["squeue", "-h", "-o", "%j %t", "--name=" + ",".join(_job_names(c))],
+        ["squeue", "-h", "-o", "%j %t", "--name=" + ",".join(_job_names())],
         capture_output=True,
         text=True,
     )
@@ -77,10 +83,10 @@ def squeue_states(c: Collection) -> dict[str, int]:
     return states
 
 
-def _job_names(c: Collection) -> list[str]:
+def _job_names() -> list[str]:
     return [
         f"{s}{p.parent.name}"
-        for p in Path(c.raw_dir).glob("*/manifest.yaml")
+        for p in Path(RAW_DIR).glob("*/manifest.yaml")
         for s in STAGES
     ]
 
@@ -192,12 +198,10 @@ def stuck(names: set[str], done: set[str], limit: int = 8) -> list[str]:
 MIN_COMPLETIONS = 5
 
 
-def sample(
-    c: Collection, done_bytes: int, done_count: int
-) -> tuple[float, int, int] | None:
+def sample(done_bytes: int, done_count: int) -> tuple[float, int, int] | None:
     """Append a sample; return the oldest one inside the window, if any."""
     now = time.time()
-    SAMPLES = Path(log_root(c)) / "progress.jsonl"
+    SAMPLES = Path(LOG_ROOT) / "progress.jsonl"
     SAMPLES.parent.mkdir(parents=True, exist_ok=True)
     history = []
     if SAMPLES.exists():
@@ -220,7 +224,7 @@ def sample(
     return (inside or history or [None])[0]
 
 
-def databases(c: Collection) -> list[str]:
+def databases() -> list[str]:
     """Every database the build will contain, downloaded yet or not.
 
     Taken from the source repo rather than from what has landed locally: while
@@ -237,21 +241,21 @@ def databases(c: Collection) -> list[str]:
 
         return sorted(
             f.split("/", 1)[0]
-            for f in HfApi().list_repo_files(c.source_repo, repo_type="dataset")
+            for f in HfApi().list_repo_files(SOURCE_REPO, repo_type="dataset")
             if f.endswith("/manifest.yaml") and f.count("/") == 1
         )
     except Exception:  # offline: fall back to what is on disk
-        return sorted(p.parent.name for p in Path(c.raw_dir).glob("*/manifest.yaml"))
+        return sorted(p.parent.name for p in Path(RAW_DIR).glob("*/manifest.yaml"))
 
 
-def cost(c: Collection, names: list[str]) -> dict[str, tuple[float, float]]:
+def cost(names: list[str]) -> dict[str, tuple[float, float]]:
     """database -> (rustler seconds, embed seconds), estimated.
 
     Text bytes come from the previous build until this one has written its own;
     once `text.json` exists it is the real thing rather than a prediction, which
     matters because the prediction is the weaker of the two.
     """
-    sizes, out = load_sizes(c), Path(c.out_dir)
+    sizes, out = load_sizes(), Path(OUT_DIR)
     known_out = sorted(v.get("out", 0) for v in sizes.values())
     known_text = sorted(v.get("text", 0) for v in sizes.values())
     med_out = known_out[len(known_out) // 2] if known_out else 0
@@ -274,10 +278,10 @@ def cost(c: Collection, names: list[str]) -> dict[str, tuple[float, float]]:
     return est
 
 
-def report(c: Collection) -> None:
-    names = databases(c)
-    out = Path(c.out_dir)
-    est = cost(c, names)
+def report() -> None:
+    names = databases()
+    out = Path(OUT_DIR)
+    est = cost(names)
 
     done = [n for n in names if is_done(out / n, EMBEDDER)]
     total = sum(r + e for r, e in est.values())
@@ -287,7 +291,7 @@ def report(c: Collection) -> None:
         for n in names
     )
 
-    print(f"=== {datetime.now():%Y-%m-%d %H:%M:%S}  {c.name} preprocessing")
+    print(f"=== {datetime.now():%Y-%m-%d %H:%M:%S}  {NAME} preprocessing")
     print(
         f"databases : {len(done)}/{len(names)}"
         f"   (rustler {sum(is_rustler_done(out / n) for n in names)}/{len(names)})"
@@ -298,7 +302,7 @@ def report(c: Collection) -> None:
     )
     done_bytes, total_bytes = finished, total
 
-    earlier = sample(c, int(done_bytes), len(done))
+    earlier = sample(int(done_bytes), len(done))
     if earlier and done_bytes > earlier[1]:
         elapsed = time.time() - earlier[0]
         rate = (done_bytes - earlier[1]) / elapsed
@@ -324,7 +328,7 @@ def report(c: Collection) -> None:
     else:
         print("rate      : nothing finished yet (run again in a few minutes)")
 
-    states = squeue_states(c)
+    states = squeue_states()
     if states:
         print("jobs      : " + "  ".join(f"{v} {k}" for k, v in sorted(states.items())))
     live = running_now()
@@ -345,4 +349,4 @@ def report(c: Collection) -> None:
 
 
 if __name__ == "__main__":
-    report(pick(sys.argv))
+    report()

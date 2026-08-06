@@ -8,33 +8,32 @@ replacement. Two collections, one pipeline:
 | `the-join` | 639 | 28 GiB | ~1.4 TiB |
 | `relbench` | 7 | 10 GiB | ~230 GiB (plus a `legacy/` tree) |
 
-Four commands, in order, each naming the collection. Nothing else needs
-deciding.
+Four commands, in order. Which collection they act on is the block of constants
+at the top of `submit.py` — edit it; the other sits below it commented out.
 
 ```bash
 # 0. make room under /dfs/user/$USER: ~1.5 TiB for the-join, ~250 GiB for relbench
 df -h /dfs/user/$USER
 
 # 1. fetch the raw collection once
-pixi run python expts/preprocess/download.py the-join
+pixi run python expts/preprocess/download.py
 
 # 2. submit. Re-run any time -- it submits only what is left, and only
 #    databases whose raw files have all arrived, so it is safe to start while
 #    step 1 is still running and to re-run as more land.
-pixi run python expts/preprocess/submit.py the-join --dry-run   # the plan first
-pixi run python expts/preprocess/submit.py the-join
+pixi run python pixi run python expts/preprocess/submit.py
 
 # 3. watch it
-pixi run python expts/preprocess/status.py the-join
-watch -n60 pixi run python expts/preprocess/status.py the-join
+pixi run python expts/preprocess/status.py
+watch -n60 pixi run python expts/preprocess/status.py
 
 # 4. verify, write the task lists, and publish
-pixi run python expts/preprocess/finalize.py the-join upload
+pixi run python expts/preprocess/finalize.py upload
 ```
 
-Everything a collection differs by -- its repos, its paths, a task list that
-cannot be recomputed, directories the upload must not delete -- is one entry in
-`collection.py`. Adding a third is that entry and nothing else.
+Everything a collection differs by — its repos, a task list that cannot be
+recomputed, directories the upload must not delete — is that one block. Adding a
+third is a third block.
 
 Step 2 refuses to run from a dirty or unpushed tree, and says so before it
 submits anything — jobs clone the commit you submit from, so commit first.
@@ -46,17 +45,16 @@ and cheap) until `status.py` reports 639, then do step 4.
 
 | file | what it does |
 |---|---|
-| `collection.py` | what a collection is: repos, paths, and its two quirks |
 | `download.py` | one resumable git-lfs fetch of the raw collection; `--repair` mends it |
 | `preprocess.py` | the job targets: `rustler` (cpu-only), `embed` (GPU), `legacy` |
 | `submit.py` | sizes each job, submits the stages, holds the resource numbers |
 | `status.py` | progress and ETA, measured in bytes |
 | `finalize.py` | `verify`, `task-lists`, `upload` |
-| `sizes.py` / `sizes-<collection>.json` | expected output bytes per database |
+| `sizes.py` / `sizes-<collection>.json` | output **and text** bytes per database, from the previous build |
 | `rt-j-dbs.json` | the 475 databases rt-j trains on, carried forward |
 
-Embedder, batch size and every resource number are constants at the top of
-`submit.py`; paths and per-collection facts live in `collection.py`.
+`submit.py` holds the collection and the two values every stage must agree on;
+every resource number is written at the call that passes it.
 
 ### The `legacy/` tree
 
@@ -144,7 +142,7 @@ quietly break either:
 
 * **Nothing writes into `RAW_DIR` except `download.py`.** The size check catches
   corruption after the fact; not creating it is better. Use
-  `download.py <collection> --repair` to mend, never a copy from somewhere else.
+  `download.py --repair` to mend, never a copy from somewhere else.
 * **Do not run downloaders in parallel.** The Hub's limit is not per-process,
   and extra processes turn a slow fetch into one that fails outright.
 

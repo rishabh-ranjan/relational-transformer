@@ -1,8 +1,8 @@
 """Check the build, write its task lists, and publish it.
 
-    pixi run python expts/preprocess/finalize.py <collection> verify
-    pixi run python expts/preprocess/finalize.py <collection> task-lists
-    pixi run python expts/preprocess/finalize.py <collection> upload
+    pixi run python expts/preprocess/finalize.py verify
+    pixi run python expts/preprocess/finalize.py task-lists
+    pixi run python expts/preprocess/finalize.py upload
 
 `verify` is not optional politeness: a database whose job was preempted between
 rustler and the embedding step leaves a directory that looks finished, and
@@ -34,8 +34,16 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
-from expts.preprocess.collection import Collection, pick  # noqa: E402
-from expts.preprocess.submit import EMBEDDER  # noqa: E402
+from expts.preprocess.submit import (  # noqa: E402
+    CURATED,
+    EMBEDDER,
+    KEEP,
+    LEGACY_DIR,
+    OUT_DIR,
+    RAW_DIR,
+    SOURCE_REPO,
+    TARGET_REPO,
+)
 
 REQUIRED = (
     "meta.json",
@@ -53,10 +61,10 @@ def databases(out: Path) -> list[str]:
     return sorted(p.parent.name for p in out.glob("*/meta.json"))
 
 
-def verify(c: Collection) -> list[str]:
+def verify() -> list[str]:
     """Report every database that is missing, incomplete, or empty."""
-    out, problems = Path(c.out_dir), []
-    expected = sorted(p.parent.name for p in Path(c.raw_dir).glob("*/manifest.yaml"))
+    out, problems = Path(OUT_DIR), []
+    expected = sorted(p.parent.name for p in Path(RAW_DIR).glob("*/manifest.yaml"))
     built = set(databases(out))
 
     for name in expected:
@@ -75,7 +83,7 @@ def verify(c: Collection) -> list[str]:
             problems.append(f"{name}: meta.json does not record {EMBEDDER}")
 
     for name in sorted(built - set(expected)):
-        problems.append(f"{name}: built but not in {c.raw_dir} (stale output)")
+        problems.append(f"{name}: built but not in {RAW_DIR} (stale output)")
 
     print(f"{len(expected)} expected, {len(built)} built, {len(problems)} problem(s)")
     for p in problems[:40]:
@@ -85,12 +93,12 @@ def verify(c: Collection) -> list[str]:
     return problems
 
 
-def verify_legacy(c: Collection) -> list[str]:
+def verify_legacy() -> list[str]:
     """The legacy tree, held to the same standard as the build."""
-    if not c.legacy:
+    if not LEGACY_DIR:
         return []
-    out, problems = Path(c.legacy_dir), []
-    expected = sorted(p.parent.name for p in Path(c.raw_dir).glob("*/manifest.yaml"))
+    out, problems = Path(LEGACY_DIR), []
+    expected = sorted(p.parent.name for p in Path(RAW_DIR).glob("*/manifest.yaml"))
     built = set(databases(out)) if out.is_dir() else set()
     for name in expected:
         if name not in built:
@@ -110,9 +118,9 @@ def verify_legacy(c: Collection) -> list[str]:
     return problems
 
 
-def task_lists(c: Collection) -> None:
+def task_lists() -> None:
     """Write `db-task-lists/` from the metas this build just produced."""
-    out = Path(c.out_dir)
+    out = Path(OUT_DIR)
     by_kind: dict[str, list[list[str]]] = defaultdict(list)
     every: list[list[str]] = []
     for name in databases(out):
@@ -127,8 +135,12 @@ def task_lists(c: Collection) -> None:
         "autocomplete": by_kind.get("autocomplete", []),
     }
     curated = set()
-    if c.curated_path:
-        curated = set(json.loads(c.curated_path.read_text()))
+    if Path(__file__).with_name(CURATED) if CURATED else None:
+        curated = set(
+            json.loads(
+                (Path(__file__).with_name(CURATED) if CURATED else None).read_text()
+            )
+        )
         lists["rt-j"] = [pair for pair in every if pair[0] in curated]
     d = out / "db-task-lists"
     d.mkdir(parents=True, exist_ok=True)
@@ -145,7 +157,7 @@ def task_lists(c: Collection) -> None:
             print(f"    {name}")
 
 
-def upload(c: Collection, private: bool = False) -> None:
+def upload(private: bool = False) -> None:
     """Publish the whole replacement, or none of it.
 
     Both trees are verified before anything is pushed: a collection is what its
@@ -155,15 +167,15 @@ def upload(c: Collection, private: bool = False) -> None:
     """
     from huggingface_hub import CommitOperationDelete, HfApi
 
-    problems = verify(c) + verify_legacy(c)
+    problems = verify() + verify_legacy()
     if problems:
         raise SystemExit(
             f"{len(problems)} problem(s); publishing nothing. "
             "Re-run submit.py to fill the gaps, then try again."
         )
-    task_lists(c)
+    task_lists()
 
-    out, repo = Path(c.out_dir), c.target_repo
+    out, repo = Path(OUT_DIR), TARGET_REPO
     local = set(databases(out))
     api = HfApi()
     api.create_repo(repo, repo_type="dataset", private=private, exist_ok=True)
@@ -171,12 +183,12 @@ def upload(c: Collection, private: bool = False) -> None:
     print(f"uploading {out} -> {repo}")
     api.upload_large_folder(repo_id=repo, repo_type="dataset", folder_path=str(out))
 
-    if c.legacy:
-        print(f"uploading {c.legacy_dir} -> {repo}/legacy")
+    if LEGACY_DIR:
+        print(f"uploading {LEGACY_DIR} -> {repo}/legacy")
         api.upload_large_folder(
             repo_id=repo,
             repo_type="dataset",
-            folder_path=str(Path(c.legacy_dir)),
+            folder_path=str(Path(LEGACY_DIR)),
             path_in_repo="legacy",
         )
 
@@ -185,7 +197,7 @@ def upload(c: Collection, private: bool = False) -> None:
         for f in api.list_repo_files(repo, repo_type="dataset")
         if "/" in f
     }
-    stale = sorted(remote_dirs - local - set(c.keep))
+    stale = sorted(remote_dirs - local - set(KEEP))
     if not stale:
         print("nothing stale on the Hub; it already mirrors this build")
         return
@@ -199,20 +211,18 @@ def upload(c: Collection, private: bool = False) -> None:
             CommitOperationDelete(path_in_repo=f"{name}/", is_folder=True)
             for name in stale
         ],
-        commit_message=f"drop {len(stale)} database(s) no longer in {c.source_repo}",
+        commit_message=f"drop {len(stale)} database(s) no longer in {SOURCE_REPO}",
     )
     print("done")
 
 
 if __name__ == "__main__":
-    words = [a for a in sys.argv[1:] if not a.startswith("-")]
-    command = words[1] if len(words) > 1 else ""
-    c = pick([sys.argv[0], words[0]] if words else sys.argv)
+    command = sys.argv[1] if len(sys.argv) > 1 else ""
     if command == "verify":
-        sys.exit(1 if verify(c) + verify_legacy(c) else 0)
+        sys.exit(1 if verify() + verify_legacy() else 0)
     elif command == "task-lists":
-        task_lists(c)
+        task_lists()
     elif command == "upload":
-        upload(c)
+        upload()
     else:
         sys.exit(__doc__)
