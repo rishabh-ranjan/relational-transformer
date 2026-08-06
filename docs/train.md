@@ -94,7 +94,9 @@ submit("examples.train:train",
 ```
 
 See [`expts/README.md`](../expts/README.md) for how experiments in this repo are
-laid out, and [`expts/data_scaling/`](../expts/data_scaling/) for a worked one.
+laid out, and [`expts/fine_tune/submit.py`](../expts/fine_tune/submit.py) for a
+worked one -- it passes `rt.train:main` straight to `submit`, which is the least
+boilerplate a run on this cluster can be.
 Hard-won notes if you write your own launcher instead:
 
 - **Name a run you may want to resume.** `run_id` names the output

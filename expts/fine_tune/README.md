@@ -16,7 +16,7 @@ pixi run python expts/fine_tune/submit.py                # batch, 4xB200
 pixi run python expts/fine_tune/submit.py --interactive  # in a held allocation
 ```
 
-Both submit `expts.fine_tune.train:train` with the same arguments; the flag only
+Both submit `rt.train:main` with the same arguments; the flag only
 changes whose allocation it runs in. Use `--interactive` while the recipe is
 still moving -- it starts in seconds instead of queuing, and a crash leaves the
 allocation standing -- and the plain form for the run whose number you report.
@@ -43,8 +43,8 @@ nothing to do. An interactive one is not -- resubmit with the same `run_id`
 
 ## What is fixed and what is not
 
-`train.py` carries pretraining's hyperparameters verbatim (they come from
-`expts/data_scaling/train.py`, which is RT-J's recipe), so an arm differs from
+`submit.py` passes `rt.train:main` directly, with pretraining's hyperparameters
+verbatim (the released RT-J recipe, `examples/train.py`), so an arm differs from
 pretraining only in what it is trained on:
 
 - `db_task_list` is one `(db, task)` pair instead of a mixture;
@@ -53,9 +53,8 @@ pretraining only in what it is trained on:
 - `load_ckpt_path` is the arm. `None` is random init; a checkpoint path is the
   pretrained arm.
 
-`total_steps` is the one number this experiment sets on its own (pretraining's
-100k steps is a mixture's worth of data, not one task's), and it is a `submit.py`
-constant so a change to it is a diff.
+`total_steps` is the one number this experiment sets on its own: pretraining's
+100k steps is a mixture's worth of data, not one task's.
 
 ## Baselines
 

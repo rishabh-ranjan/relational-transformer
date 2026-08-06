@@ -9,7 +9,7 @@ them, so nothing is hidden in a default you did not choose.
 
 Data is a local directory -- download it first (see docs/downloads.md). For
 running this on a cluster without writing any slurm boilerplate, see
-roach.slurm.submit and expts/data_scaling/submit.py.
+roach.slurm.submit and expts/fine_tune/submit.py.
 """
 
 from __future__ import annotations

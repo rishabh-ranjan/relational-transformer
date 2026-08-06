@@ -4,10 +4,14 @@ One directory per experiment, laid out however that experiment wants. It has to
 submit jobs and it has to be committed — jobs clone the commit you submit from,
 so the directory is the record of what was run.
 
-`data_scaling/` happens to split into a recipe (`train.py`), a sweep
-(`submit.py`) and its task lists; an experiment that runs one job, or evaluates
-checkpoints, or sweeps a grid, will look different. Nothing here enforces a
-shape.
+**One file where one file will do, and arguments written where they are passed.**
+`fine_tune/submit.py` is the shape to copy: it submits `rt.train:main` directly,
+with every argument spelled out at the call, so there is no wrapper function to
+keep in step with the entry point and no constant defined three screens away from
+its only use. The call *is* the recipe, and a change to the experiment is a diff
+in one place. A sweep is a loop around that call; an experiment that needs a
+derived input (a curated task list, a subset) keeps it beside the file that uses
+it. Nothing here enforces a shape, but a second file has to earn itself.
 
 ## What every experiment owes
 
