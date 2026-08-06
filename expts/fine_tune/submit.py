@@ -194,7 +194,7 @@ def submit_one(db: str, task: str, resources: Resources):
             # logging
             project="2026-08-06-fine_tune",
             entity="rtv2",
-            run_name=None,
+            run_name=f"{db}/{task}",
             wandb_disabled=False,
             out_root="/dfs/user/ranjanr/ckpts",
         ),
