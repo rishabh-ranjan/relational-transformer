@@ -10,26 +10,27 @@ readme = "README.md"
 license = { file = "LICENSE" }
 requires-python = ">=3.12"
 dependencies = [
-    "torch",
-    "safetensors",
-    "huggingface-hub",
-    "sentence-transformers",
-    "numpy",
+    "beartype",
     "einops",
+    "huggingface-hub",
+    "matplotlib",
     "ml_dtypes",
+    "numpy",
     "orjson",
-    "tqdm",
+    "pandas",
+    "polars",
+    "pre-commit",
+    "pyarrow",
+    "pytest",
     "pyyaml",
+    "safetensors",
+    "scikit-learn<1.6",
+    "sentence-transformers",
+    "torch",
+    "tqdm",
+    "wandb",
+    "xgboost",
 ]
-
-[project.optional-dependencies]
-# `eval` (rt.eval) also needs relbench, a git dependency that can't be
-# declared here (PyPI forbids URL deps) -- install it manually:
-#   pip install "git+https://github.com/snap-stanford/relbench.git@<rev>"
-eval = ["scikit-learn<1.6.0"]
-# wandb logging for rt.cli.train (off by default).
-train = ["wandb"]
-test = ["pytest", "polars"]
 
 [tool.maturin]
 python-source = "src"
@@ -55,50 +56,8 @@ python = ">=3.12"
 rust = "*"
 maturin = "*"
 uv = "*"
-matplotlib = ">=3.11.0,<4"
-beartype = ">=0.22.9,<0.23"
 
 [tool.pixi.pypi-dependencies]
 relational-transformer = { path = ".", editable = true }
-torch = "*"
-safetensors = "*"
-sentence-transformers = "*"
-huggingface-hub = "*"
-numpy = "*"
-ml_dtypes = "*"
-orjson = "*"
-beartype = "*"
-einops = "*"
-scikit-learn = "<1.6.0"
-pandas = "*"
-pyarrow = "*"
-polars = "*"
-pytest = "*"
-pre-commit = "*"
-tqdm = "*"
-wandb = "*"
-xgboost = "*"
 # pinned until the relbench-hf branch (HF Hub data loading) lands in a relbench release
 relbench = { git = "https://github.com/snap-stanford/relbench.git", rev = "6e4a3a3d271f981b7f61e2ecbb6fd1c0f1cd3eeb" }
-
-[tool.pixi.tasks]
-# Standalone preprocessor binary (polars + manifest reader; no FAISS).
-build-pre = "cargo build --release --manifest-path rustler/Cargo.toml"
-# Rebuild the rt.rustler extension after editing rust. `pixi install` builds it
-# too -- and that is all a fresh checkout needs -- but it does not notice a
-# changed .rs file (measured: a touched lib.rs leaves `pixi install` a 0.09s
-# no-op), so this is the one to run while working on the crate. The opt-in FAISS
-# Sampler is `maturin develop --release --features vecdb` (needs cmake + a BLAS).
-build-sampler = "maturin develop --uv --release"
-# Preprocess one dataset: download (HF or local) -> rustler -> embeddings.
-preprocess = { cmd = "python -m rt.cli.preprocess one", depends-on = ["build-sampler"] }
-# Preprocess many datasets from a HuggingFace collection repo.
-preprocess-many = { cmd = "python -m rt.cli.preprocess many", depends-on = ["build-sampler"] }
-# Upload an already-preprocessed dataset directory to a HuggingFace repo.
-upload = "python -m rt.cli.preprocess upload"
-# Training has no pixi task: launch rt.cli.train under torchrun yourself (see
-# docs/train.md), after `pixi run build-sampler`.
-# eval defaults to single-process (one GPU); for multi-GPU eval launch
-# rt.cli.eval under torchrun yourself (see the module docstring).
-eval = { cmd = "python -m rt.cli.eval", depends-on = ["build-sampler"] }
-test = { cmd = "pytest", depends-on = ["build-sampler"] }
