@@ -610,17 +610,6 @@ def main(
         # Best-checkpoint tracking follows the primary (untagged) grid entry.
         consider(metrics, step)
         if is_main:
-            for prefix, by_split in metrics.items():
-                label = prefix.rstrip("_") or "live"
-                for split, by_metric in by_split.items():
-                    log(
-                        indent=1,
-                        eval_model=label,
-                        split=split,
-                        step=step,
-                        auc=by_metric["auc"].get("mean"),
-                        mae=by_metric["mae"].get("mean"),
-                    )
             if use_wandb:
                 # {prefix}{metric}/{split}/mean and .../{db}/{table}
                 wandb.log(
@@ -725,14 +714,6 @@ def main(
                         "train/sec_per_step": step_time,
                         "train/load_time": load_time,
                     }
-                )
-            if step % 50 == 0:
-                log(
-                    step=step,
-                    loss=f"{total_loss:.4f}",
-                    grad_norm=f"{float(norm):.3f}",
-                    sec_per_step=f"{step_time:.3f}",
-                    load_time=f"{load_time:.3f}",
                 )
 
         # Time-based resume checkpoint (preemption resilience), independent of

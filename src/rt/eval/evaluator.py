@@ -9,7 +9,7 @@ import torch.distributed as dist
 from torch.utils.data import DataLoader
 
 from rt.data import EvalDataset, RustlerDataset
-from rt.progress import Progress, fmt_duration, log
+from rt.progress import fmt_duration, log
 from rt.eval.metrics import metric_for
 from rt.model.net import SEM_TYPE_BOOLEAN
 import wandb
@@ -72,11 +72,6 @@ class Evaluator:
         self.eval_loaders = {}
         self.eval_loader_iters = {}
 
-        init_pbar = Progress(
-            total=len(self.tasks),
-            name="load_eval_data",
-            disable=local_rank != 0,
-        )
         init_tic = time.time()
         prefetch_time = 0.0
 
@@ -126,8 +121,6 @@ class Evaluator:
             _prefetch_tic = time.time()
             self.eval_loader_iters[eval_task] = iter(self.eval_loaders[eval_task])
             prefetch_time += time.time() - _prefetch_tic
-            init_pbar.update(1)
-        init_pbar.close()
         if local_rank == 0:
             log(
                 eval_tasks_loaded=len(self.tasks),
@@ -172,7 +165,6 @@ class Evaluator:
         ddp = self.ddp
         world_size = self.world_size
         global_rank = self.global_rank
-        local_rank = self.local_rank
 
         for net, _ in nets_with_prefix:
             net.eval()
@@ -205,11 +197,6 @@ class Evaluator:
                 labels = []
                 batch_masks = []
                 node_idxs_acc = []
-                pbar = Progress(
-                    total=n_batches,
-                    name=f"{eval_task.db_name}/{eval_task.table_name}/{eval_task.split}",
-                    disable=local_rank != 0,
-                )
                 # Drive the loop by the fixed, cross-rank-uniform batch count.
                 # Every rank processes exactly ``n_batches`` batches (each of
                 # ``eval_bs`` rows, phantom-padded as needed), so every rank
@@ -285,9 +272,6 @@ class Evaluator:
                         ).sum(dim=1)
                         assert nidx.size(0) == batch_mask.size(0)
                         node_idxs_acc.append(nidx)
-                    pbar.update(1)
-
-                pbar.close()
 
                 # prefetch next pass while we run gather + metric compute.
                 self.eval_loader_iters[eval_task] = iter(eval_loader)
@@ -428,13 +412,6 @@ class Evaluator:
             (x, y): [] for x in eval_ctx_size_list_to_use for y in self.eval_splits
         }
 
-        outer_pbar = Progress(
-            total=len(self.eval_loaders),
-            name=f"eval@{steps}",
-            disable=local_rank != 0,
-        )
-
-        last_task = None
         for (
             eval_task,
             eval_ctx_size,
@@ -442,10 +419,6 @@ class Evaluator:
             preds_by_prefix_np,
             num_labels_np,
         ) in self.evaluate_raw(nets_with_prefix, eval_ctx_size_list_to_use):
-            if last_task is not None and eval_task is not last_task:
-                outer_pbar.update(1)
-            last_task = eval_task
-
             # Uniform per-real-item average. Length matches labels_np.
             task_mean_labels = float(num_labels_np.mean())
             if eval_task.task_type == "reg":
@@ -459,14 +432,11 @@ class Evaluator:
 
             for prefix, preds_np in preds_by_prefix_np.items():
                 if eval_task.task_type == "reg":
-                    metric_name = "mae"
                     _, metric = metric_for("reg", labels_np, preds_np)
                     all_reg_scores[prefix][(eval_ctx_size, eval_task.split)].append(
                         metric
                     )
-                    metric_str = f"{metric:<6.4f}"
                 elif eval_task.task_type == "clf":
-                    metric_name = "auc"
                     try:
                         _, metric = metric_for("clf", labels_np, preds_np)
                     except Exception as e:
@@ -492,28 +462,13 @@ class Evaluator:
                     all_auc_scores[prefix][(eval_ctx_size, eval_task.split)].append(
                         metric
                     )
-                    metric_str = f"{metric * 100:<6.1f}"
 
-                short_db = eval_task.db_name.split("/")[-1].split("-")[1]
-                log(
-                    indent=1,
-                    task=(
-                        f"{prefix}{short_db}/{eval_task.table_name}/{eval_task.split}"
-                    ),
-                    ctx_size=eval_ctx_size,
-                    **{metric_name: metric_str.strip()},
-                    mean_labels=f"{task_mean_labels:.1f}",
-                )
                 all_metrics[prefix][eval_task.split][eval_ctx_size][
                     (eval_task.db_name, eval_task.table_name)
                 ] = metric
                 all_metrics[prefix][eval_task.split][eval_ctx_size][
                     (eval_task.db_name, eval_task.table_name, "mean_labels")
                 ] = task_mean_labels
-
-        if last_task is not None:
-            outer_pbar.update(1)
-        outer_pbar.close()
 
         if global_rank == 0:
             for _, prefix in nets_with_prefix:
@@ -548,15 +503,6 @@ class Evaluator:
                         all_metrics[prefix][split][eval_ctx_size][
                             "avg_mean_labels_clf"
                         ] = avg_mean_labels_clf
-                        log(
-                            indent=1,
-                            task=f"{prefix}avg/{split}",
-                            ctx_size=eval_ctx_size,
-                            mae=f"{avg_reg:.4f}",
-                            auc=f"{avg_auc * 100:.1f}",
-                            mean_labels_reg=f"{avg_mean_labels_reg:.1f}",
-                            mean_labels_clf=f"{avg_mean_labels_clf:.1f}",
-                        )
 
         if global_rank == 0:
             tasks_by_split: dict[str, list] = {s: [] for s in self.eval_splits}

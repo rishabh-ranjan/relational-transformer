@@ -7,7 +7,7 @@ import signal
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from rt.data.tasks import resolve_db_task_list
-from rt.progress import Progress, log
+from rt.progress import log
 import time
 
 _libc = ctypes.CDLL(ctypes.util.find_library("c"), use_errno=True)
@@ -128,7 +128,6 @@ def mlock_main(
         size=fmt_size(total_size),
         footprint=fmt_size(total_footprint),
     )
-    pbar = Progress(total=total_size, name="mlock", unit_scale=True)
     with ThreadPoolExecutor(max_workers=workers) as ex:
         futures = [ex.submit(lock_db, db) for db in pending]
         for fut in as_completed(futures):
@@ -146,8 +145,6 @@ def mlock_main(
                 continue
             log(indent=1, locked_db=db, size=fmt_size(db_size))
             total += db_size
-            pbar.update(db_size)
-    pbar.close()
     elapsed = time.time() - t0
 
     log(
