@@ -7,7 +7,7 @@ import signal
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from rt.data.tasks import resolve_db_task_list
-from rt.progress import Progress
+from rt.progress import Progress, log
 import time
 
 _libc = ctypes.CDLL(ctypes.util.find_library("c"), use_errno=True)
@@ -61,7 +61,7 @@ def mlock_main(
     concurrency: networked filesystems typically populate faster with more.
     """
     db_names = sorted({db for db, _ in resolve_db_task_list(db_task_list)})
-    print(f"mlock: {len(db_names)} unique dbs", flush=True)
+    log("mlock_start", num_dbs=len(db_names))
 
     def db_paths(db: str) -> list[str]:
         base = os.path.join(pre_dir, db)
@@ -72,7 +72,7 @@ def mlock_main(
         ]
 
     def fmt_size(n: int) -> str:
-        return f"{n / 2**30:.2f} GiB"
+        return f"{n / 2**30:.2f}GiB"
 
     page_size = os.sysconf("SC_PAGESIZE")
 
@@ -95,7 +95,6 @@ def mlock_main(
             size_errors[db] = f"{type(e).__name__}: {e}"
 
     total_size = sum(db_sizes.values())
-    width = max((len(fmt_size(s)) for s in db_sizes.values()), default=0)
 
     locked_files = 0
     total = 0
@@ -103,9 +102,11 @@ def mlock_main(
 
     for db in db_names:
         if db in size_errors:
-            print(
-                f"\x1b[31m[{'ERROR':>{width}}] {db}  {size_errors[db]}\x1b[0m",
-                flush=True,
+            log(
+                "db_size_error",
+                indent=1,
+                db=db,
+                error=size_errors[db].replace(" ", "_"),
             )
             skipped += 1
 
@@ -123,8 +124,13 @@ def mlock_main(
     total_footprint = sum(db_footprints[db] for db in pending)
 
     t0 = time.time()
-    print(f"mlock: footprint={fmt_size(total_footprint)}", flush=True)
-    pbar = Progress(total=total_size, desc="mlock", unit_scale=True)
+    log(
+        "mlock_plan",
+        num_dbs=len(pending),
+        size=fmt_size(total_size),
+        footprint=fmt_size(total_footprint),
+    )
+    pbar = Progress(total=total_size, name="mlock", unit_scale=True)
     with ThreadPoolExecutor(max_workers=workers) as ex:
         futures = [ex.submit(lock_db, db) for db in pending]
         for fut in as_completed(futures):
@@ -132,26 +138,31 @@ def mlock_main(
             db_size = db_sizes[db]
             locked_files += n
             if err is not None:
-                print(
-                    f"\x1b[31m[{fmt_size(db_size):>{width}}] {db}  "
-                    f"ERROR: {type(err).__name__}: {err}\x1b[0m",
-                    flush=True,
+                log(
+                    "db_lock_error",
+                    indent=1,
+                    db=db,
+                    size=fmt_size(db_size),
+                    error=f"{type(err).__name__}:{err}".replace(" ", "_"),
                 )
                 skipped += 1
                 continue
-            print(f"[{fmt_size(db_size):>{width}}] {db}", flush=True)
+            log("db_locked", indent=1, db=db, size=fmt_size(db_size))
             total += db_size
             pbar.update(db_size)
     pbar.close()
     elapsed = time.time() - t0
 
-    print(
-        f"locked {locked_files} files, {fmt_size(total)} on disk, "
-        f"{fmt_size(total_footprint)} memory footprint, "
-        f"{skipped} dbs skipped, in {elapsed:.0f}s "
-        f"({total / 2**30 / max(elapsed, 1e-9):.2f} GiB/s). "
-        f"pid={os.getpid()}. sleeping until signaled.",
-        flush=True,
+    log(
+        "mlock_done",
+        num_files=locked_files,
+        size=fmt_size(total),
+        footprint=fmt_size(total_footprint),
+        num_skipped=skipped,
+        elapsed=f"{elapsed:.0f}s",
+        rate=f"{total / 2**30 / max(elapsed, 1e-9):.2f}GiB/s",
+        pid=os.getpid(),
+        state="sleeping_until_signaled",
     )
 
     def _fast_exit(signum: int, frame: object) -> None:

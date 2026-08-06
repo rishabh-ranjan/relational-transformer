@@ -9,7 +9,7 @@ import torch.distributed as dist
 from torch.utils.data import DataLoader
 
 from rt.data import EvalDataset, RustlerDataset
-from rt.progress import Progress, fmt_duration
+from rt.progress import Progress, fmt_duration, log
 from rt.eval.metrics import metric_for
 from rt.model.net import SEM_TYPE_BOOLEAN
 import wandb
@@ -74,7 +74,7 @@ class Evaluator:
 
         init_pbar = Progress(
             total=len(self.tasks),
-            desc="load eval data",
+            name="load_eval_data",
             disable=local_rank != 0,
         )
         init_tic = time.time()
@@ -129,14 +129,11 @@ class Evaluator:
             init_pbar.update(1)
         init_pbar.close()
         if local_rank == 0:
-            print(
-                f"\neval data loaded in"
-                f" \033[1m{fmt_duration(time.time() - init_tic)}\033[0m",
-                flush=True,
-            )
-            print(
-                f"  prefetch init took \033[1m{fmt_duration(prefetch_time)}\033[0m",
-                flush=True,
+            log(
+                "eval_data_loaded",
+                num_tasks=len(self.tasks),
+                elapsed=fmt_duration(time.time() - init_tic),
+                prefetch_time=fmt_duration(prefetch_time),
             )
 
     def evaluate_raw(
@@ -211,7 +208,7 @@ class Evaluator:
                 node_idxs_acc = []
                 pbar = Progress(
                     total=n_batches,
-                    desc=f"{eval_task.db_name}/{eval_task.table_name}/{eval_task.split}",
+                    name=f"{eval_task.db_name}/{eval_task.table_name}/{eval_task.split}",
                     disable=local_rank != 0,
                 )
                 # Drive the loop by the fixed, cross-rank-uniform batch count.
@@ -407,7 +404,7 @@ class Evaluator:
         global_rank = self.global_rank
 
         if local_rank == 0:
-            print(f"[step {steps}]", flush=True)
+            log("eval_start", step=steps)
 
         avg_reg_key = "avg_mae"
 
@@ -434,7 +431,7 @@ class Evaluator:
 
         outer_pbar = Progress(
             total=len(self.eval_loaders),
-            desc=f"eval@{steps}",
+            name=f"eval@{steps}",
             disable=local_rank != 0,
         )
 
@@ -478,16 +475,20 @@ class Evaluator:
                         n_classes = len(set(labels_int))
                         n_nan_labels = int(np.isnan(labels_np).sum())
                         n_nan_preds = int(np.isnan(preds_np).sum())
-                        print(
-                            f"\033[31mroc_auc_score failed for "
-                            f"{eval_task.db_name}/{eval_task.table_name}/"
-                            f"{eval_task.split} ctx={eval_ctx_size}: "
-                            f"{type(e).__name__}: {e} | "
-                            f"n={len(labels_int)} n_classes={n_classes} "
-                            f"n_nan_labels={n_nan_labels} "
-                            f"n_nan_preds={n_nan_preds} "
-                            f"→ falling back to AUC=0\033[0m",
-                            flush=True,
+                        log(
+                            "auc_failed",
+                            indent=1,
+                            task=(
+                                f"{eval_task.db_name}/{eval_task.table_name}"
+                                f"/{eval_task.split}"
+                            ),
+                            ctx_size=eval_ctx_size,
+                            error=f"{type(e).__name__}:{e}".replace(" ", "_"),
+                            n=len(labels_int),
+                            n_classes=n_classes,
+                            n_nan_labels=n_nan_labels,
+                            n_nan_preds=n_nan_preds,
+                            fallback_auc=0.0,
                         )
                         metric = 0.0
                     all_auc_scores[prefix][(eval_ctx_size, eval_task.split)].append(
@@ -496,12 +497,15 @@ class Evaluator:
                     metric_str = f"{metric * 100:<6.1f}"
 
                 short_db = eval_task.db_name.split("/")[-1].split("-")[1]
-                print(
-                    f"  {f'{prefix}{short_db}/{eval_task.table_name}/{eval_task.split}':<30}"
-                    f"ctx: {eval_ctx_size:<5}   "
-                    f"{metric_name}: \033[1m{metric_str}\033[0m  "
-                    f"mean_labels: \033[1m{task_mean_labels:<5.1f}\033[0m",
-                    flush=True,
+                log(
+                    "task_metric",
+                    indent=1,
+                    task=(
+                        f"{prefix}{short_db}/{eval_task.table_name}/{eval_task.split}"
+                    ),
+                    ctx_size=eval_ctx_size,
+                    **{metric_name: metric_str.strip()},
+                    mean_labels=f"{task_mean_labels:.1f}",
                 )
                 all_metrics[prefix][eval_task.split][eval_ctx_size][
                     (eval_task.db_name, eval_task.table_name)
@@ -547,14 +551,15 @@ class Evaluator:
                         all_metrics[prefix][split][eval_ctx_size][
                             "avg_mean_labels_clf"
                         ] = avg_mean_labels_clf
-                        print(
-                            f"  {f'{prefix}avg/{split}':<30}"
-                            f"ctx: {eval_ctx_size:<7}"
-                            f"mae: \033[1m{avg_reg:<6.4f}\033[0m  "
-                            f"auc: \033[1m{avg_auc * 100:<5.1f}\033[0m  "
-                            f"mean_labels_reg: \033[1m{avg_mean_labels_reg:<5.1f}\033[0m  "
-                            f"mean_labels_clf: \033[1m{avg_mean_labels_clf:<5.1f}\033[0m",
-                            flush=True,
+                        log(
+                            "avg_metric",
+                            indent=1,
+                            task=f"{prefix}avg/{split}",
+                            ctx_size=eval_ctx_size,
+                            mae=f"{avg_reg:.4f}",
+                            auc=f"{avg_auc * 100:.1f}",
+                            mean_labels_reg=f"{avg_mean_labels_reg:.1f}",
+                            mean_labels_clf=f"{avg_mean_labels_clf:.1f}",
                         )
 
         if global_rank == 0:
@@ -594,8 +599,9 @@ class Evaluator:
                         wandb.log(payload)
 
         if local_rank == 0:
-            print(
-                f"  eval done in \033[1m{fmt_duration(time.time() - eval_tic)}\033[0m",
-                flush=True,
+            log(
+                "eval_done",
+                step=steps,
+                elapsed=fmt_duration(time.time() - eval_tic),
             )
         return all_metrics

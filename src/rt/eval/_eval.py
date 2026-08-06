@@ -13,6 +13,7 @@ from rt.eval.evaluator import Evaluator
 from rt.eval.metrics import metric_for
 from rt.eval.relbench import _emit_and_score
 from rt.model import load_rt_model
+from rt.progress import log
 from collections import defaultdict
 import numpy as np
 
@@ -96,16 +97,19 @@ def main(
     embedder = config["embedder"]
     d_text = config["d_text"]
     if global_rank == 0:
-        print(
-            f"loaded {config.get('name', checkpoint)} (embed={embedder}) on {device}"
-            + (f" [ddp, world_size={world_size}]" if ddp else "")
+        log(
+            "model_loaded",
+            model=config.get("name", checkpoint),
+            embedder=embedder,
+            device=device,
+            world_size=world_size,
         )
     if global_rank == 0 and config.get("task_type") in ("clf", "reg"):
-        print(
-            f"warning: this checkpoint was selected/trained for "
-            f"task_type={config['task_type']}; it will be evaluated on "
-            f"both clf and reg tasks",
-            flush=True,
+        log(
+            "warning",
+            kind="task_type_mismatch",
+            ckpt_task_type=config["task_type"],
+            evaluated_on="clf_and_reg",
         )
     # The checkpoint carries the dims that built it; the arguments here
     # are ignored here. Warn when they disagree so a stale CLI default is
@@ -125,10 +129,10 @@ def main(
     if embedder != embedder:
         mismatches.append(f"embedder: config={embedder} checkpoint={embedder}")
     if mismatches and global_rank == 0:
-        print(
-            "warning: model config ignored for checkpoint eval; differs from "
-            "the checkpoint's own config: " + "; ".join(mismatches),
-            flush=True,
+        log(
+            "warning",
+            kind="model_config_ignored",
+            mismatches=";".join(mismatches).replace(" ", "_"),
         )
 
     eval_kwargs = dict(
@@ -290,7 +294,7 @@ def run_and_report(
     by_metric: dict[str, list[float]] = {}
     results = {}
     if is_main:
-        print(f"\n{'task':40} {'metric':8} {'value':>9} {'n':>7}  {'align':>11}  debug")
+        log("eval_start", mode="plain", ctx_size=ctx_size)
     for task, _ctx, labels, preds_by_prefix, _nl, node_idxs in evaluator.evaluate_raw(
         [(model, "")], [ctx_size], with_node_idxs=True
     ):
@@ -311,20 +315,28 @@ def run_and_report(
             "value": mval,
             "n": n,
         }
-        print(
-            f"{task.db_name + '/' + task.table_name:40} {mname:8} {mval:>9.4f} {n:>7}  "
-            f"{align:>11}  norm[{nm}]={nv:.4f}"
+        log(
+            "task_result",
+            indent=1,
+            task=f"{task.db_name}/{task.table_name}",
+            metric=mname,
+            value=f"{mval:.4f}",
+            n=n,
+            align=align,
+            norm_metric=nm,
+            norm_value=f"{nv:.4f}",
         )
     if not is_main:
         return results
-    print(f"\n{'mean':40}")
     for name, vals in by_metric.items():
-        print(f"  {name:10} {sum(vals) / len(vals):>9.4f}  (over {len(vals)} tasks)")
-    if csv_out_dir is not None:
-        print(
-            f"\nsubmission CSVs written to {csv_out_dir}/  "
-            f"(validate: python -m relbench.leaderboard {csv_out_dir})"
+        log(
+            "mean_result",
+            metric=name,
+            value=f"{sum(vals) / len(vals):.4f}",
+            num_tasks=len(vals),
         )
+    if csv_out_dir is not None:
+        log("csv_written", dir=csv_out_dir)
     return results
 
 
@@ -379,7 +391,13 @@ def run_ensemble(
             key = (task.db_name, task.table_name)
             if key not in best or _is_better(task.task_type, v, best[key]["value"]):
                 best[key] = {"cfg": cfg, "value": v, "task_type": task.task_type}
-            print(f"  tune {task.db_name}/{task.table_name} cfg={cfg}: {v:.4f}")
+            log(
+                "tune_result",
+                indent=1,
+                task=f"{task.db_name}/{task.table_name}",
+                cfg=str(cfg).replace(" ", ""),
+                value=f"{v:.4f}",
+            )
 
     # Only rank 0 saw the tuning metrics, so only it knows the winning configs.
     # Every rank must group the test tasks identically -- otherwise the ranks
@@ -400,9 +418,7 @@ def run_ensemble(
     by_metric: dict[str, list[float]] = {}
     results = {}
     if is_main:
-        print(
-            f"\n{'task':40} {'cfg':14} {'metric':8} {'value':>9} {'n':>7}  {'align':>11}"
-        )
+        log("eval_start", mode="ensembled", ctx_size=ctx_size)
     for cfg, tasks in groups.items():
         lcs, bw, pl = cfg
         acc = {}  # key -> [labels, sum_preds, task, node_idxs]
@@ -443,18 +459,26 @@ def run_ensemble(
                 "cfg": cfg,
                 "n": n,
             }
-            print(
-                f"{task.db_name + '/' + task.table_name:40} {str(cfg):14} {mname:8} "
-                f"{mval:>9.4f} {n:>7}  {align:>11}"
+            log(
+                "task_result",
+                indent=1,
+                task=f"{task.db_name}/{task.table_name}",
+                cfg=str(cfg).replace(" ", ""),
+                metric=mname,
+                value=f"{mval:.4f}",
+                n=n,
+                align=align,
             )
     if not is_main:
         return results
-    print(f"\n{'mean (ensembled)':40}")
     for name, vals in by_metric.items():
-        print(f"  {name:10} {sum(vals) / len(vals):>9.4f}  (over {len(vals)} tasks)")
-    if csv_out_dir is not None:
-        print(
-            f"\nsubmission CSVs written to {csv_out_dir}/  "
-            f"(validate: python -m relbench.leaderboard {csv_out_dir})"
+        log(
+            "mean_result",
+            metric=name,
+            value=f"{sum(vals) / len(vals):.4f}",
+            num_tasks=len(vals),
+            ensembled=True,
         )
+    if csv_out_dir is not None:
+        log("csv_written", dir=csv_out_dir)
     return results
