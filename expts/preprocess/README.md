@@ -63,8 +63,9 @@ Embedder, batch size and every resource number are constants at the top of
 `relbench` also publishes `legacy/`: the same databases under RT-v1's boolean
 typing, which the released RT-v1 checkpoints need. `submit.py` builds it
 alongside the main sweep, into its own directory, and `finalize.py upload`
-swaps it in **only once every database of it is complete** -- half a new tree on
-the Hub is worse than all of an old one.
+verifies it together with the build — **a problem in either publishes
+neither**. The Hub keeps the previous version, whole, until there is a whole new
+one to replace it with.
 
 ## Two stages, and why
 

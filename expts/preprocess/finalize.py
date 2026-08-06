@@ -15,10 +15,16 @@ replacement rather than a merge with whatever was there before. Root files
 (README.md, .gitattributes) are left alone; they are not this sweep's to own,
 and neither is anything in the collection's `keep`.
 
-A collection with a `legacy/` tree gets it swapped **only once it is complete**.
-It is built in its own directory, verified on its own, and pushed as a separate
-step; until then the Hub keeps the previous one. The RT-v1 checkpoints read
-that tree, and half of a new one is worse than all of an old one.
+Nothing is published until **everything** is ready. A collection with a
+`legacy/` tree -- the same databases under RT-v1's boolean typing, which the
+released RT-v1 checkpoints read -- has that tree verified alongside the build,
+and a problem in either means neither goes. The Hub keeps the previous version,
+whole, until there is a whole new one to put in its place.
+
+(The Hub has no atomic multi-file swap: `upload_large_folder` commits in
+batches. What is guaranteed here is that nothing starts going out until the
+whole replacement exists and verifies, not that the repo is unobservable
+mid-push.)
 """
 
 from __future__ import annotations
@@ -106,27 +112,6 @@ def verify_legacy(c: Collection) -> list[str]:
     return problems
 
 
-def upload_legacy(c: Collection, private: bool = False) -> None:
-    """Swap the legacy tree in, once all of it is there."""
-    from huggingface_hub import HfApi
-
-    if not c.legacy:
-        return
-    if verify_legacy(c):
-        print("legacy tree incomplete; leaving the published one alone")
-        return
-    api = HfApi()
-    print(f"uploading {c.legacy_dir} -> {c.target_repo}/legacy")
-    api.upload_large_folder(
-        repo_id=c.target_repo,
-        repo_type="dataset",
-        folder_path=str(Path(c.legacy_dir)),
-        # everything lands under legacy/, replacing that tree and nothing else
-        path_in_repo="legacy",
-    )
-    print("legacy swapped")
-
-
 def task_lists(c: Collection) -> None:
     """Write `db-task-lists/` from the metas this build just produced."""
     out = Path(c.out_dir)
@@ -163,8 +148,22 @@ def task_lists(c: Collection) -> None:
 
 
 def upload(c: Collection, private: bool = False) -> None:
-    """Push the build, then delete the database directories it replaces."""
+    """Publish the whole replacement, or none of it.
+
+    Both trees are verified before anything is pushed: a collection is what its
+    databases and its legacy variant are together, and replacing one of them
+    while the other is half-built is how a published dataset ends up internally
+    inconsistent.
+    """
     from huggingface_hub import CommitOperationDelete, HfApi
+
+    problems = verify(c) + verify_legacy(c)
+    if problems:
+        raise SystemExit(
+            f"{len(problems)} problem(s); publishing nothing. "
+            "Re-run submit.py to fill the gaps, then try again."
+        )
+    task_lists(c)
 
     out, repo = Path(c.out_dir), c.target_repo
     local = set(databases(out))
@@ -173,6 +172,15 @@ def upload(c: Collection, private: bool = False) -> None:
 
     print(f"uploading {out} -> {repo}")
     api.upload_large_folder(repo_id=repo, repo_type="dataset", folder_path=str(out))
+
+    if c.legacy:
+        print(f"uploading {c.legacy_dir} -> {repo}/legacy")
+        api.upload_large_folder(
+            repo_id=repo,
+            repo_type="dataset",
+            folder_path=str(Path(c.legacy_dir)),
+            path_in_repo="legacy",
+        )
 
     remote_dirs = {
         f.split("/", 1)[0]
@@ -193,7 +201,7 @@ def upload(c: Collection, private: bool = False) -> None:
             CommitOperationDelete(path_in_repo=f"{name}/", is_folder=True)
             for name in stale
         ],
-        commit_message=f"drop {len(stale)} database(s) no longer in the-join",
+        commit_message=f"drop {len(stale)} database(s) no longer in {c.source_repo}",
     )
     print("done")
 
@@ -207,11 +215,6 @@ if __name__ == "__main__":
     elif command == "task-lists":
         task_lists(c)
     elif command == "upload":
-        if verify(c):
-            sys.exit("refusing to upload an incomplete build; fix it and re-run")
-        task_lists(c)
         upload(c)
-        # separately, and only if all of it is there
-        upload_legacy(c)
     else:
         sys.exit(__doc__)
