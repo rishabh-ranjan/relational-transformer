@@ -13,6 +13,15 @@ in one place. A sweep is a loop around that call; an experiment that needs a
 derived input (a curated task list, a subset) keeps it beside the file that uses
 it. Nothing here enforces a shape, but a second file has to earn itself.
 
+**No module-level `CONSTANTS` for values one call site consumes.** A name in
+caps at the top of the file is the "constant three screens away" this layout
+exists to avoid: write the value in the argument that takes it. When a value is
+bulky or wanted in two places, a function that returns it (`targets_for(db,
+task)` in `fine_tune/submit.py`) keeps it next to its use and lets the second
+caller ask for exactly what it needs — a shared `TARGETS` dict does neither.
+`TASKS` is the exception the rule allows: the sweep loops over it, and it is
+edited every submission.
+
 **`submit.py` is edited, not configured.** It is scratch that happens to be
 committed: expect to change it every time you submit, because what you submit
 next depends on what slurm has free right now — a different card, a different

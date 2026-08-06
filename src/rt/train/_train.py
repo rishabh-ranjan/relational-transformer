@@ -212,7 +212,7 @@ def main(
     eval_lcs_bw_pl_grid: list[tuple[int, int, bool]],
     # logging
     run_id: str,
-    ceilings: dict[str, float],
+    targets: dict[str, float],
     project: str,
     entity: str | None,
     run_name: str | None,
@@ -806,7 +806,7 @@ def main(
                         # draws as a horizontal line across the whole x-range
                         # of the panel its metric lives in -- wandb has no
                         # reference-line primitive, a flat series is the line.
-                        **{f"{k}/ceiling": v for k, v in ceilings.items()},
+                        **{f"{k}/target": v for k, v in targets.items()},
                     }
                 )
 
