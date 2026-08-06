@@ -20,7 +20,7 @@ CLONE_ROOT = "/lfs/local/0/roach_clones"
 SECRETS_DIR = "/dfs/user/ranjanr/.secrets"
 LOG_ROOT = "/dfs/user/ranjanr/slurm-logs/data-scaling"
 OUT_ROOT = "/dfs/user/ranjanr/ckpts"
-PRE_DIR = "/dfs/user/ranjanr/pre/the-join-preprocessed"
+PRE_DIR = "/dfs/user/ranjanr/share/stanford-star/the-join-preprocessed"
 EVAL_PRE_DIR = "/dfs/user/ranjanr/pre/relbench-preprocessed"
 
 WHERE = dict(

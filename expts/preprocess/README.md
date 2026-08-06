@@ -117,12 +117,12 @@ Every one of these cost real time; none of them is hypothetical.
 | `Requested node configuration is not available` on an idle node | `DefMemPerGPU` caps GPUs per job and `--mem` does not lift it | `mem_per_gpu` on `Resources` (see the cluster section) |
 | an embed that would take ~44h on one GPU | the stage was one card per database | six GPUs per job, ~4× |
 
-That last one is the important one. A `manifest.yaml` is not a downloaded
+The size check is the important one. A `manifest.yaml` is not a downloaded
 database, and a git checkout holds LFS pointers that are the right *name* and
 the wrong *content*. The size check is what makes it safe to preprocess while
-the download is still running — and it is what kept 3000 pointer files, rsynced
-into the raw directory by mistake, from reaching any output. **Nothing should
-move data into `RAW_DIR` except `download.py`.**
+the download is still running. It has also caught 3000 LFS pointers that an
+rsync put into the raw directory, before any of them reached the output.
+**Nothing should move data into `RAW_DIR` except `download.py`.**
 
 ## The cluster, as measured
 
