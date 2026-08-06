@@ -6,8 +6,6 @@ signature, and hands slurm a script that reproduces the run from that commit.
 Nothing here is site-specific -- paths, account and QOS are arguments.
 """
 
-from __future__ import annotations
-
 import inspect
 import json
 import os

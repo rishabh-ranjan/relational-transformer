@@ -6,8 +6,6 @@ single-device and multi-process paths must agree, or a collection built partly
 on one and partly on the other is internally inconsistent.
 """
 
-from __future__ import annotations
-
 import time
 
 

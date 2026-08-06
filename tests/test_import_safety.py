@@ -1,8 +1,6 @@
 """Import-time guarantees, checked in fresh subprocesses (sys.modules must be
 pristine, so each assertion runs in its own interpreter)."""
 
-from __future__ import annotations
-
 import subprocess
 import sys
 import textwrap

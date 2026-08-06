@@ -18,8 +18,6 @@ the number the pretrained arm has to beat.
 Run it from a clean, pushed checkout: the job clones the commit you submit from.
 """
 
-from __future__ import annotations
-
 import sys
 
 from roach.slurm import BLACKWELL, BLACKWELL_INTERACTIVE_1GPU, interactive, submit

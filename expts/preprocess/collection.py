@@ -12,8 +12,6 @@ Every command takes the collection as its first argument:
     pixi run python expts/preprocess/download.py relbench
 """
 
-from __future__ import annotations
-
 from dataclasses import dataclass
 from pathlib import Path
 

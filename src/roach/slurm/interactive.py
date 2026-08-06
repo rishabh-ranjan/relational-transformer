@@ -25,8 +25,6 @@ resume, and a wall clock the QOS caps at 12h. Do not park a training run here.
     interactive.release() # give it back
 """
 
-from __future__ import annotations
-
 import os
 import subprocess
 

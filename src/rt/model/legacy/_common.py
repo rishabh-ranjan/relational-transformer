@@ -1,8 +1,6 @@
 """Shared glue for the legacy architectures: block-mask building, the
 Evaluator-facing ``predict`` adapter, and Hub checkpoint loading."""
 
-from __future__ import annotations
-
 import torch
 from torch.nn.attention.flex_attention import create_block_mask
 

@@ -1,8 +1,6 @@
 """Evaluator: the shared per-(task, ctx_size) eval kernel used by standalone
 eval and by in-loop training eval (rank-aware under DDP)."""
 
-from __future__ import annotations
-
 import time
 
 import lazy_loader as lazy

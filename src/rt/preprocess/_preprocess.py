@@ -24,8 +24,6 @@ Build the preprocessor binary first: ``pixi run build-pre`` (or it is built
 automatically by the ``preprocess`` pixi task).
 """
 
-from __future__ import annotations
-
 import json
 import sys
 from pathlib import Path

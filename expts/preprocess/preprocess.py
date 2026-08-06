@@ -26,8 +26,6 @@ arguments: work already finished is skipped, work interrupted part-way is redone
 from the start.
 """
 
-from __future__ import annotations
-
 import json
 import time
 from pathlib import Path

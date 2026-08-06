@@ -1,7 +1,5 @@
 """Text embeddings for preprocessed datasets (sentence-transformers)."""
 
-from __future__ import annotations
-
 import numpy as np
 import orjson
 import torch

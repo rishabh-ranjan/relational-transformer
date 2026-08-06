@@ -5,8 +5,6 @@ arguments that do not match the target, a resource shape that slurm rejects, and
 a batch script that has lost a placeholder.
 """
 
-from __future__ import annotations
-
 import inspect
 
 import pytest

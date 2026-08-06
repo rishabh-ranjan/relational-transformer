@@ -1,7 +1,5 @@
 """mlock: pin the preprocessed mixture in RAM across training restarts."""
 
-from __future__ import annotations
-
 import ctypes
 import ctypes.util
 import os

@@ -4,8 +4,6 @@ The architectures live in ``rt.model.legacy``; this is the evaluation loop they
 share. See examples/eval_legacy.py for the published context configuration.
 """
 
-from __future__ import annotations
-
 from pathlib import Path
 
 import torch

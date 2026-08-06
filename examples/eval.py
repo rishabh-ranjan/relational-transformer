@@ -9,8 +9,6 @@ The checkpoint may be a local path or a Hub spec (checkpoints are still fetched
 on demand); the data is a local directory (see docs/downloads.md).
 """
 
-from __future__ import annotations
-
 from rt.eval import main
 from roach.slurm import timestamp
 

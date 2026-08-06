@@ -7,8 +7,6 @@ rank-major order, with labels/preds/node_idxs/num_labels staying aligned, and
 the phantom (padding) rows dropped.
 """
 
-from __future__ import annotations
-
 import os
 
 import numpy as np

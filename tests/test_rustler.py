@@ -1,7 +1,5 @@
 """The compiled Rust engine: symbols + preprocess end-to-end."""
 
-from __future__ import annotations
-
 
 def test_extension_symbols():
     import rt.rustler as r

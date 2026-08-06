@@ -21,8 +21,6 @@ and `git lfs pull` re-checks what is already in `.git/lfs` and fetches the rest,
 so an interrupted run converges rather than starting over.
 """
 
-from __future__ import annotations
-
 import subprocess
 import sys
 import time

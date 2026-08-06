@@ -2,8 +2,6 @@
 back to the relbench parquet, write submission CSVs, score with relbench's own
 evaluator."""
 
-from __future__ import annotations
-
 import json
 import tempfile
 from functools import cache

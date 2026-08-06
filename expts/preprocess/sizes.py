@@ -23,8 +23,6 @@ Regenerate with ``python expts/preprocess/sizes.py <collection>`` (needs the
 Hub; it reads file sizes only, downloading nothing).
 """
 
-from __future__ import annotations
-
 import json
 import sys
 from collections import defaultdict

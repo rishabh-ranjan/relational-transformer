@@ -27,8 +27,6 @@ whole replacement exists and verifies, not that the repo is unobservable
 mid-push.)
 """
 
-from __future__ import annotations
-
 import json
 import sys
 from collections import defaultdict

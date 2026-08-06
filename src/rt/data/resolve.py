@@ -9,8 +9,6 @@ revalidates over the network) and one copy per node. An explicit
 ``hf download`` into a path you can inspect is both faster and simpler.
 """
 
-from __future__ import annotations
-
 import json
 from functools import cache
 from pathlib import Path

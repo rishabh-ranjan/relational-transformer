@@ -1,8 +1,6 @@
 """Stochastic weight averaging over training parameters, backed by an fp32
 shadow copy (used in-loop by rt.train)."""
 
-from __future__ import annotations
-
 import torch
 
 

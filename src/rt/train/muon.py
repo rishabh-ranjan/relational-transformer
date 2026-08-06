@@ -6,8 +6,6 @@ and runs Newton-Schulz orthogonalization as batched matrix operations
 kernels. Pass ``compile=True`` to torch.compile the full step.
 """
 
-from __future__ import annotations
-
 import math
 from collections import defaultdict
 from typing import Optional

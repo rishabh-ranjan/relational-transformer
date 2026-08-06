@@ -1,7 +1,5 @@
 """rt-internal metric on the normalized scale (val tuning + debug numbers)."""
 
-from __future__ import annotations
-
 
 def metric_for(task_type: str, labels, preds) -> tuple[str, float]:
     """rt-internal metric on the *normalized* scale (val-set tuning + debug).

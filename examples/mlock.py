@@ -11,8 +11,6 @@ Needs a high RLIMIT_MEMLOCK (`ulimit -l unlimited`, or slurm's
 `--propagate=MEMLOCK`, which roach.slurm sets) to lock the whole mixture.
 """
 
-from __future__ import annotations
-
 from rt.data import mlock_main
 
 PRE_DIR = "data/the-join-preprocessed"

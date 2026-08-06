@@ -26,8 +26,6 @@ Single-node multi-GPU and multi-node (preemptible queue) both run under
         --logger.out-root ~/ckpts
 """
 
-from __future__ import annotations
-
 import json
 import os
 import random

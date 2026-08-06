@@ -2,8 +2,6 @@
 the cluster. Skipped without a GPU: the model's attention has no CPU backward.
 """
 
-from __future__ import annotations
-
 from pathlib import Path
 
 import pytest

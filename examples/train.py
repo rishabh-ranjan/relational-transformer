@@ -12,8 +12,6 @@ running this on a cluster without writing any slurm boilerplate, see
 roach.slurm.submit and expts/fine_tune/submit.py.
 """
 
-from __future__ import annotations
-
 from roach.slurm import timestamp
 from rt.train import main
 

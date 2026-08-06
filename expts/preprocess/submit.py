@@ -13,8 +13,6 @@ Re-running is the resume: a database whose output is already complete is not
 resubmitted, and one that is queued or running is not duplicated.
 """
 
-from __future__ import annotations
-
 import subprocess
 import sys
 from pathlib import Path

@@ -16,8 +16,6 @@ job logs, so an ETA is available from the second invocation onward and does not
 assume the sweep started when you happened to look.
 """
 
-from __future__ import annotations
-
 import json
 import subprocess
 import sys

@@ -1,7 +1,5 @@
 """Fine-tune a Relational Transformer on one task."""
 
-from __future__ import annotations
-
 from rt.train import main
 
 

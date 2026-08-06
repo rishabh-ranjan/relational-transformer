@@ -6,8 +6,6 @@ two jobs building at once, a builder preempted mid-build, a finished job
 deleting a clone others are still using, and a reaper deleting a live one.
 """
 
-from __future__ import annotations
-
 import os
 import signal
 import subprocess

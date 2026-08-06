@@ -10,8 +10,6 @@ plainly. A missing one is a broken environment and should fail at collection,
 not vanish into a skip.
 """
 
-from __future__ import annotations
-
 import json
 from datetime import datetime, timedelta
 

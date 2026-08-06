@@ -10,8 +10,6 @@ gpu, gpus per QOS) are policy, and the scheduler reports them better than a
 stale copy in here would.
 """
 
-from __future__ import annotations
-
 from dataclasses import dataclass, replace
 
 

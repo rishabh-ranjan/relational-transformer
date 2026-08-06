@@ -7,8 +7,6 @@ ctx_size), width 256, no random-walk tier and no recency-sorted neighbors.
     pixi run python examples/eval_legacy.py
 """
 
-from __future__ import annotations
-
 from rt.eval.legacy import run
 from rt.model.legacy.plurel import PLUREL_HUB_REPO, PluRelTransformer
 from rt.model.legacy.v1 import V1_HUB_REPO, V1Transformer

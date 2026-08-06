@@ -9,8 +9,6 @@ checked, both of which the training jobs depend on:
   run save a checkpoint before it dies.
 """
 
-from __future__ import annotations
-
 import os
 import signal
 import time

@@ -30,8 +30,6 @@ Faithfulness notes (vs ``rt-v1:rustler/src/pre.rs``):
   nulls.
 """
 
-from __future__ import annotations
-
 import shutil
 from pathlib import Path
 

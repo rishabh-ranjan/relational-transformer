@@ -1,7 +1,5 @@
 """Public API: RelationalTransformer.from_pretrained + load_rt_model."""
 
-from __future__ import annotations
-
 import json
 
 import torch

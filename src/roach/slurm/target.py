@@ -1,7 +1,5 @@
 """Resolving ``"module:attr"`` to the function a job should run."""
 
-from __future__ import annotations
-
 from importlib import import_module
 from typing import Any, Callable
 

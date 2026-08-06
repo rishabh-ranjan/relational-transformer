@@ -9,8 +9,6 @@ sharded across a slurm array), ``ls`` prints what is in a collection, and
 ``upload`` publishes the result. Raw inputs may be a local path or a Hub spec.
 """
 
-from __future__ import annotations
-
 from rt.preprocess import ls, many, one, upload
 
 

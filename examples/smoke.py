@@ -15,8 +15,6 @@ roach.slurm.
     from examples.smoke import smoke; smoke(...)  # or submitted with roach.slurm
 """
 
-from __future__ import annotations
-
 from rt.train import main as train
 
 

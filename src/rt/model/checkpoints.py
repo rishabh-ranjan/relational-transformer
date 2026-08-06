@@ -1,7 +1,5 @@
 """Checkpoint IO: save/load model state (local file/dir or Hub repo)."""
 
-from __future__ import annotations
-
 import json
 from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
