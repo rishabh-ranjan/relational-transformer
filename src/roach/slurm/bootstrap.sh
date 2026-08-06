@@ -34,13 +34,6 @@ mkdir -p "@CLONE_ROOT@"
 # lock acquisition. Reproducibility is unchanged: a clone is still exactly the
 # submitted commit, and a different commit is a different directory, so a queued
 # job still cannot change under you.
-#
-# Keying by *branch* was tried and reverted. It made iteration much cheaper --
-# one clone, so one environment and one cargo target dir across commits -- by
-# rewriting the checkout in place, which is the running job's code and the
-# environment it is importing from. A job would evaluate on code it did not
-# train with (this package defers imports), or find its environment rebuilt
-# under it mid-run, and its logs would name a commit that was not what ran.
 # --------------------------------------------------------------------------- #
 REPO_DIR=@CLONE_ROOT@/repo-@COMMIT@
 
