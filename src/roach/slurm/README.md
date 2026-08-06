@@ -11,7 +11,6 @@ submit(
     args={"lr": 1e-3, "steps": 1000},
     resources=BLACKWELL,           # or Resources(...) for another shape
     name="lr-1e-3",
-    clone_by="branch",             # or "commit" -- no default, see below
     setup=("pixi run build-sampler",),   # built inside the clone, if you need it
     repo_root=..., log_root=..., clone_root=..., secrets_dir=...,
 )
@@ -58,31 +57,8 @@ output directory, same checkpoint.
 
 ## Clones
 
-`clone_root` holds **one clone per key per node**, shared by every job at that
-key, where the key is `clone_by`: the submit-time commit, or the submit-time
-branch. There is no default, because the two answers trade different things
-away and neither is right for everything.
-
-| | `clone_by="commit"` | `clone_by="branch"` |
-|---|---|---|
-| clone directory | `repo-<sha>` | `repo-<branch>` |
-| checked out at | the submitted sha, pinned | the branch, at its tip when the job starts |
-| what a later push does to a queued job | nothing | **it runs the newer code** |
-| cost of a new commit | a fresh environment and a full build | whatever actually changed |
-
-Both refuse a dirty or unpushed tree, and both record the submitted commit. They
-differ in what the clone is checked out at. A commit clone is pinned: a job
-queued on Monday runs Monday's code on Thursday. A branch clone follows the
-branch -- every job fetches and moves the clone to the tip before building -- so
-the environment, the cargo target dir and everything else it has built survive
-from one commit to the next. On this project that saves 50-100s of `pixi install`
-plus a full cargo build per commit, which is why iteration should use it.
-
-The two things "branch" gives up: a job may run code newer than the commit you
-submitted from, and a later job moves the checkout under one that is still
-running. Use `"commit"` for a sweep whose results you will read days later.
-
-The rest of this section describes what is true either way. It used to be one per job, thrown away at exit, and that cost far
+`clone_root` holds **one clone per commit per node**, shared by every job at
+that commit. It used to be one per job, thrown away at exit, and that cost far
 more than the disk: pixi keys an environment on the project path (a detached
 environment is literally `NAME-HASH_OF_PATH`), uv keys built wheels on the mtime
 of `pyproject.toml`, and cargo's artifacts live under the manifest. A clone at a

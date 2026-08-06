@@ -3,7 +3,6 @@
     from roach.slurm import AMPERE, submit
 
     submit("mypkg.train:main", args={...}, resources=AMPERE, name="run",
-           clone_by="branch",
            repo_root=..., log_root=..., clone_root=..., secrets_dir=...,
            setup=("pixi run build-sampler",))
 

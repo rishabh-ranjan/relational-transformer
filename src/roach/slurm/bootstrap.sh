@@ -5,7 +5,7 @@
 set -euo pipefail
 
 echo "=== $(date -Is) job $SLURM_JOB_ID on $(hostname), restarts=${SLURM_RESTART_COUNT:-0} ==="
-echo "name=@NAME@ repo=@REPO@ commit=@COMMIT@ branch=@BRANCH@ run_id=@RUN_ID@ target=@TARGET@"
+echo "name=@NAME@ repo=@REPO@ commit=@COMMIT@ run_id=@RUN_ID@ target=@TARGET@"
 
 export USER=${USER:-$(id -un)}
 export TMPDIR=/tmp/$USER
@@ -30,25 +30,19 @@ mkdir -p "@CLONE_ROOT@"
 # of a full allocation, per job, for a result the previous job had already
 # produced byte for byte.
 #
-# The first job at a key on a node pays that once and the rest pay a lock
-# acquisition. What the key is -- the commit or the branch -- is the submitter's
-# `clone_by`, and it is the one real choice here:
+# Keyed by commit, the first job on a node pays that once and the rest pay a
+# lock acquisition. Reproducibility is unchanged: a clone is still exactly the
+# submitted commit, and a different commit is a different directory, so a queued
+# job still cannot change under you.
 #
-#   commit: a clone is exactly one commit, forever. A queued job cannot change
-#           under you, and every new commit pays for its own environment.
-#   branch: one clone, moved to each submitted commit. The environment, the
-#           cargo target dir and everything else built here survive to the next
-#           commit -- and a later submission moves the checkout under a job that
-#           is still running from it.
-#
-# The key is also what the clone is checked out at, which is the whole of the
-# difference: a commit clone is pinned to the sha that was submitted, a branch
-# clone follows the branch and is brought to its tip every time a job arrives.
-# So a branch job runs what the branch says now, which may be newer than the
-# commit it was submitted from -- that is the point of it, and the reason it is
-# for iterating rather than for a sweep you will read later.
+# Keying by *branch* was tried and reverted. It made iteration much cheaper --
+# one clone, so one environment and one cargo target dir across commits -- by
+# rewriting the checkout in place, which is the running job's code and the
+# environment it is importing from. A job would evaluate on code it did not
+# train with (this package defers imports), or find its environment rebuilt
+# under it mid-run, and its logs would name a commit that was not what ran.
 # --------------------------------------------------------------------------- #
-REPO_DIR=@CLONE_ROOT@/repo-@CLONE_KEY@
+REPO_DIR=@CLONE_ROOT@/repo-@COMMIT@
 
 # One place that knows how to reach a private repo, used to clone and to fetch.
 git_auth() {  # <git args...>
@@ -56,35 +50,9 @@ git_auth() {  # <git args...>
         "$@"
 }
 
-# What this clone is supposed to be at: a fixed sha, or wherever the branch has
-# got to. The branch case is resolved fresh on every job, which is how a branch
-# clone picks up commits pushed since the job was submitted.
-want_ref() {  # <dir> -> sha
-    if [[ @CLONE_BY@ == branch ]]; then
-        ( cd "$1" && git_auth fetch --quiet origin @BRANCH@ )
-        git -C "$1" rev-parse FETCH_HEAD
-    else
-        echo @COMMIT@
-    fi
-}
-
-git_clone() {  # <url> <dir>
-    git_auth clone --quiet "$1" "$2"
-}
-
-# Bring the clone to what it should be at. Returns 0 if it moved, so the caller
-# knows to build again; 1 if it was already there, which is every job after the
-# first at a commit, and every job at all in commit mode.
-sync_to_ref() {  # <dir>
-    local dir=$1 want head
-    want=$(want_ref "$dir")
-    head=$(git -C "$dir" rev-parse HEAD 2>/dev/null || echo none)
-    if [[ $head == "$want" ]]; then return 1; fi
-    if [[ $head != none ]]; then
-        echo "clone: moving $dir from ${head:0:7} to ${want:0:7}"
-    fi
-    git -C "$dir" checkout --quiet --force "$want"
-    return 0
+git_clone() {  # <url> <commit> <dir>
+    git_auth clone --quiet "$1" "$3"
+    git -C "$3" checkout --quiet "$2"
 }
 
 # A clone is per commit, so iterating -- which is a commit per attempt -- pays
@@ -102,10 +70,7 @@ seed_lock() {  # in the new clone, before pixi install
     # byte-identical; pixi validates it against the manifest anyway and re-solves
     # if it disagrees, so a stale lock costs nothing and a matching one skips
     # the solve entirely.
-    # A branch-keyed clone that moved to a new commit already has the lock it
-    # solved for the last one, and pixi will re-solve it if the manifest moved
-    # too. Leave it alone -- and never seed from ourselves, which is what a
-    # ready clone in this loop would otherwise be.
+    # Never seed over a lock we already have.
     if [[ -f pixi.lock ]]; then return 0; fi
     local newest= d
     for d in "@CLONE_ROOT@"/*/; do
@@ -150,23 +115,16 @@ prepare_repo() {
 # editable path dependency -- for a maturin project, a full recompile, done by
 # every rank at once, colliding in uv's shared build cache. Atomicity is the
 # marker's job; the directory itself never moves.
-clone_at_commit() {  # <dir> <url> <prepare-fn>
-    local dir=$1 url=$2 prepare=$3
+clone_at_commit() {  # <dir> <url> <commit> <prepare-fn>
+    local dir=$1 url=$2 commit=$3 prepare=$4
     exec 9>"$dir.lock"
     flock 9
     if [[ ! -f $dir/.roach-ready ]]; then
         echo "preparing $dir"
         rm -rf "$dir"
         local t=$SECONDS
-        git_clone "$url" "$dir"
-        sync_to_ref "$dir" || true
+        git_clone "$url" "$commit" "$dir"
         echo "prepare: git clone $((SECONDS - t))s"
-        ( cd "$dir" && "$prepare" )
-        touch "$dir/.roach-ready"
-    elif sync_to_ref "$dir"; then
-        # The code changed under a clone that is already built, so build again:
-        # the environment is keyed on this path and survives, and everything
-        # that did not change is a cache hit rather than work.
         ( cd "$dir" && "$prepare" )
         touch "$dir/.roach-ready"
     fi
@@ -174,7 +132,7 @@ clone_at_commit() {  # <dir> <url> <prepare-fn>
     echo "clone: $dir @ $(git -C "$dir" rev-parse --short HEAD)"
 }
 
-clone_at_commit "$REPO_DIR" "@REPO@" prepare_repo
+clone_at_commit "$REPO_DIR" "@REPO@" "@COMMIT@" prepare_repo
 
 cd "$REPO_DIR"
 # What this run's environment actually was, next to its logs. A record, not a

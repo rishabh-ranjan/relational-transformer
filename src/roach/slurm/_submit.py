@@ -165,7 +165,6 @@ def submit(
     log_root: Path | str,
     clone_root: Path | str,
     secrets_dir: Path | str,
-    clone_by: str,
     setup: tuple[str, ...] = (),
     run_id: str | None = None,
     after: str | None = None,
@@ -182,23 +181,6 @@ def submit(
     the first stage to finish. The wait is on success: if the dependency fails,
     slurm cancels this job rather than leaving it pending forever.
 
-    ``clone_by`` is what the job's clone is named after, and it has no default
-    because the two answers trade different things away. Either way the job runs
-    the commit you submitted -- the difference is what the clone is *keyed* on:
-
-    * ``"commit"`` -- one clone per commit. A queued job cannot change under
-      you, and a clone is exactly one commit forever. It is also a new directory
-      per commit, so every commit pays for its own environment and its own build
-      (measured on this project: 50-100s of ``pixi install``, plus a full cargo
-      build inside it).
-    * ``"branch"`` -- one clone per branch, checked out at the branch and
-      brought to its tip whenever a job arrives. The environment and the cargo
-      target dir survive from one commit to the next, which is most of that cost
-      gone. Two prices, both real: the job runs **what the branch says when it
-      starts**, which may be newer than the commit you submitted from, and a
-      later job moves the checkout under one that is still running. Fine while
-      iterating, wrong for a sweep you will read results from days later.
-
     ``overlap`` is the id of an allocation somebody is *holding* (see
     ``roach.slurm.interactive``). The run then goes in as a step of that
     allocation instead of as a job of its own: nothing is queued, and a run that
@@ -214,10 +196,7 @@ def submit(
         sys.path.insert(0, str(repo_root))
     # roach lives in this repo, so the commit that pins the project pins the
     # roach that runs it too -- there is no second thing to resolve or clone.
-    repo, commit, branch = preflight()
-    if clone_by not in ("branch", "commit"):
-        raise ValueError(f"clone_by must be 'branch' or 'commit', got {clone_by!r}")
-    clone_key = branch if clone_by == "branch" else commit
+    repo, commit, _branch = preflight()
     run_id = run_id or timestamp()
     if "run_id" in inspect.signature(resolve(target)).parameters:
         args = {**args, "run_id": run_id}
@@ -233,9 +212,6 @@ def submit(
     for key, value in {
         "@REPO@": repo,
         "@COMMIT@": commit,
-        "@BRANCH@": branch,
-        "@CLONE_KEY@": clone_key,
-        "@CLONE_BY@": clone_by,
         "@RUN_ID@": run_id,
         "@NAME@": name,
         "@TARGET@": target,

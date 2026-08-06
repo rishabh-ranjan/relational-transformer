@@ -63,7 +63,7 @@ submission machinery along with everything else.
 from roach.slurm import BLACKWELL, submit
 
 submit("expts.<name>.<module>:<function>", args={...}, resources=BLACKWELL,
-       name=..., clone_by="branch", setup=(...),
+       name=..., setup=("pixi run build-sampler",),
        repo_root=..., log_root=..., clone_root=..., secrets_dir=...)
 ```
 
