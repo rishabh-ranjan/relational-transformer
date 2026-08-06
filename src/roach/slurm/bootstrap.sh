@@ -152,6 +152,10 @@ unset SLURM_CPUS_PER_TASK
 # prepare_repo wrote; use it. Installing is deliberately still allowed -- a rank
 # that finds the environment wrong should say so, or fix it, rather than run on
 # in whatever state it was left in.
-srun --export=ALL --label --kill-on-bad-exit=1 \
-    pixi run --frozen python -m roach.slurm.run "@TARGET@" "@ARGS@" &
+#
+# The srun line itself is filled in by submit(): a batch job starts its ranks in
+# its own allocation, an overlapping job starts them as a sibling step of an
+# allocation somebody else is holding. Everything above this point is identical
+# either way.
+@LAUNCH@ &
 wait $!

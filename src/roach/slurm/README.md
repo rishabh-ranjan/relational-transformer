@@ -119,6 +119,38 @@ The rule in practice:
 If an experiment genuinely needs a writable copy of the tree, copy it to
 somewhere under `run_id` and work there.
 
+## Iterating: hold an allocation, overlap the runs
+
+A batch job is the wrong shape for a session where you run something, read the
+traceback, fix a line and run it again: every attempt queues again for scarce
+cards, and a crash gives the node back. Hold the allocation instead, and make
+each run a step of it.
+
+```python
+from roach.slurm import BLACKWELL_INTERACTIVE, interactive, submit
+
+job = interactive.hold(BLACKWELL_INTERACTIVE, log_root=LOG_ROOT)  # once
+submit(..., resources=BLACKWELL_INTERACTIVE, overlap=job)         # per run
+interactive.release()                                             # when done
+```
+
+`interactive.find()` returns the id of a hold that is already running, so a
+later session picks up the one you left rather than queuing a second.
+
+**Use this while developing** — a first run of a new target, a shape bug, an
+experiment you are still writing. `overlap=` skips sbatch entirely: the script
+goes in as a step (`srun --jobid=<hold> --overlap`), so it starts in seconds,
+and when it dies the allocation is still yours.
+
+**Do not use it for the actual run.** An overlapping step is not requeued and
+not resumed, and `il-interactive` caps the allocation at 2 GPUs and 12 hours.
+Anything that should survive the night is `BLACKWELL` or `AMPERE` through the
+normal path.
+
+Everything else is unchanged: same script, same clone, same target, same
+`args.json` beside the same logs — so a target debugged in the hold is submitted
+as a batch job by editing one argument.
+
 ## Resources
 
 `Resources` has no defaults: a resource request is a deliberate choice. The

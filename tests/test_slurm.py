@@ -12,6 +12,7 @@ import inspect
 import pytest
 
 from roach.slurm import Resources, check_args, resolve, timestamp
+from roach.slurm._submit import launch
 from roach.slurm._submit import submit as submit_fn
 
 
@@ -137,7 +138,9 @@ def test_every_placeholder_in_the_scripts_is_one_submit_fills():
         text = files("roach.slurm").joinpath(name).read_text()
         used |= set(re.findall(r"@[A-Z_]+@", text))
     filled = set(re.findall(r'"(@[A-Z_]+@)"', inspect.getsource(submit_fn)))
-    assert used == filled
+    # Subset, not equality: submit() also fills placeholders that only reach the
+    # script through another one (@TARGET@ and @ARGS@ ride inside @LAUNCH@).
+    assert used <= filled
 
 
 def test_no_placeholder_sits_inside_a_comment():
@@ -180,22 +183,42 @@ def test_job_env_is_not_inherited():
     assert '"--export=NONE"' in inspect.getsource(submit_fn)
 
 
-def test_bootstrap_lets_srun_inherit_the_job_environment():
+def test_the_launcher_lets_srun_inherit_the_job_environment():
     """--export=NONE (which keeps the submit shell out of the job) also stops
     srun from passing the job's own environment to its tasks, so `pixi` is not
     on their PATH; SLURM_EXPORT_ENV=ALL puts it back."""
-    from importlib.resources import files
+    for overlap in (None, "12345"):
+        line = launch(ampere(), "pkg:main", "/args.json", overlap)
+        assert "--export=ALL" in line
 
-    script = files("roach.slurm").joinpath("bootstrap.sh").read_text()
-    assert "srun --export=ALL" in script
+
+def test_an_overlapping_run_states_its_shape_in_full():
+    """The driver script runs as a one-task step of somebody else's allocation,
+    so srun inherits *that* shape unless the ranks' own is spelled out -- one
+    task on one cpu with no gpu, which is not a training job. --overlap is what
+    keeps the two steps from waiting on each other."""
+    line = launch(ampere(gpus="b200:4", cpus_per_task=36), "p:m", "/a.json", "999")
+    for flag in (
+        "--jobid=999",
+        "--overlap",
+        "--ntasks=4",
+        "--cpus-per-task=36",
+        "--gpus-per-task=1",
+    ):
+        assert flag in line
+    assert "--jobid" not in launch(ampere(), "p:m", "/a.json", None)
+
+
+def test_a_cpu_only_overlapping_run_asks_for_no_gpu():
+    assert "--gpus-per-task" not in launch(ampere(gpus="0"), "p:m", "/a.json", "1")
 
 
 def test_presets_are_one_rank_per_gpu():
     """The preset's cpus_per_task is per rank, so a preset that quietly asked
     for a node's worth of cores per rank would be rejected at submit."""
-    from roach.slurm import AMPERE, AMPERE_LO, BLACKWELL
+    from roach.slurm import AMPERE, AMPERE_LO, BLACKWELL, BLACKWELL_INTERACTIVE
 
-    for preset in (AMPERE, AMPERE_LO, BLACKWELL):
+    for preset in (AMPERE, AMPERE_LO, BLACKWELL, BLACKWELL_INTERACTIVE):
         assert preset.ranks == int(preset.gpus.rpartition(":")[2])
         assert preset.ranks * preset.cpus_per_task <= 288  # the widest node here
 

@@ -103,6 +103,10 @@ def rig(tmp_path: Path):
             "@ARGS@": str(tmp_path / "logs" / "args.json"),
             "@ENV@": f"export PATH={tmp_path / 'bin'}:/usr/bin:/bin",
             "@SETUP@": setup,
+            "@LAUNCH@": (
+                "srun --export=ALL pixi run --frozen python"
+                " -m roach.slurm.run pkg:main args.json"
+            ),
         }.items():
             filled = filled.replace(key, value)
         path = tmp_path / "work" / f"{run_id}.sh"
