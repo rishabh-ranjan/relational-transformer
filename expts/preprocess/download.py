@@ -42,6 +42,20 @@ def _run(*args: str, cwd: str | None = None) -> int:
     return subprocess.run(args, cwd=cwd).returncode
 
 
+def _pointers(d: Path) -> list[Path]:
+    """Files git-lfs left as pointers: the right name, 130 bytes, no data."""
+    out = []
+    for p in d.rglob("*"):
+        if not p.is_file() or ".git" in p.parts or p.stat().st_size > 1000:
+            continue
+        try:
+            if p.open("rb").read(64).startswith(b"version https://git-lfs"):
+                out.append(p)
+        except OSError:
+            continue
+    return out
+
+
 def download(c: Collection) -> None:
     d, repo = Path(c.raw_dir), c.source_repo
     url = f"https://huggingface.co/datasets/{repo}"
@@ -55,6 +69,13 @@ def download(c: Collection) -> None:
             sys.exit(f"could not clone {url} into {d}")
     else:
         _run("git", "-c", "lfs.fetchexclude=*", "pull", "--quiet", cwd=str(d))
+
+    # Without this, `git lfs pull` fetches every object and then says "Skipping
+    # object checkout, Git LFS is not installed for this repository" -- leaving a
+    # working tree of 130-byte pointers that have the right names and none of the
+    # data. It exits 0 while doing it, so nothing downstream notices except the
+    # size check, which then reports the whole collection as not downloaded.
+    _run("git", "lfs", "install", "--local", cwd=str(d))
 
     for attempt in range(1, ATTEMPTS + 1):
         code = _run(
@@ -72,6 +93,11 @@ def download(c: Collection) -> None:
     else:
         sys.exit(f"{repo} did not finish downloading in {ATTEMPTS} attempts")
 
+    # `git lfs pull` can exit 0 having checked out nothing, so the check is the
+    # tree, not the exit code.
+    left = _pointers(d)
+    if left:
+        sys.exit(f"{len(left)} files are still LFS pointers in {d}; e.g. {left[0]}")
     n = len(list(d.glob("*/manifest.yaml")))
     print(f"{n} databases in {d}")
 
