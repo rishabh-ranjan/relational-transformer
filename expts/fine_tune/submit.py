@@ -1,7 +1,7 @@
-"""Fine-tune a Relational Transformer on one task, and submit it.
+"""Fine-tune a Relational Transformer on one task, and submit one job per task.
 
-    pixi run python expts/fine_tune/submit.py                # batch, 4xB200
-    pixi run python expts/fine_tune/submit.py --interactive  # in a held allocation
+    pixi run python expts/fine_tune/submit.py            # submit the sweep
+    pixi run python expts/fine_tune/submit.py --dry-run  # print the plan only
 
 One file, and every argument written where it is passed: `rt.train:main` is the
 target, so there is no per-experiment wrapper to keep in step with it, and the
@@ -20,21 +20,112 @@ Run it from a clean, pushed checkout: the job clones the commit you submit from.
 
 import sys
 
-from roach.slurm import BLACKWELL, BLACKWELL_INTERACTIVE_1GPU, interactive, submit
+from roach.slurm import Resources, submit
+
+# The benchmark tasks of these four databases: every forecast or external task
+# whose type RT models. Link-prediction tasks are not modeled, and autocomplete
+# tasks are not part of the benchmark these runs are compared against, so
+# neither is here. Written out rather than discovered at submit time -- the list
+# is what ran, and a database gaining a task should not silently change a sweep.
+TASKS = (
+    ("rel-f1", "driver-dnf"),
+    ("rel-f1", "driver-position"),
+    ("rel-f1", "driver-top3"),
+    ("rel-event", "user-attendance"),
+    ("rel-event", "user-ignore"),
+    ("rel-event", "user-repeat"),
+    ("rel-trial", "site-success"),
+    ("rel-trial", "study-adverse"),
+    ("rel-trial", "study-outcome"),
+    ("rel-avito", "ad-ctr"),
+    ("rel-avito", "user-clicks"),
+    ("rel-avito", "user-visits"),
+)
 
 
-def main(use_interactive: bool = False) -> None:
-    held = None
-    if use_interactive:
-        held = interactive.find()
-        if held is None:
-            raise SystemExit(
-                "no interactive allocation is held; take one with\n"
-                "  from roach.slurm import BLACKWELL_INTERACTIVE, interactive\n"
-                "  interactive.hold(BLACKWELL_INTERACTIVE,"
-                " log_root='/dfs/user/ranjanr/slurm-logs/fine-tune')"
-            )
-    submit(
+def b200(qos: str, time: str) -> Resources:
+    """One B200. 36 cpus is blackwell1's 288 cores split eight ways, and the
+    memory is that share of the node -- under the site's MaxMemPerCPU of 10700M
+    times 36, which is what an explicit --mem is capped at."""
+    return Resources(
+        partition="il",
+        account="infolab",
+        qos=qos,
+        time=time,
+        gpus="b200:1",
+        cpus_per_task=36,
+        ntasks=None,
+        exclusive=False,
+        mem="375000M",
+        mem_per_gpu=None,
+        constraint=None,
+        nodelist="blackwell1",
+    )
+
+
+def a100(qos: str, time: str) -> Resources:
+    """One A100. 14 cpus is what the site allows per gpu on a job that is not
+    --exclusive; no --mem, so the partition's DefMemPerGPU (240000M) applies,
+    which is more than an explicit request would be given."""
+    return Resources(
+        partition="il",
+        account="infolab",
+        qos=qos,
+        time=time,
+        gpus="a100:1",
+        cpus_per_task=14,
+        ntasks=None,
+        exclusive=False,
+        mem=None,
+        mem_per_gpu=None,
+        constraint="ampere",
+        nodelist=None,
+    )
+
+
+def plan(n: int) -> list[Resources]:
+    """The best n slots this cluster will give one-GPU jobs, best first.
+
+    Blackwell before Ampere, and within a card the QOS in priority order, each
+    taken up to the limit that makes the next one necessary:
+
+    * `il-interactive` caps a user at 2 GPUs of any kind (12h wall, highest
+      priority, not preempted). A job that hits that wall stops; resubmit it
+      with the same run_id and it resumes from its own checkpoint.
+    * `il` caps b200 at 2 and a100 at 10 per user (7d wall, not preempted).
+    * `il-lo` is preemptible and effectively uncapped (21d wall). The b200 share
+      stops at 4 because that is what is left of blackwell1's eight cards once
+      the four above are held; the rest of the sweep goes to a100s, of which
+      this cluster has many more.
+
+    Every one of these runs is preemption-safe -- it checkpoints and resumes --
+    so the low-priority queue costs wall clock, not work.
+    """
+    tiers = [
+        (2, b200("il-interactive", "12:00:00")),
+        (2, b200("il", "7-00:00:00")),
+        (4, b200("il-lo", "21-00:00:00")),
+        (10, a100("il", "7-00:00:00")),
+    ]
+    out = [r for count, r in tiers for _ in range(count)][:n]
+    # whatever is left goes to the queue with no cap
+    out += [a100("il-lo", "21-00:00:00")] * (n - len(out))
+    return out
+
+
+def main(dry_run: bool = False) -> None:
+    slots = plan(len(TASKS))
+    for (db, task), resources in zip(TASKS, slots, strict=True):
+        print(
+            f"  {db}/{task:16s} {resources.gpus} {resources.qos:15s} {resources.time}"
+        )
+        if dry_run:
+            continue
+        submit_one(db, task, resources)
+
+
+def submit_one(db: str, task: str, resources: Resources):
+    return submit(
         "rt.train:main",
         args=dict(
             # model: RT-J's dims, so a fine-tuned run and a pretrained
@@ -50,7 +141,7 @@ def main(use_interactive: bool = False) -> None:
             # the arm: None is random init, a checkpoint path is fine-tuning
             load_ckpt_path=None,
             # data: one task, from the benchmark data rather than the Join
-            db_task_list=[("rel-f1", "driver-top3")],
+            db_task_list=[(db, task)],
             pre_dir="/dfs/user/ranjanr/share/stanford-star/relbench-preprocessed",
             tokens_per_gpu=2**17,
             num_workers=16,
@@ -81,7 +172,7 @@ def main(use_interactive: bool = False) -> None:
             resume_save_mins=20.0,
             # in-loop validation: the task it is trained on, on the val split
             eval_splits=["val", "test"],
-            eval_db_task_list=[("rel-f1", "driver-top3")],
+            eval_db_task_list=[(db, task)],
             eval_pre_dir="/dfs/user/ranjanr/share/stanford-star/relbench-preprocessed",
             eval_tokens_per_gpu=2**18,
             eval_num_workers=1,
@@ -102,12 +193,9 @@ def main(use_interactive: bool = False) -> None:
             wandb_disabled=False,
             out_root="/dfs/user/ranjanr/ckpts",
         ),
-        # A held allocation is 2 b200s and each run takes one, so a second arm
-        # starts beside this one rather than after it -- and a run's world size
-        # does not change with how much of the allocation happens to be free.
-        resources=BLACKWELL_INTERACTIVE_1GPU if use_interactive else BLACKWELL,
-        overlap=held,
-        name="ft-rel-f1-driver-top3-scratch",
+        # one GPU per job: the slot `plan` picked for it
+        resources=resources,
+        name=f"ft-{db}-{task}-scratch",
         repo_root="/lfs/hyperturing1/0/ranjanr/clones/rishabh-ranjan/relational-transformer",
         log_root="/dfs/user/ranjanr/slurm-logs/rishabh-ranjan/relational-transformer/expts/fine-tune",
         # the node's own big disk, not /tmp (the 280G root filesystem): clones
@@ -122,4 +210,4 @@ def main(use_interactive: bool = False) -> None:
 
 
 if __name__ == "__main__":
-    main(use_interactive="--interactive" in sys.argv[1:])
+    main(dry_run="--dry-run" in sys.argv[1:])
