@@ -1,14 +1,35 @@
 # Experiments
 
-One directory per experiment, laid out however that experiment wants. The only
-convention is that something in it submits jobs, and that it is committed —
-jobs clone the commit you submit from, so the directory is the record of what
-was run.
+One directory per experiment, laid out however that experiment wants. It has to
+submit jobs and it has to be committed — jobs clone the commit you submit from,
+so the directory is the record of what was run.
 
 `data_scaling/` happens to split into a recipe (`train.py`), a sweep
 (`submit.py`) and its task lists; an experiment that runs one job, or evaluates
 checkpoints, or sweeps a grid, will look different. Nothing here enforces a
 shape.
+
+## What every experiment owes
+
+**Enough to run the work again, and a README that says how.** Someone who was
+not there should be able to reproduce it by reading that file, in order, without
+reconstructing anything from a conversation or a shell history.
+
+- **Every input is fetched by code in the directory**, not by a command someone
+  typed once. Data downloaded by hand is a step nobody can repeat.
+- **Anything derived, expensive and depended on is committed beside the code** —
+  measured sizes, a curated list that cannot be recomputed. If regenerating it
+  needs a resource that may be gone, keep the artifact, not the recipe alone.
+- **What the code can prevent, it prevents.** A failure that was hit once should
+  be impossible the next time, not documented. Prose is for what code cannot
+  fix: a machine with bad hardware, a preemptible queue, a rule a future change
+  could break.
+- **The README opens with the commands, in order** — what to run, what it costs,
+  what to do when it stops. Numbers that were measured, not guessed, and said to
+  be measurements.
+
+Not a diary. It is the difference between an experiment that can be re-run and
+one that merely happened; `preprocess/` is the worked example.
 
 ## Submitting
 
