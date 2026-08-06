@@ -94,10 +94,14 @@ def plan(n: int) -> list[Resources]:
       priority, not preempted). A job that hits that wall stops; resubmit it
       with the same run_id and it resumes from its own checkpoint.
     * `il` caps b200 at 2 and a100 at 10 per user (7d wall, not preempted).
-    * `il-lo` is preemptible and effectively uncapped (21d wall). The b200 share
-      stops at 4 because that is what is left of blackwell1's eight cards once
-      the four above are held; the rest of the sweep goes to a100s, of which
-      this cluster has many more.
+    * `il-lo` is preemptible and effectively uncapped (21d wall).
+
+    A whole card better beats a faster one: an idle a100 on `il` starts now,
+    while blackwell1 is one node whose eight cards the rest of the cluster wants
+    too -- measured, three b200 `il-lo` jobs sat pending behind another user's
+    reservation while a100s were free. So both `il` tiers come before either
+    `il-lo` tier, and the b200 `il-lo` share stops at 4, which is what is left of
+    blackwell1 once the four above are held.
 
     Every one of these runs is preemption-safe -- it checkpoints and resumes --
     so the low-priority queue costs wall clock, not work.
@@ -105,8 +109,8 @@ def plan(n: int) -> list[Resources]:
     tiers = [
         (2, b200("il-interactive", "12:00:00")),
         (2, b200("il", "7-00:00:00")),
-        (4, b200("il-lo", "21-00:00:00")),
         (10, a100("il", "7-00:00:00")),
+        (4, b200("il-lo", "21-00:00:00")),
     ]
     out = [r for count, r in tiers for _ in range(count)][:n]
     # whatever is left goes to the queue with no cap
