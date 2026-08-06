@@ -53,9 +53,12 @@ CURATED = None
 # and that the mirror upload must therefore not delete. legacy/ is RT-v1 boolean
 # typing, which the released RT-v1 checkpoints read.
 KEEP = ("db-task-lists", "legacy")
-# Built beside the collection, not inside it, so an unfinished legacy tree
-# cannot ride along with the upload that replaces it. None if there is none.
-LEGACY_DIR = "/dfs/user/ranjanr/share/stanford-star/relbench-preprocessed-legacy"
+# Inside the collection's output, under the name it publishes at, so the whole
+# replacement is one folder and one upload. It was outside once, to stop an
+# unfinished tree riding along -- but finalize.py verifies both before it pushes
+# anything, and a second upload call is a second thing that can fail after the
+# first has already changed the repo. Which it did. None if there is none.
+LEGACY_DIR = f"/dfs/user/ranjanr/share/stanford-star/{NAME}-preprocessed/legacy"
 
 # NAME = "the-join"
 # SOURCE_REPO = "stanford-star/the-join"

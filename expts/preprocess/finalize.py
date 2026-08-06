@@ -82,7 +82,7 @@ def verify() -> list[str]:
         if EMBEDDER not in meta.get("text_embeddings", {}):
             problems.append(f"{name}: meta.json does not record {EMBEDDER}")
 
-    for name in sorted(built - set(expected)):
+    for name in sorted(built - set(expected) - set(KEEP)):
         problems.append(f"{name}: built but not in {RAW_DIR} (stale output)")
 
     print(f"{len(expected)} expected, {len(built)} built, {len(problems)} problem(s)")
@@ -180,17 +180,12 @@ def upload(private: bool = False) -> None:
     api = HfApi()
     api.create_repo(repo, repo_type="dataset", private=private, exist_ok=True)
 
+    # One call: the legacy tree lives under out/legacy, so the whole
+    # replacement goes in a single operation. Two calls meant the second could
+    # fail after the first had already changed the published repo -- leaving new
+    # databases beside an old legacy variant of them.
     print(f"uploading {out} -> {repo}")
     api.upload_large_folder(repo_id=repo, repo_type="dataset", folder_path=str(out))
-
-    if LEGACY_DIR:
-        print(f"uploading {LEGACY_DIR} -> {repo}/legacy")
-        api.upload_large_folder(
-            repo_id=repo,
-            repo_type="dataset",
-            folder_path=str(Path(LEGACY_DIR)),
-            path_in_repo="legacy",
-        )
 
     remote_dirs = {
         f.split("/", 1)[0]
