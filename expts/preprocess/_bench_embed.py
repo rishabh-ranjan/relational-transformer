@@ -1,7 +1,9 @@
-"""Measure the embedding stage: 1 GPU vs every GPU on the node, same texts.
+"""Measure and check the embedding stage. A roach target, so it runs in the
+project's environment with a whole node's GPUs in one rank.
 
-Run as a roach target so it gets the project's environment and a whole node's
-GPUs in one rank.
+`dtypes` answers a correctness question rather than a performance one: the
+single-device and multi-process paths must agree, or a collection built partly
+on one and partly on the other is internally inconsistent.
 """
 
 from __future__ import annotations
@@ -9,24 +11,54 @@ from __future__ import annotations
 import time
 
 
-def bench(*, text_path: str, n_texts: int, batch_size: int, embedder: str) -> None:
+def _texts(text_path: str, n: int) -> list[str]:
     import orjson
+
+    with open(text_path, "rb") as f:
+        return orjson.loads(f.read())[:n]
+
+
+def dtypes(*, text_path: str, n_texts: int, batch_size: int, embedder: str) -> None:
+    """Do both paths compute in bf16, and do they agree?"""
+    import numpy as np
     import torch
 
     from rt.preprocess.embed import TextEmbedder
 
-    with open(text_path, "rb") as f:
-        texts = orjson.loads(f.read())
-    texts = texts[:n_texts]
+    texts = _texts(text_path, n_texts)
     ngpu = torch.cuda.device_count()
-    card = torch.cuda.get_device_name(0)
-    print(
-        f"host={__import__('socket').gethostname()} gpus={ngpu} card={card}", flush=True
-    )
-    print(f"texts={len(texts):,} batch={batch_size}", flush=True)
+    one = TextEmbedder(batch_size, embedder, "cuda:0")
+    p = next(one.model.parameters())
+    print(f"model dtype on one device: {p.dtype}", flush=True)
+    a = one(texts, device="cuda:0")
 
-    # warm the model in, so the first timing is not the download/load
-    TextEmbedder(batch_size, embedder, "cuda:0")
+    devs = [f"cuda:{i}" for i in range(ngpu)]
+    many = TextEmbedder(batch_size, embedder, devs[0])
+    b = many(texts, device=devs)
+    print(f"stored dtypes: single={a.dtype} multi={b.dtype}", flush=True)
+
+    af, bf = a.astype(np.float32), b.astype(np.float32)
+    same = np.array_equal(af, bf)
+    print(
+        f"RESULT identical={same}  max|diff|={np.abs(af - bf).max():.3e}  "
+        f"rows={len(texts)}",
+        flush=True,
+    )
+
+
+def bench(*, text_path: str, n_texts: int, batch_size: int, embedder: str) -> None:
+    """1 GPU against every GPU on the node, same texts."""
+    import torch
+
+    from rt.preprocess.embed import TextEmbedder
+
+    texts = _texts(text_path, n_texts)
+    ngpu = torch.cuda.device_count()
+    print(
+        f"gpus={ngpu} card={torch.cuda.get_device_name(0)} texts={len(texts):,}",
+        flush=True,
+    )
+    TextEmbedder(batch_size, embedder, "cuda:0")  # warm the model in
 
     one = TextEmbedder(batch_size, embedder, "cuda:0")
     t0 = time.monotonic()
