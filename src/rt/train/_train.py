@@ -52,7 +52,7 @@ from rt.train.muon import Muon
 from rt.train.swa import SwaState
 from rt.eval import metric_for
 from rt.eval import Evaluator
-from rt.progress import log
+from rt.progress import fmt_duration, log
 import wandb
 
 # Released model dims (RT-J). Override via CLI for a different size.
@@ -224,6 +224,11 @@ def main(
     """
     params = dict(locals())
 
+    # Reference point for time-to-first-step: everything before the first
+    # optimizer step (dist setup, model build, data, the step-0 eval) is
+    # startup cost, and it is what a run that "hangs" is usually stuck in.
+    start_tic = time.time()
+
     device, rank, local_rank, world_size, ddp = setup_dist()
     is_main = rank == 0
 
@@ -360,6 +365,7 @@ def main(
 
     # ---- data: re-seed by resumed step so the stream does not replay ----
     data_seed = seed + SEED_STRIDE * start_step
+    train_init_tic = time.time()
     train_tasks = get_tasks(pre_dir, db_task_list, ("train",))
     train_ds = TrainDataset(
         tasks=train_tasks,
@@ -400,12 +406,9 @@ def main(
         total_items = total_steps * total_bs
         stream_items = train_ds.num_items
         log(
-            train_tasks=len(train_tasks),
-            pre_dir=pre_dir,
+            train_tasks_loaded=len(train_tasks),
+            elapsed=fmt_duration(time.time() - train_init_tic),
             items=f"{total_items:_}",
-            steps=f"{total_steps:_}",
-            bs=total_bs,
-            distinct_items=f"{stream_items:_}",
             epochs=f"{total_items / stream_items:.2f}",
         )
     loader = DataLoader(
@@ -698,6 +701,15 @@ def main(
 
         step_time = time.perf_counter() - step_t0
         step_t0 = time.perf_counter()
+
+        if is_main and step == start_step + 1:
+            # step_time for the first step starts where the loop reset it after
+            # the step-0 eval, so it is the compile + first-batch cost alone;
+            # time_to_first_step adds everything before that (setup, eval).
+            log(
+                time_to_first_step=fmt_duration(time.time() - start_tic),
+                compile_time=fmt_duration(step_time),
+            )
 
         if is_main:
             # Every step to wandb: a fine-tuning run is short, and a loss curve
