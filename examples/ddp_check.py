@@ -13,12 +13,11 @@ import os
 import signal
 import time
 from pathlib import Path
+import torch
+import torch.distributed as dist
 
 
 def main(run_id: str, seconds: int, out_dir: str) -> None:
-    import torch
-    import torch.distributed as dist
-
     rank = int(os.environ.get("RANK", "0"))
     world_size = int(os.environ.get("WORLD_SIZE", "1"))
     local_rank = int(os.environ.get("LOCAL_RANK", "0"))

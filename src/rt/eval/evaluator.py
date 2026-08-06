@@ -3,7 +3,6 @@ eval and by in-loop training eval (rank-aware under DDP)."""
 
 import time
 
-import lazy_loader as lazy
 import numpy as np
 import torch
 import torch.distributed as dist
@@ -13,8 +12,7 @@ from tqdm.auto import tqdm
 from rt.data import EvalDataset, RustlerDataset
 from rt.eval.metrics import metric_for
 from rt.model.net import SEM_TYPE_BOOLEAN
-
-wandb = lazy.load("wandb")
+import wandb
 
 
 def fmt_duration(secs):

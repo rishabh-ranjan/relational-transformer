@@ -13,6 +13,8 @@ from rt.eval.evaluator import Evaluator
 from rt.eval.metrics import metric_for
 from rt.eval.relbench import _emit_and_score
 from rt.model import load_rt_model
+from collections import defaultdict
+import numpy as np
 
 
 def setup_dist():
@@ -349,9 +351,6 @@ def run_ensemble(
     ``ensemble_size`` context seeds and average the per-item predictions, then
     score the averaged submission through relbench's evaluator.
     """
-    from collections import defaultdict
-
-    import numpy as np
 
     embedder = eval_kwargs["embedder"]
     ddp = eval_kwargs.get("ddp", False)

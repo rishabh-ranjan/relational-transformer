@@ -1,16 +1,21 @@
 """The compiled Rust engine: symbols + preprocess end-to-end."""
 
+import rt.rustler as r
+from rt.rustler import preprocess
+import json
+from rt.data.resolve import get_column_index
+from rt.data.tasks import get_tasks
+import ml_dtypes
+import numpy as np
+from rt.rustler import Sampler
+
 
 def test_extension_symbols():
-    import rt.rustler as r
-
     assert hasattr(r, "Sampler")
     assert hasattr(r, "preprocess")  # present only when built with --features pre
 
 
 def test_preprocess_end_to_end(synthetic_dataset, tmp_path):
-    from rt.rustler import preprocess
-
     out = tmp_path / "out"
     preprocess(str(synthetic_dataset), str(out), skip_tasks=True)
 
@@ -31,11 +36,6 @@ def test_remove_columns_reaches_the_sampler_for_a_non_autocomplete_task(
     column)` indices handed to the sampler as `columns_to_drop`. fly.rs then skips those
     cell indices wherever they appear, with no dependence on the task's kind.
     """
-    import json
-
-    from rt.data.resolve import get_column_index
-    from rt.data.tasks import get_tasks
-    from rt.rustler import preprocess
 
     out = tmp_path / "out"
     preprocess(str(synthetic_dataset_with_external_task), str(out))
@@ -72,14 +72,6 @@ def test_sampler_drops_remove_columns_on_the_targets_horizon(
     emits -- so the test fails both if the drop stops working and if it widens into a
     whole-column removal.
     """
-    import json
-
-    import ml_dtypes
-    import numpy as np
-
-    from rt.data.resolve import get_column_index
-    from rt.data.tasks import get_tasks
-    from rt.rustler import Sampler, preprocess
 
     out = tmp_path / "out"
     preprocess(str(synthetic_dataset_with_external_task), str(out))

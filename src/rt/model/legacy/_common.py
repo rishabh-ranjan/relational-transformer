@@ -3,6 +3,8 @@ Evaluator-facing ``predict`` adapter, and Hub checkpoint loading."""
 
 import torch
 from torch.nn.attention.flex_attention import create_block_mask
+from pathlib import Path
+from huggingface_hub import hf_hub_download
 
 # Both legacy papers use the same architecture dims.
 LEGACY_MODEL_DIMS = dict(num_blocks=12, d_model=256, d_text=384, num_heads=8, d_ff=1024)
@@ -48,12 +50,9 @@ def predict(model, batch, eval_ctx_size_list, device, task):
 def load_legacy_checkpoint(cls, repo_id: str, filename: str, device: str = "cpu"):
     """Build ``cls`` with the shared legacy dims and load a released ``.pt``
     (flat bf16 state dict) from the Hub or a local path."""
-    from pathlib import Path
 
     p = Path(filename).expanduser()
     if not p.is_file():
-        from huggingface_hub import hf_hub_download
-
         p = Path(hf_hub_download(repo_id, filename))
     state_dict = torch.load(p, map_location="cpu", weights_only=True)
     if "model" in state_dict and isinstance(state_dict["model"], dict):

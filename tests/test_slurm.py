@@ -12,6 +12,15 @@ import pytest
 from roach.slurm import Resources, check_args, resolve, timestamp
 from roach.slurm._submit import _overlap, launch
 from roach.slurm._submit import submit as submit_fn
+import re
+from importlib.resources import files
+from roach.slurm import (
+    AMPERE,
+    AMPERE_LO,
+    BLACKWELL,
+    BLACKWELL_INTERACTIVE,
+    BLACKWELL_INTERACTIVE_1GPU,
+)
 
 
 def sample(a: int, b: str, c: list[int], run_id: str) -> None:  # noqa: ARG001
@@ -128,8 +137,6 @@ def test_resources_rejects_nonsense(bad):
 def test_every_placeholder_in_the_scripts_is_one_submit_fills():
     """A placeholder nobody fills reaches the compute node as a literal @NAME@,
     and fails there rather than here."""
-    import re
-    from importlib.resources import files
 
     used = set()
     for name in ("bootstrap.sh", "env.sh"):
@@ -146,8 +153,6 @@ def test_no_placeholder_sits_inside_a_comment():
     in a comment gets the same treatment: the first line stays commented out and
     every line after it breaks out and runs as garbage -- which is a two-command
     setup silently corrupted, and a single-command one working fine."""
-    import re
-    from importlib.resources import files
 
     for name in ("bootstrap.sh", "env.sh"):
         text = files("roach.slurm").joinpath(name).read_text()
@@ -163,8 +168,6 @@ def test_the_job_scripts_take_no_configuration_from_the_environment():
     """A job's environment is what submit() put there. A ``${VAR:-default}`` is
     a knob nobody passed, silently answered by whatever the node exported --
     which is how the same submission produces two different runs."""
-    import re
-    from importlib.resources import files
 
     # who we are, and what slurm tells the job about itself: not configuration
     runtime = {"USER", "SLURM_RESTART_COUNT"}
@@ -228,13 +231,6 @@ def test_a_cpu_only_overlapping_run_asks_for_no_gpu():
 def test_presets_are_one_rank_per_gpu():
     """The preset's cpus_per_task is per rank, so a preset that quietly asked
     for a node's worth of cores per rank would be rejected at submit."""
-    from roach.slurm import (
-        AMPERE,
-        AMPERE_LO,
-        BLACKWELL,
-        BLACKWELL_INTERACTIVE,
-        BLACKWELL_INTERACTIVE_1GPU,
-    )
 
     for preset in (
         AMPERE,

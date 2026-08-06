@@ -35,6 +35,7 @@ from expts.preprocess.submit import (  # noqa: E402
     SOURCE_REPO,
     load_sizes,
 )
+from huggingface_hub import HfApi
 
 # Only rate samples inside this window are used, so an ETA reflects how the
 # sweep is going now rather than averaging in a slow start or a stall.
@@ -237,8 +238,6 @@ def databases() -> list[str]:
     as one.
     """
     try:
-        from huggingface_hub import HfApi
-
         return sorted(
             f.split("/", 1)[0]
             for f in HfApi().list_repo_files(SOURCE_REPO, repo_type="dataset")

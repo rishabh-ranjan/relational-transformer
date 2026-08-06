@@ -32,6 +32,15 @@ Faithfulness notes (vs ``rt-v1:rustler/src/pre.rs``):
 
 import shutil
 from pathlib import Path
+import polars as pl
+from rt.preprocess._preprocess import (
+    dataset_name,
+    embed_dataset,
+    resolve_dataset_dir,
+    run_rustler_pre,
+    update_meta_with_embeddings,
+)
+from huggingface_hub import HfApi
 
 # (db, table) -> columns cast to Boolean via `col != 0` (RT-v1 cast_col_to_bool;
 # polars int -> bool casts nonzero to true). Task-table rules apply to every
@@ -61,8 +70,6 @@ BINARIZE_FIRST: dict[tuple[str, str], list[str]] = {
 
 
 def _transform_df(df, db_name: str, table_name: str):
-    import polars as pl
-
     for col in CAST_TO_BOOL.get((db_name, table_name), []):
         if col in df.columns:
             df = df.with_columns(pl.col(col).cast(pl.Boolean).alias(col))
@@ -90,7 +97,6 @@ def _transform_df(df, db_name: str, table_name: str):
 def transform_dataset(dataset_dir: Path, out_dataset_dir: Path, db_name: str) -> Path:
     """Copy ``dataset_dir`` to ``out_dataset_dir`` with the RT-v1 boolean rules
     applied to the relevant parquets. Everything else is copied verbatim."""
-    import polars as pl
 
     out_dataset_dir = Path(out_dataset_dir)
     if out_dataset_dir.exists():
@@ -139,13 +145,6 @@ def preprocess_one_legacy(
     dataset, apply the RT-v1 boolean transform, run the regular rustler `pre` +
     embedding pipeline, and (optionally) upload under ``legacy/<name>`` of
     ``upload_repo``."""
-    from rt.preprocess._preprocess import (
-        dataset_name,
-        embed_dataset,
-        resolve_dataset_dir,
-        run_rustler_pre,
-        update_meta_with_embeddings,
-    )
 
     out_dir = Path(out_dir).expanduser()
     dataset_dir = resolve_dataset_dir(spec, revision=revision)
@@ -162,8 +161,6 @@ def preprocess_one_legacy(
     update_meta_with_embeddings(pre_dataset_dir, embedder, d_text)
 
     if upload_repo:
-        from huggingface_hub import HfApi
-
         api = HfApi()
         api.create_repo(
             upload_repo, repo_type="dataset", private=private, exist_ok=True

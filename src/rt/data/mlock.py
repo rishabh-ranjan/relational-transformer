@@ -9,6 +9,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from tqdm import tqdm
 
 from rt.data.tasks import resolve_db_task_list
+import time
 
 _libc = ctypes.CDLL(ctypes.util.find_library("c"), use_errno=True)
 _libc.mmap.argtypes = [
@@ -121,7 +122,6 @@ def mlock_main(
 
     pending = [db for db in db_names if db not in size_errors]
     total_footprint = sum(db_footprints[db] for db in pending)
-    import time
 
     t0 = time.time()
     pbar = tqdm(total=total_size, unit="B", unit_scale=True, unit_divisor=1024)

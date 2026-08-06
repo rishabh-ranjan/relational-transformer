@@ -17,6 +17,9 @@ import torch.multiprocessing as mp
 
 from rt.eval.evaluator import Evaluator
 from rt.model.net import SEM_TYPE_BOOLEAN
+import socket
+import sys
+import rt.eval._eval  # noqa: F401
 
 CTX = 4  # seq len of the fake batches
 EVAL_BS = 2
@@ -172,7 +175,6 @@ def _worker(rank, port, ret):
 
 def test_eval_gather_ddp_two_ranks():
     """Two real processes: rank 0's yield must equal the union of both shards."""
-    import socket
 
     with socket.socket() as s:
         s.bind(("127.0.0.1", 0))
@@ -229,9 +231,6 @@ class _EnsembleFakeEvaluator:
 def _run_ensemble_worker(rank, port, ret):
     os.environ["MASTER_ADDR"] = "127.0.0.1"
     os.environ["MASTER_PORT"] = str(port)
-    import sys
-
-    import rt.eval._eval  # noqa: F401
 
     # ``rt.eval._eval`` the attribute is the *function* re-exported by the
     # package __init__; the module itself lives in sys.modules.
@@ -287,7 +286,6 @@ def _named_task(table_name, split):
 def test_run_ensemble_ddp_does_not_deadlock():
     """Only rank 0 sees the tuning metrics; without broadcasting the winning
     configs the ranks would iterate different task groups and hang."""
-    import socket
 
     with socket.socket() as s:
         s.bind(("127.0.0.1", 0))

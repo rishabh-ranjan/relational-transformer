@@ -7,21 +7,19 @@ on one and partly on the other is internally inconsistent.
 """
 
 import time
+import orjson
+import numpy as np
+import torch
+from rt.preprocess.embed import TextEmbedder
 
 
 def _texts(text_path: str, n: int) -> list[str]:
-    import orjson
-
     with open(text_path, "rb") as f:
         return orjson.loads(f.read())[:n]
 
 
 def dtypes(*, text_path: str, n_texts: int, batch_size: int, embedder: str) -> None:
     """Do both paths compute in bf16, and do they agree?"""
-    import numpy as np
-    import torch
-
-    from rt.preprocess.embed import TextEmbedder
 
     texts = _texts(text_path, n_texts)
     ngpu = torch.cuda.device_count()
@@ -46,9 +44,6 @@ def dtypes(*, text_path: str, n_texts: int, batch_size: int, embedder: str) -> N
 
 def bench(*, text_path: str, n_texts: int, batch_size: int, embedder: str) -> None:
     """1 GPU against every GPU on the node, same texts."""
-    import torch
-
-    from rt.preprocess.embed import TextEmbedder
 
     texts = _texts(text_path, n_texts)
     ngpu = torch.cuda.device_count()

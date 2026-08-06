@@ -71,8 +71,6 @@ def _is_complete(dataset_dir: Path) -> bool:
     if not meta_path.exists():
         return False
     try:
-        import json
-
         embs = json.loads(meta_path.read_text()).get("text_embeddings", {})
     except Exception:
         return False

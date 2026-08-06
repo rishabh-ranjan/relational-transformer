@@ -44,6 +44,7 @@ from expts.preprocess.submit import (  # noqa: E402
     SOURCE_REPO,
     TARGET_REPO,
 )
+from huggingface_hub import CommitOperationDelete, HfApi
 
 REQUIRED = (
     "meta.json",
@@ -168,7 +169,6 @@ def upload(private: bool = False) -> None:
     while the other is half-built is how a published dataset ends up internally
     inconsistent.
     """
-    from huggingface_hub import CommitOperationDelete, HfApi
 
     problems = verify() + verify_legacy()
     if problems:

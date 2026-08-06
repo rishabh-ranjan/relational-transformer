@@ -7,23 +7,12 @@ import tempfile
 from functools import cache
 from pathlib import Path
 
+import numpy as np
+import relbench
+import sklearn.metrics as M
+from relbench.leaderboard import evaluate_task
+
 from rt.data import read_meta, resolve_pre_dir
-
-
-# --------------------------------------------------------------------------- #
-# RelBench submission: denormalize / sigmoid, key by node index, score.
-# --------------------------------------------------------------------------- #
-def _relbench():
-    try:
-        import relbench  # noqa: F401
-        from relbench.leaderboard import evaluate_task
-
-        return relbench, evaluate_task
-    except Exception as e:  # pragma: no cover - import-time guidance
-        raise RuntimeError(
-            "relbench is required for evaluation. It is a declared dependency "
-            "(relbench @ relbench-hf), e.g. `pixi install`."
-        ) from e
 
 
 @cache
@@ -41,7 +30,6 @@ def _seed_offset(pre_dir: str, db: str, table: str, split: str, embedder: str) -
 
 @cache
 def _load_relbench_task(source: str, table: str):
-    relbench, _ = _relbench()
     return relbench.load_task(source, table)
 
 
@@ -74,9 +62,6 @@ def _emit_and_score(
     class agreement for clf) -- both should be ~perfect when the node-index
     join is correct.
     """
-    import numpy as np
-
-    relbench, evaluate_task = _relbench()
 
     meta = read_meta(pre_dir, task.db_name)
     source = meta.get("source")
@@ -137,7 +122,6 @@ def _emit_and_score(
         # refuses CSVs that do not cover the full test set, so score the
         # subsample here with the same metric definitions it uses -- AUROC for
         # clf; NMAE = MAE / train-split target std (ddof=1) for reg.
-        import sklearn.metrics as M
 
         if ret_path is None:
             Path(score_path).unlink(missing_ok=True)

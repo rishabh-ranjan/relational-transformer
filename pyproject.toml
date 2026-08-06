@@ -18,7 +18,6 @@ dependencies = [
     "einops",
     "ml_dtypes",
     "orjson",
-    "lazy_loader",
     "tqdm",
     "pyyaml",
 ]
@@ -43,6 +42,9 @@ include = ["src/roach/slurm/*.sh"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+# The repo root, so `examples.*` and `expts.*` import the same way in a test as
+# they do in a job (roach targets are module paths relative to the checkout).
+pythonpath = ["."]
 
 [tool.pixi.workspace]
 channels = ["conda-forge"]
@@ -73,7 +75,6 @@ pyarrow = "*"
 polars = "*"
 pytest = "*"
 pre-commit = "*"
-lazy_loader = "*"
 tqdm = "*"
 wandb = "*"
 xgboost = "*"

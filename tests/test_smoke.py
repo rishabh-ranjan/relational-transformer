@@ -8,6 +8,7 @@ import pytest
 import torch
 
 from roach.slurm import timestamp
+from examples.smoke import smoke
 
 PRE_DIR = "/dfs/user/ranjanr/pre/relbench-preprocessed"
 
@@ -17,8 +18,6 @@ PRE_DIR = "/dfs/user/ranjanr/pre/relbench-preprocessed"
     not Path(PRE_DIR).is_dir(), reason=f"no preprocessed data at {PRE_DIR}"
 )
 def test_smoke(tmp_path):
-    from examples.smoke import smoke
-
     run_id = timestamp()
     smoke(
         pre_dir=PRE_DIR,

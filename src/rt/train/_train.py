@@ -50,6 +50,9 @@ from rt.model import (
 )
 from rt.train.muon import Muon
 from rt.train.swa import SwaState
+from rt.eval import metric_for
+from rt.eval import Evaluator
+import wandb
 
 # Released model dims (RT-J). Override via CLI for a different size.
 # Re-seed offset applied per resumed step so a resumed stream does not replay.
@@ -101,7 +104,6 @@ def eval_avg_metrics(evaluator, nets_with_prefix, ctx_size_list):
     evaluate_raw yield is one (task, ctx_size) slice, so passing the full
     ctx-size list means the mean spans all of them.
     """
-    from rt.eval import metric_for
 
     acc = {p: {"clf": [], "reg": []} for _, p in nets_with_prefix}
     for task, _ctx, labels, preds_by_prefix, _nl in evaluator.evaluate_raw(
@@ -196,8 +198,6 @@ def main(
 
     use_wandb = (not wandb_disabled) and is_main
     if use_wandb:
-        import wandb
-
         wandb.init(
             project=project,
             entity=entity,
@@ -422,7 +422,6 @@ def main(
     # underlying mmap'd data (page cache), so extra entries cost eval compute
     # only, nothing between eval points.
     val_tasks = get_tasks(eval_pre_dir, eval_db_task_list, tuple(eval_splits))
-    from rt.eval import Evaluator
 
     evaluators = (
         [

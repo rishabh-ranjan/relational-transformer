@@ -14,6 +14,10 @@ import json
 from datetime import datetime, timedelta
 
 import pytest
+from rt import RelationalTransformer
+from rt.model import CONFIG_FILE, MODEL_FILE, save_model
+import polars as pl
+import yaml
 
 TINY_DIMS = dict(num_blocks=2, d_model=16, d_text=8, num_heads=2, d_ff=32)
 
@@ -29,8 +33,6 @@ def tiny_checkpoint(tmp_path, tiny_dims):
 
     Returns ``(checkpoint_dir, source_model)``.
     """
-    from rt import RelationalTransformer
-    from rt.model import CONFIG_FILE, MODEL_FILE, save_model
 
     src = RelationalTransformer(**tiny_dims, compile=False, materialize_attn_masks=True)
     ckpt = tmp_path / "ckpt"
@@ -52,8 +54,6 @@ def synthetic_dataset(tmp_path):
     into the entity table. Column dtypes cover the branches ``normalize_df``
     dispatches on -- string, int, float, bool, and datetime.
     """
-    import polars as pl
-    import yaml
 
     n_users, n_events = 10, 18
     users = pl.DataFrame(
@@ -107,8 +107,6 @@ def synthetic_dataset_with_external_task(synthetic_dataset):
     shape ``remove_columns`` takes for a non-autocomplete task: the leaking column lives in
     a *different* table from the label rows.
     """
-    import polars as pl
-    import yaml
 
     ds = synthetic_dataset
     tdir = ds / "tasks" / "spend"

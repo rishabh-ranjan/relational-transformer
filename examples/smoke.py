@@ -16,6 +16,7 @@ roach.slurm.
 """
 
 from rt.train import main as train
+from roach.slurm import timestamp
 
 
 def smoke(
@@ -87,8 +88,6 @@ def smoke(
 
 
 if __name__ == "__main__":
-    from roach.slurm import timestamp
-
     smoke(
         pre_dir="/dfs/user/ranjanr/pre/relbench-preprocessed",
         out_root="/tmp/rt-smoke",

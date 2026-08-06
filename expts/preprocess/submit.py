@@ -22,6 +22,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 from roach.slurm import Resources, submit  # noqa: E402
 
 from expts.preprocess.preprocess import is_done, is_rustler_done  # noqa: E402
+from collections import defaultdict
+from huggingface_hub import HfApi
 
 # The two values every stage has to agree on, and the only ones kept out of
 # their call sites: the embedder names the directory `is_done` looks for, so a
@@ -243,9 +245,6 @@ def fully_downloaded(names: list[str]) -> set[str]:
     whole collection, and makes it safe to submit while the fetch is still
     running -- the cluster need not idle until the last byte lands.
     """
-    from collections import defaultdict
-
-    from huggingface_hub import HfApi
 
     remote: dict[str, dict[str, int]] = defaultdict(dict)
     info = HfApi().repo_info(SOURCE_REPO, repo_type="dataset", files_metadata=True)

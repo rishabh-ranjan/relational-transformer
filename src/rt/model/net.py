@@ -7,6 +7,7 @@ from einops import rearrange
 from einops._torch_specific import allow_ops_in_compiled_graph
 from torch import nn
 from torch.nn.attention.flex_attention import create_block_mask, flex_attention
+from rt.model.checkpoints import MODEL_DIM_KEYS, load_model, resolve_checkpoint
 
 allow_ops_in_compiled_graph()
 flex_attention = torch.compile(flex_attention, dynamic=False)
@@ -330,8 +331,6 @@ class RelationalTransformer(nn.Module):
             model = RelationalTransformer.from_pretrained("/path/to/checkpoint")
         """
 
-        from rt.model.checkpoints import MODEL_DIM_KEYS, load_model, resolve_checkpoint
-
         config, model_path = resolve_checkpoint(
             model_id_or_path, revision=revision, subfolder=subfolder
         )
@@ -591,3 +590,32 @@ class RelationalTransformer(nn.Module):
             yhat = yhat_dict["number"].squeeze(-1)  # (B, S)
             preds[ctx_size] = (yhat * sorted_is_targets.to(yhat.dtype)).sum(dim=1).cpu()
         return preds
+
+
+def load_rt_model(
+    spec,
+    *,
+    device: str = "cpu",
+    compile: bool = False,
+    revision: str | None = None,
+    subfolder: str | None = None,
+    model_kwargs: dict | None = None,
+):
+    """Resolve a checkpoint, build the RelationalTransformer, load its weights.
+
+    Returns ``(model, config)``. Thin backward-compatible wrapper around
+    :meth:`rt.model.RelationalTransformer.from_pretrained` (the HuggingFace-style
+    entry point, which returns just the model with ``config`` attached as
+    ``model.config``). ``model_kwargs`` overrides/fills model dims when a
+    checkpoint has no ``config.json`` (e.g. a raw internal ckpt during dev).
+    """
+
+    model = RelationalTransformer.from_pretrained(
+        spec,
+        device=device,
+        compile=compile,
+        revision=revision,
+        subfolder=subfolder,
+        **(model_kwargs or {}),
+    )
+    return model, model.config

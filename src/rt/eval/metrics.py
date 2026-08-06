@@ -1,5 +1,7 @@
 """rt-internal metric on the normalized scale (val tuning + debug numbers)."""
 
+import sklearn.metrics as M
+
 
 def metric_for(task_type: str, labels, preds) -> tuple[str, float]:
     """rt-internal metric on the *normalized* scale (val-set tuning + debug).
@@ -8,7 +10,6 @@ def metric_for(task_type: str, labels, preds) -> tuple[str, float]:
     comparison, scale-invariant) and as a labeled debug number alongside the
     authoritative RelBench metric. Not the submission metric.
     """
-    import sklearn.metrics as M
 
     if task_type == "reg":
         return "mae", float(M.mean_absolute_error(labels, preds))

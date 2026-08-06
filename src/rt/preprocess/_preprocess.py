@@ -30,6 +30,9 @@ from pathlib import Path
 
 
 from huggingface_hub import HfApi, snapshot_download
+import yaml  # PyYAML ships with huggingface_hub's deps; fall back to a tiny parse
+from rt.rustler import preprocess
+from rt.preprocess.embed import embed_texts
 
 
 # --------------------------------------------------------------------------- #
@@ -78,7 +81,6 @@ def resolve_dataset_dir(spec: str, revision: str | None = None) -> Path:
 
 def dataset_name(dataset_dir: Path) -> str:
     """Read the dataset name from its manifest (the output subdirectory name)."""
-    import yaml  # PyYAML ships with huggingface_hub's deps; fall back to a tiny parse
 
     text = (dataset_dir / "manifest.yaml").read_text()
     try:
@@ -96,15 +98,12 @@ def dataset_name(dataset_dir: Path) -> str:
 def run_rustler_pre(
     dataset_dir: Path, out_dir: Path, source: str, skip_tasks: bool
 ) -> None:
-    from rt.rustler import preprocess
-
     print(f"+ preprocess {dataset_dir} -> {out_dir}", flush=True)
     preprocess(str(dataset_dir), str(out_dir), source=source, skip_tasks=skip_tasks)
 
 
 def embed_dataset(pre_dataset_dir: Path, embedder: str, batch_size: int) -> int:
     """Compute text embeddings for a preprocessed dataset; return d_text."""
-    from rt.preprocess.embed import embed_texts
 
     # Lazy import so download/upload/list work without torch installed.
 

@@ -29,6 +29,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from expts.preprocess.submit import RAW_DIR, SOURCE_REPO  # noqa: E402
+from huggingface_hub import HfApi, hf_hub_download
 
 ATTEMPTS = 20
 # git-lfs opens this many transfers; the batch API is not what rate-limits, so
@@ -115,7 +116,6 @@ def repair() -> int:
     that state, so the symptom is a sweep that stops making progress rather
     than bad output -- and this is the fix.
     """
-    from huggingface_hub import HfApi, hf_hub_download
 
     d, repo = Path(RAW_DIR), SOURCE_REPO
     info = HfApi().repo_info(repo, repo_type="dataset", files_metadata=True)
