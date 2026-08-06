@@ -741,6 +741,16 @@ def main(
             batch = move(raw_batch, device)
             out = net(batch, return_embeddings=False)
             loss = out[0] / step_grad_accum
+            # NOTE: this no_sync does nothing as written -- DDP only skips the
+            # reduction when the *forward* also runs inside the context, so
+            # every microbatch all-reduces (measured: 4 all-reduces/step at
+            # grad_accum=4, same as without no_sync). Gradients are correct
+            # either way (max rel err 1e-7): summing all-reduced grads equals
+            # all-reducing their sum. Making it real needs the forward moved
+            # inside *and* static_graph=False -- with static_graph=True that
+            # combination dies in the reducer (expect_autograd_hooks_ INTERNAL
+            # ASSERT). That is a comm-vs-overlap tradeoff to measure, not to
+            # guess, so the cheap no-op stays until someone times it.
             if ddp and micro < step_grad_accum - 1:
                 with net.no_sync():
                     loss.backward()
