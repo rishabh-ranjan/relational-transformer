@@ -10,19 +10,18 @@ edition = "2024"
 name = "rustler"
 crate-type = ["cdylib"]
 
-# `pre`: build the standalone preprocessor (reads parquet via polars, parses
-#   relbench-3.0.0 manifest.yaml). Needed only to build the `rustler` binary.
-# `vecdb`: opt-in FAISS-similarity seed selection in the Sampler. Off by
-#   default so the Sampler cdylib and the preprocessor build without FAISS
-#   (no cmake/BLAS), keeping the preprocessing environment minimal.
+# One feature, and nothing anybody builds routinely needs to know about it:
+# `vecdb` is opt-in FAISS-similarity seed selection in the Sampler, and it is
+# opt-in because FAISS needs cmake and a BLAS that this environment does not
+# carry. Everything else -- the Sampler and the preprocessor alike -- is built
+# unconditionally, so there is exactly one build and it has everything in it.
 [features]
 default = []
-pre = ["dep:polars", "dep:serde_yaml"]
 vecdb = ["dep:faiss"]
 
 [dependencies]
-polars = {version = "*", features = ["parquet", "lazy", "dtype-categorical"], optional = true}
-serde_yaml = {version = "*", optional = true}
+polars = {version = "*", features = ["parquet", "lazy", "dtype-categorical"]}
+serde_yaml = "*"
 serde_json = "*"
 glob = "*"
 itertools = "*"

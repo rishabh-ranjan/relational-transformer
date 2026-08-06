@@ -51,8 +51,16 @@ export PATH=$PIXI_HOME/bin:/usr/local/bin:/usr/bin:/bin
 unset PYTHONPATH  # points into a home that is not this job's home
 export TMPDIR=/tmp/$USER
 export XDG_CACHE_HOME=$HOME/.cache
+# One cargo target dir for every clone on this node, rather than one inside
+# each. Clones are per commit, so a per-clone target dir compiles the crate's
+# whole dependency tree -- polars included -- for every commit, whether or not
+# it touched rust: measured at 3m27s wall (12m47s of cpu) from empty. Shared,
+# a commit that changed no rust recompiles only what its own fingerprint
+# changed. Cargo locks the directory, so two builds at once queue rather than
+# corrupt it, which is why jobs at one commit take a clone lock first.
 export WANDB_DIR=$HOME/.cache
-mkdir -p "$TMPDIR" "$XDG_CACHE_HOME"
+export CARGO_TARGET_DIR=$XDG_CACHE_HOME/cargo-target
+mkdir -p "$TMPDIR" "$XDG_CACHE_HOME" "$CARGO_TARGET_DIR"
 
 # Tokens come from the shared secrets dir rather than the job env, where slurm
 # would record them; they were checked for readability above.

@@ -205,8 +205,12 @@ def submit_one(db: str, task: str, resources: Resources):
         clone_root="/lfs/local/0/roach_clones",
         secrets_dir="/dfs/user/ranjanr/.secrets",
         clone_ttl_days=7,
-        # the rustler sampler is a compiled extension; build it in the clone
-        setup=("pixi run build-sampler",),
+        # No setup: `pixi install` already builds the rustler extension and puts
+        # it in src/rt/ -- the project is an editable dependency of its own
+        # environment. Running `pixi run build-sampler` here as well rebuilt the
+        # whole pyo3 stack a second time (maturin develop drops
+        # pyo3/extension-module, which is a different fingerprint), for ~10s and
+        # no different result.
     )
 
 

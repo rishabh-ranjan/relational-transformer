@@ -36,8 +36,8 @@ test = ["pytest", "polars"]
 python-source = "src"
 manifest-path = "rustler/Cargo.toml"
 module-name = "rt.rustler"
-# `pre` bundles the polars preprocess pyfunction; FAISS (`vecdb`) stays source-only.
-features = ["pyo3/extension-module", "pre"]
+# The whole crate, FAISS aside (`vecdb` needs cmake and a BLAS; see rustler/Cargo.toml).
+features = ["pyo3/extension-module"]
 # roach.slurm ships a batch-script template and the node env setup alongside its .py
 include = ["src/roach/slurm/*.sh"]
 
@@ -82,10 +82,12 @@ relbench = { git = "https://github.com/snap-stanford/relbench.git", rev = "6e4a3
 
 [tool.pixi.tasks]
 # Standalone preprocessor binary (polars + manifest reader; no FAISS).
-build-pre = "cargo build --release --features pre --manifest-path rustler/Cargo.toml"
-# Build + editable-install the rt package and the rt.rustler extension from the
-# root maturin project (FAISS-free). The opt-in FAISS vector-db Sampler is built
-# manually: `maturin develop --release --features vecdb` (needs cmake + a BLAS).
+build-pre = "cargo build --release --manifest-path rustler/Cargo.toml"
+# Rebuild the rt.rustler extension after editing rust. `pixi install` builds it
+# too -- and that is all a fresh checkout needs -- but it does not notice a
+# changed .rs file (measured: a touched lib.rs leaves `pixi install` a 0.09s
+# no-op), so this is the one to run while working on the crate. The opt-in FAISS
+# Sampler is `maturin develop --release --features vecdb` (needs cmake + a BLAS).
 build-sampler = "maturin develop --uv --release"
 # Preprocess one dataset: download (HF or local) -> rustler -> embeddings.
 preprocess = { cmd = "python -m rt.cli.preprocess one", depends-on = ["build-sampler"] }
