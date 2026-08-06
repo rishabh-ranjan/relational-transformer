@@ -64,8 +64,7 @@ from roach.slurm import BLACKWELL, submit
 
 submit("expts.<name>.<module>:<function>", args={...}, resources=BLACKWELL,
        name=..., clone_by="branch", setup=(...),
-       repo_root=..., log_root=..., clone_root=..., secrets_dir=...,
-       clone_ttl_days=...)
+       repo_root=..., log_root=..., clone_root=..., secrets_dir=...)
 ```
 
 A sweep is a python loop around that call — conditional resources, staggered

@@ -14,7 +14,6 @@ submit(
     clone_by="branch",             # or "commit" -- no default, see below
     setup=("pixi run build-sampler",),   # built inside the clone, if you need it
     repo_root=..., log_root=..., clone_root=..., secrets_dir=...,
-    clone_ttl_days=7,
 )
 ```
 
@@ -114,13 +113,33 @@ you. What changes:
   matching clone was tried and does not work — pixi rebuilds a prefix it did not
   create. Avoiding it needs the manifest to sit at a path that does not change
   per commit, which is a bigger change than it sounds.
-* **Nothing is deleted when a job ends.** A clone is retired once no live job
-  holds it and nothing has touched it for `clone_ttl_days`, swept by
-  whichever job publishes the next clone.
+* **Nothing is ever deleted.** No job removes a clone, at exit or otherwise,
+  and there is no TTL. A clone that nobody wants sits there costing very little
+  (see below), and a job that deleted directories on a timer would eventually
+  delete one somebody was using.
 
 Put `clone_root` on the node's own big disk, on the same filesystem as the
-package caches — pixi hardlinks the environment from them when it can, and
-copies ~8 GiB when it cannot.
+package caches — pixi reflinks the environment from them when it can, and copies
+~8 GiB when it cannot.
+
+### Reclaiming the space
+
+**If a node's disk fills up, delete clones by hand:**
+
+```bash
+rm -rf <clone_root>/repo-*        # e.g. /lfs/local/0/roach_clones/repo-*
+```
+
+Nothing else has to happen: the next job at a key re-clones and rebuilds it. Do
+not do this while jobs are running from a clone — check with
+`squeue -u $USER` first, since a clone is the running job's code and
+environment.
+
+They are cheaper than `du` suggests. Each environment reports ~8 GiB but is
+reflinked from the package cache, so its own cost is ~230 MiB (measured with
+`btrfs filesystem du -s`: 8.17 GiB total, 222 MiB exclusive). Thirty-odd
+environments on a node were ~7 GiB of real disk. Treat a full disk as a real
+event to act on, not something to pre-empt with a policy.
 
 ### The clone is read-only
 

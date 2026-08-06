@@ -1,9 +1,9 @@
 """The batch script's clone protocol, exercised without slurm.
 
-The clone is shared by every job at a commit, which is only safe because of a
-lock, a marker and a rename. Each test here is one of the ways that goes wrong:
-two jobs building at once, a builder preempted mid-build, a finished job
-deleting a clone others are still using, and a reaper deleting a live one.
+The clone is shared by every job at a key, which is only safe because of a lock
+and a marker. Each test here is one of the ways that goes wrong: two jobs
+building at once, a builder preempted mid-build, a finished job deleting a clone
+others are still using, and a branch clone left at the wrong commit.
 """
 
 import os
@@ -87,7 +87,6 @@ def rig(tmp_path: Path):
         run_id: str,
         sha: str,
         setup: str = "echo built > built.txt",
-        ttl: int = 99,
         key: str = "",
     ) -> Path:
         filled = script
@@ -97,7 +96,6 @@ def rig(tmp_path: Path):
             "@BRANCH@": "main",
             "@CLONE_KEY@": key or sha,
             "@CLONE_ROOT@": str(tmp_path / "clones"),
-            "@CLONE_TTL_DAYS@": str(ttl),
             "@LOG_ROOT@": str(tmp_path / "logs"),
             "@SECRETS_DIR@": str(tmp_path / "secrets"),
             "@RUN_ID@": run_id,
@@ -215,7 +213,6 @@ def test_a_finished_job_leaves_the_clone_for_the_next_one(rig):
     rig.run(rig.job("first", sha), 1001)
     clone = rig.clones / f"repo-{sha}"
     assert (clone / ".roach-ready").is_file()
-    assert not list((clone / ".roach-inuse").iterdir())  # claim released
 
     out = rig.run(rig.job("second", sha), 1002)
     assert "preparing" not in out.stdout
@@ -247,23 +244,3 @@ def test_a_killed_builder_leaves_a_recoverable_clone(rig):
     assert out.returncode == 0, out.stderr
     assert (clone / ".roach-ready").is_file()
     assert (clone / "built.txt").is_file()
-
-
-def test_the_reaper_keeps_a_clone_a_live_job_still_holds(rig):
-    """Sweeping by age alone would delete the clone out from under a long job
-    that has held it since before the cutoff."""
-    old = rig.commit()
-    rig.run(rig.job("old", old), 1001)
-    clone = rig.clones / f"repo-{old}"
-    (clone / ".roach-used").touch()
-    os.utime(clone / ".roach-used", (0, 0))  # ancient
-    (clone / ".roach-inuse" / "1300").touch()  # a job that is still running
-    rig.live.write_text("1300\n")
-
-    rig.run(rig.job("new", rig.churn(), ttl=0), 1002)
-    assert clone.is_dir(), "reaped a clone a live job was using"
-
-    # and once that job is gone, the next sweep retires it
-    rig.live.write_text("")
-    rig.run(rig.job("newer", rig.churn(), ttl=0), 1003)
-    assert not clone.exists()

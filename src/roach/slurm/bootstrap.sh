@@ -124,6 +124,11 @@ prepare_repo() {
 # Late arrivals block here for the one build, then find the marker and fall
 # straight through.
 #
+# Nothing here ever deletes a clone. They are cheap (an environment is reflinked
+# from the package cache: ~230 MiB of its 8 GiB is its own) and deleting one is
+# `rm -rf` when a disk actually fills up -- which is a person's call, not a
+# rule a job should be enforcing at 3am against a directory somebody is using.
+#
 # Built in place, not staged and renamed: the environment is keyed to the path
 # it was installed at, so moving the project afterwards makes pixi reinstall the
 # editable path dependency -- for a maturin project, a full recompile, done by
@@ -148,54 +153,11 @@ clone_at_commit() {  # <dir> <url> <commit> <prepare-fn>
         ( cd "$dir" && "$prepare" )
         touch "$dir/.roach-ready"
     fi
-    # Claim it before dropping the lock, so the reaper -- which takes the same
-    # lock -- cannot see an unused clone that a job is in the middle of adopting.
-    mkdir -p "$dir/.roach-inuse"
-    touch "$dir/.roach-inuse/$SLURM_JOB_ID" "$dir/.roach-used"
     exec 9>&-
     echo "clone: $dir @ $(git -C "$dir" rev-parse --short HEAD)"
 }
 
-# Nothing deletes a clone when a job ends any more -- it is shared, and the next
-# job at that commit wants it. Sweep instead: a clone goes once no live job
-# holds it and nothing has touched it for the submitter's clone_ttl_days.
-# Skipped entirely if squeue cannot answer, since "no live jobs" would then
-# delete the world.
-reap_clones() {
-    local ttl=@CLONE_TTL_DAYS@ dir marker id
-    if ! squeue -h -u "$USER" -o %i >/dev/null 2>&1; then
-        echo "reap: squeue unavailable, skipping"
-        return 0
-    fi
-    for dir in "@CLONE_ROOT@"/*/; do
-        dir=${dir%/}
-        if [[ $dir == "$REPO_DIR" ]]; then continue; fi
-        if [[ ! -f $dir/.roach-ready ]]; then continue; fi
-        # A job holding the lock is preparing or adopting this clone.
-        exec 8>"$dir.lock"
-        if ! flock -n 8; then exec 8>&-; continue; fi
-        for marker in "$dir"/.roach-inuse/*; do
-            if [[ ! -e $marker ]]; then continue; fi
-            id=$(basename "$marker")
-            if [[ -z $(squeue -h -j "$id" -o %i 2>/dev/null) ]]; then rm -f "$marker"; fi
-        done
-        if [[ -n $(ls -A "$dir/.roach-inuse" 2>/dev/null) ]]; then exec 8>&-; continue; fi
-        if [[ -z $(find "$dir/.roach-used" -mtime "+$ttl" 2>/dev/null) ]]; then
-            exec 8>&-; continue
-        fi
-        echo "reaping $dir (unused for >${ttl}d)"
-        rm -rf "$dir"
-        exec 8>&-
-        rm -f "$dir.lock"
-    done
-}
-
 clone_at_commit "$REPO_DIR" "@REPO@" "@COMMIT@" prepare_repo
-reap_clones
-
-# Release the claim when this job ends, so the reaper can retire the clone once
-# the last job at this commit is done with it.
-trap 'rm -f "$REPO_DIR/.roach-inuse/$SLURM_JOB_ID"' EXIT
 
 cd "$REPO_DIR"
 # What this run's environment actually was, next to its logs. A record, not a

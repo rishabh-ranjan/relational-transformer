@@ -208,7 +208,6 @@ def submit_one(db: str, task: str, resources: Resources):
         # the package cache only when the two are on the same filesystem
         clone_root="/lfs/local/0/roach_clones",
         secrets_dir="/dfs/user/ranjanr/.secrets",
-        clone_ttl_days=7,
         # One clone per branch, moved to each submitted commit: the environment
         # and the cargo target dir survive from one submission to the next,
         # which is most of a minute per job. The catch is that submitting again

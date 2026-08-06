@@ -165,7 +165,6 @@ def submit(
     log_root: Path | str,
     clone_root: Path | str,
     secrets_dir: Path | str,
-    clone_ttl_days: int,
     clone_by: str,
     setup: tuple[str, ...] = (),
     run_id: str | None = None,
@@ -177,11 +176,6 @@ def submit(
     ``run_id`` is minted here and injected into ``args`` if the target declares
     it; pass one to relaunch an existing run, which is how a run resumes from a
     checkpoint it wrote earlier.
-
-    ``clone_ttl_days`` is how long an unused clone survives in ``clone_root``
-    before a later job sweeps it. It is required for the same reason
-    ``Resources`` has no defaults: the job reads nothing from the environment,
-    so a value nobody passed would be roach choosing on the experiment's behalf.
 
     ``after`` is the id of a job this one waits for, so a pipeline whose stages
     want different hardware can be submitted in one pass instead of polling for
@@ -245,7 +239,6 @@ def submit(
         "@ARGS@": str(args_path),
         "@LOG_ROOT@": str(log_root),
         "@CLONE_ROOT@": str(clone_root),
-        "@CLONE_TTL_DAYS@": str(clone_ttl_days),
         "@SECRETS_DIR@": str(secrets_dir),
         "@SETUP@": "\n".join(setup),
         "@ENV@": env_sh,

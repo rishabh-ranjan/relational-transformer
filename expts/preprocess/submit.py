@@ -290,7 +290,6 @@ def submit_legacy(name: str, expected_bytes: int):
         # the package cache only when the two are on the same filesystem
         clone_root="/lfs/local/0/roach_clones",
         secrets_dir="/dfs/user/ranjanr/.secrets",
-        clone_ttl_days=7,
         # one clone per branch, moved to each submitted commit (see
         # src/roach/slurm/README.md); submitting again moves it under running jobs
         clone_by="branch",
@@ -318,7 +317,6 @@ def submit_embed(name: str, expected_bytes: int, after: str | None = None):
         # the package cache only when the two are on the same filesystem
         clone_root="/lfs/local/0/roach_clones",
         secrets_dir="/dfs/user/ranjanr/.secrets",
-        clone_ttl_days=7,
         # one clone per branch, moved to each submitted commit (see
         # src/roach/slurm/README.md); submitting again moves it under running jobs
         clone_by="branch",
@@ -421,7 +419,6 @@ def main() -> None:
             log_root=LOG_ROOT,
             clone_root="/lfs/local/0/roach_clones",
             secrets_dir="/dfs/user/ranjanr/.secrets",
-            clone_ttl_days=7,
             # one clone per branch, moved to each submitted commit (see
             # src/roach/slurm/README.md); submitting again moves it under running jobs
             clone_by="branch",
