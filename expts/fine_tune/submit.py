@@ -22,18 +22,19 @@ import sys
 
 from roach.slurm import Resources, submit
 
-# The benchmark tasks of these four databases: every forecast or external task
-# whose type RT models. Link-prediction tasks are not modeled, and autocomplete
-# tasks are not part of the benchmark these runs are compared against, so
-# neither is here. Written out rather than discovered at submit time -- the list
-# is what ran, and a database gaining a task should not silently change a sweep.
+# The forecast tasks of these four databases whose type RT models: predict a
+# label at a timestamp from what is known before it. Nothing else is here --
+# link-prediction tasks are not modeled, autocomplete tasks complete a column
+# rather than forecast one, and rel-event's user-repeat is an external table
+# rather than a forecast. Written out rather than discovered at submit time --
+# the list is what ran, and a database gaining a task should not silently
+# change a sweep.
 TASKS = (
     ("rel-f1", "driver-dnf"),
     ("rel-f1", "driver-position"),
     ("rel-f1", "driver-top3"),
     ("rel-event", "user-attendance"),
     ("rel-event", "user-ignore"),
-    ("rel-event", "user-repeat"),
     ("rel-trial", "site-success"),
     ("rel-trial", "study-adverse"),
     ("rel-trial", "study-outcome"),
