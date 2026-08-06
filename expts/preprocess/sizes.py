@@ -32,19 +32,10 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from expts.preprocess.submit import KEEP, SIZES, TARGET_REPO  # noqa: E402
-
-
-def out_bytes(sizes: dict[str, dict[str, int]], name: str, default: int) -> int:
-    return sizes.get(name, {}).get("out", default)
-
-
-def text_bytes(sizes: dict[str, dict[str, int]], name: str, default: int) -> int:
-    return sizes.get(name, {}).get("text", default)
+from huggingface_hub import HfApi
 
 
 def write() -> None:
-    from huggingface_hub import HfApi
-
     info = HfApi().repo_info(TARGET_REPO, repo_type="dataset", files_metadata=True)
     per_db: dict[str, dict[str, int]] = defaultdict(lambda: {"out": 0, "text": 0})
     for f in info.siblings:
