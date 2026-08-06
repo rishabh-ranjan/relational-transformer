@@ -610,11 +610,6 @@ def main(
         # Best-checkpoint tracking follows the primary (untagged) grid entry.
         consider(metrics, step)
         if is_main:
-            with open(out_dir / "val_metrics.jsonl", "a") as f:
-                f.write(
-                    json.dumps({"step": step, "swa_n": swa.n, "metrics": metrics})
-                    + "\n"
-                )
             for prefix, by_split in metrics.items():
                 label = prefix.rstrip("_") or "live"
                 for split, by_metric in by_split.items():
