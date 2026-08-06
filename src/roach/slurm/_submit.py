@@ -142,8 +142,13 @@ def launch(
     ]
     gpus = int(resources.gpus.rpartition(":")[2])
     if gpus:
-        # per task, so each rank gets its own CUDA_VISIBLE_DEVICES
-        flags.append(f"--gpus-per-task={gpus // resources.ranks or 1}")
+        # Per step, not per task. --gpus-per-task hands each rank its own
+        # CUDA_VISIBLE_DEVICES holding one card, which every rank then sees as
+        # device 0 -- and rank 1, which sets LOCAL_RANK=1 like the batch path
+        # does, asks for an ordinal that does not exist ("invalid device
+        # ordinal"). The batch path gives every task the node's whole gres and
+        # lets LOCAL_RANK index it; this matches that.
+        flags.append(f"--gres=gpu:{gpus}")
     return "srun " + " ".join(flags) + f" \\\n    {run}"
 
 

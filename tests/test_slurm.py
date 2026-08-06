@@ -203,14 +203,17 @@ def test_an_overlapping_run_states_its_shape_in_full():
         "--overlap",
         "--ntasks=4",
         "--cpus-per-task=36",
-        "--gpus-per-task=1",
+        # every rank sees every card, so LOCAL_RANK indexes them; --gpus-per-task
+        # would give each rank one card as device 0 and rank 1 an ordinal that
+        # does not exist
+        "--gres=gpu:4",
     ):
         assert flag in line
     assert "--jobid" not in launch(ampere(), "p:m", "/a.json", None)
 
 
 def test_a_cpu_only_overlapping_run_asks_for_no_gpu():
-    assert "--gpus-per-task" not in launch(ampere(gpus="0"), "p:m", "/a.json", "1")
+    assert "--gres" not in launch(ampere(gpus="0"), "p:m", "/a.json", "1")
 
 
 def test_presets_are_one_rank_per_gpu():
