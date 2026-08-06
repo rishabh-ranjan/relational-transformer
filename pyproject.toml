@@ -51,6 +51,20 @@ pythonpath = ["."]
 channels = ["conda-forge"]
 platforms = ["linux-64"]
 
+# conda-forge's rust package writes an activation script that bakes the
+# environment's own prefix into the linker setting:
+#
+#   CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_LINKER=<prefix>/bin/x86_64-conda-linux-gnu-cc
+#
+# Cargo hashes the per-target linker into every unit's fingerprint, including
+# registry crates that never invoke a linker, so a checkout at a new path
+# rebuilds the entire dependency tree however little changed. Pinning the bare
+# name -- the same binary, resolved through PATH, which puts this environment's
+# bin first -- makes the fingerprint independent of where the environment lives.
+# Measured: a second checkout of the same commit went from 3m39s to 15s.
+[tool.pixi.activation.env]
+CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_LINKER = "x86_64-conda-linux-gnu-cc"
+
 [tool.pixi.dependencies]
 python = ">=3.12"
 rust = "*"
