@@ -6,9 +6,8 @@ import os
 import signal
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
-from tqdm import tqdm
-
 from rt.data.tasks import resolve_db_task_list
+from rt.progress import Progress
 import time
 
 _libc = ctypes.CDLL(ctypes.util.find_library("c"), use_errno=True)
@@ -124,8 +123,8 @@ def mlock_main(
     total_footprint = sum(db_footprints[db] for db in pending)
 
     t0 = time.time()
-    pbar = tqdm(total=total_size, unit="B", unit_scale=True, unit_divisor=1024)
-    pbar.set_postfix_str(f"footprint={fmt_size(total_footprint)}")
+    print(f"mlock: footprint={fmt_size(total_footprint)}", flush=True)
+    pbar = Progress(total=total_size, desc="mlock", unit_scale=True)
     with ThreadPoolExecutor(max_workers=workers) as ex:
         futures = [ex.submit(lock_db, db) for db in pending]
         for fut in as_completed(futures):
@@ -133,13 +132,14 @@ def mlock_main(
             db_size = db_sizes[db]
             locked_files += n
             if err is not None:
-                tqdm.write(
+                print(
                     f"\x1b[31m[{fmt_size(db_size):>{width}}] {db}  "
-                    f"ERROR: {type(err).__name__}: {err}\x1b[0m"
+                    f"ERROR: {type(err).__name__}: {err}\x1b[0m",
+                    flush=True,
                 )
                 skipped += 1
                 continue
-            tqdm.write(f"[{fmt_size(db_size):>{width}}] {db}")
+            print(f"[{fmt_size(db_size):>{width}}] {db}", flush=True)
             total += db_size
             pbar.update(db_size)
     pbar.close()

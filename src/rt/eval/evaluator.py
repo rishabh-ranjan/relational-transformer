@@ -7,17 +7,12 @@ import numpy as np
 import torch
 import torch.distributed as dist
 from torch.utils.data import DataLoader
-from tqdm.auto import tqdm
 
 from rt.data import EvalDataset, RustlerDataset
+from rt.progress import Progress, fmt_duration
 from rt.eval.metrics import metric_for
 from rt.model.net import SEM_TYPE_BOOLEAN
 import wandb
-
-
-def fmt_duration(secs):
-    m, s = divmod(int(secs), 60)
-    return f"{m}m{s:02d}s"
 
 
 class Evaluator:
@@ -77,11 +72,10 @@ class Evaluator:
         self.eval_loaders = {}
         self.eval_loader_iters = {}
 
-        init_pbar = tqdm(
+        init_pbar = Progress(
             total=len(self.tasks),
             desc="load eval data",
             disable=local_rank != 0,
-            leave=False,
         )
         init_tic = time.time()
         prefetch_time = 0.0
@@ -215,11 +209,10 @@ class Evaluator:
                 labels = []
                 batch_masks = []
                 node_idxs_acc = []
-                pbar = tqdm(
+                pbar = Progress(
                     total=n_batches,
                     desc=f"{eval_task.db_name}/{eval_task.table_name}/{eval_task.split}",
                     disable=local_rank != 0,
-                    leave=False,
                 )
                 # Drive the loop by the fixed, cross-rank-uniform batch count.
                 # Every rank processes exactly ``n_batches`` batches (each of
@@ -414,7 +407,7 @@ class Evaluator:
         global_rank = self.global_rank
 
         if local_rank == 0:
-            tqdm.write(f"[step {steps}]")
+            print(f"[step {steps}]", flush=True)
 
         avg_reg_key = "avg_mae"
 
@@ -439,11 +432,10 @@ class Evaluator:
             (x, y): [] for x in eval_ctx_size_list_to_use for y in self.eval_splits
         }
 
-        outer_pbar = tqdm(
+        outer_pbar = Progress(
             total=len(self.eval_loaders),
             desc=f"eval@{steps}",
             disable=local_rank != 0,
-            leave=False,
         )
 
         last_task = None
@@ -486,7 +478,7 @@ class Evaluator:
                         n_classes = len(set(labels_int))
                         n_nan_labels = int(np.isnan(labels_np).sum())
                         n_nan_preds = int(np.isnan(preds_np).sum())
-                        tqdm.write(
+                        print(
                             f"\033[31mroc_auc_score failed for "
                             f"{eval_task.db_name}/{eval_task.table_name}/"
                             f"{eval_task.split} ctx={eval_ctx_size}: "
@@ -494,7 +486,8 @@ class Evaluator:
                             f"n={len(labels_int)} n_classes={n_classes} "
                             f"n_nan_labels={n_nan_labels} "
                             f"n_nan_preds={n_nan_preds} "
-                            f"→ falling back to AUC=0\033[0m"
+                            f"→ falling back to AUC=0\033[0m",
+                            flush=True,
                         )
                         metric = 0.0
                     all_auc_scores[prefix][(eval_ctx_size, eval_task.split)].append(
@@ -503,11 +496,12 @@ class Evaluator:
                     metric_str = f"{metric * 100:<6.1f}"
 
                 short_db = eval_task.db_name.split("/")[-1].split("-")[1]
-                tqdm.write(
+                print(
                     f"  {f'{prefix}{short_db}/{eval_task.table_name}/{eval_task.split}':<30}"
                     f"ctx: {eval_ctx_size:<5}   "
                     f"{metric_name}: \033[1m{metric_str}\033[0m  "
-                    f"mean_labels: \033[1m{task_mean_labels:<5.1f}\033[0m"
+                    f"mean_labels: \033[1m{task_mean_labels:<5.1f}\033[0m",
+                    flush=True,
                 )
                 all_metrics[prefix][eval_task.split][eval_ctx_size][
                     (eval_task.db_name, eval_task.table_name)
@@ -553,13 +547,14 @@ class Evaluator:
                         all_metrics[prefix][split][eval_ctx_size][
                             "avg_mean_labels_clf"
                         ] = avg_mean_labels_clf
-                        tqdm.write(
+                        print(
                             f"  {f'{prefix}avg/{split}':<30}"
                             f"ctx: {eval_ctx_size:<7}"
                             f"mae: \033[1m{avg_reg:<6.4f}\033[0m  "
                             f"auc: \033[1m{avg_auc * 100:<5.1f}\033[0m  "
                             f"mean_labels_reg: \033[1m{avg_mean_labels_reg:<5.1f}\033[0m  "
-                            f"mean_labels_clf: \033[1m{avg_mean_labels_clf:<5.1f}\033[0m"
+                            f"mean_labels_clf: \033[1m{avg_mean_labels_clf:<5.1f}\033[0m",
+                            flush=True,
                         )
 
         if global_rank == 0:
@@ -599,7 +594,8 @@ class Evaluator:
                         wandb.log(payload)
 
         if local_rank == 0:
-            tqdm.write(
-                f"  eval done in \033[1m{fmt_duration(time.time() - eval_tic)}\033[0m"
+            print(
+                f"  eval done in \033[1m{fmt_duration(time.time() - eval_tic)}\033[0m",
+                flush=True,
             )
         return all_metrics
