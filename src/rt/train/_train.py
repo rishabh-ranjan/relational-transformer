@@ -26,6 +26,7 @@ Single-node multi-GPU and multi-node (preemptible queue) both run under
         --logger.out-root ~/ckpts
 """
 
+import contextlib
 import json
 import os
 import random
@@ -367,20 +368,6 @@ def main(
                 world_size=world_size,
             )
 
-    if ddp:
-        # Multi-node comm tuning: gradient_as_bucket_view avoids a grad copy,
-        # broadcast_buffers=False skips per-step buffer sync (no buffers needing
-        # it here), static_graph enables comm/compute overlap for the fixed
-        # compiled graph. find_unused_parameters stays False (all params used).
-        net = torch.nn.parallel.DistributedDataParallel(
-            net,
-            device_ids=[local_rank],
-            find_unused_parameters=False,
-            gradient_as_bucket_view=True,
-            broadcast_buffers=False,
-            static_graph=True,
-        )
-
     # ---- data: re-seed by resumed step so the stream does not replay ----
     data_seed = seed + SEED_STRIDE * start_step
     train_init_tic = time.time()
@@ -465,6 +452,30 @@ def main(
         grad_accum = 1
     else:
         grad_accum = total_bs // (world_size * train_bs)
+
+    # ---- DDP (wrapped here: static_graph depends on grad_accum) ----
+    # gradient_as_bucket_view avoids a grad copy and broadcast_buffers=False
+    # skips a per-step buffer sync (no buffers need it here);
+    # find_unused_parameters stays False (all params are used).
+    #
+    # static_graph is the one knob with a tradeoff. It buys comm/compute overlap
+    # on a fixed graph, but it cannot coexist with working gradient
+    # accumulation: DDP only skips a microbatch's all-reduce when the *forward*
+    # runs inside no_sync(), and that combination dies under static_graph
+    # (``expect_autograd_hooks_ INTERNAL ASSERT`` in the reducer). Accumulating
+    # runs therefore drop it and save grad_accum-1 all-reduces per step --
+    # strictly more comm saved than the overlap was worth. Runs that never
+    # accumulate skip nothing, so they keep static_graph.
+    accumulates = multi_ctx or grad_accum > 1
+    if ddp:
+        net = torch.nn.parallel.DistributedDataParallel(
+            net,
+            device_ids=[local_rank],
+            find_unused_parameters=False,
+            gradient_as_bucket_view=True,
+            broadcast_buffers=False,
+            static_graph=not accumulates,
+        )
 
     # ---- evaluators (built once; one per context config in the eval grid) ----
     # The first grid entry is the primary config: its metrics keep the untagged
@@ -740,22 +751,13 @@ def main(
                 raw_batch = next(it)
                 load_time += time.perf_counter() - t_load
             batch = move(raw_batch, device)
-            out = net(batch, return_embeddings=False)
-            loss = out[0] / step_grad_accum
-            # NOTE: this no_sync does nothing as written -- DDP only skips the
-            # reduction when the *forward* also runs inside the context, so
-            # every microbatch all-reduces (measured: 4 all-reduces/step at
-            # grad_accum=4, same as without no_sync). Gradients are correct
-            # either way (max rel err 1e-7): summing all-reduced grads equals
-            # all-reducing their sum. Making it real needs the forward moved
-            # inside *and* static_graph=False -- with static_graph=True that
-            # combination dies in the reducer (expect_autograd_hooks_ INTERNAL
-            # ASSERT). That is a comm-vs-overlap tradeoff to measure, not to
-            # guess, so the cheap no-op stays until someone times it.
-            if ddp and micro < step_grad_accum - 1:
-                with net.no_sync():
-                    loss.backward()
-            else:
+            # The forward belongs inside no_sync() as much as the backward:
+            # DDP decides whether to reduce at forward time, so a forward
+            # outside the context all-reduces this microbatch regardless.
+            sync = not (ddp and micro < step_grad_accum - 1)
+            with contextlib.nullcontext() if sync else net.no_sync():
+                out = net(batch, return_embeddings=False)
+                loss = out[0] / step_grad_accum
                 loss.backward()
             total_loss += loss.item()
 
