@@ -100,6 +100,9 @@ def verify_legacy() -> list[str]:
     out, problems = Path(LEGACY_DIR), []
     expected = sorted(p.parent.name for p in Path(RAW_DIR).glob("*/manifest.yaml"))
     built = set(databases(out)) if out.is_dir() else set()
+    # anything in here that is not a database is scratch that would be published
+    for extra in sorted(built - set(expected)):
+        problems.append(f"legacy/{extra}: not a database of this build")
     for name in expected:
         if name not in built:
             problems.append(f"legacy/{name}: not built")

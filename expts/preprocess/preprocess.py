@@ -27,6 +27,7 @@ from the start.
 """
 
 import json
+import shutil
 import time
 from pathlib import Path
 
@@ -172,10 +173,18 @@ def legacy(
         out_root,
         embedder=embedder,
         batch_size=batch_size,
-        upload_repo=None,  # published by finalize.py, once the tree is complete
+        upload_repo=None,  # published by finalize.py, with the rest of the build
         private=True,
         revision=None,
     )
+    # rt.preprocess.legacy writes the boolean-cast copy of the raw database to
+    # <out>/_transformed on its way through. It is scratch -- a relbench-format
+    # copy of data that is already published elsewhere -- and this directory is
+    # published, so it has to go. (It reached the Hub once: 247 files, 5.9 GiB.)
+    shutil.rmtree(out_root / "_transformed" / dataset, ignore_errors=True)
+    for leftover in (out_root / "_transformed",):
+        if leftover.is_dir() and not any(leftover.iterdir()):
+            leftover.rmdir()
     print(
         f"= {dataset}: legacy {time.monotonic() - started:.0f}s  "
         f"{dir_bytes(pre_dataset_dir) / 2**30:.2f} GiB",
