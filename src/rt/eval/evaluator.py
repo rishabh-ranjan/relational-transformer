@@ -130,8 +130,7 @@ class Evaluator:
         init_pbar.close()
         if local_rank == 0:
             log(
-                "eval_data_loaded",
-                num_tasks=len(self.tasks),
+                eval_tasks_loaded=len(self.tasks),
                 elapsed=fmt_duration(time.time() - init_tic),
                 prefetch_time=fmt_duration(prefetch_time),
             )
@@ -404,7 +403,7 @@ class Evaluator:
         global_rank = self.global_rank
 
         if local_rank == 0:
-            log("eval_start", step=steps)
+            log(eval_at_step=steps)
 
         avg_reg_key = "avg_mae"
 
@@ -476,9 +475,8 @@ class Evaluator:
                         n_nan_labels = int(np.isnan(labels_np).sum())
                         n_nan_preds = int(np.isnan(preds_np).sum())
                         log(
-                            "auc_failed",
                             indent=1,
-                            task=(
+                            auc_failed=(
                                 f"{eval_task.db_name}/{eval_task.table_name}"
                                 f"/{eval_task.split}"
                             ),
@@ -498,7 +496,6 @@ class Evaluator:
 
                 short_db = eval_task.db_name.split("/")[-1].split("-")[1]
                 log(
-                    "task_metric",
                     indent=1,
                     task=(
                         f"{prefix}{short_db}/{eval_task.table_name}/{eval_task.split}"
@@ -552,7 +549,6 @@ class Evaluator:
                             "avg_mean_labels_clf"
                         ] = avg_mean_labels_clf
                         log(
-                            "avg_metric",
                             indent=1,
                             task=f"{prefix}avg/{split}",
                             ctx_size=eval_ctx_size,
@@ -600,8 +596,7 @@ class Evaluator:
 
         if local_rank == 0:
             log(
-                "eval_done",
-                step=steps,
+                eval_done_at_step=steps,
                 elapsed=fmt_duration(time.time() - eval_tic),
             )
         return all_metrics

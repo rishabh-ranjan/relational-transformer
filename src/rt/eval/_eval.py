@@ -98,16 +98,14 @@ def main(
     d_text = config["d_text"]
     if global_rank == 0:
         log(
-            "model_loaded",
-            model=config.get("name", checkpoint),
+            model_loaded=config.get("name", checkpoint),
             embedder=embedder,
             device=device,
             world_size=world_size,
         )
     if global_rank == 0 and config.get("task_type") in ("clf", "reg"):
         log(
-            "warning",
-            kind="task_type_mismatch",
+            warning="ckpt_task_type_mismatch",
             ckpt_task_type=config["task_type"],
             evaluated_on="clf_and_reg",
         )
@@ -130,8 +128,7 @@ def main(
         mismatches.append(f"embedder: config={embedder} checkpoint={embedder}")
     if mismatches and global_rank == 0:
         log(
-            "warning",
-            kind="model_config_ignored",
+            warning="model_config_ignored",
             mismatches=";".join(mismatches).replace(" ", "_"),
         )
 
@@ -294,7 +291,7 @@ def run_and_report(
     by_metric: dict[str, list[float]] = {}
     results = {}
     if is_main:
-        log("eval_start", mode="plain", ctx_size=ctx_size)
+        log(eval_mode="plain", ctx_size=ctx_size)
     for task, _ctx, labels, preds_by_prefix, _nl, node_idxs in evaluator.evaluate_raw(
         [(model, "")], [ctx_size], with_node_idxs=True
     ):
@@ -316,7 +313,6 @@ def run_and_report(
             "n": n,
         }
         log(
-            "task_result",
             indent=1,
             task=f"{task.db_name}/{task.table_name}",
             metric=mname,
@@ -330,13 +326,12 @@ def run_and_report(
         return results
     for name, vals in by_metric.items():
         log(
-            "mean_result",
-            metric=name,
+            mean_metric=name,
             value=f"{sum(vals) / len(vals):.4f}",
-            num_tasks=len(vals),
+            over_tasks=len(vals),
         )
     if csv_out_dir is not None:
-        log("csv_written", dir=csv_out_dir)
+        log(csv_dir=csv_out_dir)
     return results
 
 
@@ -392,9 +387,8 @@ def run_ensemble(
             if key not in best or _is_better(task.task_type, v, best[key]["value"]):
                 best[key] = {"cfg": cfg, "value": v, "task_type": task.task_type}
             log(
-                "tune_result",
                 indent=1,
-                task=f"{task.db_name}/{task.table_name}",
+                tune_task=f"{task.db_name}/{task.table_name}",
                 cfg=str(cfg).replace(" ", ""),
                 value=f"{v:.4f}",
             )
@@ -418,7 +412,7 @@ def run_ensemble(
     by_metric: dict[str, list[float]] = {}
     results = {}
     if is_main:
-        log("eval_start", mode="ensembled", ctx_size=ctx_size)
+        log(eval_mode="ensembled", ctx_size=ctx_size)
     for cfg, tasks in groups.items():
         lcs, bw, pl = cfg
         acc = {}  # key -> [labels, sum_preds, task, node_idxs]
@@ -460,7 +454,6 @@ def run_ensemble(
                 "n": n,
             }
             log(
-                "task_result",
                 indent=1,
                 task=f"{task.db_name}/{task.table_name}",
                 cfg=str(cfg).replace(" ", ""),
@@ -473,12 +466,10 @@ def run_ensemble(
         return results
     for name, vals in by_metric.items():
         log(
-            "mean_result",
-            metric=name,
+            mean_metric=name,
             value=f"{sum(vals) / len(vals):.4f}",
-            num_tasks=len(vals),
-            ensembled=True,
+            over_tasks=len(vals),
         )
     if csv_out_dir is not None:
-        log("csv_written", dir=csv_out_dir)
+        log(csv_dir=csv_out_dir)
     return results

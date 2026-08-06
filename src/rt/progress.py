@@ -1,21 +1,25 @@
 """Log-file friendly progress reporting: plain lines, no carriage returns.
 
 Every line this module emits -- and every line the callers below emit through
-``log`` -- is a flat sequence of ``key: value`` pairs separated by two spaces,
-the first pair always ``event: <name>``::
+``log`` -- is a flat sequence of ``key: value`` pairs separated by two spaces::
 
-    event: progress  name: eval@1000  n: 12  total: 57  pct: 21  elapsed: 0m30s
+    progress: eval@1000  n: 12  total: 57  pct: 21  elapsed: 0m30s
 
 Values never contain whitespace, so after stripping ANSI codes
 (``re.sub(r"\\x1b\\[[0-9;]*m", "", line)``) a line parses into a dict with
-``re.findall(r"(\\S+): (\\S+)", line)``. Values are bolded and column-padded,
-and leading indentation nests records for human eyes; both are cosmetic.
+``re.findall(r"(\\S+): (\\S+)", line)``. Numeric and time values are bolded,
+values are column-padded, and leading indentation nests records: all cosmetic.
 """
 
+import re
 import time
 
 BOLD = "\033[1m"
 RESET = "\033[0m"
+
+# bold only numeric/time values: 12  3.5  0m30s  1.25GiB  2.0GiB/s -- anything
+# starting with a digit (or a sign), never names, paths or free-form strings.
+_NUMERIC = re.compile(r"^[+-]?\d")
 
 
 def fmt_duration(secs):
@@ -26,23 +30,26 @@ def fmt_duration(secs):
 _widths: dict[str, dict[str, int]] = {}
 
 
-def log(event, *, indent=0, **fields):
+def log(*, indent=0, **fields):
     """Emit one ``key: value`` record. Values must be whitespace-free.
 
-    Values are bolded, and padded to the widest value seen so far for that
-    ``(event, key)``, so repeated records of one event line up in columns.
+    Values are padded to the widest value seen so far for that key within
+    this set of keys, so repeated records of a kind line up in columns.
     """
-    widths = _widths.setdefault(event, {})
-    parts = [f"event: {BOLD}{event}{RESET}"]
+    widths = _widths.setdefault(",".join(fields), {})
+    parts = []
     for k, v in fields.items():
         v = str(v)
         widths[k] = max(widths.get(k, 0), len(v))
-        parts.append(f"{k}: {BOLD}{v.ljust(widths[k])}{RESET}")
+        v = v.ljust(widths[k])
+        parts.append(
+            f"{k}: {BOLD}{v}{RESET}" if _NUMERIC.match(v.strip()) else f"{k}: {v}"
+        )
     print(("  " * indent + "  ".join(parts)).rstrip(), flush=True)
 
 
 class Progress:
-    """Counter with time-throttled ``event: progress`` lines.
+    """Counter with time-throttled ``progress: <name>`` lines.
 
     ``total`` may be a count of anything (batches, bytes); ``unit_scale``
     renders the counters as GiB instead of raw numbers.
@@ -80,9 +87,8 @@ class Progress:
             return
         pct = 100.0 * self.n / self.total if self.total else 100.0
         log(
-            "progress",
             indent=1,
-            name=self.name,
+            progress=self.name,
             n=self._fmt(self.n),
             total=self._fmt(self.total),
             pct=f"{pct:.0f}",

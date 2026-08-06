@@ -230,7 +230,7 @@ def main(
         (out_dir / "params.json").write_text(
             json.dumps(params, indent=1, sort_keys=True) + "\n"
         )
-        log("out_dir", path=out_dir)
+        log(out_dir=out_dir)
     compile = compile
 
     def build_net():
@@ -252,7 +252,7 @@ def main(
     net = build_net()
     raw_net = net
     if is_main:
-        log("model_built", params=f"{sum(p.numel() for p in net.parameters()):_}")
+        log(params=f"{sum(p.numel() for p in net.parameters()):_}")
     muon_params = [p for p in net.parameters() if p.ndim == 2]
     other_params = [p for p in net.parameters() if p.ndim != 2]
     opts = [
@@ -294,7 +294,7 @@ def main(
         _, ckpt_path = resolve_checkpoint(load_ckpt_path)
         raw_net.load_state_dict(load_model(ckpt_path))
         if is_main:
-            log("warm_started", ckpt=load_ckpt_path)
+            log(warm_started_from=load_ckpt_path)
 
     # ---- resume from preemption (GPU-count flexible: full model+opt per rank) ----
     if resume_path.exists():
@@ -309,8 +309,7 @@ def main(
         best = ck.get("best", best)
         if is_main:
             log(
-                "resumed",
-                ckpt=resume_path,
+                resumed_from=resume_path,
                 step=start_step,
                 world_size=world_size,
             )
@@ -371,8 +370,7 @@ def main(
         total_items = total_steps * total_bs
         stream_items = train_ds.num_items
         log(
-            "train_plan",
-            num_tasks=len(train_tasks),
+            train_tasks=len(train_tasks),
             pre_dir=pre_dir,
             items=f"{total_items:_}",
             steps=f"{total_steps:_}",
@@ -472,7 +470,7 @@ def main(
         # instead of the step it died at, the question is always whether the
         # ranks ever saw the signal. Without this line that is unanswerable
         # after the fact.
-        log("signal_caught", rank=rank, signal=signum, action="save_next_step")
+        log(rank=rank, caught_signal=signum, action="save_next_step")
 
     signal.signal(signal.SIGTERM, _on_signal)
     signal.signal(signal.SIGUSR1, _on_signal)
@@ -587,10 +585,9 @@ def main(
             for prefix, m in metrics.items():
                 label = prefix.rstrip("_") or "live"
                 log(
-                    "best_model",
                     indent=1,
+                    new_best=label,
                     step=step,
-                    label=label,
                     clf_auc=m["clf"],
                     mae=m["reg"],
                 )
@@ -698,7 +695,6 @@ def main(
                 )
             if step % 50 == 0:
                 log(
-                    "train_step",
                     step=step,
                     loss=f"{total_loss:.4f}",
                     grad_norm=f"{float(norm):.3f}",
@@ -714,11 +710,11 @@ def main(
             last_resume_t = time.perf_counter()
             step_t0 = time.perf_counter()  # don't count the save in sec/step
             if is_main:
-                log("resume_saved", step=step, every_mins=resume_save_mins)
+                log(resume_saved_at_step=step, every_mins=resume_save_mins)
 
         if should_stop():
             if is_main:
-                log("preempted", step=step, action="save_resume_and_exit")
+                log(preempted_at_step=step, action="save_resume_and_exit")
             save_resume(step)
             if ddp:
                 dist.barrier()
@@ -733,7 +729,7 @@ def main(
         for tt, label in [("clf", "best_clf"), ("reg", "best_reg")]:
             b = best[tt]
             if b is None:
-                log("best_skipped", label=label, task_type=tt, reason="no_val_tasks")
+                log(skipped=label, task_type=tt, reason="no_val_tasks")
                 continue
             src = out_dir / (
                 f"swa_steps={b['step']}.safetensors"
@@ -743,17 +739,13 @@ def main(
             if src.exists():
                 shutil.copyfile(src, out_dir / f"{label}.safetensors")
             log(
-                "best_saved",
-                label=label,
+                saved=label,
                 kind=b["kind"],
                 step=b["step"],
                 metric=b["metric"],
                 value=f"{b['value']:.4f}",
                 path=f"{label}.safetensors",
             )
-        log(
-            "load_hint",
-            call=f"rt.model.load_rt_model('{out_dir}/best_clf.safetensors')",
-        )
+        log(load_with=f"rt.model.load_rt_model('{out_dir}/best_clf.safetensors')")
     if ddp:
         dist.destroy_process_group()

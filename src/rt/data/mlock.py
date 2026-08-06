@@ -61,7 +61,7 @@ def mlock_main(
     concurrency: networked filesystems typically populate faster with more.
     """
     db_names = sorted({db for db, _ in resolve_db_task_list(db_task_list)})
-    log("mlock_start", num_dbs=len(db_names))
+    log(mlock_dbs=len(db_names))
 
     def db_paths(db: str) -> list[str]:
         base = os.path.join(pre_dir, db)
@@ -103,9 +103,8 @@ def mlock_main(
     for db in db_names:
         if db in size_errors:
             log(
-                "db_size_error",
                 indent=1,
-                db=db,
+                db_size_error=db,
                 error=size_errors[db].replace(" ", "_"),
             )
             skipped += 1
@@ -125,8 +124,7 @@ def mlock_main(
 
     t0 = time.time()
     log(
-        "mlock_plan",
-        num_dbs=len(pending),
+        locking_dbs=len(pending),
         size=fmt_size(total_size),
         footprint=fmt_size(total_footprint),
     )
@@ -139,31 +137,29 @@ def mlock_main(
             locked_files += n
             if err is not None:
                 log(
-                    "db_lock_error",
                     indent=1,
-                    db=db,
+                    db_lock_error=db,
                     size=fmt_size(db_size),
                     error=f"{type(err).__name__}:{err}".replace(" ", "_"),
                 )
                 skipped += 1
                 continue
-            log("db_locked", indent=1, db=db, size=fmt_size(db_size))
+            log(indent=1, locked_db=db, size=fmt_size(db_size))
             total += db_size
             pbar.update(db_size)
     pbar.close()
     elapsed = time.time() - t0
 
     log(
-        "mlock_done",
-        num_files=locked_files,
+        locked_files=locked_files,
         size=fmt_size(total),
         footprint=fmt_size(total_footprint),
-        num_skipped=skipped,
+        skipped_dbs=skipped,
         elapsed=f"{elapsed:.0f}s",
         rate=f"{total / 2**30 / max(elapsed, 1e-9):.2f}GiB/s",
         pid=os.getpid(),
-        state="sleeping_until_signaled",
     )
+    log(sleeping_until_signaled=True)
 
     def _fast_exit(signum: int, frame: object) -> None:
         # Proactively release all locked pages before exiting. Without this the

@@ -143,12 +143,11 @@ class RustlerDataset:
                 skipped_tasks.append((task_name, e))
 
         if skipped_tasks and local_rank == 0 and not quiet:
-            log("tasks_skipped", num_tasks=len(skipped_tasks))
+            log(tasks_skipped=len(skipped_tasks))
             for task_name, e in skipped_tasks:
                 log(
-                    "task_skipped",
                     indent=1,
-                    task=task_name,
+                    task_skipped=task_name,
                     error=str(e).replace(" ", "_"),
                 )
 
