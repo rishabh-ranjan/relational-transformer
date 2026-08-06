@@ -235,7 +235,7 @@ def submit(
         script = script.replace(key, value)
 
     if overlap is not None:
-        return _overlap(script, overlap, name, run_id, log_root, target)
+        return _overlap(script, overlap, name, run_id, log_root, target, resources)
 
     log = log_root / f"{run_id}_%j.out"
     flags = [
@@ -288,6 +288,7 @@ def _overlap(
     run_id: str,
     log_root: Path,
     target: str,
+    resources: Resources,
 ) -> Job:
     """Run the same script as a step of an allocation somebody is holding.
 
@@ -304,8 +305,15 @@ def _overlap(
         # for the other's resources
         "--overlap",
         f"--job-name={name}",
+        # One task -- it clones, builds, and starts the ranks -- but every cpu
+        # the ranks will want. The ranks are a *nested* step: slurm puts them in
+        # a cgroup under this one, so they can only ever be bound to the cpus
+        # this step holds, whatever their own --cpus-per-task says. A driver on
+        # one cpu produced a training run pinned to a single core (two
+        # hyperthreads) with 16 dataloader workers fighting over it, while
+        # `scontrol show step` cheerfully reported CPUs=36.
         "--ntasks=1",
-        "--cpus-per-task=1",
+        f"--cpus-per-task={resources.ranks * resources.cpus_per_task}",
         "--chdir=/tmp",
         # Nothing from this shell, exactly as the batch path's --export=NONE:
         # its HOME does not exist on the node and its environment holds API

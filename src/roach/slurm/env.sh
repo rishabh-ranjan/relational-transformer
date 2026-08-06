@@ -51,8 +51,15 @@ export PATH=$PIXI_HOME/bin:/usr/local/bin:/usr/bin:/bin
 unset PYTHONPATH  # points into a home that is not this job's home
 export TMPDIR=/tmp/$USER
 export XDG_CACHE_HOME=$HOME/.cache
+# One target dir for every clone on this node, rather than one inside each.
+# Clones are per commit, so a per-clone target dir recompiled pyo3 and the
+# extension for every commit -- including the ones that did not touch a line of
+# rust. Shared, cargo reuses the dependency artifacts and rebuilds only what
+# actually changed. Cargo locks it, so concurrent builds queue rather than
+# corrupt it.
+export CARGO_TARGET_DIR=$XDG_CACHE_HOME/cargo-target
 export WANDB_DIR=$HOME/.cache
-mkdir -p "$TMPDIR" "$XDG_CACHE_HOME"
+mkdir -p "$TMPDIR" "$XDG_CACHE_HOME" "$CARGO_TARGET_DIR"
 
 # Tokens come from the shared secrets dir rather than the job env, where slurm
 # would record them; they were checked for readability above.

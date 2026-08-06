@@ -22,7 +22,7 @@ TOOLS = {
     # `pixi install` is the slow step a second job must not repeat.
     "pixi": """#!/bin/bash
 case "$1" in
-  install) sleep 1; echo "lock-$(date +%s%N)" > pixi.lock ;;
+  install) sleep 1; [[ -f pixi.lock ]] || echo "lock-$(date +%s%N)" > pixi.lock ;;
   run) shift; while [[ $1 == --* ]]; do shift; done; exec "$@" ;;
 esac
 """,
@@ -161,6 +161,21 @@ def test_concurrent_jobs_at_one_commit_build_the_clone_once(rig):
     # one solve, shared: every run recorded the same lock
     locks = {p.read_text() for p in (rig.root / "logs").glob("*.pixi.lock")}
     assert len(locks) == 1
+
+
+def test_a_new_commit_inherits_the_previous_solve(rig):
+    """Iterating is a commit per attempt, and a clone is per commit, so a fresh
+    solve per commit is a fresh solve per attempt -- minutes each, for commits
+    that never touched a dependency. The lock is gitignored, so the new clone
+    seeds it from a ready clone with a byte-identical manifest and pixi finds
+    nothing to solve."""
+    first = rig.commit()
+    rig.run(rig.job("first", first), 1001)
+    lock = (rig.clones / f"repo-{first}" / "pixi.lock").read_text()
+
+    out = rig.run(rig.job("second", rig.churn()), 1002)  # new commit, same deps
+    assert "seeded pixi.lock" in out.stdout, out.stdout
+    assert (rig.clones / f"repo-{rig.commit()}" / "pixi.lock").read_text() == lock
 
 
 def test_a_finished_job_leaves_the_clone_for_the_next_one(rig):

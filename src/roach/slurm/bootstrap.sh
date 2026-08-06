@@ -43,15 +43,43 @@ git_clone() {  # <url> <commit> <dir>
     git -C "$3" checkout --quiet "$2"
 }
 
+# A clone is per commit, so iterating -- which is a commit per attempt -- pays
+# for a new one every time. Nothing about that is wrong; what was wrong is
+# paying for work the previous commit already did. Each of these seeds the new
+# clone from the node's caches, and each reports what it cost, because a
+# regression here is minutes per attempt and otherwise invisible.
+seed_lock() {  # in the new clone, before pixi install
+    # pixi.lock is gitignored, so a fresh clone has none and pixi solves from
+    # scratch -- the same solve, per commit, for a commit that did not touch a
+    # dependency. Copy the newest lock from a ready clone whose manifest is
+    # byte-identical; pixi validates it against the manifest anyway and re-solves
+    # if it disagrees, so a stale lock costs nothing and a matching one skips
+    # the solve entirely.
+    local newest= d
+    for d in "@CLONE_ROOT@"/*/; do
+        [[ -f $d/.roach-ready && -f $d/pixi.lock ]] || continue
+        cmp -s pyproject.toml "$d/pyproject.toml" || continue
+        if [[ -z $newest || $d/pixi.lock -nt $newest ]]; then newest=$d/pixi.lock; fi
+    done
+    if [[ -n $newest ]]; then
+        cp "$newest" pixi.lock
+        echo "prepare: seeded pixi.lock from $newest"
+    fi
+}
+
 prepare_repo() {
-    # pixi.lock is gitignored, so the first job at this commit solves the
-    # environment and every later one inherits that solve from the clone.
-    pixi install
+    local t
+    t=$SECONDS; seed_lock; echo "prepare: seed_lock $((SECONDS - t))s"
+    # The lock (seeded or solved here) lives in the clone, so every later job at
+    # this commit inherits it.
+    t=$SECONDS; pixi install; echo "prepare: pixi install $((SECONDS - t))s"
+    t=$SECONDS
     # Whatever this project needs built before its ranks start: the submitter's
     # `setup` argument, one command per line, empty is fine. Naming the
     # placeholder in this comment would splice the commands into it, and every
     # line after the first would break out and run as garbage.
     @SETUP@
+    echo "prepare: setup $((SECONDS - t))s"
 }
 
 # Whoever takes the lock builds; .roach-ready, written last, is what publishes
@@ -72,7 +100,9 @@ clone_at_commit() {  # <dir> <url> <commit> <prepare-fn>
     if [[ ! -f $dir/.roach-ready ]]; then
         echo "preparing $dir"
         rm -rf "$dir"
+        local t=$SECONDS
         git_clone "$url" "$commit" "$dir"
+        echo "prepare: git clone $((SECONDS - t))s"
         ( cd "$dir" && "$prepare" )
         touch "$dir/.roach-ready"
     fi
