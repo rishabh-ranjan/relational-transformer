@@ -99,21 +99,28 @@ def move(batch, device):
 
 @torch.inference_mode()
 def eval_avg_metrics(evaluator, nets_with_prefix, ctx_size_list):
-    """Mean metric per net prefix and eval split::
+    """Per-task and mean metric, per net prefix, eval split and metric name::
 
-        {prefix: {split: {"clf": auc, "reg": mae}}}
+        {prefix: {split: {"auc": {"mean": v, "rel-f1/driver-dnf": v, ...},
+                          "mae": {"mean": v, ...}}}}
 
-    Splits are kept apart: an evaluator built with ``eval_splits=["val",
+    Metrics are named after what they are -- ``auc`` for clf tasks, ``mae``
+    for reg -- and ``"mean"`` is the average over that split's tasks of that
+    type. Splits are kept apart: an evaluator built with ``eval_splits=["val",
     "test"]`` yields both, and averaging them together would both hide the
     test curve and contaminate val-driven checkpoint selection.
 
-    Averaged over both eval tasks and the requested eval ctx sizes -- each
-    evaluate_raw yield is one (task, ctx_size) slice, so passing the full
-    ctx-size list means the mean spans all of them.
+    Each metric is itself averaged over the requested eval ctx sizes -- one
+    evaluate_raw yield is one (task, ctx_size) slice, so a task appears once
+    per ctx size and its per-task value spans all of them.
     """
 
-    splits = evaluator.eval_splits
-    acc = {p: {s: {"clf": [], "reg": []} for s in splits} for _, p in nets_with_prefix}
+    metric_names = {"clf": "auc", "reg": "mae"}
+    # split -> metric_name -> task_key -> [values over ctx sizes]
+    acc = {
+        p: {s: {m: {} for m in metric_names.values()} for s in evaluator.eval_splits}
+        for _, p in nets_with_prefix
+    }
     for task, _ctx, labels, preds_by_prefix, _nl in evaluator.evaluate_raw(
         nets_with_prefix, ctx_size_list
     ):
@@ -125,12 +132,22 @@ def eval_avg_metrics(evaluator, nets_with_prefix, ctx_size_list):
                 continue
             # setdefault: a task with an empty split is absent from
             # ``eval_splits`` but still yielded, and still worth a curve.
-            by_split = acc[prefix].setdefault(task.split, {"clf": [], "reg": []})
-            by_split[task.task_type].append(v)
+            by_metric = acc[prefix].setdefault(
+                task.split, {m: {} for m in metric_names.values()}
+            )
+            per_task = by_metric[metric_names[task.task_type]]
+            per_task.setdefault(f"{task.db_name}/{task.table_name}", []).append(v)
+
+    def _reduce(per_task):
+        # Per task: mean over ctx sizes. Then "mean": mean over tasks.
+        out = {k: float(np.mean(vs)) for k, vs in per_task.items()}
+        out["mean"] = float(np.mean(list(out.values()))) if out else None
+        return out
+
     return {
         p: {
-            s: {k: (float(np.mean(vs)) if vs else None) for k, vs in d.items()}
-            for s, d in by_split.items()
+            s: {m: _reduce(per_task) for m, per_task in by_metric.items()}
+            for s, by_metric in by_split.items()
         }
         for p, by_split in acc.items()
     }
@@ -566,8 +583,8 @@ def main(
         for prefix, kind in [("", "live"), ("swa_", "swa")]:
             if prefix not in metrics or "val" not in metrics[prefix]:
                 continue
-            for tt, better in [("clf", max), ("reg", min)]:
-                v = metrics[prefix]["val"].get(tt)
+            for tt, metric, better in [("clf", "auc", max), ("reg", "mae", min)]:
+                v = metrics[prefix]["val"][metric].get("mean")
                 if v is None:
                     continue
                 cur = best[tt]
@@ -576,7 +593,7 @@ def main(
                         "kind": kind,
                         "step": step,
                         "value": v,
-                        "metric": "auc" if tt == "clf" else "mae",
+                        "metric": metric,
                     }
 
     def run_eval(step):
@@ -600,24 +617,26 @@ def main(
                 )
             for prefix, by_split in metrics.items():
                 label = prefix.rstrip("_") or "live"
-                for split, m in by_split.items():
+                for split, by_metric in by_split.items():
                     log(
                         indent=1,
                         eval_model=label,
                         split=split,
                         step=step,
-                        clf_auc=m["clf"],
-                        mae=m["reg"],
+                        auc=by_metric["auc"].get("mean"),
+                        mae=by_metric["mae"].get("mean"),
                     )
             if use_wandb:
+                # {prefix}{metric}/{split}/mean and .../{db}/{table}
                 wandb.log(
                     {
                         "step": step,
                         **{
-                            f"{split}/{p}{tt}": v
+                            f"{p}{metric}/{split}/{task_key}": v
                             for p, by_split in metrics.items()
-                            for split, m in by_split.items()
-                            for tt, v in m.items()
+                            for split, by_metric in by_split.items()
+                            for metric, per_task in by_metric.items()
+                            for task_key, v in per_task.items()
                             if v is not None
                         },
                     }
