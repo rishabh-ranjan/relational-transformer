@@ -53,6 +53,7 @@ def train(pre_dir: str, eval_pre_dir: str, out_root: str, run_id: str) -> None:
         mmap_populate=True,
         timeout_per_item=10.0,
         eval_freq=2000,
+        keep_all_ckpts=True,
         vector_db_path=None,
         resume_save_mins=20.0,
         # in-loop validation on RelBench

@@ -173,6 +173,7 @@ def submit_one(db: str, task: str, resources: Resources):
             mmap_populate=True,
             timeout_per_item=10.0,
             eval_freq=100,
+            keep_all_ckpts=False,
             vector_db_path=None,
             resume_save_mins=20.0,
             # in-loop validation: the task it is trained on, on the val split

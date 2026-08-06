@@ -3,23 +3,20 @@ eval and by in-loop training eval (rank-aware under DDP)."""
 
 import time
 
-import numpy as np
 import torch
 import torch.distributed as dist
 from torch.utils.data import DataLoader
 
 from rt.data import EvalDataset, RustlerDataset
 from rt.progress import fmt_duration, log
-from rt.eval.metrics import metric_for
 from rt.model.net import SEM_TYPE_BOOLEAN
-import wandb
 
 
 class Evaluator:
     """Standard per-task eval over a fixed task list.
 
-    Build once with sampler/loader knobs; call ``evaluate`` (or
-    ``evaluate_raw``) one or more times. Re-using an instance across
+    Build once with sampler/loader knobs; call ``evaluate_raw`` one or
+    more times. Re-using an instance across
     eval points reuses prefetch state and avoids loader rebuild —
     important for the in-loop training eval.
 
@@ -370,179 +367,3 @@ class Evaluator:
                         if with_node_idxs:
                             out = out + (node_idxs_np,)
                         yield out
-
-    def evaluate(self, nets_with_prefix, eval_ctx_size_list_to_use, steps):
-        """Full in-loop eval pass: per-task metrics, per-split avg
-        aggregation, stdout printing, wandb logging.
-
-        ``nets_with_prefix``: list of ``(net, prefix_str)``. Prefixes
-        feed into wandb keys + console labels (e.g. ``""`` for the
-        live net, ``"swa_"`` for the SWA snapshot).
-
-        Returns the empty-prefix net's metrics dict, or the first
-        net's if no empty-prefix entry exists.
-        """
-        eval_tic = time.time()
-        local_rank = self.local_rank
-        global_rank = self.global_rank
-
-        if local_rank == 0:
-            log(eval_at_step=steps)
-
-        avg_reg_key = "avg_mae"
-
-        all_metrics = {}
-        all_reg_scores = {}
-        all_auc_scores = {}
-        for _, prefix in nets_with_prefix:
-            all_metrics[prefix] = {
-                split: {ctx: {} for ctx in eval_ctx_size_list_to_use}
-                for split in self.eval_splits
-            }
-            all_reg_scores[prefix] = {
-                (x, y): [] for x in eval_ctx_size_list_to_use for y in self.eval_splits
-            }
-            all_auc_scores[prefix] = {
-                (x, y): [] for x in eval_ctx_size_list_to_use for y in self.eval_splits
-            }
-        all_mean_labels_reg = {
-            (x, y): [] for x in eval_ctx_size_list_to_use for y in self.eval_splits
-        }
-        all_mean_labels_clf = {
-            (x, y): [] for x in eval_ctx_size_list_to_use for y in self.eval_splits
-        }
-
-        for (
-            eval_task,
-            eval_ctx_size,
-            labels_np,
-            preds_by_prefix_np,
-            num_labels_np,
-        ) in self.evaluate_raw(nets_with_prefix, eval_ctx_size_list_to_use):
-            # Uniform per-real-item average. Length matches labels_np.
-            task_mean_labels = float(num_labels_np.mean())
-            if eval_task.task_type == "reg":
-                all_mean_labels_reg[(eval_ctx_size, eval_task.split)].append(
-                    task_mean_labels
-                )
-            elif eval_task.task_type == "clf":
-                all_mean_labels_clf[(eval_ctx_size, eval_task.split)].append(
-                    task_mean_labels
-                )
-
-            for prefix, preds_np in preds_by_prefix_np.items():
-                if eval_task.task_type == "reg":
-                    _, metric = metric_for("reg", labels_np, preds_np)
-                    all_reg_scores[prefix][(eval_ctx_size, eval_task.split)].append(
-                        metric
-                    )
-                elif eval_task.task_type == "clf":
-                    try:
-                        _, metric = metric_for("clf", labels_np, preds_np)
-                    except Exception as e:
-                        labels_int = [int(x > 0) for x in labels_np]
-                        n_classes = len(set(labels_int))
-                        n_nan_labels = int(np.isnan(labels_np).sum())
-                        n_nan_preds = int(np.isnan(preds_np).sum())
-                        log(
-                            indent=1,
-                            auc_failed=(
-                                f"{eval_task.db_name}/{eval_task.table_name}"
-                                f"/{eval_task.split}"
-                            ),
-                            ctx_size=eval_ctx_size,
-                            error=f"{type(e).__name__}:{e}".replace(" ", "_"),
-                            n=len(labels_int),
-                            n_classes=n_classes,
-                            n_nan_labels=n_nan_labels,
-                            n_nan_preds=n_nan_preds,
-                            fallback_auc=0.0,
-                        )
-                        metric = 0.0
-                    all_auc_scores[prefix][(eval_ctx_size, eval_task.split)].append(
-                        metric
-                    )
-
-                all_metrics[prefix][eval_task.split][eval_ctx_size][
-                    (eval_task.db_name, eval_task.table_name)
-                ] = metric
-                all_metrics[prefix][eval_task.split][eval_ctx_size][
-                    (eval_task.db_name, eval_task.table_name, "mean_labels")
-                ] = task_mean_labels
-
-        if global_rank == 0:
-            for _, prefix in nets_with_prefix:
-                for split in self.eval_splits:
-                    for eval_ctx_size in eval_ctx_size_list_to_use:
-
-                        def _avg(xs):
-                            # Single-task-type task sets (per-task fine-tuning)
-                            # have no scores for the other type.
-                            return sum(xs) / len(xs) if xs else float("nan")
-
-                        avg_reg = _avg(all_reg_scores[prefix][(eval_ctx_size, split)])
-                        avg_auc = _avg(all_auc_scores[prefix][(eval_ctx_size, split)])
-                        wandb.log(
-                            {
-                                f"{prefix}{avg_reg_key}/{split}/{eval_ctx_size}": avg_reg,
-                                f"{prefix}avg_auc/{split}/{eval_ctx_size}": avg_auc,
-                            },
-                            step=steps,
-                        )
-                        avg_mean_labels_reg = _avg(
-                            all_mean_labels_reg[(eval_ctx_size, split)]
-                        )
-                        avg_mean_labels_clf = _avg(
-                            all_mean_labels_clf[(eval_ctx_size, split)]
-                        )
-                        all_metrics[prefix][split][eval_ctx_size][avg_reg_key] = avg_reg
-                        all_metrics[prefix][split][eval_ctx_size]["avg_auc"] = avg_auc
-                        all_metrics[prefix][split][eval_ctx_size][
-                            "avg_mean_labels_reg"
-                        ] = avg_mean_labels_reg
-                        all_metrics[prefix][split][eval_ctx_size][
-                            "avg_mean_labels_clf"
-                        ] = avg_mean_labels_clf
-
-        if global_rank == 0:
-            tasks_by_split: dict[str, list] = {s: [] for s in self.eval_splits}
-            for t in self.tasks:
-                tasks_by_split[t.split].append(t)
-            for _, prefix in nets_with_prefix:
-                for split in self.eval_splits:
-                    for eval_ctx_size in eval_ctx_size_list_to_use:
-                        payload = {
-                            "ctx_size": eval_ctx_size,
-                            f"{prefix}ctx_scaling/steps={steps}/{split}/{avg_reg_key}": all_metrics[
-                                prefix
-                            ][split][eval_ctx_size][avg_reg_key],
-                            f"{prefix}ctx_scaling/steps={steps}/{split}/avg_auc": all_metrics[
-                                prefix
-                            ][split][eval_ctx_size]["avg_auc"],
-                            f"{prefix}ctx_scaling/steps={steps}/{split}/avg_mean_labels_reg": all_metrics[
-                                prefix
-                            ][split][eval_ctx_size]["avg_mean_labels_reg"],
-                            f"{prefix}ctx_scaling/steps={steps}/{split}/avg_mean_labels_clf": all_metrics[
-                                prefix
-                            ][split][eval_ctx_size]["avg_mean_labels_clf"],
-                        }
-                        for t in tasks_by_split[split]:
-                            metric_name = "mae" if t.task_type == "reg" else "auc"
-                            base = (
-                                f"per_task/{prefix}ctx_scaling/steps={steps}/"
-                                f"{t.db_name}/{t.table_name}/{split}"
-                            )
-                            payload[f"{base}/{metric_name}"] = all_metrics[prefix][
-                                split
-                            ][eval_ctx_size][(t.db_name, t.table_name)]
-                            payload[f"{base}/mean_labels"] = all_metrics[prefix][split][
-                                eval_ctx_size
-                            ][(t.db_name, t.table_name, "mean_labels")]
-                        wandb.log(payload)
-
-        if local_rank == 0:
-            log(
-                eval_done_at_step=steps,
-                elapsed=fmt_duration(time.time() - eval_tic),
-            )
-        return all_metrics

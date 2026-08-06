@@ -190,6 +190,7 @@ def main(
     mmap_populate: bool,
     timeout_per_item: float,
     eval_freq: int | None,
+    keep_all_ckpts: bool,
     vector_db_path: str | None,
     resume_save_mins: float,
     # in-loop validation
@@ -266,7 +267,6 @@ def main(
             json.dumps(params, indent=1, sort_keys=True) + "\n"
         )
         log(out_dir=out_dir)
-    compile = compile
 
     def build_net():
         return (
@@ -288,8 +288,22 @@ def main(
     raw_net = net
     if is_main:
         log(params=f"{sum(p.numel() for p in net.parameters()):_}")
-    muon_params = [p for p in net.parameters() if p.ndim == 2]
-    other_params = [p for p in net.parameters() if p.ndim != 2]
+
+    # Muon orthogonalizes a 2-D update, which only means anything for a
+    # hidden weight *matrix*. The per-sem-type encoders/decoders are the
+    # model's embedding and output layers -- and the number/datetime/boolean
+    # ones are (d_model, 1) besides, where Newton-Schulz degenerates to a
+    # rescale. Those, and everything 0/1-D, go to AdamW, per Muon's own
+    # guidance (no embeddings, no heads, no gains/biases).
+    def _is_muon(name, p):
+        if p.ndim != 2 or min(p.shape) == 1:
+            return False
+        return not name.startswith(("enc_dict.", "dec_dict."))
+
+    named = list(net.named_parameters())
+    muon_params = [p for n, p in named if _is_muon(n, p)]
+    other_params = [p for n, p in named if not _is_muon(n, p)]
+    assert len(muon_params) + len(other_params) == len(named)
     opts = [
         Muon(
             muon_params,
@@ -311,7 +325,10 @@ def main(
     ]
 
     def lr_lambda(step):
-        return (step + 1) / warmup_steps if step < warmup_steps else 1.0
+        # warmup_steps=0 means no warmup: full lr from the first step.
+        if step >= warmup_steps:
+            return 1.0
+        return (step + 1) / warmup_steps
 
     scheds = [optim.lr_scheduler.LambdaLR(o, lr_lambda) for o in opts]
     swa = SwaState(raw_net.named_parameters(), momentum=swa_momentum)
@@ -333,7 +350,7 @@ def main(
 
     # ---- resume from preemption (GPU-count flexible: full model+opt per rank) ----
     if resume_path.exists():
-        ck = torch.load(resume_path, map_location="cpu")
+        ck = torch.load(resume_path, map_location="cpu", weights_only=True)
         raw_net.load_state_dict(ck["model"])
         for o, sd in zip(opts, ck["optimizers"], strict=True):
             o.load_state_dict(sd)
@@ -454,6 +471,11 @@ def main(
     # alongside it under a "lcs<l>-bw<b>-pl<p>_" tag. All evaluators share the
     # underlying mmap'd data (page cache), so extra entries cost eval compute
     # only, nothing between eval points.
+    # Duplicates would map to the same metrics prefix, and the later entry
+    # would silently overwrite the earlier one in ``metrics``.
+    assert len(set(map(tuple, eval_lcs_bw_pl_grid))) == len(eval_lcs_bw_pl_grid), (
+        f"duplicate entries in eval_lcs_bw_pl_grid: {eval_lcs_bw_pl_grid}"
+    )
     val_tasks = get_tasks(eval_pre_dir, eval_db_task_list, tuple(eval_splits))
 
     evaluators = (
@@ -579,6 +601,27 @@ def main(
                 metadata={"step": step, "swa_n": swa.n},
             )
 
+    def prune_ckpts():
+        """Delete every periodic checkpoint no longer worth keeping.
+
+        With ``keep_all_ckpts=False`` the only checkpoints that must survive
+        are the ones ``best`` still points at -- a best from an earlier eval
+        is copied to best_clf/best_reg only at the very end, so its file has
+        to live until then. The latest step needs no file of its own:
+        resume.pt is rewritten at every eval and once more at the end, and it
+        carries the same weights.
+        """
+        if keep_all_ckpts or not is_main:
+            return
+        keep = {
+            f"{'swa_' if b['kind'] == 'swa' else ''}steps={b['step']}.safetensors"
+            for b in best.values()
+            if b is not None
+        }
+        for f in out_dir.glob("*steps=*.safetensors"):
+            if f.name not in keep:
+                f.unlink(missing_ok=True)
+
     def consider(metrics, step):
         # Selection is val-only: a test split may be evaluated alongside for
         # its curves, but must never pick the checkpoint. With no val split
@@ -611,7 +654,11 @@ def main(
             tagged_nets = [(n, tag + p) for n, p in nets]
             metrics.update(eval_avg_metrics(evaluator, tagged_nets, eval_ctx_size_list))
         # Best-checkpoint tracking follows the primary (untagged) grid entry.
-        consider(metrics, step)
+        # Rank 0 only: ``evaluate_raw`` yields there and nowhere else, so the
+        # other ranks hold empty metrics and must not touch ``best`` (they
+        # would write None-free garbage the moment that changes).
+        if is_main:
+            consider(metrics, step)
         if is_main:
             if use_wandb:
                 # {prefix}{metric}/{split}/mean and .../{db}/{table}
@@ -631,12 +678,22 @@ def main(
         for n, _ in nets:
             n.train()
 
-    def should_stop():
-        """True if any rank caught a preemption signal."""
-        flag = torch.tensor([1.0 if preempt["flag"] else 0.0], device=device)
-        if ddp:
-            dist.all_reduce(flag, op=dist.ReduceOp.MAX)
-        return flag.item() > 0
+    def reduce_step_stats(local_loss):
+        """(mean loss over ranks, any rank preempted?).
+
+        One collective per step carries both: the loss so the logged curve is
+        the batch's, not rank 0's slice of it, and the preemption flag so all
+        ranks leave the loop together (a rank exiting alone hangs the rest at
+        their next collective). Both reduce with SUM, so they ride in one
+        tensor.
+        """
+        if not ddp:
+            return local_loss, preempt["flag"]
+        stats = torch.tensor(
+            [local_loss, 1.0 if preempt["flag"] else 0.0], device=device
+        )
+        dist.all_reduce(stats, op=dist.ReduceOp.SUM)
+        return stats[0].item() / world_size, stats[1].item() > 0
 
     # ---- training loop ----
     it = iter(loader)
@@ -647,11 +704,16 @@ def main(
     # loses at most that much progress. The save is atomic (tmp+rename) and rank
     # 0 only; we don't count it in sec/step (step_t0 is reset after).
     last_resume_t = time.perf_counter()
+    # A resume starts at a step whose eval already ran (resume.pt is written at
+    # every eval), so don't repeat it. A fresh run's step 0 is not that case.
+    evaled_at = start_step if start_step > 0 else None
     while step < total_steps:
-        if eval_freq and step % eval_freq == 0:
+        if eval_freq and step % eval_freq == 0 and step != evaled_at:
             run_eval(step)
             checkpoint(step)
+            prune_ckpts()
             save_resume(step)
+            evaled_at = step
             step_t0 = time.perf_counter()  # don't count eval/ckpt in step time
 
         total_loss = 0.0
@@ -699,6 +761,8 @@ def main(
         swa.update(raw_net.named_parameters())
         step += 1
 
+        total_loss, stop = reduce_step_stats(total_loss)
+
         step_time = time.perf_counter() - step_t0
         step_t0 = time.perf_counter()
 
@@ -738,10 +802,12 @@ def main(
             if is_main:
                 log(resume_saved_at_step=step, every_mins=resume_save_mins)
 
-        if should_stop():
+        if stop:
             if is_main:
                 log(preempted_at_step=step, action="save_resume_and_exit")
             save_resume(step)
+            if use_wandb:
+                wandb.finish()
             if ddp:
                 dist.barrier()
                 dist.destroy_process_group()
@@ -750,6 +816,7 @@ def main(
     # ---- final eval + best selection ----
     run_eval(step)
     checkpoint(step)
+    prune_ckpts()
     save_resume(step)
     if is_main:
         for tt, label in [("clf", "best_clf"), ("reg", "best_reg")]:
@@ -764,6 +831,8 @@ def main(
             )
             if src.exists():
                 shutil.copyfile(src, out_dir / f"{label}.safetensors")
+            else:
+                log(warning="best_ckpt_missing", label=label, expected=src)
             log(
                 saved=label,
                 kind=b["kind"],
@@ -773,5 +842,7 @@ def main(
                 path=f"{label}.safetensors",
             )
         log(load_with=f"rt.model.load_rt_model('{out_dir}/best_clf.safetensors')")
+    if use_wandb:
+        wandb.finish()
     if ddp:
         dist.destroy_process_group()

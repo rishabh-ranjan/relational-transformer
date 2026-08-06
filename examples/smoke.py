@@ -59,6 +59,7 @@ def smoke(
         mmap_populate=False,
         timeout_per_item=60.0,
         eval_freq=None,
+        keep_all_ckpts=False,
         vector_db_path=None,
         resume_save_mins=60.0,
         # in-loop validation: the final eval always runs, so keep it minimal

@@ -9,7 +9,10 @@ by mean validation metric.
 Checkpoints land in the per-run directory
 `<out-root>/<entity>/<project>/<id>/` as `steps=<N>.safetensors` (live) and
 `swa_steps=<N>.safetensors` (SWA); at the end the run copies the best classifier
-and regressor to `best_clf.safetensors` / `best_reg.safetensors`. Multi-GPU is
+and regressor to `best_clf.safetensors` / `best_reg.safetensors`. With
+`keep_all_ckpts=False` only the checkpoints the best-so-far still points at are
+kept -- the rest are deleted as they are superseded, and the latest weights stay
+available in `resume.pt` (rewritten at every eval and once more at the end). Multi-GPU is
 automatic under `torchrun`, and a run relaunched with the same `run_id`
 resumes automatically from `resume.pt` in that same directory
 (preemption-safe).
