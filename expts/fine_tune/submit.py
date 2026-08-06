@@ -30,16 +30,16 @@ from roach.slurm import Resources, submit
 # change a sweep.
 TASKS = (
     ("rel-f1", "driver-dnf"),
-    ("rel-f1", "driver-position"),
-    ("rel-f1", "driver-top3"),
-    ("rel-event", "user-attendance"),
-    ("rel-event", "user-ignore"),
-    ("rel-trial", "site-success"),
-    ("rel-trial", "study-adverse"),
-    ("rel-trial", "study-outcome"),
-    ("rel-avito", "ad-ctr"),
-    ("rel-avito", "user-clicks"),
-    ("rel-avito", "user-visits"),
+    # ("rel-f1", "driver-position"),
+    # ("rel-f1", "driver-top3"),
+    # ("rel-event", "user-attendance"),
+    # ("rel-event", "user-ignore"),
+    # ("rel-trial", "site-success"),
+    # ("rel-trial", "study-adverse"),
+    # ("rel-trial", "study-outcome"),
+    # ("rel-avito", "ad-ctr"),
+    # ("rel-avito", "user-clicks"),
+    # ("rel-avito", "user-visits"),
 )
 
 
@@ -192,7 +192,7 @@ def submit_one(db: str, task: str, resources: Resources):
             eval_vector_db_path=None,
             eval_lcs_bw_pl_grid=[(8192, 256, True)],
             # logging
-            project="2026-08-05-fine_tune",
+            project="2026-08-06-fine_tune",
             entity="rtv2",
             run_name=None,
             wandb_disabled=False,
