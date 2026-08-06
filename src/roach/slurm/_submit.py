@@ -297,9 +297,13 @@ def _overlap(
         "--ntasks=1",
         "--cpus-per-task=1",
         "--chdir=/tmp",
-        # the allocation's environment, not this shell's: same reasoning as
-        # --export=NONE on the batch path.
-        "--export=NONE",
+        # Nothing from this shell, for the same reason the batch path passes
+        # --export=NONE: its HOME does not exist on the node and its environment
+        # holds API tokens. Not NONE itself, though -- sbatch gives a batch
+        # script a default PATH and srun gives a step nothing at all, so the
+        # step could not even find bash. Two variables, spelled out: the script
+        # builds the rest.
+        f"--export=PATH=/usr/local/bin:/usr/bin:/bin,USER={os.environ.get('USER', '')}",
     ]
     env = {
         k: v for k, v in os.environ.items() if not k.startswith(("SLURM_", "SBATCH_"))
