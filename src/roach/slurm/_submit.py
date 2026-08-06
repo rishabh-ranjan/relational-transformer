@@ -81,8 +81,8 @@ def check_args(target: str, args: dict[str, Any]) -> None:
                 raise TypeError(f"{target}({name}=...): {e}") from None
 
 
-def preflight(root: Path | str | None = None) -> tuple[str, str]:
-    """(repo url, commit) of a clean, pushed tree -- the job clones that."""
+def preflight(root: Path | str | None = None) -> tuple[str, str, str]:
+    """(repo url, commit, branch) of a clean, pushed tree -- the job clones that."""
     if root is not None:
         os.chdir(root)
     root = _git("rev-parse", "--show-toplevel")
@@ -96,7 +96,7 @@ def preflight(root: Path | str | None = None) -> tuple[str, str]:
         ["git", "merge-base", "--is-ancestor", commit, f"origin/{branch}"]
     ).returncode:
         raise RuntimeError(f"{commit} is not on origin/{branch}; push first")
-    return repo, commit
+    return repo, commit, branch
 
 
 def _git(*args: str) -> str:
@@ -166,6 +166,7 @@ def submit(
     clone_root: Path | str,
     secrets_dir: Path | str,
     clone_ttl_days: int,
+    clone_by: str,
     setup: tuple[str, ...] = (),
     run_id: str | None = None,
     after: str | None = None,
@@ -187,6 +188,21 @@ def submit(
     the first stage to finish. The wait is on success: if the dependency fails,
     slurm cancels this job rather than leaving it pending forever.
 
+    ``clone_by`` is what the job's clone is named after, and it has no default
+    because the two answers trade different things away. Either way the job runs
+    the commit you submitted -- the difference is what the clone is *keyed* on:
+
+    * ``"commit"`` -- one clone per commit. A queued job cannot change under
+      you, and a clone is exactly one commit forever. It is also a new directory
+      per commit, so every commit pays for its own environment and its own build
+      (measured on this project: 50-100s of ``pixi install``, plus a full cargo
+      build inside it).
+    * ``"branch"`` -- one clone per branch, moved to each submitted commit. The
+      environment and the cargo target dir survive from one commit to the next,
+      which is most of that cost gone. The price is real: **a later submission
+      moves the checkout under a job that is still running from it.** Fine while
+      iterating, wrong for a sweep you will read results from days later.
+
     ``overlap`` is the id of an allocation somebody is *holding* (see
     ``roach.slurm.interactive``). The run then goes in as a step of that
     allocation instead of as a job of its own: nothing is queued, and a run that
@@ -202,7 +218,10 @@ def submit(
         sys.path.insert(0, str(repo_root))
     # roach lives in this repo, so the commit that pins the project pins the
     # roach that runs it too -- there is no second thing to resolve or clone.
-    repo, commit = preflight()
+    repo, commit, branch = preflight()
+    if clone_by not in ("branch", "commit"):
+        raise ValueError(f"clone_by must be 'branch' or 'commit', got {clone_by!r}")
+    clone_key = branch if clone_by == "branch" else commit
     run_id = run_id or timestamp()
     if "run_id" in inspect.signature(resolve(target)).parameters:
         args = {**args, "run_id": run_id}
@@ -218,6 +237,8 @@ def submit(
     for key, value in {
         "@REPO@": repo,
         "@COMMIT@": commit,
+        "@BRANCH@": branch,
+        "@CLONE_KEY@": clone_key,
         "@RUN_ID@": run_id,
         "@NAME@": name,
         "@TARGET@": target,

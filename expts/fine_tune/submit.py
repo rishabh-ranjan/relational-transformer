@@ -209,6 +209,11 @@ def submit_one(db: str, task: str, resources: Resources):
         clone_root="/lfs/local/0/roach_clones",
         secrets_dir="/dfs/user/ranjanr/.secrets",
         clone_ttl_days=7,
+        # One clone per branch, moved to each submitted commit: the environment
+        # and the cargo target dir survive from one submission to the next,
+        # which is most of a minute per job. The catch is that submitting again
+        # moves the checkout under whatever is still running from it.
+        clone_by="branch",
         # No setup: `pixi install` already builds the rustler extension and puts
         # it in src/rt/ -- the project is an editable dependency of its own
         # environment. Running `pixi run build-sampler` here as well rebuilt the

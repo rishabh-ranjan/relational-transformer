@@ -89,7 +89,7 @@ from roach.slurm import AMPERE, submit
 submit("examples.train:train",
        args={"pre_dir": ..., "eval_pre_dir": ..., "out_root": ...},
        resources=AMPERE,   # or Resources(...) for a shape roach does not ship
-       name="rt-j", setup=("pixi run build-sampler",),
+       name="rt-j", clone_by="commit",   # or "branch"; no default, see roach's README
        repo_root=..., log_root=..., clone_root=..., secrets_dir=...)
 ```
 

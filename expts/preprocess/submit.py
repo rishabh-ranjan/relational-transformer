@@ -291,6 +291,9 @@ def submit_legacy(name: str, expected_bytes: int):
         clone_root="/lfs/local/0/roach_clones",
         secrets_dir="/dfs/user/ranjanr/.secrets",
         clone_ttl_days=7,
+        # one clone per branch, moved to each submitted commit (see
+        # src/roach/slurm/README.md); submitting again moves it under running jobs
+        clone_by="branch",
     )
 
 
@@ -316,6 +319,9 @@ def submit_embed(name: str, expected_bytes: int, after: str | None = None):
         clone_root="/lfs/local/0/roach_clones",
         secrets_dir="/dfs/user/ranjanr/.secrets",
         clone_ttl_days=7,
+        # one clone per branch, moved to each submitted commit (see
+        # src/roach/slurm/README.md); submitting again moves it under running jobs
+        clone_by="branch",
         after=after,
     )
 
@@ -416,6 +422,9 @@ def main() -> None:
             clone_root="/lfs/local/0/roach_clones",
             secrets_dir="/dfs/user/ranjanr/.secrets",
             clone_ttl_days=7,
+            # one clone per branch, moved to each submitted commit (see
+            # src/roach/slurm/README.md); submitting again moves it under running jobs
+            clone_by="branch",
         )
         # Queued now, held by slurm until its rustler stage succeeds: the GPU
         # queue fills itself behind the cpu one, with nothing to poll and no

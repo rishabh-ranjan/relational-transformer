@@ -5,7 +5,7 @@
 set -euo pipefail
 
 echo "=== $(date -Is) job $SLURM_JOB_ID on $(hostname), restarts=${SLURM_RESTART_COUNT:-0} ==="
-echo "name=@NAME@ repo=@REPO@ commit=@COMMIT@ run_id=@RUN_ID@ target=@TARGET@"
+echo "name=@NAME@ repo=@REPO@ commit=@COMMIT@ branch=@BRANCH@ run_id=@RUN_ID@ target=@TARGET@"
 
 export USER=${USER:-$(id -un)}
 export TMPDIR=/tmp/$USER
@@ -30,17 +30,45 @@ mkdir -p "@CLONE_ROOT@"
 # of a full allocation, per job, for a result the previous job had already
 # produced byte for byte.
 #
-# Keyed by commit, the first job on a node pays that once and the rest pay a
-# lock acquisition. Reproducibility is unchanged: a clone is still exactly the
-# submitted commit, and a different commit is a different directory, so a queued
-# job still cannot change under you.
+# The first job at a key on a node pays that once and the rest pay a lock
+# acquisition. What the key is -- the commit or the branch -- is the submitter's
+# `clone_by`, and it is the one real choice here:
+#
+#   commit: a clone is exactly one commit, forever. A queued job cannot change
+#           under you, and every new commit pays for its own environment.
+#   branch: one clone, moved to each submitted commit. The environment, the
+#           cargo target dir and everything else built here survive to the next
+#           commit -- and a later submission moves the checkout under a job that
+#           is still running from it.
+#
+# Either way the job runs the commit that was submitted: the checkout below is
+# by sha, not by branch name, so "the branch" is only what the directory is
+# called.
 # --------------------------------------------------------------------------- #
-REPO_DIR=@CLONE_ROOT@/repo-@COMMIT@
+REPO_DIR=@CLONE_ROOT@/repo-@CLONE_KEY@
+
+# One place that knows how to reach a private repo, used to clone and to fetch.
+git_auth() {  # <git args...>
+    git -c url."https://x-access-token:$(tr -d '[:space:]' < "@SECRETS_DIR@/github")@github.com/".insteadOf="https://github.com/" \
+        "$@"
+}
 
 git_clone() {  # <url> <commit> <dir>
-    git -c url."https://x-access-token:$(tr -d '[:space:]' < "@SECRETS_DIR@/github")@github.com/".insteadOf="https://github.com/" \
-        clone --quiet "$1" "$3"
+    git_auth clone --quiet "$1" "$3"
     git -C "$3" checkout --quiet "$2"
+}
+
+# A branch-keyed clone outlives the commit it was built for, so bring it to the
+# one this job submitted. A no-op when the key is the commit (HEAD already
+# matches) and when a previous job at this same commit got here first.
+sync_to_commit() {  # <dir> <commit>; prints whether anything moved
+    local dir=$1 commit=$2 head
+    head=$(git -C "$dir" rev-parse HEAD)
+    if [[ $head == "$commit" ]]; then return 1; fi
+    echo "clone: moving $dir from ${head:0:7} to ${commit:0:7}"
+    ( cd "$dir" && git_auth fetch --quiet origin "$commit" )
+    git -C "$dir" checkout --quiet --force "$commit"
+    return 0
 }
 
 # A clone is per commit, so iterating -- which is a commit per attempt -- pays
@@ -58,6 +86,11 @@ seed_lock() {  # in the new clone, before pixi install
     # byte-identical; pixi validates it against the manifest anyway and re-solves
     # if it disagrees, so a stale lock costs nothing and a matching one skips
     # the solve entirely.
+    # A branch-keyed clone that moved to a new commit already has the lock it
+    # solved for the last one, and pixi will re-solve it if the manifest moved
+    # too. Leave it alone -- and never seed from ourselves, which is what a
+    # ready clone in this loop would otherwise be.
+    if [[ -f pixi.lock ]]; then return 0; fi
     local newest= d
     for d in "@CLONE_ROOT@"/*/; do
         [[ -f $d/.roach-ready && -f $d/pixi.lock ]] || continue
@@ -106,6 +139,12 @@ clone_at_commit() {  # <dir> <url> <commit> <prepare-fn>
         local t=$SECONDS
         git_clone "$url" "$commit" "$dir"
         echo "prepare: git clone $((SECONDS - t))s"
+        ( cd "$dir" && "$prepare" )
+        touch "$dir/.roach-ready"
+    elif sync_to_commit "$dir" "$commit"; then
+        # The code changed under a clone that is already built, so build again:
+        # the environment is keyed on this path and survives, and everything
+        # that did not change is a cache hit rather than work.
         ( cd "$dir" && "$prepare" )
         touch "$dir/.roach-ready"
     fi
