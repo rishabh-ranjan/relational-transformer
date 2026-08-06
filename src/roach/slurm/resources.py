@@ -12,7 +12,7 @@ stale copy in here would.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 
 @dataclass(frozen=True)
@@ -186,3 +186,18 @@ user), and 12 hours is the QOS wall clock, so a loop that outlives a working day
 needs the allocation renewed. Anything that should survive a night, a preemption
 or your laptop closing is a batch job on `BLACKWELL`/`AMPERE` instead: an
 interactive allocation is not requeued, and its runs are not resumed for you."""
+
+BLACKWELL_INTERACTIVE_1GPU = replace(
+    BLACKWELL_INTERACTIVE, gpus="b200:1", cpus_per_task=36, mem=None
+)
+"""One run's share of a held BLACKWELL_INTERACTIVE allocation.
+
+What you *hold* and what a run *takes* are two different shapes, which is why
+`submit(..., overlap=...)` keeps asking for resources: the allocation is 2
+b200s, and a run that wants one asks for one. Two of these fit side by side --
+a second arm, or a scratch run beside the one you are watching -- and a
+single-GPU run also keeps the comparison honest, since world size changes the
+data stream a run sees.
+
+`mem` is None because a step does not request memory: it takes it from the
+allocation that is already holding the node's share."""

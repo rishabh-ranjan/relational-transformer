@@ -27,8 +27,11 @@ from roach.slurm import BLACKWELL_INTERACTIVE, interactive
 interactive.hold(BLACKWELL_INTERACTIVE, log_root="/dfs/user/ranjanr/slurm-logs/fine-tune")
 ```
 
-It is 2xB200 for at most 12 hours (the `il-interactive` QOS caps both), and it
-is not requeued, so nothing that has to survive the night belongs in it. See
+The allocation is 2xB200 for at most 12 hours (the `il-interactive` QOS caps
+both), while each fine-tuning run takes **one** GPU
+(`BLACKWELL_INTERACTIVE_1GPU`) -- so two arms run side by side, and a run's world
+size does not change with how much of the allocation happens to be free. It is
+not requeued, so nothing that has to survive the night belongs in it. See
 [`src/roach/slurm/README.md`](../../src/roach/slurm/README.md).
 
 Logs and `args.json` land in `/dfs/user/ranjanr/slurm-logs/fine-tune`,

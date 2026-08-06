@@ -25,6 +25,7 @@ from roach.slurm.resources import (
     AMPERE_LO,
     BLACKWELL,
     BLACKWELL_INTERACTIVE,
+    BLACKWELL_INTERACTIVE_1GPU,
     Resources,
 )
 from roach.slurm._submit import Job, check_args, submit, timestamp
@@ -35,6 +36,7 @@ __all__ = [
     "AMPERE_LO",
     "BLACKWELL",
     "BLACKWELL_INTERACTIVE",
+    "BLACKWELL_INTERACTIVE_1GPU",
     "Job",
     "Resources",
     "check_args",

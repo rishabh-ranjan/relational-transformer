@@ -230,9 +230,21 @@ def test_a_cpu_only_overlapping_run_asks_for_no_gpu():
 def test_presets_are_one_rank_per_gpu():
     """The preset's cpus_per_task is per rank, so a preset that quietly asked
     for a node's worth of cores per rank would be rejected at submit."""
-    from roach.slurm import AMPERE, AMPERE_LO, BLACKWELL, BLACKWELL_INTERACTIVE
+    from roach.slurm import (
+        AMPERE,
+        AMPERE_LO,
+        BLACKWELL,
+        BLACKWELL_INTERACTIVE,
+        BLACKWELL_INTERACTIVE_1GPU,
+    )
 
-    for preset in (AMPERE, AMPERE_LO, BLACKWELL, BLACKWELL_INTERACTIVE):
+    for preset in (
+        AMPERE,
+        AMPERE_LO,
+        BLACKWELL,
+        BLACKWELL_INTERACTIVE,
+        BLACKWELL_INTERACTIVE_1GPU,
+    ):
         assert preset.ranks == int(preset.gpus.rpartition(":")[2])
         assert preset.ranks * preset.cpus_per_task <= 288  # the widest node here
 

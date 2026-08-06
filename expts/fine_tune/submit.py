@@ -16,7 +16,7 @@ from __future__ import annotations
 
 import sys
 
-from roach.slurm import BLACKWELL, BLACKWELL_INTERACTIVE, interactive, submit
+from roach.slurm import BLACKWELL, BLACKWELL_INTERACTIVE_1GPU, interactive, submit
 
 # Where this cluster keeps things. roach.slurm has no idea about any of it.
 REPO_ROOT = "/lfs/hyperturing1/0/ranjanr/clones/rishabh-ranjan/relational-transformer"
@@ -66,7 +66,10 @@ def main(use_interactive: bool = False) -> None:
                 "  from roach.slurm import BLACKWELL_INTERACTIVE, interactive\n"
                 f"  interactive.hold(BLACKWELL_INTERACTIVE, log_root='{LOG_ROOT}')"
             )
-        resources, overlap = BLACKWELL_INTERACTIVE, held
+        # One GPU per run, though the allocation holds two: a fine-tuning run
+        # is small, and the second card is what lets the next arm start beside
+        # this one instead of after it.
+        resources, overlap = BLACKWELL_INTERACTIVE_1GPU, held
     else:
         resources, overlap = BLACKWELL, None
     submit(
