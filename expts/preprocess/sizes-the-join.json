@@ -1,652 +1,2558 @@
 {
- "join-aact-clinicaltrials": 8027101780,
- "join-accidents": 981202095,
- "join-act-mooc": 489656153,
- "join-adventureworks2014": 794160376,
- "join-airline": 954342037,
- "join-amazon-appliances": 1077042,
- "join-amazon-arts-crafts": 1904007009,
- "join-amazon-automotive": 3299794229,
- "join-amazon-beauty": 5856712,
- "join-amazon-books": 844592541,
- "join-amazon-cds-vinyl": 1100551184,
- "join-amazon-cell-phones": 2030382520,
- "join-amazon-clothing": 4110033880,
- "join-amazon-digital-music": 682533254,
- "join-amazon-electronics": 24491049614,
- "join-amazon-fashion": 41590304209,
- "join-amazon-gift-cards": 9592156,
- "join-amazon-grocery": 2409411592,
- "join-amazon-home": 36688669424,
- "join-amazon-industrial": 4770394876,
- "join-amazon-kindle": 1773997422,
- "join-amazon-luxury-beauty": 88506153,
- "join-amazon-magazine": 9289164,
- "join-amazon-movies": 11851915499,
- "join-amazon-musical-instruments": 1045606579,
- "join-amazon-office": 2559082269,
- "join-amazon-patio": 3323379198,
- "join-amazon-pets": 2520506462,
- "join-amazon-prime-pantry": 586908313,
- "join-amazon-software": 55838858,
- "join-amazon-sports": 17268120820,
- "join-amazon-tools": 2867896782,
- "join-amazon-toys": 2615190335,
- "join-amazon-video-games": 2630736659,
- "join-amazon0302": 396095542,
- "join-apple-podcasts": 1768899957,
- "join-arnaud-citeseer": 38130320,
- "join-arnaud-nwecensusmid2014": 227811084,
- "join-atherosclerosis": 14061382,
- "join-atp-tennis": 493358398,
- "join-australianfootball": 129618244,
- "join-basketball-men": 56150783,
- "join-basketball-women": 9027440,
- "join-beeradvocate": 5369110470,
- "join-berka": 2744052633,
- "join-bgp-routing": 2557726,
- "join-biodegradability": 6216053,
- "join-bird-address": 153417179,
- "join-bird-airline": 593233854,
- "join-bird-app-store": 64695040,
- "join-bird-authors": 4567410875,
- "join-bird-beer-factory": 7134542,
- "join-bird-bike-share-1": 20202353215,
- "join-bird-book-publishing-company": 475119,
- "join-bird-books": 2530987942,
- "join-bird-california-schools": 117990350,
- "join-bird-car-retails": 2663372,
- "join-bird-card-games": 1165705944,
- "join-bird-cars": 740943,
- "join-bird-chicago-crime": 465970268,
- "join-bird-codebase-comments": 15062589763,
- "join-bird-codebase-community": 1391655396,
- "join-bird-coinmarketcap": 8979742857,
- "join-bird-college-completion": 678749884,
- "join-bird-computer-student": 234296,
- "join-bird-cookbook": 9009861,
- "join-bird-cs-semester": 265203,
- "join-bird-debit-card-specializing": 115906652,
- "join-bird-disney": 1994743,
- "join-bird-donor": 10403231217,
- "join-bird-european-football-1": 70525448,
- "join-bird-european-football-2": 614253535,
- "join-bird-food-inspection": 135444262,
- "join-bird-food-inspection-2": 1516421911,
- "join-bird-human-resources": 121474,
- "join-bird-ice-hockey-draft": 7561503,
- "join-bird-image-and-language": 1235298097,
- "join-bird-language-corpus": 3264104731,
- "join-bird-law-episode": 3134538,
- "join-bird-legislator": 58295185,
- "join-bird-mental-health-survey": 71715073,
- "join-bird-menu": 6895021316,
- "join-bird-movie": 12336442,
- "join-bird-movie-3": 135724402,
- "join-bird-movie-platform": 840777884,
- "join-bird-movielens": 383100202,
- "join-bird-movies-4": 259294119,
- "join-bird-music-platform-2": 10462217783,
- "join-bird-music-tracker": 149913156,
- "join-bird-olympics": 318198396,
- "join-bird-professional-basketball": 55698209,
- "join-bird-public-review-platform": 391648559,
- "join-bird-regional-sales": 45543369,
- "join-bird-restaurant": 15271911,
- "join-bird-retail-complains": 41464490,
- "join-bird-retail-world": 991504,
- "join-bird-retails": 8167432374,
- "join-bird-sales": 1809037139,
- "join-bird-sales-in-weather": 1380520806,
- "join-bird-shipping": 5551785,
- "join-bird-shooting": 1855749,
- "join-bird-simpson-episodes": 2856711,
- "join-bird-soccer-2016": 120724977,
- "join-bird-social-media": 175868031,
- "join-bird-software-company": 19276955485,
- "join-bird-student-club": 30182590,
- "join-bird-superhero": 4490320,
- "join-bird-superstore": 23026739,
- "join-bird-synthea": 397612398,
- "join-bird-thrombosis-prediction": 44817980,
- "join-bird-university": 11791562,
- "join-bird-video-games": 1136123908,
- "join-bird-works-cycles": 714490399,
- "join-bird-world-development-indicators": 1816539399,
- "join-boem-offshore": 2995043561,
- "join-brightkite": 9602044318,
- "join-bts-airlines": 8516383659,
- "join-bupa": 745591,
- "join-ca-astroph": 114533690,
- "join-canparl": 26960419,
- "join-carcinogenesis": 8985196,
- "join-cart": 8560589,
- "join-cdeschools": 118371856,
- "join-cellartracker": 4494041320,
- "join-cfpb-complaints": 538836304,
- "join-chess": 2999344,
- "join-chinook": 170396158,
- "join-chronicling-america": 1955713,
- "join-citeseer": 35605523,
- "join-citi-bike": 1578489335,
- "join-classicmodels": 35402072,
- "join-clinical-chembl": 85759818,
- "join-clinvar": 16719458998,
- "join-cms-hospitals": 156331166,
- "join-cms-nursing-homes": 515441470,
- "join-coingecko": 30246049,
- "join-com-dblp": 354846506,
- "join-consumerexpenditures": 856938300,
- "join-contacts": 1186344847,
- "join-cora": 16444518,
- "join-cordis-h2020": 701076832,
- "join-cordis-horizon": 499681642,
- "join-countries": 18681602,
- "join-craftbeer": 3681688,
- "join-credit": 712035580,
- "join-cricsheet": 2307778259,
- "join-ctu-20news": 56595853,
- "join-ctu-chembl": 4918859538,
- "join-ctu-crossschema1": 2195646763,
- "join-ctu-crossschema2": 17451734,
- "join-ctu-datatype-benchmark": 96176,
- "join-ctu-fairytale": 183353003,
- "join-ctu-feature-data": 83277240,
- "join-ctu-financial": 1905815094,
- "join-ctu-metalearning": 42123428,
- "join-ctu-mushrooms": 5904135,
- "join-ctu-outliers": 90346,
- "join-ctu-phishing": 42272296,
- "join-cve-nvd": 1433977411,
- "join-dallas": 2434643,
- "join-dblp": 3646712072,
- "join-dcg": 2351018,
- "join-device-events": 110471457,
- "join-dplace": 184486771,
- "join-drugsfda": 439686896,
- "join-dunur": 172137,
- "join-economics": 832399,
- "join-economics-worldbank-wdi": 32164975,
- "join-eia-860": 174069695,
- "join-eia-923": 185369008,
- "join-elti": 436605,
- "join-email-eu": 589731069,
- "join-email-euall": 168538357,
- "join-ember-electricity": 87162483,
- "join-ember-yearly": 281196732,
- "join-employee": 1257909393,
- "join-epa-air-quality": 124569155,
- "join-epinions": 157047790,
- "join-ergastf1": 230662889,
- "join-europeana": 107667282,
- "join-eurostat": 803503798,
- "join-eve-online-market": 2463034,
- "join-exploit-db": 175164070,
- "join-facebook": 6651235,
- "join-faers": 194563703,
- "join-fb15k237": 125259680,
- "join-fda-device-recall": 124749089,
- "join-fda-food-enforcement": 48192853,
- "join-fdic-banks": 57434960,
- "join-fec-campaign": 2728569293,
- "join-fema-disasters": 3690551,
- "join-financial": 2201641114,
- "join-financial-ijs": 2153150600,
- "join-financial-std": 63956562,
- "join-flexibee": 224394127,
- "join-fma": 595607605,
- "join-fnhk": 795609834,
- "join-foodcom": 745599665,
- "join-formula-e": 735025,
- "join-foursquare-nyctky": 2622026951,
- "join-gbif-biodiversity": 36632427,
- "join-gbif-species": 27651463,
- "join-gdelt": 102185944,
- "join-geneea": 280132364,
- "join-genes": 2686831,
- "join-geo-nuclear": 1692936,
- "join-geonames": 8696749679,
- "join-github-archive": 12111375909,
- "join-gjp": 191867598,
- "join-glottolog": 48465300,
- "join-gosales": 114807271,
- "join-gowalla": 34697770234,
- "join-grants": 2136067213,
- "join-gtfs": 436918446,
- "join-h1b-filings": 3279810495,
- "join-hackernews": 4079277,
- "join-hepatitis-std": 4597333,
- "join-hmda-mortgages": 4485771298,
- "join-hockey": 83138561,
- "join-hockey-yeti": 272062,
- "join-ilo-employment": 119320517,
- "join-imdb": 54218868712,
- "join-imdb-1r": 311704877,
- "join-imdb-full": 332972556,
- "join-imdb-ijs": 3108042035,
- "join-imdb-movielens": 383100202,
- "join-imdb-small": 4756867,
- "join-imsa": 5746270,
- "join-inaturalist": 8954186158,
- "join-indy-lights": 3149125,
- "join-indycar": 6765656,
- "join-international-worldbank-wdi": 3358374,
- "join-iowa-liquor": 2264108353,
- "join-ipeds": 1464001826,
- "join-lahman-2014": 349517833,
- "join-lahman-baseball": 331329303,
- "join-lastfm": 158458369,
- "join-legalacts": 1138471352,
- "join-lichess": 782204,
- "join-listenbrainz": 3819990,
- "join-livesql-alien": 6167346,
- "join-livesql-archeology": 14413792,
- "join-livesql-credit": 8381218,
- "join-livesql-cross-db": 8065316,
- "join-livesql-crypto": 11831973,
- "join-livesql-cybermarket": 17616232,
- "join-livesql-disaster": 11073818,
- "join-livesql-fake": 11626174,
- "join-livesql-gaming": 8760286,
- "join-livesql-insider": 6006600,
- "join-livesql-mental": 8498488,
- "join-livesql-museum": 8532610,
- "join-livesql-news": 13291629,
- "join-livesql-polar": 14956985,
- "join-livesql-robot": 11450806,
- "join-livesql-solar": 7651682,
- "join-livesql-vaccine": 13431226,
- "join-livesql-virtual": 15393541,
- "join-manifold": 1079759367,
- "join-media": 4578822,
- "join-medical": 21009668,
- "join-mesh": 767297,
- "join-met-museum": 2382268590,
- "join-mitre-attack": 12568697,
- "join-modcloth": 45024391,
- "join-moma": 686500012,
- "join-mondial": 10871288,
- "join-mondial-geo": 3227194,
- "join-mondial-tutorial": 244391,
- "join-mooney-family": 1397607,
- "join-motogp": 3761822,
- "join-movielens": 7661625370,
- "join-movielens-1m": 1440850868,
- "join-musklarge": 29148237,
- "join-musksmall": 2282657,
- "join-mutagenesis": 3263445,
- "join-mutagenesis-188": 6786729,
- "join-mutagenesis-42": 1387385,
- "join-nasa-exoplanets": 179043399,
- "join-nascar-cup": 28091800,
- "join-nascar-trk": 2540882,
- "join-nations": 3875627,
- "join-nba": 1164769,
- "join-ncaa": 131052268,
- "join-ndbc-buoys": 752698,
- "join-nhl-draft": 7662753,
- "join-nhs-prescriptions": 42734623,
- "join-nhtsa-fars": 2322881854,
- "join-nih-reporter": 181644811,
- "join-noaa-storms": 85383176,
- "join-northwind": 7689223,
- "join-nsf-awards": 309829443,
- "join-nyc-311": 372137257,
- "join-nyc-taxi": 3189435311,
- "join-ogbn-arxiv": 368582709,
- "join-ogbn-mag": 2535842084,
- "join-onet": 203216500,
- "join-online-retail": 1150298590,
- "join-open-food-facts": 11078381021,
- "join-open-power-system": 1174633333,
- "join-openalex": 283804,
- "join-openalex-academic": 126854228,
- "join-openflights": 74729375,
- "join-openfoodfacts": 1271274873,
- "join-openml-2016": 4613276581,
- "join-opensanctions": 965588687,
- "join-opensubtitles": 37437091,
- "join-opsd-energy": 195158584,
- "join-osm-city-extracts": 6360723,
- "join-oulad": 8418480366,
- "join-our-world-in-data": 145720,
- "join-overture-maps": 20120066495,
- "join-paleobiology-db": 142352466,
- "join-pew-global-attitudes": 289088179,
- "join-phmsa-pipelines": 200606400,
- "join-pima": 1850603,
- "join-polls": 522564021,
- "join-polymarket": 938491031,
- "join-premierleague": 56973552,
- "join-pte": 11122975,
- "join-pubchem-compounds": 168205341,
- "join-pubmed-diabetes": 305202917,
- "join-pubs": 35797522,
- "join-pyrimidine": 140766,
- "join-ram-fisheries": 174438203,
- "join-ratebeer": 6182386635,
- "join-reactome": 88173468,
- "join-reddit-hyperlinks-body": 2482901541,
- "join-reddit-hyperlinks-title": 3581965125,
- "join-renttherunway": 9715514887,
- "join-retailrocket": 19613780809,
- "join-roadnet-ca": 1608915263,
- "join-sakila": 105309374,
- "join-salesdb": 1823290332,
- "join-same-gen": 471056,
- "join-sap": 12460614088,
- "join-sat": 5573268,
- "join-science": 171483,
- "join-sdss-dr18": 326296148,
- "join-se-3dprinting": 2012209976,
- "join-se-academia": 30133665866,
- "join-se-ai": 5439421629,
- "join-se-android": 23479626757,
- "join-se-anime": 2791492023,
- "join-se-apple": 35011632093,
- "join-se-arduino": 10845343515,
- "join-se-askubuntu": 24868485779,
- "join-se-astronomy": 5781270180,
- "join-se-bicycles": 10360475546,
- "join-se-biology": 11975525652,
- "join-se-boardgames": 4433083867,
- "join-se-buddhism": 1340567249,
- "join-se-chemistry": 19246453659,
- "join-se-chess": 4164285075,
- "join-se-christianity": 6924297376,
- "join-se-codegolf": 16276375469,
- "join-se-codereview": 38581047561,
- "join-se-cooking": 13150728156,
- "join-se-crypto": 10421895601,
- "join-se-cs": 16490613661,
- "join-se-cstheory": 5426673007,
- "join-se-datascience": 14097021196,
- "join-se-dba": 45341229462,
- "join-se-diy": 1975621000,
- "join-se-earthscience": 2984763131,
- "join-se-economics": 3975099980,
- "join-se-electronics": 78473594606,
- "join-se-emacs": 5821824523,
- "join-se-engineering": 4547016578,
- "join-se-english": 54730056763,
- "join-se-gaming": 26751893947,
- "join-se-gardening": 8132290607,
- "join-se-gis": 45917211104,
- "join-se-hinduism": 5922778665,
- "join-se-history": 5044873015,
- "join-se-interpersonal": 3420356261,
- "join-se-islam": 6627444289,
- "join-se-judaism": 11608483115,
- "join-se-law": 11701290344,
- "join-se-lifehacks": 173230974,
- "join-se-linguistics": 285641606,
- "join-se-mathoverflow": 4251023247,
- "join-se-money": 1044986640,
- "join-se-movies": 1151615428,
- "join-se-music": 651814611,
- "join-se-parenting": 338975844,
- "join-se-pets": 197177890,
- "join-se-philosophy": 477007775,
- "join-se-photo": 716729849,
- "join-se-physics": 4101314906,
- "join-se-politics": 977156573,
- "join-se-puzzling": 892619544,
- "join-se-raspberrypi": 830485547,
- "join-se-retrocomputing": 417569005,
- "join-se-reverseengineering": 180640042,
- "join-se-rpg": 2098688081,
- "join-se-scifi": 2784098128,
- "join-se-security": 1787893182,
- "join-se-serverfault": 6280968536,
- "join-se-skeptics": 688189264,
- "join-se-softwareengineering": 4102997145,
- "join-se-softwarerecs": 442592930,
- "join-se-sports": 205107749,
- "join-se-superuser": 10320085546,
- "join-se-tex": 5679297015,
- "join-se-travel": 1522754968,
- "join-se-unix": 5518050745,
- "join-se-vi": 375113282,
- "join-se-webmasters": 609379247,
- "join-se-wordpress": 1843715520,
- "join-se-workplace": 2248496262,
- "join-se-worldbuilding": 1708100279,
- "join-se-writing": 430714638,
- "join-sec-edgar": 19915530,
- "join-seznam": 829784507,
- "join-sfscores": 40882417,
- "join-shakespeare": 45410131,
- "join-simpsons": 39206,
- "join-soc-livejournal": 456821648,
- "join-soc-pokec": 543468912,
- "join-soc-sign-bitcoin": 8278811,
- "join-socialevo": 850570167,
- "join-sodir-norway": 71345784,
- "join-spider-activity-1": 251466,
- "join-spider-aircraft": 103819,
- "join-spider-allergy-1": 106352,
- "join-spider-apartment-rentals": 153034,
- "join-spider-architecture": 69120,
- "join-spider-assets-maintenance": 248782,
- "join-spider-battle-death": 71140,
- "join-spider-behavior-monitoring": 297007,
- "join-spider-bike-1": 25260113,
- "join-spider-body-builder": 25169,
- "join-spider-book-2": 32943,
- "join-spider-browser-web": 63003,
- "join-spider-candidate-poll": 40481,
- "join-spider-car-1": 782827,
- "join-spider-chinook-1": 33452780,
- "join-spider-cinema": 51875,
- "join-spider-city-record": 80730,
- "join-spider-climbing": 47273,
- "join-spider-club-1": 100529,
- "join-spider-coffee-shop": 58445,
- "join-spider-college-1": 272940,
- "join-spider-college-2": 12995185,
- "join-spider-college-3": 484540,
- "join-spider-company-1": 87555,
- "join-spider-company-employee": 64857,
- "join-spider-company-office": 72758,
- "join-spider-concert-singer": 68625,
- "join-spider-county-public-safety": 51411,
- "join-spider-course-teach": 36714,
- "join-spider-cre-doc-control-systems": 113752,
- "join-spider-cre-doc-template-mgt": 69744,
- "join-spider-cre-doc-tracking-db": 103026,
- "join-spider-cre-docs-and-epenses": 80692,
- "join-spider-cre-drama-workshop-groups": 453749,
- "join-spider-cre-theme-park": 228529,
- "join-spider-csu-1": 1157267,
- "join-spider-culture-company": 78126,
- "join-spider-customer-complaints": 116068,
- "join-spider-customer-deliveries": 290434,
- "join-spider-customers-and-addresses": 134510,
- "join-spider-customers-and-invoices": 236517,
- "join-spider-customers-and-products-contacts": 225632,
- "join-spider-customers-campaigns-ecommerce": 186999,
- "join-spider-customers-card-transactions": 134473,
- "join-spider-debate": 43947,
- "join-spider-decoration-competition": 45273,
- "join-spider-department-management": 47532,
- "join-spider-department-store": 265415,
- "join-spider-device": 54558,
- "join-spider-document-management": 162060,
- "join-spider-dog-kennels": 308480,
- "join-spider-dorm-1": 134559,
- "join-spider-driving-school": 230161,
- "join-spider-e-government": 265842,
- "join-spider-e-learning": 206499,
- "join-spider-election": 64327,
- "join-spider-election-representative": 33195,
- "join-spider-employee-hire-evaluation": 74629,
- "join-spider-entertainment-awards": 39291,
- "join-spider-entrepreneur": 30229,
- "join-spider-farm": 55138,
- "join-spider-film-rank": 60640,
- "join-spider-flight-1": 95588,
- "join-spider-flight-4": 65562793,
- "join-spider-flight-company": 100789,
- "join-spider-game-1": 118873,
- "join-spider-game-injury": 90683,
- "join-spider-gas-company": 74729,
- "join-spider-gymnast": 34041,
- "join-spider-hospital-1": 164356,
- "join-spider-hr-1": 560476,
- "join-spider-icfp-1": 60699,
- "join-spider-inn-1": 1351832,
- "join-spider-insurance-and-eclaims": 97909,
- "join-spider-insurance-fnol": 75803,
- "join-spider-insurance-policies": 68272,
- "join-spider-journal-committee": 42441,
- "join-spider-loan-1": 35871,
- "join-spider-local-govt-and-lot": 145171,
- "join-spider-local-govt-in-alabama": 44036,
- "join-spider-local-govt-mdm": 47584,
- "join-spider-machine-repair": 60599,
- "join-spider-manufactory-1": 36809,
- "join-spider-manufacturer": 30635,
- "join-spider-match-season": 124378,
- "join-spider-medicine-enzyme-interaction": 90520,
- "join-spider-mountain-photos": 84321,
- "join-spider-movie-1": 35389,
- "join-spider-museum-visit": 30431,
- "join-spider-music-1": 50870,
- "join-spider-music-4": 70755,
- "join-spider-musical": 54758,
- "join-spider-network-1": 33013,
- "join-spider-network-2": 18528,
- "join-spider-news-report": 42363,
- "join-spider-orchestra": 98665,
- "join-spider-party-host": 47005,
- "join-spider-party-people": 76003,
- "join-spider-performance-attendance": 43046,
- "join-spider-perpetrator": 42257,
- "join-spider-pets-1": 90111,
- "join-spider-phone-1": 62660,
- "join-spider-phone-market": 29658,
- "join-spider-pilot-record": 54917,
- "join-spider-poker-player": 23153,
- "join-spider-product-catalog": 89371,
- "join-spider-products-for-hire": 116814,
- "join-spider-products-gen-characteristics": 111614,
- "join-spider-program-share": 54466,
- "join-spider-protein-institute": 95012,
- "join-spider-race-track": 36323,
- "join-spider-railway": 111685,
- "join-spider-real-estate-properties": 110456,
- "join-spider-restaurant-1": 104475,
- "join-spider-riding-club": 93700,
- "join-spider-roller-coaster": 37640,
- "join-spider-sakila-1": 22308043,
- "join-spider-school-bus": 55878,
- "join-spider-school-finance": 62127,
- "join-spider-school-player": 161208,
- "join-spider-scientist-1": 39065,
- "join-spider-ship-1": 40309,
- "join-spider-ship-mission": 40743,
- "join-spider-shop-membership": 68436,
- "join-spider-singer": 32318,
- "join-spider-small-bank-1": 20439,
- "join-spider-soccer-1": 230565191,
- "join-spider-soccer-2": 30546,
- "join-spider-solvency-ii": 140455,
- "join-spider-sports-competition": 85314,
- "join-spider-station-weather": 75012,
- "join-spider-store-1": 156164750,
- "join-spider-store-product": 79603,
- "join-spider-storm-record": 57939,
- "join-spider-student-1": 140737,
- "join-spider-student-assessment": 187150,
- "join-spider-student-transcripts-tracking": 330505,
- "join-spider-swimming": 112227,
- "join-spider-theme-gallery": 34668,
- "join-spider-tracking-grants-for-research": 138708,
- "join-spider-tracking-orders": 111551,
- "join-spider-tracking-share-transactions": 81818,
- "join-spider-tracking-software-problems": 110611,
- "join-spider-train-station": 52842,
- "join-spider-tvshow": 96680,
- "join-spider-twitter-1": 36835,
- "join-spider-university-basketball": 64051,
- "join-spider-voter-1": 130689,
- "join-spider-voter-2": 95413,
- "join-spider-wedding": 51532,
- "join-spider-wine-1": 1056900,
- "join-spider-workshop-paper": 43540,
- "join-spider-wrestler": 43075,
- "join-spider2-adventureworks": 242998,
- "join-spider2-airlines": 112935,
- "join-spider2-bank-sales-trading": 193500,
- "join-spider2-bowlingleague": 93820,
- "join-spider2-brazilian-e-commerce": 121582,
- "join-spider2-california-traffic-collision": 202181,
- "join-spider2-city-legislation": 350560,
- "join-spider2-complex-oracle": 281360,
- "join-spider2-delivery-center": 122381,
- "join-spider2-e-commerce": 167113,
- "join-spider2-education-business": 224024,
- "join-spider2-entertainmentagency": 182070,
- "join-spider2-eu-soccer": 482024,
- "join-spider2-imdb-movies": 69528,
- "join-spider2-ipl": 97908,
- "join-spider2-log": 201266,
- "join-spider2-modern-data": 161182,
- "join-spider2-music": 188762,
- "join-spider2-oracle-sql": 222114,
- "join-spider2-school-scheduling": 196302,
- "join-spider2-stacking": 119391,
- "join-spider2-wwe": 160205,
- "join-stats": 1900878275,
- "join-stats-ceb": 929861664,
- "join-statsbomb-football": 17599662,
- "join-steam": 65632330,
- "join-student-loan": 1393194,
- "join-sx-askubuntu": 4780266008,
- "join-sx-mathoverflow": 1234100712,
- "join-sx-superuser": 8213299358,
- "join-talkingdata": 22508412096,
- "join-tate": 323265858,
- "join-telstra": 41691185,
- "join-toxicology": 14469812,
- "join-tpcc": 1695794485,
- "join-tpcd": 12368678155,
- "join-tpcds": 11336993100,
- "join-tpch": 81531483150,
- "join-trains": 59132,
- "join-triazine": 633490,
- "join-tubepricing": 62369991,
- "join-twitterfromsearch4-20101001": 11081967816,
- "join-unhcr-refugees": 228781,
- "join-university": 72627,
- "join-unpaywall": 14075954008,
- "join-unvote": 460498141,
- "join-urlhaus": 198049680,
- "join-usda-fooddata": 90265191,
- "join-usda-nass": 1005600460,
- "join-usgs-water": 3529892,
- "join-uslegis": 21793171,
- "join-uspto": 66293018,
- "join-utube": 856081,
- "join-uw-std": 224784,
- "join-vdem": 2081961248,
- "join-visualgenome": 1235298644,
- "join-voc": 20654253,
- "join-walmart": 1404972737,
- "join-walmart-2014": 140574887,
- "join-wals": 20853061,
- "join-web-stanford": 701629210,
- "join-webkp": 23253944,
- "join-who-gho": 104054912,
- "join-wikidata": 98276096,
- "join-wn18rr": 74197973,
- "join-world": 6493205,
- "join-world-geodata": 109114696,
- "join-wrc": 1878493,
- "join-yago3-10": 512373412,
- "join-yelp": 520379282,
- "join-yelpdataset3": 1150414104,
- "join-yelpdataset3-disc-clean": 391648728,
- "join-yoochoose": 4432660357,
- "join-zillow-markets": 306576740
+ "join-accidents": {
+  "out": 1004106766,
+  "text": 393415
+ },
+ "join-act-mooc": {
+  "out": 489888075,
+  "text": 7711
+ },
+ "join-adventureworks2014": {
+  "out": 795215730,
+  "text": 40523324
+ },
+ "join-airline": {
+  "out": 932386369,
+  "text": 554323
+ },
+ "join-amazon-appliances": {
+  "out": 1132696,
+  "text": 4757
+ },
+ "join-amazon-arts-crafts": {
+  "out": 1904008419,
+  "text": 2424846
+ },
+ "join-amazon-automotive": {
+  "out": 3299795735,
+  "text": 2599992
+ },
+ "join-amazon-beauty": {
+  "out": 5983684,
+  "text": 20435
+ },
+ "join-amazon-cds-vinyl": {
+  "out": 1100551730,
+  "text": 1776077
+ },
+ "join-amazon-cell-phones": {
+  "out": 2030383386,
+  "text": 4119591
+ },
+ "join-amazon-clothing": {
+  "out": 4109895244,
+  "text": 3518837
+ },
+ "join-amazon-digital-music": {
+  "out": 682817405,
+  "text": 212462
+ },
+ "join-amazon-electronics": {
+  "out": 20981686257,
+  "text": 14710130
+ },
+ "join-amazon-fashion": {
+  "out": 26177191316,
+  "text": 240983425
+ },
+ "join-amazon-gift-cards": {
+  "out": 9592926,
+  "text": 15415
+ },
+ "join-amazon-grocery": {
+  "out": 2409412803,
+  "text": 2263153
+ },
+ "join-amazon-industrial": {
+  "out": 4837357527,
+  "text": 628572
+ },
+ "join-amazon-kindle": {
+  "out": 1773997511,
+  "text": 3081312
+ },
+ "join-amazon-luxury-beauty": {
+  "out": 88506129,
+  "text": 138074
+ },
+ "join-amazon-magazine": {
+  "out": 9289184,
+  "text": 9484
+ },
+ "join-amazon-movies": {
+  "out": 11851917389,
+  "text": 5718256
+ },
+ "join-amazon-musical-instruments": {
+  "out": 1045608117,
+  "text": 1085396
+ },
+ "join-amazon-office": {
+  "out": 2559083800,
+  "text": 2315239
+ },
+ "join-amazon-patio": {
+  "out": 3323380928,
+  "text": 2445336
+ },
+ "join-amazon-pets": {
+  "out": 2520507513,
+  "text": 2173703
+ },
+ "join-amazon-prime-pantry": {
+  "out": 586908808,
+  "text": 536125
+ },
+ "join-amazon-software": {
+  "out": 55839909,
+  "text": 71826
+ },
+ "join-amazon-sports": {
+  "out": 17268123023,
+  "text": 10570830
+ },
+ "join-amazon-tools": {
+  "out": 2867897968,
+  "text": 3044787
+ },
+ "join-amazon-toys": {
+  "out": 2615191514,
+  "text": 2621068
+ },
+ "join-amazon-video-games": {
+  "out": 2630738990,
+  "text": 1471372
+ },
+ "join-amazon0302": {
+  "out": 444000787,
+  "text": 110
+ },
+ "join-apple-podcasts": {
+  "out": 1777018147,
+  "text": 5214033
+ },
+ "join-arnaud-citeseer": {
+  "out": 40735407,
+  "text": 94456
+ },
+ "join-arnaud-nwecensusmid2014": {
+  "out": 227818021,
+  "text": 697012
+ },
+ "join-atherosclerosis": {
+  "out": 14063719,
+  "text": 4173
+ },
+ "join-atp-tennis": {
+  "out": 493360492,
+  "text": 1109407
+ },
+ "join-australianfootball": {
+  "out": 129619706,
+  "text": 18116
+ },
+ "join-basketball-men": {
+  "out": 56113762,
+  "text": 236721
+ },
+ "join-basketball-women": {
+  "out": 8962296,
+  "text": 62190
+ },
+ "join-beeradvocate": {
+  "out": 5370181848,
+  "text": 1329251
+ },
+ "join-berka": {
+  "out": 2757096760,
+  "text": 70363
+ },
+ "join-bgp-routing": {
+  "out": 2568163,
+  "text": 53912
+ },
+ "join-biodegradability": {
+  "out": 6790208,
+  "text": 835
+ },
+ "join-bird-address": {
+  "out": 158381745,
+  "text": 506638
+ },
+ "join-bird-airline": {
+  "out": 593234441,
+  "text": 352805
+ },
+ "join-bird-app-store": {
+  "out": 66238005,
+  "text": 3486193
+ },
+ "join-bird-authors": {
+  "out": 4567410962,
+  "text": 217873260
+ },
+ "join-bird-beer-factory": {
+  "out": 7119628,
+  "text": 49400
+ },
+ "join-bird-bike-share-1": {
+  "out": 20202354002,
+  "text": 23041049
+ },
+ "join-bird-book-publishing-company": {
+  "out": 475591,
+  "text": 38187
+ },
+ "join-bird-books": {
+  "out": 2608857255,
+  "text": 918076
+ },
+ "join-bird-california-schools": {
+  "out": 117439097,
+  "text": 2032426
+ },
+ "join-bird-car-retails": {
+  "out": 2662004,
+  "text": 41580
+ },
+ "join-bird-card-games": {
+  "out": 1178084527,
+  "text": 80607321
+ },
+ "join-bird-cars": {
+  "out": 758614,
+  "text": 6407
+ },
+ "join-bird-chicago-crime": {
+  "out": 465892410,
+  "text": 3578542
+ },
+ "join-bird-codebase-comments": {
+  "out": 15062590000,
+  "text": 1170222895
+ },
+ "join-bird-coinmarketcap": {
+  "out": 8979691238,
+  "text": 2765616
+ },
+ "join-bird-college-completion": {
+  "out": 710002160,
+  "text": 797633
+ },
+ "join-bird-computer-student": {
+  "out": 257165,
+  "text": 643
+ },
+ "join-bird-cookbook": {
+  "out": 9134247,
+  "text": 460695
+ },
+ "join-bird-cs-semester": {
+  "out": 270343,
+  "text": 3803
+ },
+ "join-bird-debit-card-specializing": {
+  "out": 116824885,
+  "text": 12251
+ },
+ "join-bird-disney": {
+  "out": 1994880,
+  "text": 29851
+ },
+ "join-bird-donor": {
+  "out": 10403231579,
+  "text": 358062110
+ },
+ "join-bird-european-football-1": {
+  "out": 70405224,
+  "text": 13595
+ },
+ "join-bird-european-football-2": {
+  "out": 614232140,
+  "text": 268887997
+ },
+ "join-bird-food-inspection": {
+  "out": 136881974,
+  "text": 467192
+ },
+ "join-bird-food-inspection-2": {
+  "out": 1519733880,
+  "text": 78426895
+ },
+ "join-bird-human-resources": {
+  "out": 121536,
+  "text": 1847
+ },
+ "join-bird-ice-hockey-draft": {
+  "out": 7562015,
+  "text": 71913
+ },
+ "join-bird-image-and-language": {
+  "out": 1235298409,
+  "text": 10562
+ },
+ "join-bird-language-corpus": {
+  "out": 3406517639,
+  "text": 25386562
+ },
+ "join-bird-law-episode": {
+  "out": 3184122,
+  "text": 47920
+ },
+ "join-bird-legislator": {
+  "out": 58293165,
+  "text": 922060
+ },
+ "join-bird-mental-health-survey": {
+  "out": 76865851,
+  "text": 601548
+ },
+ "join-bird-menu": {
+  "out": 6894526099,
+  "text": 52255457
+ },
+ "join-bird-movie": {
+  "out": 12336654,
+  "text": 995583
+ },
+ "join-bird-movie-3": {
+  "out": 135596600,
+  "text": 662535
+ },
+ "join-bird-movie-platform": {
+  "out": 833653899,
+  "text": 40452744
+ },
+ "join-bird-movielens": {
+  "out": 413092060,
+  "text": 963
+ },
+ "join-bird-movies-4": {
+  "out": 264974885,
+  "text": 4070444
+ },
+ "join-bird-music-platform-2": {
+  "out": 10467136742,
+  "text": 561294346
+ },
+ "join-bird-music-tracker": {
+  "out": 153784850,
+  "text": 2063484
+ },
+ "join-bird-olympics": {
+  "out": 335057304,
+  "text": 2940138
+ },
+ "join-bird-professional-basketball": {
+  "out": 55660648,
+  "text": 257214
+ },
+ "join-bird-public-review-platform": {
+  "out": 416541376,
+  "text": 14936
+ },
+ "join-bird-regional-sales": {
+  "out": 45677142,
+  "text": 77409
+ },
+ "join-bird-restaurant": {
+  "out": 15276857,
+  "text": 221250
+ },
+ "join-bird-retail-complains": {
+  "out": 37330645,
+  "text": 565661
+ },
+ "join-bird-retail-world": {
+  "out": 991616,
+  "text": 16971
+ },
+ "join-bird-retails": {
+  "out": 8131431957,
+  "text": 294424168
+ },
+ "join-bird-sales": {
+  "out": 1931558019,
+  "text": 28823
+ },
+ "join-bird-sales-in-weather": {
+  "out": 1380521318,
+  "text": 12299
+ },
+ "join-bird-shipping": {
+  "out": 5550248,
+  "text": 17228
+ },
+ "join-bird-shooting": {
+  "out": 1855811,
+  "text": 34683
+ },
+ "join-bird-simpson-episodes": {
+  "out": 2978153,
+  "text": 25491
+ },
+ "join-bird-soccer-2016": {
+  "out": 124490117,
+  "text": 11408
+ },
+ "join-bird-social-media": {
+  "out": 178251325,
+  "text": 13774558
+ },
+ "join-bird-software-company": {
+  "out": 19287037971,
+  "text": 5637
+ },
+ "join-bird-student-club": {
+  "out": 30194035,
+  "text": 268931
+ },
+ "join-bird-superhero": {
+  "out": 4768202,
+  "text": 22214
+ },
+ "join-bird-superstore": {
+  "out": 22955530,
+  "text": 307485
+ },
+ "join-bird-synthea": {
+  "out": 406766210,
+  "text": 349074
+ },
+ "join-bird-thrombosis-prediction": {
+  "out": 44818847,
+  "text": 30883
+ },
+ "join-bird-university": {
+  "out": 12503290,
+  "text": 39442
+ },
+ "join-bird-video-games": {
+  "out": 1156682392,
+  "text": 325821
+ },
+ "join-bird-works-cycles": {
+  "out": 709849463,
+  "text": 31895356
+ },
+ "join-bird-world-development-indicators": {
+  "out": 1816511991,
+  "text": 556470
+ },
+ "join-boem-offshore": {
+  "out": 2989284781,
+  "text": 5278066
+ },
+ "join-brightkite": {
+  "out": 9617611265,
+  "text": 27650782
+ },
+ "join-bts-airlines": {
+  "out": 8110239707,
+  "text": 71733
+ },
+ "join-bupa": {
+  "out": 824952,
+  "text": 677
+ },
+ "join-ca-astroph": {
+  "out": 127813143,
+  "text": 110
+ },
+ "join-canparl": {
+  "out": 26984818,
+  "text": 149
+ },
+ "join-carcinogenesis": {
+  "out": 9811904,
+  "text": 835
+ },
+ "join-cart": {
+  "out": 8560776,
+  "text": 95733
+ },
+ "join-cdeschools": {
+  "out": 117820628,
+  "text": 2032469
+ },
+ "join-cellartracker": {
+  "out": 4494043199,
+  "text": 23681580
+ },
+ "join-cfpb-complaints": {
+  "out": 538877929,
+  "text": 143288033
+ },
+ "join-chess": {
+  "out": 2939144,
+  "text": 63754
+ },
+ "join-chinook": {
+  "out": 170675162,
+  "text": 113472
+ },
+ "join-chronicling-america": {
+  "out": 1967870,
+  "text": 104281
+ },
+ "join-citeseer": {
+  "out": 38210610,
+  "text": 94431
+ },
+ "join-citi-bike": {
+  "out": 1551901744,
+  "text": 24727472
+ },
+ "join-classicmodels": {
+  "out": 36139104,
+  "text": 46377
+ },
+ "join-clinical-chembl": {
+  "out": 85847308,
+  "text": 2663066
+ },
+ "join-clinvar": {
+  "out": 16837550986,
+  "text": 414340391
+ },
+ "join-cms-hospitals": {
+  "out": 150963887,
+  "text": 497297
+ },
+ "join-cms-nursing-homes": {
+  "out": 500045786,
+  "text": 2568668
+ },
+ "join-coingecko": {
+  "out": 30231887,
+  "text": 365332
+ },
+ "join-com-dblp": {
+  "out": 398590407,
+  "text": 110
+ },
+ "join-consumerexpenditures": {
+  "out": 860236097,
+  "text": 5416
+ },
+ "join-contacts": {
+  "out": 1186369280,
+  "text": 5931
+ },
+ "join-cora": {
+  "out": 17866875,
+  "text": 15012
+ },
+ "join-cordis-h2020": {
+  "out": 704766322,
+  "text": 83529756
+ },
+ "join-cordis-horizon": {
+  "out": 501280911,
+  "text": 57596236
+ },
+ "join-countries": {
+  "out": 18681714,
+  "text": 59204
+ },
+ "join-craftbeer": {
+  "out": 3681800,
+  "text": 68057
+ },
+ "join-credit": {
+  "out": 708486526,
+  "text": 156779
+ },
+ "join-cricsheet": {
+  "out": 2308275464,
+  "text": 170633
+ },
+ "join-ctu-20news": {
+  "out": 56595854,
+  "text": 36933454
+ },
+ "join-ctu-chembl": {
+  "out": 4969402872,
+  "text": 1562826420
+ },
+ "join-ctu-crossschema1": {
+  "out": 2195568544,
+  "text": 6641
+ },
+ "join-ctu-crossschema2": {
+  "out": 17490457,
+  "text": 4422
+ },
+ "join-ctu-datatype-benchmark": {
+  "out": 94400,
+  "text": 1716
+ },
+ "join-ctu-fairytale": {
+  "out": 183349058,
+  "text": 168305975
+ },
+ "join-ctu-feature-data": {
+  "out": 83277577,
+  "text": 1341
+ },
+ "join-ctu-financial": {
+  "out": 1905959569,
+  "text": 6987
+ },
+ "join-ctu-metalearning": {
+  "out": 41294694,
+  "text": 5293151
+ },
+ "join-ctu-mushrooms": {
+  "out": 5896135,
+  "text": 830
+ },
+ "join-ctu-outliers": {
+  "out": 90533,
+  "text": 135
+ },
+ "join-ctu-phishing": {
+  "out": 40528048,
+  "text": 621351
+ },
+ "join-cve-nvd": {
+  "out": 1478135857,
+  "text": 94412111
+ },
+ "join-dallas": {
+  "out": 2434780,
+  "text": 243524
+ },
+ "join-dblp": {
+  "out": 3858830397,
+  "text": 117979937
+ },
+ "join-dcg": {
+  "out": 2550909,
+  "text": 261
+ },
+ "join-device-events": {
+  "out": 106867326,
+  "text": 834009
+ },
+ "join-dplace": {
+  "out": 187644803,
+  "text": 4776192
+ },
+ "join-drugsfda": {
+  "out": 439687822,
+  "text": 363537
+ },
+ "join-dunur": {
+  "out": 197950,
+  "text": 1139
+ },
+ "join-economics": {
+  "out": 832836,
+  "text": 9245
+ },
+ "join-economics-worldbank-wdi": {
+  "out": 32165037,
+  "text": 14839
+ },
+ "join-eia-860": {
+  "out": 174070199,
+  "text": 1732071
+ },
+ "join-eia-923": {
+  "out": 185369009,
+  "text": 1761618
+ },
+ "join-elti": {
+  "out": 480264,
+  "text": 738
+ },
+ "join-email-eu": {
+  "out": 589757354,
+  "text": 5985
+ },
+ "join-email-euall": {
+  "out": 190468274,
+  "text": 110
+ },
+ "join-ember-electricity": {
+  "out": 86045933,
+  "text": 18064
+ },
+ "join-ember-yearly": {
+  "out": 278295111,
+  "text": 7236
+ },
+ "join-employee": {
+  "out": 1276509059,
+  "text": 171413
+ },
+ "join-epa-air-quality": {
+  "out": 122511722,
+  "text": 194949
+ },
+ "join-epinions": {
+  "out": 175760331,
+  "text": 110
+ },
+ "join-europeana": {
+  "out": 107667344,
+  "text": 11855610
+ },
+ "join-eurostat": {
+  "out": 759179254,
+  "text": 10869
+ },
+ "join-eve-online-market": {
+  "out": 2390511,
+  "text": 81400
+ },
+ "join-exploit-db": {
+  "out": 175162526,
+  "text": 7139547
+ },
+ "join-facebook": {
+  "out": 6966670,
+  "text": 5375
+ },
+ "join-faers": {
+  "out": 203307764,
+  "text": 886002
+ },
+ "join-fb15k237": {
+  "out": 132703284,
+  "text": 186912
+ },
+ "join-fda-device-recall": {
+  "out": 124798756,
+  "text": 66961838
+ },
+ "join-fda-food-enforcement": {
+  "out": 48192199,
+  "text": 3498916
+ },
+ "join-fdic-banks": {
+  "out": 57435122,
+  "text": 585331
+ },
+ "join-fec-campaign": {
+  "out": 2727683306,
+  "text": 28501091
+ },
+ "join-fema-disasters": {
+  "out": 3690552,
+  "text": 33823
+ },
+ "join-financial": {
+  "out": 2201881037,
+  "text": 68487
+ },
+ "join-financial-ijs": {
+  "out": 2153301619,
+  "text": 128426
+ },
+ "join-financial-std": {
+  "out": 70035346,
+  "text": 932
+ },
+ "join-flexibee": {
+  "out": 192524987,
+  "text": 1734318
+ },
+ "join-fma": {
+  "out": 595608788,
+  "text": 35948260
+ },
+ "join-fnhk": {
+  "out": 795610169,
+  "text": 607119
+ },
+ "join-foodcom": {
+  "out": 760022019,
+  "text": 9632725
+ },
+ "join-formula-e": {
+  "out": 735026,
+  "text": 9003
+ },
+ "join-foursquare-nyctky": {
+  "out": 2622102093,
+  "text": 2724530
+ },
+ "join-gbif-biodiversity": {
+  "out": 35473487,
+  "text": 932463
+ },
+ "join-gbif-species": {
+  "out": 27396358,
+  "text": 728352
+ },
+ "join-gdelt": {
+  "out": 102118398,
+  "text": 2046045
+ },
+ "join-geneea": {
+  "out": 298176276,
+  "text": 2259656
+ },
+ "join-genes": {
+  "out": 2708439,
+  "text": 5933
+ },
+ "join-geo-nuclear": {
+  "out": 1693073,
+  "text": 21127
+ },
+ "join-geonames": {
+  "out": 8696750016,
+  "text": 172472235
+ },
+ "join-github-archive": {
+  "out": 12208373449,
+  "text": 26105010
+ },
+ "join-gjp": {
+  "out": 191929575,
+  "text": 4319
+ },
+ "join-glottolog": {
+  "out": 48227357,
+  "text": 521427
+ },
+ "join-gosales": {
+  "out": 114808770,
+  "text": 21856
+ },
+ "join-gowalla": {
+  "out": 28904058214,
+  "text": 5855
+ },
+ "join-grants": {
+  "out": 2203306902,
+  "text": 554957842
+ },
+ "join-gtfs": {
+  "out": 450901905,
+  "text": 23668
+ },
+ "join-h1b-filings": {
+  "out": 3264644990,
+  "text": 20319882
+ },
+ "join-hackernews": {
+  "out": 4078582,
+  "text": 133647
+ },
+ "join-hepatitis-std": {
+  "out": 4963951,
+  "text": 668
+ },
+ "join-hmda-mortgages": {
+  "out": 4485772579,
+  "text": 11970910
+ },
+ "join-hockey": {
+  "out": 83129806,
+  "text": 361799
+ },
+ "join-hockey-yeti": {
+  "out": 264577,
+  "text": 5510
+ },
+ "join-ilo-employment": {
+  "out": 112016687,
+  "text": 50476
+ },
+ "join-imdb": {
+  "out": 54340661870,
+  "text": 767978758
+ },
+ "join-imdb-1r": {
+  "out": 335725415,
+  "text": 289
+ },
+ "join-imdb-full": {
+  "out": 335698160,
+  "text": 9691628
+ },
+ "join-imdb-ijs": {
+  "out": 3215452195,
+  "text": 32680459
+ },
+ "join-imdb-movielens": {
+  "out": 413092060,
+  "text": 963
+ },
+ "join-imdb-small": {
+  "out": 4762435,
+  "text": 56209
+ },
+ "join-imsa": {
+  "out": 5745646,
+  "text": 138177
+ },
+ "join-inaturalist": {
+  "out": 8954186245,
+  "text": 698641677
+ },
+ "join-indy-lights": {
+  "out": 3148527,
+  "text": 36126
+ },
+ "join-indycar": {
+  "out": 6765893,
+  "text": 74072
+ },
+ "join-international-worldbank-wdi": {
+  "out": 3358375,
+  "text": 194707
+ },
+ "join-iowa-liquor": {
+  "out": 2312110687,
+  "text": 377783
+ },
+ "join-ipeds": {
+  "out": 1463859503,
+  "text": 2255149
+ },
+ "join-lahman-2014": {
+  "out": 349437992,
+  "text": 980223
+ },
+ "join-lahman-baseball": {
+  "out": 331330597,
+  "text": 1257413
+ },
+ "join-lastfm": {
+  "out": 165161434,
+  "text": 2135850
+ },
+ "join-legalacts": {
+  "out": 1175927146,
+  "text": 22513561
+ },
+ "join-lichess": {
+  "out": 779349,
+  "text": 3860
+ },
+ "join-listenbrainz": {
+  "out": 3820965,
+  "text": 66081
+ },
+ "join-livesql-alien": {
+  "out": 6143458,
+  "text": 25721
+ },
+ "join-livesql-archeology": {
+  "out": 14439769,
+  "text": 229879
+ },
+ "join-livesql-credit": {
+  "out": 8329103,
+  "text": 391170
+ },
+ "join-livesql-cross-db": {
+  "out": 8066078,
+  "text": 67573
+ },
+ "join-livesql-crypto": {
+  "out": 11833135,
+  "text": 1993313
+ },
+ "join-livesql-cybermarket": {
+  "out": 17617844,
+  "text": 1830732
+ },
+ "join-livesql-disaster": {
+  "out": 11074955,
+  "text": 885461
+ },
+ "join-livesql-fake": {
+  "out": 11624794,
+  "text": 1555630
+ },
+ "join-livesql-gaming": {
+  "out": 8688344,
+  "text": 48377
+ },
+ "join-livesql-insider": {
+  "out": 6007537,
+  "text": 323557
+ },
+ "join-livesql-mental": {
+  "out": 8474028,
+  "text": 463359
+ },
+ "join-livesql-museum": {
+  "out": 8531556,
+  "text": 36625
+ },
+ "join-livesql-news": {
+  "out": 13292616,
+  "text": 861093
+ },
+ "join-livesql-polar": {
+  "out": 14957831,
+  "text": 1220436
+ },
+ "join-livesql-robot": {
+  "out": 11452868,
+  "text": 801321
+ },
+ "join-livesql-solar": {
+  "out": 7652769,
+  "text": 361495
+ },
+ "join-livesql-vaccine": {
+  "out": 13432288,
+  "text": 177342
+ },
+ "join-livesql-virtual": {
+  "out": 15456456,
+  "text": 1254923
+ },
+ "join-manifold": {
+  "out": 1080593276,
+  "text": 1743271
+ },
+ "join-media": {
+  "out": 4563974,
+  "text": 63723
+ },
+ "join-medical": {
+  "out": 24498234,
+  "text": 18490
+ },
+ "join-mesh": {
+  "out": 871928,
+  "text": 2487
+ },
+ "join-met-museum": {
+  "out": 2380117921,
+  "text": 109540418
+ },
+ "join-mitre-attack": {
+  "out": 12992734,
+  "text": 1795896
+ },
+ "join-modcloth": {
+  "out": 48197192,
+  "text": 1121
+ },
+ "join-moma": {
+  "out": 692138959,
+  "text": 33504025
+ },
+ "join-mondial": {
+  "out": 11095193,
+  "text": 68469
+ },
+ "join-mondial-geo": {
+  "out": 3563593,
+  "text": 959
+ },
+ "join-mondial-tutorial": {
+  "out": 270925,
+  "text": 279
+ },
+ "join-mooney-family": {
+  "out": 1594894,
+  "text": 4746
+ },
+ "join-motogp": {
+  "out": 3645867,
+  "text": 43940
+ },
+ "join-movielens": {
+  "out": 4058312815,
+  "text": 816703
+ },
+ "join-movielens-1m": {
+  "out": 1440852932,
+  "text": 149169
+ },
+ "join-musklarge": {
+  "out": 29155719,
+  "text": 3878
+ },
+ "join-musksmall": {
+  "out": 2289899,
+  "text": 3878
+ },
+ "join-mutagenesis": {
+  "out": 3508572,
+  "text": 365
+ },
+ "join-mutagenesis-188": {
+  "out": 7404645,
+  "text": 861
+ },
+ "join-mutagenesis-42": {
+  "out": 1511642,
+  "text": 815
+ },
+ "join-nasa-exoplanets": {
+  "out": 178625207,
+  "text": 8441540
+ },
+ "join-nascar-cup": {
+  "out": 28092062,
+  "text": 336531
+ },
+ "join-nascar-trk": {
+  "out": 2540133,
+  "text": 48514
+ },
+ "join-nations": {
+  "out": 4142510,
+  "text": 3768
+ },
+ "join-nba": {
+  "out": 1119356,
+  "text": 10962
+ },
+ "join-ncaa": {
+  "out": 131082133,
+  "text": 9565
+ },
+ "join-ndbc-buoys": {
+  "out": 742858,
+  "text": 367
+ },
+ "join-nhl-draft": {
+  "out": 7663190,
+  "text": 73121
+ },
+ "join-nhs-prescriptions": {
+  "out": 42932011,
+  "text": 407934
+ },
+ "join-nhtsa-fars": {
+  "out": 2313636718,
+  "text": 3965096
+ },
+ "join-nih-reporter": {
+  "out": 181266202,
+  "text": 87186256
+ },
+ "join-noaa-storms": {
+  "out": 85382873,
+  "text": 252234
+ },
+ "join-northwind": {
+  "out": 7583345,
+  "text": 1515247
+ },
+ "join-nsf-awards": {
+  "out": 309943902,
+  "text": 29037276
+ },
+ "join-nyc-311": {
+  "out": 372138247,
+  "text": 30851
+ },
+ "join-nyc-taxi": {
+  "out": 3189435673,
+  "text": 5511
+ },
+ "join-ogbn-arxiv": {
+  "out": 409968357,
+  "text": 732
+ },
+ "join-ogbn-mag": {
+  "out": 2829346276,
+  "text": 4800
+ },
+ "join-onet": {
+  "out": 199206755,
+  "text": 2132842
+ },
+ "join-online-retail": {
+  "out": 1150441976,
+  "text": 145941
+ },
+ "join-open-food-facts": {
+  "out": 11078503263,
+  "text": 6332361545
+ },
+ "join-open-power-system": {
+  "out": 1174635870,
+  "text": 200973
+ },
+ "join-openalex": {
+  "out": 286159,
+  "text": 7828
+ },
+ "join-openalex-academic": {
+  "out": 125530209,
+  "text": 7794287
+ },
+ "join-openflights": {
+  "out": 74354126,
+  "text": 643538
+ },
+ "join-openfoodfacts": {
+  "out": 1271089161,
+  "text": 6345432
+ },
+ "join-openml-2016": {
+  "out": 4588825178,
+  "text": 35162666
+ },
+ "join-opensanctions": {
+  "out": 965812984,
+  "text": 36374619
+ },
+ "join-opensubtitles": {
+  "out": 36542222,
+  "text": 353875
+ },
+ "join-opsd-energy": {
+  "out": 195160301,
+  "text": 3118
+ },
+ "join-osm-city-extracts": {
+  "out": 6215250,
+  "text": 91421
+ },
+ "join-oulad": {
+  "out": 8418635746,
+  "text": 9589
+ },
+ "join-our-world-in-data": {
+  "out": 145721,
+  "text": 2969
+ },
+ "join-overture-maps": {
+  "out": 58058757345,
+  "text": 8545485528
+ },
+ "join-paleobiology-db": {
+  "out": 139699684,
+  "text": 1407766
+ },
+ "join-pew-global-attitudes": {
+  "out": 309453061,
+  "text": 67471
+ },
+ "join-phmsa-pipelines": {
+  "out": 198993849,
+  "text": 8555054
+ },
+ "join-pima": {
+  "out": 2004825,
+  "text": 727
+ },
+ "join-polls": {
+  "out": 522564333,
+  "text": 377900
+ },
+ "join-polymarket": {
+  "out": 941141163,
+  "text": 357424
+ },
+ "join-premierleague": {
+  "out": 56146679,
+  "text": 16444
+ },
+ "join-pte": {
+  "out": 11781320,
+  "text": 81370
+ },
+ "join-pubchem-compounds": {
+  "out": 168205578,
+  "text": 7088961
+ },
+ "join-pubmed-diabetes": {
+  "out": 330455543,
+  "text": 5552
+ },
+ "join-pubs": {
+  "out": 39314067,
+  "text": 116367
+ },
+ "join-pyrimidine": {
+  "out": 147227,
+  "text": 346
+ },
+ "join-ram-fisheries": {
+  "out": 137872723,
+  "text": 473156
+ },
+ "join-reactome": {
+  "out": 88561068,
+  "text": 627804
+ },
+ "join-reddit-hyperlinks-body": {
+  "out": 2482905417,
+  "text": 3094441
+ },
+ "join-reddit-hyperlinks-title": {
+  "out": 3581968873,
+  "text": 790984
+ },
+ "join-renttherunway": {
+  "out": 11634266459,
+  "text": 9474
+ },
+ "join-roadnet-ca": {
+  "out": 1810652124,
+  "text": 110
+ },
+ "join-sakila": {
+  "out": 105046734,
+  "text": 302102
+ },
+ "join-salesdb": {
+  "out": 1945811211,
+  "text": 28837
+ },
+ "join-same-gen": {
+  "out": 514893,
+  "text": 281
+ },
+ "join-sap": {
+  "out": 12460543054,
+  "text": 5449
+ },
+ "join-sat": {
+  "out": 6234528,
+  "text": 4333
+ },
+ "join-science": {
+  "out": 172320,
+  "text": 2337
+ },
+ "join-sdss-dr18": {
+  "out": 297493483,
+  "text": 520
+ },
+ "join-se-3dprinting": {
+  "out": 2308622172,
+  "text": 1055949
+ },
+ "join-se-academia": {
+  "out": 33390084212,
+  "text": 6353291
+ },
+ "join-se-ai": {
+  "out": 6033634009,
+  "text": 2662698
+ },
+ "join-se-android": {
+  "out": 26824901472,
+  "text": 9142900
+ },
+ "join-se-anime": {
+  "out": 3308150001,
+  "text": 1631886
+ },
+ "join-se-apple": {
+  "out": 38976071946,
+  "text": 15550326
+ },
+ "join-se-arduino": {
+  "out": 12380203233,
+  "text": 2924748
+ },
+ "join-se-astronomy": {
+  "out": 6407583850,
+  "text": 2002059
+ },
+ "join-se-bicycles": {
+  "out": 11474891012,
+  "text": 2335270
+ },
+ "join-se-biology": {
+  "out": 13430228530,
+  "text": 3342756
+ },
+ "join-se-boardgames": {
+  "out": 4932373373,
+  "text": 1440613
+ },
+ "join-se-buddhism": {
+  "out": 1481727550,
+  "text": 948734
+ },
+ "join-se-chemistry": {
+  "out": 21776018151,
+  "text": 5232322
+ },
+ "join-se-chess": {
+  "out": 4622203328,
+  "text": 1173220
+ },
+ "join-se-christianity": {
+  "out": 7551961404,
+  "text": 2447999
+ },
+ "join-se-codegolf": {
+  "out": 17600110355,
+  "text": 2129136
+ },
+ "join-se-codereview": {
+  "out": 42580859951,
+  "text": 8516158
+ },
+ "join-se-cooking": {
+  "out": 14668838984,
+  "text": 3027876
+ },
+ "join-se-crypto": {
+  "out": 11564385957,
+  "text": 3799589
+ },
+ "join-se-cs": {
+  "out": 18128223928,
+  "text": 6043695
+ },
+ "join-se-cstheory": {
+  "out": 6055716395,
+  "text": 2012544
+ },
+ "join-se-datascience": {
+  "out": 15602491322,
+  "text": 5402982
+ },
+ "join-se-dba": {
+  "out": 50325950847,
+  "text": 11555479
+ },
+ "join-se-diy": {
+  "out": 2007204940,
+  "text": 7713940
+ },
+ "join-se-earthscience": {
+  "out": 3360814411,
+  "text": 1016258
+ },
+ "join-se-economics": {
+  "out": 4349015752,
+  "text": 1892060
+ },
+ "join-se-electronics": {
+  "out": 87177356916,
+  "text": 19816151
+ },
+ "join-se-emacs": {
+  "out": 6372307895,
+  "text": 2431053
+ },
+ "join-se-engineering": {
+  "out": 4938810430,
+  "text": 2051611
+ },
+ "join-se-english": {
+  "out": 61597583347,
+  "text": 14479652
+ },
+ "join-se-gaming": {
+  "out": 29896827369,
+  "text": 9091178
+ },
+ "join-se-gardening": {
+  "out": 9219026997,
+  "text": 1739511
+ },
+ "join-se-gis": {
+  "out": 51301852125,
+  "text": 16426455
+ },
+ "join-se-hinduism": {
+  "out": 6439575069,
+  "text": 2001680
+ },
+ "join-se-history": {
+  "out": 5624409313,
+  "text": 2250639
+ },
+ "join-se-interpersonal": {
+  "out": 3826461982,
+  "text": 914711
+ },
+ "join-se-islam": {
+  "out": 7363219111,
+  "text": 1768363
+ },
+ "join-se-judaism": {
+  "out": 12833004538,
+  "text": 4105019
+ },
+ "join-se-law": {
+  "out": 12799267996,
+  "text": 3536400
+ },
+ "join-se-lifehacks": {
+  "out": 175226138,
+  "text": 686440
+ },
+ "join-se-linguistics": {
+  "out": 291929786,
+  "text": 1536094
+ },
+ "join-se-mathoverflow": {
+  "out": 4332367235,
+  "text": 22029530
+ },
+ "join-se-money": {
+  "out": 1064866213,
+  "text": 5101418
+ },
+ "join-se-movies": {
+  "out": 1177364450,
+  "text": 3029161
+ },
+ "join-se-music": {
+  "out": 664334015,
+  "text": 2964544
+ },
+ "join-se-parenting": {
+  "out": 347560506,
+  "text": 1089685
+ },
+ "join-se-pets": {
+  "out": 202404830,
+  "text": 911793
+ },
+ "join-se-philosophy": {
+  "out": 486119339,
+  "text": 2776571
+ },
+ "join-se-photo": {
+  "out": 729077485,
+  "text": 3663696
+ },
+ "join-se-physics": {
+  "out": 4173493952,
+  "text": 27304721
+ },
+ "join-se-politics": {
+  "out": 996656979,
+  "text": 2552722
+ },
+ "join-se-puzzling": {
+  "out": 916909412,
+  "text": 2364672
+ },
+ "join-se-raspberrypi": {
+  "out": 838503751,
+  "text": 4478120
+ },
+ "join-se-retrocomputing": {
+  "out": 426286337,
+  "text": 896669
+ },
+ "join-se-reverseengineering": {
+  "out": 182867622,
+  "text": 1257421
+ },
+ "join-se-rpg": {
+  "out": 2152292045,
+  "text": 5523536
+ },
+ "join-se-scifi": {
+  "out": 2866529215,
+  "text": 7843509
+ },
+ "join-se-security": {
+  "out": 1821636058,
+  "text": 9124337
+ },
+ "join-se-serverfault": {
+  "out": 6358845428,
+  "text": 40165764
+ },
+ "join-se-skeptics": {
+  "out": 708639580,
+  "text": 1810465
+ },
+ "join-se-softwareengineering": {
+  "out": 4197493410,
+  "text": 10634662
+ },
+ "join-se-softwarerecs": {
+  "out": 447016206,
+  "text": 2989164
+ },
+ "join-se-sports": {
+  "out": 210138450,
+  "text": 731552
+ },
+ "join-se-superuser": {
+  "out": 10530460150,
+  "text": 59690416
+ },
+ "join-se-tex": {
+  "out": 5774307499,
+  "text": 20825304
+ },
+ "join-se-travel": {
+  "out": 1556128948,
+  "text": 6234845
+ },
+ "join-se-unix": {
+  "out": 5605561094,
+  "text": 25229836
+ },
+ "join-se-vi": {
+  "out": 379860969,
+  "text": 1696834
+ },
+ "join-se-webmasters": {
+  "out": 617437091,
+  "text": 5091814
+ },
+ "join-se-wordpress": {
+  "out": 1862952916,
+  "text": 10959947
+ },
+ "join-se-workplace": {
+  "out": 2317148370,
+  "text": 4484848
+ },
+ "join-se-worldbuilding": {
+  "out": 1751852955,
+  "text": 4778837
+ },
+ "join-se-writing": {
+  "out": 438449738,
+  "text": 1782181
+ },
+ "join-sec-edgar": {
+  "out": 20035613,
+  "text": 281770
+ },
+ "join-sfscores": {
+  "out": 42319743,
+  "text": 465131
+ },
+ "join-shakespeare": {
+  "out": 45410243,
+  "text": 4936395
+ },
+ "join-simpsons": {
+  "out": 39207,
+  "text": 564
+ },
+ "join-soc-livejournal": {
+  "out": 512564045,
+  "text": 110
+ },
+ "join-soc-pokec": {
+  "out": 543469728,
+  "text": 24219488
+ },
+ "join-soc-sign-bitcoin": {
+  "out": 8982021,
+  "text": 149
+ },
+ "join-socialevo": {
+  "out": 800185385,
+  "text": 5012
+ },
+ "join-sodir-norway": {
+  "out": 70393109,
+  "text": 1926276
+ },
+ "join-spider-activity-1": {
+  "out": 256514,
+  "text": 2455
+ },
+ "join-spider-aircraft": {
+  "out": 104996,
+  "text": 2254
+ },
+ "join-spider-allergy-1": {
+  "out": 107653,
+  "text": 939
+ },
+ "join-spider-apartment-rentals": {
+  "out": 154489,
+  "text": 3235
+ },
+ "join-spider-architecture": {
+  "out": 67471,
+  "text": 1487
+ },
+ "join-spider-assets-maintenance": {
+  "out": 251122,
+  "text": 4300
+ },
+ "join-spider-battle-death": {
+  "out": 71227,
+  "text": 1280
+ },
+ "join-spider-behavior-monitoring": {
+  "out": 288822,
+  "text": 5415
+ },
+ "join-spider-bike-1": {
+  "out": 25260528,
+  "text": 143772
+ },
+ "join-spider-body-builder": {
+  "out": 25331,
+  "text": 514
+ },
+ "join-spider-book-2": {
+  "out": 33030,
+  "text": 617
+ },
+ "join-spider-browser-web": {
+  "out": 63065,
+  "text": 1498
+ },
+ "join-spider-candidate-poll": {
+  "out": 40668,
+  "text": 776
+ },
+ "join-spider-car-1": {
+  "out": 782989,
+  "text": 8854
+ },
+ "join-spider-chinook-1": {
+  "out": 33730887,
+  "text": 112670
+ },
+ "join-spider-cinema": {
+  "out": 52037,
+  "text": 1059
+ },
+ "join-spider-city-record": {
+  "out": 82113,
+  "text": 1486
+ },
+ "join-spider-climbing": {
+  "out": 47385,
+  "text": 922
+ },
+ "join-spider-club-1": {
+  "out": 100641,
+  "text": 1269
+ },
+ "join-spider-coffee-shop": {
+  "out": 58657,
+  "text": 1010
+ },
+ "join-spider-college-1": {
+  "out": 273102,
+  "text": 3669
+ },
+ "join-spider-college-2": {
+  "out": 13782785,
+  "text": 18636
+ },
+ "join-spider-college-3": {
+  "out": 491810,
+  "text": 5464
+ },
+ "join-spider-company-1": {
+  "out": 87842,
+  "text": 1329
+ },
+ "join-spider-company-employee": {
+  "out": 65044,
+  "text": 1109
+ },
+ "join-spider-company-office": {
+  "out": 72970,
+  "text": 1248
+ },
+ "join-spider-concert-singer": {
+  "out": 69946,
+  "text": 1174
+ },
+ "join-spider-county-public-safety": {
+  "out": 51723,
+  "text": 895
+ },
+ "join-spider-course-teach": {
+  "out": 36801,
+  "text": 662
+ },
+ "join-spider-cre-doc-control-systems": {
+  "out": 113964,
+  "text": 1783
+ },
+ "join-spider-cre-doc-template-mgt": {
+  "out": 66059,
+  "text": 1024
+ },
+ "join-spider-cre-doc-tracking-db": {
+  "out": 101489,
+  "text": 2541
+ },
+ "join-spider-cre-docs-and-epenses": {
+  "out": 80112,
+  "text": 1600
+ },
+ "join-spider-cre-drama-workshop-groups": {
+  "out": 449542,
+  "text": 9217
+ },
+ "join-spider-cre-theme-park": {
+  "out": 221228,
+  "text": 3621
+ },
+ "join-spider-csu-1": {
+  "out": 1147294,
+  "text": 2058
+ },
+ "join-spider-culture-company": {
+  "out": 78288,
+  "text": 1561
+ },
+ "join-spider-customer-complaints": {
+  "out": 114269,
+  "text": 2440
+ },
+ "join-spider-customer-deliveries": {
+  "out": 292512,
+  "text": 6213
+ },
+ "join-spider-customers-and-addresses": {
+  "out": 132961,
+  "text": 2496
+ },
+ "join-spider-customers-and-invoices": {
+  "out": 228581,
+  "text": 4089
+ },
+ "join-spider-customers-and-products-contacts": {
+  "out": 223742,
+  "text": 3969
+ },
+ "join-spider-customers-campaigns-ecommerce": {
+  "out": 182266,
+  "text": 3757
+ },
+ "join-spider-customers-card-transactions": {
+  "out": 131989,
+  "text": 2999
+ },
+ "join-spider-debate": {
+  "out": 44985,
+  "text": 826
+ },
+ "join-spider-decoration-competition": {
+  "out": 45360,
+  "text": 795
+ },
+ "join-spider-department-management": {
+  "out": 48664,
+  "text": 817
+ },
+ "join-spider-department-store": {
+  "out": 264877,
+  "text": 6695
+ },
+ "join-spider-device": {
+  "out": 54620,
+  "text": 834
+ },
+ "join-spider-document-management": {
+  "out": 164058,
+  "text": 3447
+ },
+ "join-spider-dog-kennels": {
+  "out": 308667,
+  "text": 6234
+ },
+ "join-spider-dorm-1": {
+  "out": 136829,
+  "text": 1402
+ },
+ "join-spider-driving-school": {
+  "out": 228321,
+  "text": 3960
+ },
+ "join-spider-e-government": {
+  "out": 263891,
+  "text": 5323
+ },
+ "join-spider-e-learning": {
+  "out": 206586,
+  "text": 4354
+ },
+ "join-spider-election": {
+  "out": 64389,
+  "text": 1382
+ },
+ "join-spider-election-representative": {
+  "out": 33332,
+  "text": 607
+ },
+ "join-spider-employee-hire-evaluation": {
+  "out": 74741,
+  "text": 1181
+ },
+ "join-spider-entertainment-awards": {
+  "out": 38587,
+  "text": 740
+ },
+ "join-spider-entrepreneur": {
+  "out": 30341,
+  "text": 606
+ },
+ "join-spider-farm": {
+  "out": 56579,
+  "text": 1095
+ },
+ "join-spider-film-rank": {
+  "out": 60802,
+  "text": 1178
+ },
+ "join-spider-flight-1": {
+  "out": 98760,
+  "text": 1245
+ },
+ "join-spider-flight-4": {
+  "out": 65562930,
+  "text": 553530
+ },
+ "join-spider-flight-company": {
+  "out": 100901,
+  "text": 1738
+ },
+ "join-spider-game-1": {
+  "out": 119135,
+  "text": 1454
+ },
+ "join-spider-game-injury": {
+  "out": 87723,
+  "text": 1613
+ },
+ "join-spider-gas-company": {
+  "out": 74916,
+  "text": 1419
+ },
+ "join-spider-gymnast": {
+  "out": 34303,
+  "text": 716
+ },
+ "join-spider-hospital-1": {
+  "out": 161912,
+  "text": 2818
+ },
+ "join-spider-hr-1": {
+  "out": 560688,
+  "text": 7777
+ },
+ "join-spider-icfp-1": {
+  "out": 60836,
+  "text": 1090
+ },
+ "join-spider-inn-1": {
+  "out": 1352019,
+  "text": 14505
+ },
+ "join-spider-insurance-and-eclaims": {
+  "out": 98351,
+  "text": 1803
+ },
+ "join-spider-insurance-fnol": {
+  "out": 75915,
+  "text": 1562
+ },
+ "join-spider-insurance-policies": {
+  "out": 68459,
+  "text": 1217
+ },
+ "join-spider-journal-committee": {
+  "out": 43535,
+  "text": 844
+ },
+ "join-spider-loan-1": {
+  "out": 36033,
+  "text": 582
+ },
+ "join-spider-local-govt-and-lot": {
+  "out": 145750,
+  "text": 3078
+ },
+ "join-spider-local-govt-in-alabama": {
+  "out": 46639,
+  "text": 806
+ },
+ "join-spider-local-govt-mdm": {
+  "out": 54742,
+  "text": 1305
+ },
+ "join-spider-machine-repair": {
+  "out": 58218,
+  "text": 1156
+ },
+ "join-spider-manufactory-1": {
+  "out": 36896,
+  "text": 544
+ },
+ "join-spider-manufacturer": {
+  "out": 30797,
+  "text": 593
+ },
+ "join-spider-match-season": {
+  "out": 124440,
+  "text": 2777
+ },
+ "join-spider-medicine-enzyme-interaction": {
+  "out": 91922,
+  "text": 1639
+ },
+ "join-spider-mountain-photos": {
+  "out": 84458,
+  "text": 1576
+ },
+ "join-spider-movie-1": {
+  "out": 35501,
+  "text": 528
+ },
+ "join-spider-museum-visit": {
+  "out": 30593,
+  "text": 594
+ },
+ "join-spider-music-1": {
+  "out": 50957,
+  "text": 699
+ },
+ "join-spider-music-4": {
+  "out": 68994,
+  "text": 1452
+ },
+ "join-spider-musical": {
+  "out": 53870,
+  "text": 1099
+ },
+ "join-spider-network-1": {
+  "out": 35667,
+  "text": 377
+ },
+ "join-spider-network-2": {
+  "out": 18615,
+  "text": 279
+ },
+ "join-spider-news-report": {
+  "out": 43470,
+  "text": 769
+ },
+ "join-spider-orchestra": {
+  "out": 98802,
+  "text": 1769
+ },
+ "join-spider-party-host": {
+  "out": 48061,
+  "text": 827
+ },
+ "join-spider-party-people": {
+  "out": 76004,
+  "text": 1408
+ },
+ "join-spider-performance-attendance": {
+  "out": 43133,
+  "text": 804
+ },
+ "join-spider-perpetrator": {
+  "out": 42394,
+  "text": 733
+ },
+ "join-spider-pets-1": {
+  "out": 90298,
+  "text": 883
+ },
+ "join-spider-phone-1": {
+  "out": 62822,
+  "text": 1228
+ },
+ "join-spider-phone-market": {
+  "out": 29820,
+  "text": 485
+ },
+ "join-spider-pilot-record": {
+  "out": 55004,
+  "text": 1133
+ },
+ "join-spider-poker-player": {
+  "out": 23315,
+  "text": 458
+ },
+ "join-spider-product-catalog": {
+  "out": 89188,
+  "text": 1881
+ },
+ "join-spider-products-for-hire": {
+  "out": 116150,
+  "text": 2133
+ },
+ "join-spider-products-gen-characteristics": {
+  "out": 111111,
+  "text": 1878
+ },
+ "join-spider-program-share": {
+  "out": 55665,
+  "text": 981
+ },
+ "join-spider-protein-institute": {
+  "out": 95174,
+  "text": 2214
+ },
+ "join-spider-race-track": {
+  "out": 36385,
+  "text": 764
+ },
+ "join-spider-railway": {
+  "out": 111772,
+  "text": 1684
+ },
+ "join-spider-real-estate-properties": {
+  "out": 98935,
+  "text": 2468
+ },
+ "join-spider-restaurant-1": {
+  "out": 105543,
+  "text": 1452
+ },
+ "join-spider-riding-club": {
+  "out": 93937,
+  "text": 1699
+ },
+ "join-spider-roller-coaster": {
+  "out": 36053,
+  "text": 681
+ },
+ "join-spider-sakila-1": {
+  "out": 22161206,
+  "text": 187427
+ },
+ "join-spider-school-bus": {
+  "out": 55965,
+  "text": 1036
+ },
+ "join-spider-school-finance": {
+  "out": 62339,
+  "text": 1051
+ },
+ "join-spider-school-player": {
+  "out": 159575,
+  "text": 2817
+ },
+ "join-spider-scientist-1": {
+  "out": 40335,
+  "text": 834
+ },
+ "join-spider-ship-1": {
+  "out": 38601,
+  "text": 710
+ },
+ "join-spider-ship-mission": {
+  "out": 40830,
+  "text": 698
+ },
+ "join-spider-shop-membership": {
+  "out": 69597,
+  "text": 1277
+ },
+ "join-spider-singer": {
+  "out": 32430,
+  "text": 581
+ },
+ "join-spider-small-bank-1": {
+  "out": 20526,
+  "text": 260
+ },
+ "join-spider-soccer-1": {
+  "out": 230528589,
+  "text": 191617
+ },
+ "join-spider-soccer-2": {
+  "out": 30708,
+  "text": 349
+ },
+ "join-spider-solvency-ii": {
+  "out": 147923,
+  "text": 2966
+ },
+ "join-spider-sports-competition": {
+  "out": 85576,
+  "text": 1265
+ },
+ "join-spider-station-weather": {
+  "out": 74713,
+  "text": 1215
+ },
+ "join-spider-store-1": {
+  "out": 156442900,
+  "text": 113274
+ },
+ "join-spider-store-product": {
+  "out": 79430,
+  "text": 1584
+ },
+ "join-spider-storm-record": {
+  "out": 58076,
+  "text": 884
+ },
+ "join-spider-student-1": {
+  "out": 140849,
+  "text": 1566
+ },
+ "join-spider-student-assessment": {
+  "out": 184460,
+  "text": 3963
+ },
+ "join-spider-student-transcripts-tracking": {
+  "out": 326982,
+  "text": 5052
+ },
+ "join-spider-swimming": {
+  "out": 113468,
+  "text": 1717
+ },
+ "join-spider-theme-gallery": {
+  "out": 34780,
+  "text": 617
+ },
+ "join-spider-tracking-grants-for-research": {
+  "out": 135608,
+  "text": 2046
+ },
+ "join-spider-tracking-orders": {
+  "out": 111890,
+  "text": 1436
+ },
+ "join-spider-tracking-share-transactions": {
+  "out": 82364,
+  "text": 1019
+ },
+ "join-spider-tracking-software-problems": {
+  "out": 110612,
+  "text": 1677
+ },
+ "join-spider-train-station": {
+  "out": 52313,
+  "text": 1216
+ },
+ "join-spider-tvshow": {
+  "out": 93739,
+  "text": 1734
+ },
+ "join-spider-twitter-1": {
+  "out": 38028,
+  "text": 877
+ },
+ "join-spider-university-basketball": {
+  "out": 64163,
+  "text": 1408
+ },
+ "join-spider-voter-1": {
+  "out": 138906,
+  "text": 753
+ },
+ "join-spider-voter-2": {
+  "out": 95550,
+  "text": 1091
+ },
+ "join-spider-wedding": {
+  "out": 51619,
+  "text": 1005
+ },
+ "join-spider-wine-1": {
+  "out": 1038069,
+  "text": 13155
+ },
+ "join-spider-workshop-paper": {
+  "out": 44571,
+  "text": 788
+ },
+ "join-spider-wrestler": {
+  "out": 43137,
+  "text": 798
+ },
+ "join-spider2-adventureworks": {
+  "out": 229061,
+  "text": 11768
+ },
+ "join-spider2-airlines": {
+  "out": 113072,
+  "text": 2964
+ },
+ "join-spider2-bank-sales-trading": {
+  "out": 192268,
+  "text": 4845
+ },
+ "join-spider2-bowlingleague": {
+  "out": 90632,
+  "text": 1665
+ },
+ "join-spider2-brazilian-e-commerce": {
+  "out": 120250,
+  "text": 3595
+ },
+ "join-spider2-california-traffic-collision": {
+  "out": 153675,
+  "text": 3457
+ },
+ "join-spider2-city-legislation": {
+  "out": 322208,
+  "text": 7144
+ },
+ "join-spider2-complex-oracle": {
+  "out": 247870,
+  "text": 5839
+ },
+ "join-spider2-delivery-center": {
+  "out": 116060,
+  "text": 2672
+ },
+ "join-spider2-e-commerce": {
+  "out": 163229,
+  "text": 4710
+ },
+ "join-spider2-education-business": {
+  "out": 218450,
+  "text": 4778
+ },
+ "join-spider2-entertainmentagency": {
+  "out": 171639,
+  "text": 3379
+ },
+ "join-spider2-eu-soccer": {
+  "out": 476748,
+  "text": 89187
+ },
+ "join-spider2-imdb-movies": {
+  "out": 68790,
+  "text": 1271
+ },
+ "join-spider2-ipl": {
+  "out": 95270,
+  "text": 1889
+ },
+ "join-spider2-log": {
+  "out": 197798,
+  "text": 3923
+ },
+ "join-spider2-modern-data": {
+  "out": 155073,
+  "text": 3825
+ },
+ "join-spider2-music": {
+  "out": 184618,
+  "text": 3733
+ },
+ "join-spider2-oracle-sql": {
+  "out": 214811,
+  "text": 4092
+ },
+ "join-spider2-school-scheduling": {
+  "out": 194364,
+  "text": 4699
+ },
+ "join-spider2-stacking": {
+  "out": 110211,
+  "text": 2186
+ },
+ "join-spider2-wwe": {
+  "out": 159448,
+  "text": 57050
+ },
+ "join-statsbomb-football": {
+  "out": 18019936,
+  "text": 91266
+ },
+ "join-steam": {
+  "out": 65607235,
+  "text": 2306736
+ },
+ "join-student-loan": {
+  "out": 1550758,
+  "text": 1035
+ },
+ "join-sx-askubuntu": {
+  "out": 4785366701,
+  "text": 7944
+ },
+ "join-sx-mathoverflow": {
+  "out": 1234897117,
+  "text": 6252
+ },
+ "join-sx-superuser": {
+  "out": 8219512819,
+  "text": 8494
+ },
+ "join-talkingdata": {
+  "out": 22503341394,
+  "text": 31574
+ },
+ "join-tate": {
+  "out": 323255792,
+  "text": 12975344
+ },
+ "join-telstra": {
+  "out": 45247913,
+  "text": 23840
+ },
+ "join-toxicology": {
+  "out": 15866667,
+  "text": 475
+ },
+ "join-tpcc": {
+  "out": 1686867038,
+  "text": 57810673
+ },
+ "join-tpcd": {
+  "out": 12327876129,
+  "text": 608068459
+ },
+ "join-tpcds": {
+  "out": 11620206916,
+  "text": 6401573
+ },
+ "join-tpch": {
+  "out": 81496851002,
+  "text": 294458520
+ },
+ "join-trains": {
+  "out": 60541,
+  "text": 417
+ },
+ "join-triazine": {
+  "out": 661432,
+  "text": 367
+ },
+ "join-tubepricing": {
+  "out": 64064057,
+  "text": 12961
+ },
+ "join-twitterfromsearch4-20101001": {
+  "out": 12257759108,
+  "text": 9700030
+ },
+ "join-unhcr-refugees": {
+  "out": 209859,
+  "text": 467
+ },
+ "join-university": {
+  "out": 79682,
+  "text": 547
+ },
+ "join-unpaywall": {
+  "out": 14075954145,
+  "text": 724797551
+ },
+ "join-unvote": {
+  "out": 460506574,
+  "text": 4501
+ },
+ "join-urlhaus": {
+  "out": 201391650,
+  "text": 6121355
+ },
+ "join-usda-fooddata": {
+  "out": 95767558,
+  "text": 788565
+ },
+ "join-usda-nass": {
+  "out": 1005598165,
+  "text": 1627200
+ },
+ "join-usgs-water": {
+  "out": 3421608,
+  "text": 2032
+ },
+ "join-uslegis": {
+  "out": 21801282,
+  "text": 149
+ },
+ "join-uspto": {
+  "out": 67597530,
+  "text": 1867498
+ },
+ "join-utube": {
+  "out": 923388,
+  "text": 393
+ },
+ "join-uw-std": {
+  "out": 247653,
+  "text": 643
+ },
+ "join-vdem": {
+  "out": 2015775412,
+  "text": 96576
+ },
+ "join-visualgenome": {
+  "out": 1235298956,
+  "text": 10562
+ },
+ "join-voc": {
+  "out": 20280625,
+  "text": 507616
+ },
+ "join-walmart": {
+  "out": 1515800074,
+  "text": 7556
+ },
+ "join-walmart-2014": {
+  "out": 140574303,
+  "text": 448
+ },
+ "join-wals": {
+  "out": 20851625,
+  "text": 453486
+ },
+ "join-web-stanford": {
+  "out": 784651639,
+  "text": 110
+ },
+ "join-webkp": {
+  "out": 25233665,
+  "text": 17925
+ },
+ "join-who-gho": {
+  "out": 85242245,
+  "text": 899101
+ },
+ "join-wikidata": {
+  "out": 98235270,
+  "text": 1745900
+ },
+ "join-wn18rr": {
+  "out": 76430865,
+  "text": 450843
+ },
+ "join-world": {
+  "out": 6493442,
+  "text": 73341
+ },
+ "join-world-geodata": {
+  "out": 108312342,
+  "text": 4999312
+ },
+ "join-wrc": {
+  "out": 1878555,
+  "text": 27741
+ },
+ "join-yago3-10": {
+  "out": 538511192,
+  "text": 2430221
+ },
+ "join-yelp": {
+  "out": 520106151,
+  "text": 165498231
+ },
+ "join-yelpdataset3": {
+  "out": 1150039824,
+  "text": 237879336
+ },
+ "join-yelpdataset3-disc-clean": {
+  "out": 416541567,
+  "text": 14936
+ },
+ "join-yoochoose": {
+  "out": 4479192194,
+  "text": 6534
+ },
+ "join-zillow-markets": {
+  "out": 306576741,
+  "text": 5775043
+ }
 }

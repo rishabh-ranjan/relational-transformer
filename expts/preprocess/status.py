@@ -3,11 +3,13 @@
     pixi run python expts/preprocess/status.py <collection>
     watch -n60 pixi run python expts/preprocess/status.py <collection>
 
-Progress is measured in bytes, not in databases. Counting databases would say
-this sweep was 97% done while a quarter of the work remained, because 20 of the
-639 are half the output. Each database's share is what the previous build's
-output measured (`sizes.py`), so a database that is finished contributes its
-real weight and the ETA is against work, not against a count.
+Progress is measured in estimated *seconds of work*, per stage. Counting
+databases would say a sweep was 97% done with a quarter of the work left, and
+counting output bytes gets the two stages wrong in opposite directions: rustler
+tracks output size (~21 s/GiB, measured), while the embedding stage tracks text
+and the two are not proportional -- text is 12% of RelBench's output and 1.7% of
+the Join's. A database counts twice, once as each stage finishes, so progress
+moves with the work rather than jumping when a database completes.
 
 The rate comes from samples this script leaves in `progress.jsonl` next to the
 job logs, so an ETA is available from the second invocation onward and does not
@@ -26,13 +28,25 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from expts.preprocess.collection import Collection, pick  # noqa: E402
-from expts.preprocess.preprocess import is_done  # noqa: E402
+from expts.preprocess.preprocess import is_done, is_rustler_done  # noqa: E402
 from expts.preprocess.sizes import load as load_sizes  # noqa: E402
 from expts.preprocess.submit import EMBEDDER, log_root  # noqa: E402
 
 # Only rate samples inside this window are used, so an ETA reflects how the
 # sweep is going now rather than averaging in a slow start or a stall.
 WINDOW = timedelta(hours=1)
+
+# Measured on the Join: rustler is single-threaded and tracks output size; the
+# embedding stage tracks text.json and, on six GPUs, runs about four times a
+# single card. Only their ratio matters here -- the ETA divides by the rate it
+# observes -- so these being a little stale costs nothing.
+RUSTLER_S_PER_GIB_OUT = 21
+EMBED_S_PER_GIB_TEXT = 2424 / 4.1
+
+# Bumped when what a sample counts changes, so old records are ignored rather
+# than differenced against new ones -- a rate computed across a unit change
+# reads as the sweep finishing in seconds, or never.
+SAMPLE_UNIT = "job-seconds-v1"
 
 
 def gib(n: float) -> str:
@@ -117,13 +131,17 @@ def _queued() -> set[str]:
     return {db for n in out.stdout.split() if (db := _strip_stage(n))}
 
 
-def stuck(done: set[str], limit: int = 8) -> list[str]:
-    """Databases whose last attempt failed and that nothing is retrying.
+def stuck(names: set[str], done: set[str], limit: int = 8) -> list[str]:
+    """Databases of *this collection* whose last attempt failed unretried.
 
     Not "jobs that failed today": a database that failed, was resubmitted and
     succeeded would be reported as broken forever, which trains you to ignore
     the line. What matters is whether it is finished or on its way -- a failure
     with a successful retry behind it is history, not a problem.
+
+    And not other collections' jobs: they share a job-name prefix, so a failure
+    from a different sweep would otherwise be reported here as this one's, with
+    no way to act on it.
     """
     out = subprocess.run(
         [
@@ -147,7 +165,7 @@ def stuck(done: set[str], limit: int = 8) -> list[str]:
     for line in out.stdout.splitlines():
         name, _, state = line.partition("|")
         db = _strip_stage(name) if state else None
-        if not db:
+        if not db or db not in names:
             continue
         if db in done or db in live:
             continue
@@ -188,11 +206,18 @@ def sample(
         for line in SAMPLES.read_text().splitlines():
             try:
                 row = json.loads(line)
+                if row.get("unit") != SAMPLE_UNIT:
+                    continue
                 history.append((row["t"], row["bytes"], row.get("n", 0)))
             except (json.JSONDecodeError, KeyError):
                 continue
     with SAMPLES.open("a") as f:
-        f.write(json.dumps({"t": now, "bytes": done_bytes, "n": done_count}) + "\n")
+        f.write(
+            json.dumps(
+                {"t": now, "bytes": done_bytes, "n": done_count, "unit": SAMPLE_UNIT}
+            )
+            + "\n"
+        )
     inside = [h for h in history if now - h[0] <= WINDOW.total_seconds()]
     return (inside or history or [None])[0]
 
@@ -221,37 +246,73 @@ def databases(c: Collection) -> list[str]:
         return sorted(p.parent.name for p in Path(c.raw_dir).glob("*/manifest.yaml"))
 
 
+def cost(c: Collection, names: list[str]) -> dict[str, tuple[float, float]]:
+    """database -> (rustler seconds, embed seconds), estimated.
+
+    Text bytes come from the previous build until this one has written its own;
+    once `text.json` exists it is the real thing rather than a prediction, which
+    matters because the prediction is the weaker of the two.
+    """
+    sizes, out = load_sizes(c), Path(c.out_dir)
+    known_out = sorted(v.get("out", 0) for v in sizes.values())
+    known_text = sorted(v.get("text", 0) for v in sizes.values())
+    med_out = known_out[len(known_out) // 2] if known_out else 0
+    med_text = known_text[len(known_text) // 2] if known_text else 0
+
+    est = {}
+    for n in names:
+        s = sizes.get(n, {})
+        o = s.get("out", med_out)
+        local_text = out / n / "text.json"
+        text = (
+            local_text.stat().st_size
+            if local_text.exists()
+            else s.get("text", med_text)
+        )
+        est[n] = (
+            o / 2**30 * RUSTLER_S_PER_GIB_OUT,
+            text / 2**30 * EMBED_S_PER_GIB_TEXT,
+        )
+    return est
+
+
 def report(c: Collection) -> None:
-    sizes = load_sizes(c)
     names = databases(c)
     out = Path(c.out_dir)
-    # A database the previous build never had has no expected size; charge it
-    # the median so it is neither invisible nor dominant.
-    known = sorted(sizes[n] for n in names if n in sizes)
-    fallback = known[len(known) // 2] if known else 0
-    weight = {n: sizes.get(n, fallback) for n in names}
+    est = cost(c, names)
 
     done = [n for n in names if is_done(out / n, EMBEDDER)]
-    total_bytes = sum(weight.values())
-    done_bytes = sum(weight[n] for n in done)
-
-    print(f"=== {datetime.now():%Y-%m-%d %H:%M:%S}  {c.name} preprocessing")
-    print(f"databases : {len(done)}/{len(names)}")
-    print(
-        f"work      : {gib(done_bytes)} / {gib(total_bytes)}"
-        f"  ({done_bytes / max(total_bytes, 1):.1%})"
+    total = sum(r + e for r, e in est.values())
+    finished = sum(
+        (est[n][0] if is_rustler_done(out / n) else 0)
+        + (est[n][1] if is_done(out / n, EMBEDDER) else 0)
+        for n in names
     )
 
-    earlier = sample(c, done_bytes, len(done))
+    print(f"=== {datetime.now():%Y-%m-%d %H:%M:%S}  {c.name} preprocessing")
+    print(
+        f"databases : {len(done)}/{len(names)}"
+        f"   (rustler {sum(is_rustler_done(out / n) for n in names)}/{len(names)})"
+    )
+    print(
+        f"work      : {finished / 3600:,.1f} / {total / 3600:,.1f} estimated job-hours"
+        f"  ({finished / max(total, 1):.1%})"
+    )
+    done_bytes, total_bytes = finished, total
+
+    earlier = sample(c, int(done_bytes), len(done))
     if earlier and done_bytes > earlier[1]:
         elapsed = time.time() - earlier[0]
         rate = (done_bytes - earlier[1]) / elapsed
-        finished = len(done) - earlier[2]
+        completed = len(done) - earlier[2]
         print(
-            f"rate      : {gib(rate * 3600)}/h over the last {elapsed / 60:.0f} min"
-            f"  ({finished} databases)"
+            f"rate      : {rate * 3600 / 3600:,.1f} job-hours of work per hour"
+            f" over the last {elapsed / 60:.0f} min  ({completed} databases)"
         )
-        if finished >= MIN_COMPLETIONS:
+        if (
+            completed >= MIN_COMPLETIONS
+            or (total_bytes - done_bytes) / max(rate, 1e-9) < 3600
+        ):
             remaining = (total_bytes - done_bytes) / rate
             print(
                 f"eta       : {timedelta(seconds=int(remaining))}"
@@ -260,7 +321,7 @@ def report(c: Collection) -> None:
         else:
             print(
                 f"eta       : too early -- needs {MIN_COMPLETIONS} databases finished "
-                f"inside the window, has {finished}"
+                f"inside the window, has {completed}"
             )
     else:
         print("rate      : nothing finished yet (run again in a few minutes)")
@@ -271,9 +332,12 @@ def report(c: Collection) -> None:
     live = running_now()
     if live:
         print(f"running   : {len(live)}")
-        for name, where in sorted(live, key=lambda r: -weight.get(r[0], 0))[:8]:
-            print(f"            {name:42s} {gib(weight.get(name, 0)):>12s}  {where}")
-    failures = stuck(set(done))
+        for name, where in sorted(live, key=lambda r: -sum(est.get(r[0], (0, 0))))[:8]:
+            r, e = est.get(name, (0, 0))
+            print(
+                f"            {name:34s} rustler {r / 60:5.0f}m  embed {e / 60:5.0f}m  {where}"
+            )
+    failures = stuck(set(names), set(done))
     if failures:
         print(
             f"stuck     : {len(failures)} not done and not retrying (re-run submit.py)"

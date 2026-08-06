@@ -26,6 +26,7 @@ from roach.slurm import Resources, submit  # noqa: E402
 from expts.preprocess.collection import Collection, pick  # noqa: E402
 from expts.preprocess.preprocess import is_done, is_rustler_done  # noqa: E402
 from expts.preprocess.sizes import load as load_sizes  # noqa: E402
+from expts.preprocess.sizes import out_bytes, text_bytes  # noqa: E402
 
 REPO_ROOT = "/lfs/hyperturing1/0/ranjanr/clones/rishabh-ranjan/relational-transformer"
 CLONE_ROOT = "/lfs/local/0/roach_clones"
@@ -84,6 +85,11 @@ TIERS = (
 # Card type barely matters: one RTX8000 does 929 texts/s against a 2080Ti's 849,
 # a 9% gap, so there is nothing to route.
 #
+# Sized by text, not by total output: the stage's cost is the text it embeds,
+# and the two are not proportional -- text is 12% of RelBench's output and 1.7%
+# of the Join's. Sizing embed off total output is what put join-overture-maps
+# and rel-amazon in jobs too small for them.
+#
 # Memory is per GPU, not per node, and that is not a detail: the partition sets
 # DefMemPerGPU=240000M and applies it when deciding whether a job fits, so with
 # --mem the most GPUs a job can hold is RealMemory/240000M -- 3 on a turing, 8
@@ -95,7 +101,13 @@ EMBED_CPUS = 24
 # Walltime scales for the same reason memory does. join-overture-maps' 8 GiB of
 # text was still embedding when a flat 4h cut it off, and a timeout costs the
 # whole stage: the run has to start over from the first text.
-EMBED_WALLTIMES = ((1 << 30, "2:00:00"), (8 << 30, "8:00:00"), (1 << 62, "1-00:00:00"))
+# By text bytes. rel-amazon's 11 GiB of text took hours; a database with a few
+# hundred MiB takes minutes.
+EMBED_WALLTIMES = (
+    (1 << 28, "2:00:00"),
+    (2 << 30, "8:00:00"),
+    (1 << 62, "1-00:00:00"),
+)
 
 
 def log_root(c: Collection) -> str:
@@ -126,11 +138,11 @@ def resources_for(expected_bytes: int) -> Resources:
     )
 
 
-def embed_resources(expected_bytes: int) -> Resources:
+def embed_resources(text_bytes_: int) -> Resources:
     """The GPU stage. A bare count, not a type: these nodes carry rtx8000s and
     2080tis and MiniLM does not care which."""
     for limit, walltime in EMBED_WALLTIMES:
-        if expected_bytes < limit:
+        if text_bytes_ < limit:
             break
     return Resources(
         partition="il",
@@ -177,7 +189,7 @@ def datasets(c: Collection) -> list[str]:
     """
     sizes = load_sizes(c)
     names = sorted(p.parent.name for p in Path(c.raw_dir).glob("*/manifest.yaml"))
-    return sorted(names, key=lambda n: -sizes.get(n, 0))
+    return sorted(names, key=lambda n: -out_bytes(sizes, n, 0))
 
 
 def fully_downloaded(c: Collection, names: list[str]) -> set[str]:
@@ -340,22 +352,22 @@ def main(c: Collection, dry_run: bool = False) -> None:
 
     for name in to_embed:
         if dry_run:
-            r = embed_resources(sizes.get(name, 1 << 35))
+            r = embed_resources(text_bytes(sizes, name, 1 << 33))
             print(
                 f"  embed   {name:44s} {r.gpus} gpu  {r.cpus_per_task} cpu  "
                 f"{r.mem_per_gpu}/gpu  {r.time}"
             )
             continue
-        submit_embed(c, name, sizes.get(name, 1 << 35))
+        submit_embed(c, name, text_bytes(sizes, name, 1 << 33))
 
     for name in to_legacy:
         if dry_run:
             print(f"  legacy  {name:44s} -> {c.legacy_dir}")
             continue
-        submit_legacy(c, name, sizes.get(name, 1 << 35))
+        submit_legacy(c, name, text_bytes(sizes, name, 1 << 33))
 
     for name in to_rustle:
-        expected = sizes.get(name, 1 << 62)  # unknown is not the same as small
+        expected = out_bytes(sizes, name, 1 << 62)  # unknown is not small
         resources = resources_for(expected)
         if dry_run:
             print(
@@ -384,7 +396,7 @@ def main(c: Collection, dry_run: bool = False) -> None:
         # Queued now, held by slurm until its rustler stage succeeds: the GPU
         # queue fills itself behind the cpu one, with nothing to poll and no
         # second pass to remember to run.
-        submit_embed(c, name, expected, after=job.id)
+        submit_embed(c, name, text_bytes(sizes, name, 1 << 33), after=job.id)
 
 
 if __name__ == "__main__":
