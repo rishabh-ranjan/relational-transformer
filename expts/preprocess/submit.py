@@ -28,13 +28,12 @@ from expts.preprocess.preprocess import is_done, is_rustler_done  # noqa: E402
 from expts.preprocess.sizes import load as load_sizes  # noqa: E402
 from expts.preprocess.sizes import out_bytes, text_bytes  # noqa: E402
 
-REPO_ROOT = "/lfs/hyperturing1/0/ranjanr/clones/rishabh-ranjan/relational-transformer"
-CLONE_ROOT = "/lfs/local/0/roach_clones"
-SECRETS_DIR = "/dfs/user/ranjanr/.secrets"
-
+# The two values every stage has to agree on, and the only ones kept out of
+# their call sites: the embedder names the directory `is_done` looks for, so a
+# copy that drifted from the one the jobs pass would report a finished database
+# that was embedded with a different model. Everything else below is written
+# where it is used.
 EMBEDDER = "all-MiniLM-L12-v2"
-BATCH_SIZE = 1024
-
 # Every job runs `setup`, but the shared clone means it runs once per commit per
 # node -- which is the right number of times to fetch the embedder. Left to the
 # embed jobs, 50 of them start at once and each asks the Hub for the same model,
@@ -45,81 +44,35 @@ SETUP = (
     f" snapshot_download('sentence-transformers/{EMBEDDER}')\"",
 )
 
-# hyperturing1/2 have 2 TiB of memory and 252 cpus; the turings have 754 GiB
-# (turing3 1.4 TiB) and 80. Everything can run on all five; the largest
-# databases are held to the hyperturings, where one can have half a terabyte
-# without leaving the node unable to run anything alongside it.
-ALL_NODES = "hyperturing1,hyperturing2,turing1,turing2,turing3"
-BIG_NODES = "hyperturing1,hyperturing2"
-# hyperturing1's GPUs threw "uncorrectable ECC error" on 18 jobs; the cpu stage
-# is unaffected, so only the GPU stage avoids it. Drop this back to ALL_NODES
-# once the card is replaced or the node is drained.
-EMBED_NODES = "hyperturing2,turing1,turing2,turing3"
-
-# The rustler stage takes ONE cpu. Measured: TotalCPU equals Elapsed on every
-# database, so it is single-threaded and a wider request buys nothing while
-# costing a slot someone else's database could have had. How many run at once is
-# then how many cpus the five nodes have -- which is the point.
-#
-# Only memory varies, and it comes from measurement too: MaxRSS ran to about
-# twice a database's output, so this asks for three times with a floor. (The
-# site's MaxMemPerCPU of 10700M is not enforced against a per-node --mem here;
-# checked with sbatch --test-only, a 1-cpu job may ask for 200G.)
-RUSTLER_CPUS = 1
-MEM_FLOOR = 8 << 30
-MEM_FACTOR = 3
-# (max expected output bytes, wall clock, nodes)
-TIERS = (
-    (1 << 30, "2:00:00", ALL_NODES),
-    (16 << 30, "8:00:00", ALL_NODES),
-    (40 << 30, "16:00:00", ALL_NODES),
-    (1 << 62, "1-00:00:00", BIG_NODES),
-)
-
-# The embedding stage takes SEVERAL GPUs in one job. sentence-transformers runs
-# a worker per device, and measured on 2M texts that is 4.06x on six RTX8000s
-# (68% efficiency) and 4.29x on six 2080Tis (71%) -- so the stage's own skew
-# stops mattering: ten databases are 88% of it, and each of those now finishes
-# in a quarter of the time instead of queueing behind one card.
-#
-# Card type barely matters: one RTX8000 does 929 texts/s against a 2080Ti's 849,
-# a 9% gap, so there is nothing to route.
-#
-# Sized by text, not by total output: the stage's cost is the text it embeds,
-# and the two are not proportional -- text is 12% of RelBench's output and 1.7%
-# of the Join's. Sizing embed off total output is what put join-overture-maps
-# and rel-amazon in jobs too small for them.
-#
-# Memory is per GPU, not per node, and that is not a detail: the partition sets
-# DefMemPerGPU=240000M and applies it when deciding whether a job fits, so with
-# --mem the most GPUs a job can hold is RealMemory/240000M -- 3 on a turing, 8
-# on a hyperturing -- however little memory it asks for. --mem-per-gpu replaces
-# that default and lifts the limit.
-EMBED_GPUS = 6
-EMBED_MEM_PER_GPU = "40G"
-EMBED_CPUS = 24
-# Walltime scales for the same reason memory does. join-overture-maps' 8 GiB of
-# text was still embedding when a flat 4h cut it off, and a timeout costs the
-# whole stage: the run has to start over from the first text.
-# By text bytes. rel-amazon's 11 GiB of text took hours; a database with a few
-# hundred MiB takes minutes.
-EMBED_WALLTIMES = (
-    (1 << 28, "2:00:00"),
-    (2 << 30, "8:00:00"),
-    (1 << 62, "1-00:00:00"),
-)
-
 
 def log_root(c: Collection) -> str:
     return f"/dfs/user/ranjanr/slurm-logs/preprocess-{c.name}"
 
 
 def resources_for(expected_bytes: int) -> Resources:
-    """The cpu-only rustler stage: one cpu, memory from the expected output."""
-    for limit, walltime, nodes in TIERS:
+    """The cpu-only rustler stage: one cpu, memory from the expected output.
+
+    hyperturing1/2 have 2 TiB of memory and 252 cpus; the turings have 754 GiB
+    (turing3 1.4 TiB) and 80. Everything can run on all five; the largest
+    databases are held to the hyperturings, where one can have half a terabyte
+    without leaving the node unable to run anything alongside it.
+    """
+    all_nodes = "hyperturing1,hyperturing2,turing1,turing2,turing3"
+    big_nodes = "hyperturing1,hyperturing2"
+    # (max expected output bytes, wall clock, nodes)
+    for limit, walltime, nodes in (
+        (1 << 30, "2:00:00", all_nodes),
+        (16 << 30, "8:00:00", all_nodes),
+        (40 << 30, "16:00:00", all_nodes),
+        (1 << 62, "1-00:00:00", big_nodes),
+    ):
         if expected_bytes < limit:
             break
-    mem = max(MEM_FLOOR, MEM_FACTOR * expected_bytes)
+    # Memory comes from measurement: MaxRSS ran to about twice a database's
+    # output, so this asks for three times with an 8 GiB floor. (The site's
+    # MaxMemPerCPU of 10700M is not enforced against a per-node --mem here;
+    # checked with sbatch --test-only, a 1-cpu job may ask for 200G.)
+    mem = max(8 << 30, 3 * expected_bytes)
     return Resources(
         partition="il",
         account="infolab",
@@ -128,7 +81,11 @@ def resources_for(expected_bytes: int) -> Resources:
         # No GPU: this stage never touches one, and holding it would cap the
         # sweep at the 50 GPUs these five nodes have between them.
         gpus="0",
-        cpus_per_task=RUSTLER_CPUS,
+        # ONE cpu. Measured: TotalCPU equals Elapsed on every database, so the
+        # stage is single-threaded and a wider request buys nothing while
+        # costing a slot someone else's database could have had. How many run at
+        # once is then how many cpus the five nodes have -- which is the point.
+        cpus_per_task=1,
         ntasks=None,
         exclusive=False,
         mem=f"{mem // 2**30}G",
@@ -140,8 +97,22 @@ def resources_for(expected_bytes: int) -> Resources:
 
 def embed_resources(text_bytes_: int) -> Resources:
     """The GPU stage. A bare count, not a type: these nodes carry rtx8000s and
-    2080tis and MiniLM does not care which."""
-    for limit, walltime in EMBED_WALLTIMES:
+    2080tis and MiniLM does not care which.
+
+    Sized by text, not by total output: the stage's cost is the text it embeds,
+    and the two are not proportional -- text is 12% of RelBench's output and
+    1.7% of the Join's. Sizing embed off total output is what put
+    join-overture-maps and rel-amazon in jobs too small for them.
+    """
+    # Walltime scales for the same reason memory does. join-overture-maps' 8 GiB
+    # of text was still embedding when a flat 4h cut it off, and a timeout costs
+    # the whole stage: the run has to start over from the first text. rel-amazon's
+    # 11 GiB took hours; a database with a few hundred MiB takes minutes.
+    for limit, walltime in (
+        (1 << 28, "2:00:00"),
+        (2 << 30, "8:00:00"),
+        (1 << 62, "1-00:00:00"),
+    ):
         if text_bytes_ < limit:
             break
     return Resources(
@@ -149,16 +120,31 @@ def embed_resources(text_bytes_: int) -> Resources:
         account="infolab",
         qos="il-lo",
         time=walltime,
-        gpus=str(EMBED_GPUS),
-        cpus_per_task=EMBED_CPUS,
+        # SEVERAL GPUs in one job. sentence-transformers runs a worker per
+        # device, and measured on 2M texts that is 4.06x on six RTX8000s (68%
+        # efficiency) and 4.29x on six 2080Tis (71%) -- so the stage's own skew
+        # stops mattering: ten databases are 88% of it, and each of those now
+        # finishes in a quarter of the time instead of queueing behind one card.
+        # Card type barely matters: one RTX8000 does 929 texts/s against a
+        # 2080Ti's 849, a 9% gap, so there is nothing to route.
+        gpus="6",
+        cpus_per_task=24,
         # One rank with every GPU visible to it, not a rank per GPU:
         # sentence-transformers does the fan-out itself.
         ntasks=1,
         exclusive=False,
         mem=None,
-        mem_per_gpu=EMBED_MEM_PER_GPU,
+        # Per GPU, not per node, and that is not a detail: the partition sets
+        # DefMemPerGPU=240000M and applies it when deciding whether a job fits,
+        # so with --mem the most GPUs a job can hold is RealMemory/240000M -- 3
+        # on a turing, 8 on a hyperturing -- however little memory it asks for.
+        # --mem-per-gpu replaces that default and lifts the limit.
+        mem_per_gpu="40G",
         constraint=None,
-        nodelist=EMBED_NODES,
+        # hyperturing1's GPUs threw "uncorrectable ECC error" on 18 jobs; the
+        # cpu stage is unaffected, so only this one avoids it. Put hyperturing1
+        # back once the card is replaced or the node is drained.
+        nodelist="hyperturing2,turing1,turing2,turing3",
     )
 
 
@@ -243,15 +229,18 @@ def submit_legacy(c: Collection, name: str, expected_bytes: int):
             "out_dir": c.legacy_dir,
             "source_repo": c.source_repo,
             "embedder": EMBEDDER,
-            "batch_size": BATCH_SIZE,
+            "batch_size": 1024,
         },
         resources=embed_resources(expected_bytes),
         name=f"leg-{name}",
         setup=SETUP,
-        repo_root=REPO_ROOT,
+        repo_root="/lfs/hyperturing1/0/ranjanr/clones/rishabh-ranjan/relational-transformer",
         log_root=log_root(c),
-        clone_root=CLONE_ROOT,
-        secrets_dir=SECRETS_DIR,
+        # the node's own big disk, not /tmp (the 280G root filesystem): clones
+        # are shared per commit and hold the pixi env, which pixi hardlinks from
+        # the package cache only when the two are on the same filesystem
+        clone_root="/lfs/local/0/roach_clones",
+        secrets_dir="/dfs/user/ranjanr/.secrets",
         clone_ttl_days=7,
     )
 
@@ -267,15 +256,18 @@ def submit_embed(
             "dataset": name,
             "out_dir": c.out_dir,
             "embedder": EMBEDDER,
-            "batch_size": BATCH_SIZE,
+            "batch_size": 1024,
         },
         resources=embed_resources(expected_bytes),
         name=f"emb-{name}",
         setup=SETUP,
-        repo_root=REPO_ROOT,
+        repo_root="/lfs/hyperturing1/0/ranjanr/clones/rishabh-ranjan/relational-transformer",
         log_root=log_root(c),
-        clone_root=CLONE_ROOT,
-        secrets_dir=SECRETS_DIR,
+        # the node's own big disk, not /tmp (the 280G root filesystem): clones
+        # are shared per commit and hold the pixi env, which pixi hardlinks from
+        # the package cache only when the two are on the same filesystem
+        clone_root="/lfs/local/0/roach_clones",
+        secrets_dir="/dfs/user/ranjanr/.secrets",
         clone_ttl_days=7,
         after=after,
     )
@@ -290,7 +282,10 @@ def check_tree_is_submittable() -> None:
     that trims output, that reads as a queue with nothing in it.
     """
     dirty = subprocess.run(
-        ["git", "status", "--porcelain"], cwd=REPO_ROOT, capture_output=True, text=True
+        ["git", "status", "--porcelain"],
+        cwd="/lfs/hyperturing1/0/ranjanr/clones/rishabh-ranjan/relational-transformer",
+        capture_output=True,
+        text=True,
     ).stdout.strip()
     if dirty:
         raise SystemExit(
@@ -387,10 +382,10 @@ def main(c: Collection, dry_run: bool = False) -> None:
             resources=resources,
             name=f"pre-{name}",
             setup=SETUP,
-            repo_root=REPO_ROOT,
+            repo_root="/lfs/hyperturing1/0/ranjanr/clones/rishabh-ranjan/relational-transformer",
             log_root=log_root(c),
-            clone_root=CLONE_ROOT,
-            secrets_dir=SECRETS_DIR,
+            clone_root="/lfs/local/0/roach_clones",
+            secrets_dir="/dfs/user/ranjanr/.secrets",
             clone_ttl_days=7,
         )
         # Queued now, held by slurm until its rustler stage succeeds: the GPU
