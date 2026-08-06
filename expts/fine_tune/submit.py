@@ -1,7 +1,6 @@
 """Fine-tune a Relational Transformer on one task, and submit one job per task.
 
-    pixi run python expts/fine_tune/submit.py            # submit the sweep
-    pixi run python expts/fine_tune/submit.py --dry-run  # print the plan only
+    pixi run python expts/fine_tune/submit.py
 
 One file, and every argument written where it is passed: `rt.train:main` is the
 target, so there is no per-experiment wrapper to keep in step with it, and the
@@ -16,9 +15,9 @@ random-init control -- what the architecture learns from the task alone, which i
 the number the pretrained arm has to beat.
 
 Run it from a clean, pushed checkout: the job clones the commit you submit from.
+Edit it freely -- it takes no arguments, and the next submission wants a
+different shape anyway (see expts/README.md).
 """
-
-import sys
 
 from roach.slurm import Resources, submit
 
@@ -118,14 +117,11 @@ def plan(n: int) -> list[Resources]:
     return out
 
 
-def main(dry_run: bool = False) -> None:
-    slots = plan(len(TASKS))
-    for (db, task), resources in zip(TASKS, slots, strict=True):
+def main() -> None:
+    for (db, task), resources in zip(TASKS, plan(len(TASKS)), strict=True):
         print(
             f"  {db}/{task:16s} {resources.gpus} {resources.qos:15s} {resources.time}"
         )
-        if dry_run:
-            continue
         submit_one(db, task, resources)
 
 
@@ -215,4 +211,4 @@ def submit_one(db: str, task: str, resources: Resources):
 
 
 if __name__ == "__main__":
-    main(dry_run="--dry-run" in sys.argv[1:])
+    main()

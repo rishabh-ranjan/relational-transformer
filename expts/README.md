@@ -13,6 +13,23 @@ in one place. A sweep is a loop around that call; an experiment that needs a
 derived input (a curated task list, a subset) keeps it beside the file that uses
 it. Nothing here enforces a shape, but a second file has to earn itself.
 
+**`submit.py` is edited, not configured.** It is scratch that happens to be
+committed: expect to change it every time you submit, because what you submit
+next depends on what slurm has free right now — a different card, a different
+QOS, half the sweep, one task you want to see again. So it takes no arguments
+and carries no flags, no `--dry-run`, no `if variant == ...`. A knob that exists
+to avoid editing the file is a code path that has to keep working; editing the
+file is the interface.
+
+Commenting out is the right way to switch. Leave the shape you are not using
+sitting there commented, so coming back to it is uncommenting rather than
+rewriting from memory — a commented-out resource tier or task list is a record
+of what was tried, and costs nothing.
+
+Git is what makes this safe: every submission is committed (the job clones that
+commit), so the file's history is the log of every variant that ran, and any of
+them can be recovered exactly. Rewrite it freely.
+
 ## What every experiment owes
 
 **Enough to run the work again, and a README that says how.** Someone who was

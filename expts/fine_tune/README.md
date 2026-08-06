@@ -12,34 +12,26 @@ fine-tuned arm has to beat.
 ## Running it
 
 ```
-pixi run python expts/fine_tune/submit.py                # batch, 4xB200
-pixi run python expts/fine_tune/submit.py --interactive  # in a held allocation
+pixi run python expts/fine_tune/submit.py
 ```
 
-Both submit `rt.train:main` with the same arguments; the flag only
-changes whose allocation it runs in. Use `--interactive` while the recipe is
-still moving -- it starts in seconds instead of queuing, and a crash leaves the
-allocation standing -- and the plain form for the run whose number you report.
-Take the allocation first:
+One job per task, one GPU each, submitting `rt.train:main` directly. `plan()`
+hands out the best slots this cluster will give a one-GPU job, best first:
+`il-interactive` (2 GPUs per user, 12h, highest priority), then `il` (2 b200 and
+10 a100 per user, 7d), then preemptible `il-lo` (21d). Both `il` tiers come
+before either `il-lo` tier: a free A100 that starts now beats a B200 queued
+behind another user's reservation on the cluster's one Blackwell node.
 
-```python
-from roach.slurm import BLACKWELL_INTERACTIVE, interactive
-interactive.hold(BLACKWELL_INTERACTIVE, log_root="/dfs/user/ranjanr/slurm-logs/fine-tune")
-```
-
-The allocation is 2xB200 for at most 12 hours (the `il-interactive` QOS caps
-both), while each fine-tuning run takes **one** GPU
-(`BLACKWELL_INTERACTIVE_1GPU`) -- so two arms run side by side, and a run's world
-size does not change with how much of the allocation happens to be free. It is
-not requeued, so nothing that has to survive the night belongs in it. See
-[`src/roach/slurm/README.md`](../../src/roach/slurm/README.md).
+The file takes no arguments and is expected to be edited for each submission --
+see [`expts/README.md`](../README.md).
 
 Logs and `args.json` land in `/dfs/user/ranjanr/slurm-logs/fine-tune`,
 checkpoints and `params.json` under `/dfs/user/ranjanr/ckpts/rtv2/fine-tune/<run_id>`.
 
-**When it stops.** A batch run is requeued and resumes from its own `resume.pt`;
-nothing to do. An interactive one is not -- resubmit with the same `run_id`
-(`submit(..., run_id=...)`) and it picks up the same checkpoint.
+**When it stops.** A preempted run is requeued and resumes from its own
+`resume.pt`; nothing to do. A run that hits its wall clock is not requeued --
+`il-interactive`'s 12 hours is the one to watch -- so resubmit it with the same
+`run_id` (`submit(..., run_id=...)`) and it picks up the same checkpoint.
 
 ## What is fixed and what is not
 
