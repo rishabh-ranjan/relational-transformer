@@ -45,9 +45,12 @@ git_clone() {  # <url> <commit> <dir>
 
 # A clone is per commit, so iterating -- which is a commit per attempt -- pays
 # for a new one every time. Nothing about that is wrong; what was wrong is
-# paying for work the previous commit already did. Each of these seeds the new
-# clone from the node's caches, and each reports what it cost, because a
-# regression here is minutes per attempt and otherwise invisible.
+# re-solving the environment for a commit that did not touch a dependency, which
+# was minutes. The steps below print what they cost, because a regression here
+# is invisible otherwise. Measured on this project, per new commit: git clone
+# ~3s, pixi install ~50s, build ~7s -- against ~9 minutes before the lock was
+# seeded. The install is what remains, and it is pixi materializing an 8.5 GiB
+# environment because the environment is keyed on the clone's path.
 seed_lock() {  # in the new clone, before pixi install
     # pixi.lock is gitignored, so a fresh clone has none and pixi solves from
     # scratch -- the same solve, per commit, for a commit that did not touch a
@@ -80,20 +83,6 @@ prepare_repo() {
     # line after the first would break out and run as garbage.
     @SETUP@
     echo "prepare: setup $((SECONDS - t))s"
-    # The package is installed editable, which means the environment holds a
-    # path to *some* clone -- and a job that imported another commit's code
-    # would report this commit and run that one, silently, for every job at this
-    # commit thereafter. Cheap to prove, so prove it, and do not publish a clone
-    # that cannot. Resolved on both sides with -m (which does not require the
-    # path to exist): /lfs/local is a symlink to /lfs/<node>, so a correct clone
-    # answers to two names and a plain string compare rejects it.
-    local imported here
-    imported=$(realpath -m "$(pixi run --frozen python -c "import rt; print(rt.__file__)")")
-    here=$(realpath -m .)
-    case $imported in
-        "$here"/*) echo "prepare: imports rt from this clone" ;;
-        *) echo "prepare: FATAL rt resolves to $imported, not $here" >&2; exit 1 ;;
-    esac
 }
 
 # Whoever takes the lock builds; .roach-ready, written last, is what publishes

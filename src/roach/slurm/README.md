@@ -78,11 +78,22 @@ you. What changes:
   path it was installed at, so moving the project afterwards makes pixi
   reinstall the editable path dependency — for a maturin project, a full
   recompile, run by every rank at once into the one shared environment.
-* **`pixi.lock` is solved once per commit** and lives in the clone (it is
-  gitignored, so a fresh checkout has none). A copy lands next to the run's logs
-  as a record of what the run used. Ranks start under `pixi run --frozen`: in a
-  shared clone, a rank that re-solved would rewrite the lock underneath every
-  other job at that commit.
+* **`pixi.lock` is solved once, not once per commit.** It is gitignored, so a
+  fresh clone has none and pixi would solve from scratch — the same solve, for
+  every commit that never touched a dependency. A new clone copies the lock from
+  a ready clone whose `pyproject.toml` is byte-identical; pixi validates it
+  against the manifest anyway and re-solves if it disagrees, so a stale one
+  costs nothing. Measured: ~9 minutes of preparation became ~60s. A copy lands
+  next to the run's logs as a record of what the run used. Ranks start under
+  `pixi run --frozen`: in a shared clone, a rank that re-solved would rewrite
+  the lock underneath every other job at that commit.
+* **What is left is `pixi install`, ~50s per new commit**, materializing an
+  8.5 GiB environment. Pixi keys an environment on the project path, so a
+  per-commit clone means a per-commit environment; when the environment already
+  exists at that path the same command takes 0.05s. Hardlinking one from a
+  matching clone was tried and does not work — pixi rebuilds a prefix it did not
+  create. Avoiding it needs the manifest to sit at a path that does not change
+  per commit, which is a bigger change than it sounds.
 * **Nothing is deleted when a job ends.** A clone is retired once no live job
   holds it and nothing has touched it for `clone_ttl_days`, swept by
   whichever job publishes the next clone.

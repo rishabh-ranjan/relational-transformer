@@ -18,17 +18,11 @@ import pytest
 
 TOOLS = {
     # `pixi install` is the slow step a second job must not repeat.
-    # install materializes the environment at the prefix `info` reports -- the
-    # slow step a second job must not repeat, and the thing seed_env hardlinks.
+    # `install` is the slow step a second job must not repeat, and it keeps a
+    # lock it already has -- which is what makes the seeded lock observable.
     "pixi": """#!/bin/bash
 case "$1" in
-  install)
-    sleep 1
-    [[ -f pixi.lock ]] || echo "lock-$(date +%s%N)" > pixi.lock
-    mkdir -p "$PWD/.pixi/envs/default"
-    [[ -f $PWD/.pixi/envs/default/marker ]] || echo "$PWD" > "$PWD/.pixi/envs/default/marker"
-    ;;
-  info) printf '{"environments_info": [{"prefix": "%s"}]}\\n' "$PWD/.pixi/envs/default" ;;
+  install) sleep 1; [[ -f pixi.lock ]] || echo "lock-$(date +%s%N)" > pixi.lock ;;
   run) shift; while [[ $1 == --* ]]; do shift; done; exec "$@" ;;
 esac
 """,
@@ -44,9 +38,7 @@ done
 [[ -f $LIVE_JOBS_FILE ]] && cat "$LIVE_JOBS_FILE"
 exit 0
 """,
-    "python": """#!/bin/bash
-if [[ $1 == -c ]]; then echo "$PWD/src/rt/__init__.py"; else echo "ran: python $*"; fi
-""",
+    "python": '#!/bin/bash\necho "ran: python $*"\n',
 }
 
 
@@ -184,23 +176,6 @@ def test_a_new_commit_inherits_the_previous_solve(rig):
     out = rig.run(rig.job("second", rig.churn()), 1002)  # new commit, same deps
     assert "seeded pixi.lock" in out.stdout, out.stdout
     assert (rig.clones / f"repo-{rig.commit()}" / "pixi.lock").read_text() == lock
-
-
-def test_a_clone_whose_env_points_elsewhere_is_never_published(rig):
-    """A seeded environment starts out pointing at the clone it came from, and
-    the build in `setup` is what re-points it. If that ever stops working the
-    job would run a different commit than the one it reports -- so the clone is
-    not published unless it can prove `rt` resolves inside it."""
-    bad = rig.root / "bin" / "python"
-    bad.write_text(
-        '#!/bin/bash\nif [[ $1 == -c ]]; then echo /somewhere/else/rt/__init__.py; else echo "ran: python $*"; fi\n'
-    )
-    bad.chmod(0o755)
-    sha = rig.churn()
-    out = rig.run(rig.job("wrong-env", sha), 1003)
-    assert out.returncode != 0
-    assert "FATAL" in out.stderr, out.stderr
-    assert not (rig.clones / f"repo-{sha}" / ".roach-ready").exists()
 
 
 def test_a_finished_job_leaves_the_clone_for_the_next_one(rig):
