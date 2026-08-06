@@ -1,36 +1,43 @@
-# Preprocessing the Join
+# Preprocessing a collection
 
-Rebuilds `stanford-star/the-join-preprocessed` from `stanford-star/the-join`:
-639 databases, ~1.4 TiB of rustler artifacts and text embeddings, two slurm jobs
-per database across five nodes, then published back to the Hub as a replacement.
+Rebuilds a `*-preprocessed` dataset from its raw one and publishes it back as a
+replacement. Two collections, one pipeline:
 
-Four commands, in order. Nothing else needs deciding.
+| collection | databases | raw | preprocessed |
+|---|---|---|---|
+| `the-join` | 639 | 28 GiB | ~1.4 TiB |
+| `relbench` | 7 | 10 GiB | ~230 GiB (plus a `legacy/` tree) |
+
+Four commands, in order, each naming the collection. Nothing else needs
+deciding.
 
 ```bash
-# 0. make room: the build needs ~1.5 TiB free under /dfs/user/$USER
+# 0. make room under /dfs/user/$USER: ~1.5 TiB for the-join, ~250 GiB for relbench
 df -h /dfs/user/$USER
 
-# 1. fetch the raw collection once (~28 GiB)
-pixi run python expts/preprocess/download.py
+# 1. fetch the raw collection once
+pixi run python expts/preprocess/download.py the-join
 
 # 2. submit. Re-run any time -- it submits only what is left, and only
 #    databases whose raw files have all arrived, so it is safe to start while
 #    step 1 is still running and to re-run as more land.
-pixi run python expts/preprocess/submit.py --dry-run    # see the plan first
-pixi run python expts/preprocess/submit.py
+pixi run python expts/preprocess/submit.py the-join --dry-run   # the plan first
+pixi run python expts/preprocess/submit.py the-join
 
 # 3. watch it
-pixi run python expts/preprocess/status.py
-watch -n60 pixi run python expts/preprocess/status.py   # if you want it live
+pixi run python expts/preprocess/status.py the-join
+watch -n60 pixi run python expts/preprocess/status.py the-join
 
 # 4. verify, write the task lists, and publish
-pixi run python expts/preprocess/finalize.py upload
+pixi run python expts/preprocess/finalize.py the-join upload
 ```
 
-Step 2 refuses to run from a dirty or unpushed tree — jobs clone the commit you
-submit from, so commit first. **If submissions stop appearing, check
-`git status` first**: a dirty tree makes every `submit()` raise, and it is easy
-to mistake for a quiet queue.
+Everything a collection differs by -- its repos, its paths, a task list that
+cannot be recomputed, directories the upload must not delete -- is one entry in
+`collection.py`. Adding a third is that entry and nothing else.
+
+Step 2 refuses to run from a dirty or unpushed tree, and says so before it
+submits anything — jobs clone the commit you submit from, so commit first.
 
 To run the whole thing to completion unattended, loop step 2 (it is idempotent
 and cheap) until `status.py` reports 639, then do step 4.
@@ -39,16 +46,25 @@ and cheap) until `status.py` reports 639, then do step 4.
 
 | file | what it does |
 |---|---|
-| `download.py` | one resumable git-lfs fetch of the raw collection into `RAW_DIR` |
-| `preprocess.py` | the two job targets: `rustler` (cpu-only) and `embed` (GPU) |
-| `submit.py` | sizes each job, submits both stages, holds the paths and constants |
+| `collection.py` | what a collection is: repos, paths, and its two quirks |
+| `download.py` | one resumable git-lfs fetch of the raw collection; `--repair` mends it |
+| `preprocess.py` | the job targets: `rustler` (cpu-only), `embed` (GPU), `legacy` |
+| `submit.py` | sizes each job, submits the stages, holds the resource numbers |
 | `status.py` | progress and ETA, measured in bytes |
 | `finalize.py` | `verify`, `task-lists`, `upload` |
-| `sizes.py` / `sizes.json` | expected output bytes per database |
+| `sizes.py` / `sizes-<collection>.json` | expected output bytes per database |
 | `rt-j-dbs.json` | the 475 databases rt-j trains on, carried forward |
 
-Paths, embedder, batch size and every resource number are constants at the top
-of `submit.py`; everything else reads them from there.
+Embedder, batch size and every resource number are constants at the top of
+`submit.py`; paths and per-collection facts live in `collection.py`.
+
+### The `legacy/` tree
+
+`relbench` also publishes `legacy/`: the same databases under RT-v1's boolean
+typing, which the released RT-v1 checkpoints need. `submit.py` builds it
+alongside the main sweep, into its own directory, and `finalize.py upload`
+swaps it in **only once every database of it is complete** -- half a new tree on
+the Hub is worse than all of an old one.
 
 ## Two stages, and why
 
@@ -101,28 +117,35 @@ targets are idempotent, so preemption costs the work in flight and nothing else.
 
 Logs are `/dfs/user/ranjanr/slurm-logs/preprocess/<run_id>_<jobid>.out`.
 
-## Failure modes this hit, and what handles them
+## What the code cannot handle
 
-Every one of these cost real time; none of them is hypothetical.
+Everything else this build ran into is fixed in the code and cannot recur
+through the sanctioned path: the Hub's rate limits (`download.py` fetches by
+git-lfs, the embedder is prefetched once per node), both kinds of
+out-of-memory in the embedding stage (chunked encoding, memory sized from the
+database), half-downloaded raw data (`submit.py` checks every file against the
+Hub's recorded size), a stale `SLURM_CPUS_PER_TASK` (roach unsets it), and an
+embedding that would take two days on one GPU (it takes six). The reasoning
+lives next to each, in the module that implements it.
 
-| symptom | cause | handled by |
-|---|---|---|
-| `HTTP 429` fetching raw data | the Hub's file API is one call per file, and this is 28k files | `download.py` uses git-lfs, whose batch API is orders of magnitude fewer calls. **Do not add downloader processes** — the limit is the Hub's, and three extra processes rate-limited it to a standstill |
-| `HTTP 429` fetching the embedder | 50 embed jobs each downloading the same model | prefetched in `setup`, which the shared clone runs once per node |
-| `torch.OutOfMemoryError` in embed | SBERT kept every embedding on the GPU until the whole list was done | `rt.preprocess.embed` encodes in chunks — **both** paths, since the multi-process one accumulates fp32 in host memory instead (~120 GiB for join-overture-maps) |
-| `Out Of Memory` (host) in embed | `text.json` is 8 GiB for `join-overture-maps` and is parsed whole | embed memory scales with expected output; the raw bytes are dropped once parsed |
-| `uncorrectable ECC error` | failing GPU hardware on hyperturing1 | `EMBED_NODES` excludes it. **Put it back when the card is fixed** |
-| `cpus-per-task set by two different environment variables` | a stale `SLURM_CPUS_PER_TASK` reaching the job | roach's `bootstrap.sh` unsets it before `srun` |
-| a database built short a few tables | preprocessing a half-downloaded database | `submit.py` checks every raw file against the Hub's **size**, not just presence |
-| `Requested node configuration is not available` on an idle node | `DefMemPerGPU` caps GPUs per job and `--mem` does not lift it | `mem_per_gpu` on `Resources` (see the cluster section) |
-| an embed that would take ~44h on one GPU | the stage was one card per database | six GPUs per job, ~4× |
+What is left is hardware and policy, which no amount of code will fix:
 
-The size check is the important one. A `manifest.yaml` is not a downloaded
-database, and a git checkout holds LFS pointers that are the right *name* and
-the wrong *content*. The size check is what makes it safe to preprocess while
-the download is still running. It has also caught 3000 LFS pointers that an
-rsync put into the raw directory, before any of them reached the output.
-**Nothing should move data into `RAW_DIR` except `download.py`.**
+* **hyperturing1's GPUs throw `uncorrectable ECC error`.** 18 jobs died on it.
+  `EMBED_NODES` in `submit.py` excludes that node from the GPU stage -- its cpus
+  are fine and still take rustler work. **Put it back when the card is
+  replaced**, and report the node meanwhile; a workaround in an experiment is
+  not a fix for a broken card.
+* **`il-lo` is preemptible.** Nothing to do about it: both stages are
+  idempotent, so a requeued job costs the work in flight and nothing else.
+
+Two design constraints hold the rest of it up, and a future change could
+quietly break either:
+
+* **Nothing writes into `RAW_DIR` except `download.py`.** The size check catches
+  corruption after the fact; not creating it is better. Use
+  `download.py <collection> --repair` to mend, never a copy from somewhere else.
+* **Do not run downloaders in parallel.** The Hub's limit is not per-process,
+  and extra processes turn a slow fetch into one that fails outright.
 
 ## The cluster, as measured
 

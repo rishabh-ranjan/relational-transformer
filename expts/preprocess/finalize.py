@@ -1,8 +1,8 @@
 """Check the build, write its task lists, and publish it.
 
-    pixi run python expts/preprocess/finalize.py verify
-    pixi run python expts/preprocess/finalize.py task-lists
-    pixi run python expts/preprocess/finalize.py upload
+    pixi run python expts/preprocess/finalize.py <collection> verify
+    pixi run python expts/preprocess/finalize.py <collection> task-lists
+    pixi run python expts/preprocess/finalize.py <collection> upload
 
 `verify` is not optional politeness: a database whose job was preempted between
 rustler and the embedding step leaves a directory that looks finished, and
@@ -12,7 +12,13 @@ run weeks later.
 `upload` mirrors -- it pushes the build and then deletes the database
 directories the Hub has and this build does not, which is what makes it a
 replacement rather than a merge with whatever was there before. Root files
-(README.md, .gitattributes) are left alone; they are not this sweep's to own.
+(README.md, .gitattributes) are left alone; they are not this sweep's to own,
+and neither is anything in the collection's `keep`.
+
+A collection with a `legacy/` tree gets it swapped **only once it is complete**.
+It is built in its own directory, verified on its own, and pushed as a separate
+step; until then the Hub keeps the previous one. The RT-v1 checkpoints read
+that tree, and half of a new one is worse than all of an old one.
 """
 
 from __future__ import annotations
@@ -24,14 +30,8 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
-from expts.preprocess.submit import EMBEDDER, OUT_DIR, RAW_DIR  # noqa: E402
-
-REPO = "stanford-star/the-join-preprocessed"
-# The 475 databases rt-j trains on. Curated, not derivable from the data -- 126
-# databases are excluded wholesale and none partially -- so it is carried from
-# the previous build rather than recomputed. Saved before the mirror upload
-# overwrites the copy it came from.
-RT_J_DBS = Path(__file__).with_name("rt-j-dbs.json")
+from expts.preprocess.collection import Collection, pick  # noqa: E402
+from expts.preprocess.submit import EMBEDDER  # noqa: E402
 
 REQUIRED = (
     "meta.json",
@@ -49,10 +49,10 @@ def databases(out: Path) -> list[str]:
     return sorted(p.parent.name for p in out.glob("*/meta.json"))
 
 
-def verify(out_dir: str = OUT_DIR, raw_dir: str = RAW_DIR) -> list[str]:
+def verify(c: Collection) -> list[str]:
     """Report every database that is missing, incomplete, or empty."""
-    out, problems = Path(out_dir), []
-    expected = sorted(p.parent.name for p in Path(raw_dir).glob("*/manifest.yaml"))
+    out, problems = Path(c.out_dir), []
+    expected = sorted(p.parent.name for p in Path(c.raw_dir).glob("*/manifest.yaml"))
     built = set(databases(out))
 
     for name in expected:
@@ -71,7 +71,7 @@ def verify(out_dir: str = OUT_DIR, raw_dir: str = RAW_DIR) -> list[str]:
             problems.append(f"{name}: meta.json does not record {EMBEDDER}")
 
     for name in sorted(built - set(expected)):
-        problems.append(f"{name}: built but not in {raw_dir} (stale output)")
+        problems.append(f"{name}: built but not in {c.raw_dir} (stale output)")
 
     print(f"{len(expected)} expected, {len(built)} built, {len(problems)} problem(s)")
     for p in problems[:40]:
@@ -81,9 +81,55 @@ def verify(out_dir: str = OUT_DIR, raw_dir: str = RAW_DIR) -> list[str]:
     return problems
 
 
-def task_lists(out_dir: str = OUT_DIR) -> None:
+def verify_legacy(c: Collection) -> list[str]:
+    """The legacy tree, held to the same standard as the build."""
+    if not c.legacy:
+        return []
+    out, problems = Path(c.legacy_dir), []
+    expected = sorted(p.parent.name for p in Path(c.raw_dir).glob("*/manifest.yaml"))
+    built = set(databases(out)) if out.is_dir() else set()
+    for name in expected:
+        if name not in built:
+            problems.append(f"legacy/{name}: not built")
+            continue
+        for f in REQUIRED:
+            path = out / name / f
+            if not path.exists():
+                problems.append(f"legacy/{name}: missing {f}")
+            elif path.stat().st_size == 0:
+                problems.append(f"legacy/{name}: empty {f}")
+    print(
+        f"legacy: {len(expected)} expected, {len(built)} built, {len(problems)} problem(s)"
+    )
+    for p in problems[:20]:
+        print(f"  {p}")
+    return problems
+
+
+def upload_legacy(c: Collection, private: bool = False) -> None:
+    """Swap the legacy tree in, once all of it is there."""
+    from huggingface_hub import HfApi
+
+    if not c.legacy:
+        return
+    if verify_legacy(c):
+        print("legacy tree incomplete; leaving the published one alone")
+        return
+    api = HfApi()
+    print(f"uploading {c.legacy_dir} -> {c.target_repo}/legacy")
+    api.upload_large_folder(
+        repo_id=c.target_repo,
+        repo_type="dataset",
+        folder_path=str(Path(c.legacy_dir)),
+        # everything lands under legacy/, replacing that tree and nothing else
+        path_in_repo="legacy",
+    )
+    print("legacy swapped")
+
+
+def task_lists(c: Collection) -> None:
     """Write `db-task-lists/` from the metas this build just produced."""
-    out = Path(out_dir)
+    out = Path(c.out_dir)
     by_kind: dict[str, list[list[str]]] = defaultdict(list)
     every: list[list[str]] = []
     for name in databases(out):
@@ -92,13 +138,15 @@ def task_lists(out_dir: str = OUT_DIR) -> None:
             every.append([name, task["name"]])
             by_kind[task["kind"]].append([name, task["name"]])
 
-    curated = set(json.loads(RT_J_DBS.read_text()))
     lists = {
         "all": every,
         "forecast": by_kind.get("forecast", []),
         "autocomplete": by_kind.get("autocomplete", []),
-        "rt-j": [pair for pair in every if pair[0] in curated],
     }
+    curated = set()
+    if c.curated_path:
+        curated = set(json.loads(c.curated_path.read_text()))
+        lists["rt-j"] = [pair for pair in every if pair[0] in curated]
     d = out / "db-task-lists"
     d.mkdir(parents=True, exist_ok=True)
     for stem, pairs in lists.items():
@@ -114,11 +162,11 @@ def task_lists(out_dir: str = OUT_DIR) -> None:
             print(f"    {name}")
 
 
-def upload(out_dir: str = OUT_DIR, repo: str = REPO, private: bool = False) -> None:
+def upload(c: Collection, private: bool = False) -> None:
     """Push the build, then delete the database directories it replaces."""
     from huggingface_hub import CommitOperationDelete, HfApi
 
-    out = Path(out_dir)
+    out, repo = Path(c.out_dir), c.target_repo
     local = set(databases(out))
     api = HfApi()
     api.create_repo(repo, repo_type="dataset", private=private, exist_ok=True)
@@ -131,7 +179,7 @@ def upload(out_dir: str = OUT_DIR, repo: str = REPO, private: bool = False) -> N
         for f in api.list_repo_files(repo, repo_type="dataset")
         if "/" in f
     }
-    stale = sorted(remote_dirs - local - {"db-task-lists"})
+    stale = sorted(remote_dirs - local - set(c.keep))
     if not stale:
         print("nothing stale on the Hub; it already mirrors this build")
         return
@@ -151,15 +199,19 @@ def upload(out_dir: str = OUT_DIR, repo: str = REPO, private: bool = False) -> N
 
 
 if __name__ == "__main__":
-    command = sys.argv[1] if len(sys.argv) > 1 else ""
+    words = [a for a in sys.argv[1:] if not a.startswith("-")]
+    command = words[1] if len(words) > 1 else ""
+    c = pick([sys.argv[0], words[0]] if words else sys.argv)
     if command == "verify":
-        sys.exit(1 if verify() else 0)
+        sys.exit(1 if verify(c) + verify_legacy(c) else 0)
     elif command == "task-lists":
-        task_lists()
+        task_lists(c)
     elif command == "upload":
-        if verify():
+        if verify(c):
             sys.exit("refusing to upload an incomplete build; fix it and re-run")
-        task_lists()
-        upload()
+        task_lists(c)
+        upload(c)
+        # separately, and only if all of it is there
+        upload_legacy(c)
     else:
         sys.exit(__doc__)

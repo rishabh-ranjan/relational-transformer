@@ -1,7 +1,7 @@
 """Fetch the raw Join once, to a directory every node can read.
 
-    pixi run python expts/preprocess/download.py            # fetch
-    pixi run python expts/preprocess/download.py --repair   # check and mend
+    pixi run python expts/preprocess/download.py <collection>
+    pixi run python expts/preprocess/download.py <collection> --repair
 
 Once, and not per job: the collection is 639 databases in 28k files, and a job
 that resolved its own database from the Hub would be one of 639 clients doing it
@@ -30,7 +30,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
-from expts.preprocess.submit import RAW_DIR, SOURCE_REPO  # noqa: E402
+from expts.preprocess.collection import Collection, pick  # noqa: E402
 
 ATTEMPTS = 20
 # git-lfs opens this many transfers; the batch API is not what rate-limits, so
@@ -42,8 +42,8 @@ def _run(*args: str, cwd: str | None = None) -> int:
     return subprocess.run(args, cwd=cwd).returncode
 
 
-def download(repo: str = SOURCE_REPO, local_dir: str = RAW_DIR) -> None:
-    d = Path(local_dir)
+def download(c: Collection) -> None:
+    d, repo = Path(c.raw_dir), c.source_repo
     url = f"https://huggingface.co/datasets/{repo}"
 
     if not (d / ".git").is_dir():
@@ -76,7 +76,7 @@ def download(repo: str = SOURCE_REPO, local_dir: str = RAW_DIR) -> None:
     print(f"{n} databases in {d}")
 
 
-def repair(repo: str = SOURCE_REPO, local_dir: str = RAW_DIR) -> int:
+def repair(c: Collection) -> int:
     """Bring the raw directory to exactly what the Hub says it is.
 
     Every file is checked against the Hub's recorded size and only mismatches
@@ -93,7 +93,7 @@ def repair(repo: str = SOURCE_REPO, local_dir: str = RAW_DIR) -> int:
     """
     from huggingface_hub import HfApi, hf_hub_download
 
-    d = Path(local_dir)
+    d, repo = Path(c.raw_dir), c.source_repo
     info = HfApi().repo_info(repo, repo_type="dataset", files_metadata=True)
     want = {f.rfilename: (f.size or 0) for f in info.siblings if "/" in f.rfilename}
 
@@ -130,6 +130,7 @@ def repair(repo: str = SOURCE_REPO, local_dir: str = RAW_DIR) -> int:
 
 
 if __name__ == "__main__":
+    c = pick(sys.argv)
     if "--repair" in sys.argv:
-        sys.exit(1 if repair() else 0)
-    download()
+        sys.exit(1 if repair(c) else 0)
+    download(c)

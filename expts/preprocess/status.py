@@ -1,7 +1,7 @@
 """Where the sweep is, and when it will finish.
 
-    pixi run python expts/preprocess/status.py
-    watch -n60 pixi run python expts/preprocess/status.py   # if you want it live
+    pixi run python expts/preprocess/status.py <collection>
+    watch -n60 pixi run python expts/preprocess/status.py <collection>
 
 Progress is measured in bytes, not in databases. Counting databases would say
 this sweep was 97% done while a quarter of the work remained, because 20 of the
@@ -25,20 +25,14 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
+from expts.preprocess.collection import Collection, pick  # noqa: E402
 from expts.preprocess.preprocess import is_done  # noqa: E402
 from expts.preprocess.sizes import load as load_sizes  # noqa: E402
-from expts.preprocess.submit import (  # noqa: E402
-    EMBEDDER,
-    LOG_ROOT,
-    OUT_DIR,
-    RAW_DIR,
-    SOURCE_REPO,
-)
+from expts.preprocess.submit import EMBEDDER, log_root  # noqa: E402
 
 # Only rate samples inside this window are used, so an ETA reflects how the
 # sweep is going now rather than averaging in a slow start or a stall.
 WINDOW = timedelta(hours=1)
-SAMPLES = Path(LOG_ROOT) / "progress.jsonl"
 
 
 def gib(n: float) -> str:
@@ -58,9 +52,9 @@ def _strip_stage(name: str) -> str | None:
     return None
 
 
-def squeue_states() -> dict[str, int]:
+def squeue_states(c: Collection) -> dict[str, int]:
     out = subprocess.run(
-        ["squeue", "-h", "-o", "%j %t", "--name=" + ",".join(_job_names())],
+        ["squeue", "-h", "-o", "%j %t", "--name=" + ",".join(_job_names(c))],
         capture_output=True,
         text=True,
     )
@@ -71,10 +65,10 @@ def squeue_states() -> dict[str, int]:
     return states
 
 
-def _job_names() -> list[str]:
+def _job_names(c: Collection) -> list[str]:
     return [
         f"{s}{p.parent.name}"
-        for p in Path(RAW_DIR).glob("*/manifest.yaml")
+        for p in Path(c.raw_dir).glob("*/manifest.yaml")
         for s in STAGES
     ]
 
@@ -182,9 +176,12 @@ def stuck(done: set[str], limit: int = 8) -> list[str]:
 MIN_COMPLETIONS = 5
 
 
-def sample(done_bytes: int, done_count: int) -> tuple[float, int, int] | None:
+def sample(
+    c: Collection, done_bytes: int, done_count: int
+) -> tuple[float, int, int] | None:
     """Append a sample; return the oldest one inside the window, if any."""
     now = time.time()
+    SAMPLES = Path(log_root(c)) / "progress.jsonl"
     SAMPLES.parent.mkdir(parents=True, exist_ok=True)
     history = []
     if SAMPLES.exists():
@@ -200,31 +197,34 @@ def sample(done_bytes: int, done_count: int) -> tuple[float, int, int] | None:
     return (inside or history or [None])[0]
 
 
-def collection() -> list[str]:
+def databases(c: Collection) -> list[str]:
     """Every database the build will contain, downloaded yet or not.
 
     Taken from the source repo rather than from what has landed locally: while
     the download is still running, a local count makes the total grow under you
     and the percentage go backwards.
+
+    A database is a top-level directory with a manifest.yaml in it -- the same
+    rule the local scan uses. Not "every top-level directory": the raw repos
+    also carry a STATS/ catalogue, which is not a database and would be counted
+    as one.
     """
     try:
         from huggingface_hub import HfApi
 
         return sorted(
-            {
-                f.split("/", 1)[0]
-                for f in HfApi().list_repo_files(SOURCE_REPO, repo_type="dataset")
-                if f.count("/") >= 1 and f.startswith("join-")
-            }
+            f.split("/", 1)[0]
+            for f in HfApi().list_repo_files(c.source_repo, repo_type="dataset")
+            if f.endswith("/manifest.yaml") and f.count("/") == 1
         )
     except Exception:  # offline: fall back to what is on disk
-        return sorted(p.parent.name for p in Path(RAW_DIR).glob("*/manifest.yaml"))
+        return sorted(p.parent.name for p in Path(c.raw_dir).glob("*/manifest.yaml"))
 
 
-def report() -> None:
-    sizes = load_sizes()
-    names = collection()
-    out = Path(OUT_DIR)
+def report(c: Collection) -> None:
+    sizes = load_sizes(c)
+    names = databases(c)
+    out = Path(c.out_dir)
     # A database the previous build never had has no expected size; charge it
     # the median so it is neither invisible nor dominant.
     known = sorted(sizes[n] for n in names if n in sizes)
@@ -235,14 +235,14 @@ def report() -> None:
     total_bytes = sum(weight.values())
     done_bytes = sum(weight[n] for n in done)
 
-    print(f"=== {datetime.now():%Y-%m-%d %H:%M:%S}  the-join preprocessing")
+    print(f"=== {datetime.now():%Y-%m-%d %H:%M:%S}  {c.name} preprocessing")
     print(f"databases : {len(done)}/{len(names)}")
     print(
         f"work      : {gib(done_bytes)} / {gib(total_bytes)}"
         f"  ({done_bytes / max(total_bytes, 1):.1%})"
     )
 
-    earlier = sample(done_bytes, len(done))
+    earlier = sample(c, done_bytes, len(done))
     if earlier and done_bytes > earlier[1]:
         elapsed = time.time() - earlier[0]
         rate = (done_bytes - earlier[1]) / elapsed
@@ -265,7 +265,7 @@ def report() -> None:
     else:
         print("rate      : nothing finished yet (run again in a few minutes)")
 
-    states = squeue_states()
+    states = squeue_states(c)
     if states:
         print("jobs      : " + "  ".join(f"{v} {k}" for k, v in sorted(states.items())))
     live = running_now()
@@ -283,4 +283,4 @@ def report() -> None:
 
 
 if __name__ == "__main__":
-    report()
+    report(pick(sys.argv))

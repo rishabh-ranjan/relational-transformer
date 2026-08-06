@@ -41,6 +41,7 @@ from rt.preprocess import (
     run_rustler_pre,
     update_meta_with_embeddings,
 )
+from rt.preprocess.legacy import preprocess_one_legacy
 
 
 def is_rustler_done(pre_dataset_dir: Path) -> bool:
@@ -137,5 +138,48 @@ def embed(
     print(
         f"= {dataset}: embed {time.monotonic() - started:.0f}s  d_text {d_text}  "
         f"{dir_bytes(pre_dataset_dir) / 2**30:.2f} GiB total",
+        flush=True,
+    )
+
+
+def legacy(
+    *,
+    dataset: str,
+    raw_dir: str,
+    out_dir: str,
+    source_repo: str,
+    embedder: str,
+    batch_size: int,
+) -> None:
+    """The RT-v1 variant of one database: boolean typing, then the usual pipeline.
+
+    One job rather than two, unlike the main build. It is a handful of databases
+    rather than 639, and `rt.preprocess.legacy` does the transform, rustler and
+    the embedding in one call -- splitting it would mean reaching into that
+    module for the sake of a stage that is not the long pole here.
+
+    Writes beside the main build, not inside it, so an unfinished legacy tree
+    cannot ride along with the upload that replaces the collection. The RT-v1
+    checkpoints read this; half of it on the Hub is worse than the old one.
+    """
+    out_root = Path(out_dir)
+    pre_dataset_dir = out_root / dataset
+    if is_done(pre_dataset_dir, embedder):
+        print(f"= {dataset}: legacy already done", flush=True)
+        return
+
+    started = time.monotonic()
+    preprocess_one_legacy(
+        f"{raw_dir}/{dataset}",
+        out_root,
+        embedder=embedder,
+        batch_size=batch_size,
+        upload_repo=None,  # published by finalize.py, once the tree is complete
+        private=True,
+        revision=None,
+    )
+    print(
+        f"= {dataset}: legacy {time.monotonic() - started:.0f}s  "
+        f"{dir_bytes(pre_dataset_dir) / 2**30:.2f} GiB",
         flush=True,
     )

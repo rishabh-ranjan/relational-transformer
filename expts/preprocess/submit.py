@@ -1,7 +1,7 @@
 """Submit the Join preprocessing sweep: one slurm job per database.
 
-    pixi run python expts/preprocess/submit.py            # submit what is left
-    pixi run python expts/preprocess/submit.py --dry-run  # just print the plan
+    pixi run python expts/preprocess/submit.py <collection>
+    pixi run python expts/preprocess/submit.py <collection> --dry-run
 
 One job per database rather than a job array over shards, because the
 collection's work is lopsided -- the median database preprocesses to ~43 MiB and
@@ -23,15 +23,12 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from roach.slurm import Resources, submit  # noqa: E402
 
+from expts.preprocess.collection import Collection, pick  # noqa: E402
 from expts.preprocess.preprocess import is_done, is_rustler_done  # noqa: E402
 from expts.preprocess.sizes import load as load_sizes  # noqa: E402
 
 REPO_ROOT = "/lfs/hyperturing1/0/ranjanr/clones/rishabh-ranjan/relational-transformer"
-RAW_DIR = "/dfs/user/ranjanr/share/stanford-star/the-join"
-OUT_DIR = "/dfs/user/ranjanr/share/stanford-star/the-join-preprocessed"
-SOURCE_REPO = "stanford-star/the-join"
 CLONE_ROOT = "/lfs/local/0/roach_clones"
-LOG_ROOT = "/dfs/user/ranjanr/slurm-logs/preprocess"
 SECRETS_DIR = "/dfs/user/ranjanr/.secrets"
 
 EMBEDDER = "all-MiniLM-L12-v2"
@@ -101,6 +98,10 @@ EMBED_CPUS = 24
 EMBED_WALLTIMES = ((1 << 30, "2:00:00"), (8 << 30, "8:00:00"), (1 << 62, "1-00:00:00"))
 
 
+def log_root(c: Collection) -> str:
+    return f"/dfs/user/ranjanr/slurm-logs/preprocess-{c.name}"
+
+
 def resources_for(expected_bytes: int) -> Resources:
     """The cpu-only rustler stage: one cpu, memory from the expected output."""
     for limit, walltime, nodes in TIERS:
@@ -168,18 +169,18 @@ def queued_names(prefix: str) -> set[str]:
     return {n[len(prefix) :] for n in out.stdout.split() if n.startswith(prefix)}
 
 
-def datasets() -> list[str]:
+def datasets(c: Collection) -> list[str]:
     """Every database in the raw directory, largest expected output first.
 
     Largest first so the giants -- which alone set the makespan -- start before
     the tail rather than behind it.
     """
-    sizes = load_sizes()
-    names = sorted(p.parent.name for p in Path(RAW_DIR).glob("*/manifest.yaml"))
+    sizes = load_sizes(c)
+    names = sorted(p.parent.name for p in Path(c.raw_dir).glob("*/manifest.yaml"))
     return sorted(names, key=lambda n: -sizes.get(n, 0))
 
 
-def fully_downloaded(names: list[str]) -> set[str]:
+def fully_downloaded(c: Collection, names: list[str]) -> set[str]:
     """Databases whose raw files are all present *and the right size*.
 
     A directory with a manifest.yaml in it is not a downloaded database: the raw
@@ -200,7 +201,7 @@ def fully_downloaded(names: list[str]) -> set[str]:
     from huggingface_hub import HfApi
 
     remote: dict[str, dict[str, int]] = defaultdict(dict)
-    info = HfApi().repo_info(SOURCE_REPO, repo_type="dataset", files_metadata=True)
+    info = HfApi().repo_info(c.source_repo, repo_type="dataset", files_metadata=True)
     for f in info.siblings:
         if "/" in f.rfilename:
             db, rest = f.rfilename.split("/", 1)
@@ -208,7 +209,7 @@ def fully_downloaded(names: list[str]) -> set[str]:
 
     ready = set()
     for name in names:
-        d = Path(RAW_DIR) / name
+        d = Path(c.raw_dir) / name
         want = remote.get(name)
         if not want:
             continue
@@ -220,14 +221,39 @@ def fully_downloaded(names: list[str]) -> set[str]:
     return ready
 
 
-def submit_embed(name: str, expected_bytes: int, after: str | None = None):
+def submit_legacy(c: Collection, name: str, expected_bytes: int):
+    """The RT-v1 variant. One job: transform, rustler and embed together."""
+    return submit(
+        "expts.preprocess.preprocess:legacy",
+        args={
+            "dataset": name,
+            "raw_dir": c.raw_dir,
+            "out_dir": c.legacy_dir,
+            "source_repo": c.source_repo,
+            "embedder": EMBEDDER,
+            "batch_size": BATCH_SIZE,
+        },
+        resources=embed_resources(expected_bytes),
+        name=f"leg-{name}",
+        setup=SETUP,
+        repo_root=REPO_ROOT,
+        log_root=log_root(c),
+        clone_root=CLONE_ROOT,
+        secrets_dir=SECRETS_DIR,
+        clone_ttl_days=7,
+    )
+
+
+def submit_embed(
+    c: Collection, name: str, expected_bytes: int, after: str | None = None
+):
     """The GPU stage for one database, optionally held until its rustler job
     succeeds -- which is how the two stages are submitted in one pass."""
     return submit(
         "expts.preprocess.preprocess:embed",
         args={
             "dataset": name,
-            "out_dir": OUT_DIR,
+            "out_dir": c.out_dir,
             "embedder": EMBEDDER,
             "batch_size": BATCH_SIZE,
         },
@@ -235,7 +261,7 @@ def submit_embed(name: str, expected_bytes: int, after: str | None = None):
         name=f"emb-{name}",
         setup=SETUP,
         repo_root=REPO_ROOT,
-        log_root=LOG_ROOT,
+        log_root=log_root(c),
         clone_root=CLONE_ROOT,
         secrets_dir=SECRETS_DIR,
         clone_ttl_days=7,
@@ -261,7 +287,7 @@ def check_tree_is_submittable() -> None:
         )
 
 
-def main(dry_run: bool = False) -> None:
+def main(c: Collection, dry_run: bool = False) -> None:
     """Submit whatever each database needs next.
 
     Two stages, one pass: a database with no rustler output gets a cpu-only
@@ -272,13 +298,15 @@ def main(dry_run: bool = False) -> None:
     """
     if not dry_run:
         check_tree_is_submittable()
-    sizes, out = load_sizes(), Path(OUT_DIR)
-    names = datasets()
-    ready = fully_downloaded(names)
+    sizes, out = load_sizes(c), Path(c.out_dir)
+    names = datasets(c)
+    ready = fully_downloaded(c, names)
     pre_running, emb_running = queued_names("pre-"), queued_names("emb-")
-    print(f"{len(names)} databases in {RAW_DIR}, {len(ready)} fully downloaded")
+    print(f"{len(names)} databases in {c.raw_dir}, {len(ready)} fully downloaded")
 
-    to_rustle, to_embed, done, busy, waiting = [], [], 0, 0, 0
+    leg_running = queued_names("leg-")
+    legacy_out = Path(c.legacy_dir)
+    to_rustle, to_embed, to_legacy, done, busy, waiting = [], [], [], 0, 0, 0
     for name in names:
         d = out / name
         if is_done(d, EMBEDDER):
@@ -294,8 +322,21 @@ def main(dry_run: bool = False) -> None:
             waiting += 1
         else:
             to_rustle.append(name)
+        # The legacy tree is independent of the main build: it reads the same
+        # raw data and writes its own directory, so it neither waits for nor
+        # blocks the collection.
+        if (
+            c.legacy
+            and name in ready
+            and name not in leg_running
+            and not is_done(legacy_out / name, EMBEDDER)
+        ):
+            to_legacy.append(name)
     print(f"  {done} complete, {busy} queued or running, {waiting} still downloading")
-    print(f"  submitting {len(to_rustle)} rustler + {len(to_embed)} embed")
+    print(
+        f"  submitting {len(to_rustle)} rustler + {len(to_embed)} embed"
+        + (f" + {len(to_legacy)} legacy" if c.legacy else "")
+    )
 
     for name in to_embed:
         if dry_run:
@@ -305,7 +346,13 @@ def main(dry_run: bool = False) -> None:
                 f"{r.mem_per_gpu}/gpu  {r.time}"
             )
             continue
-        submit_embed(name, sizes.get(name, 1 << 35))
+        submit_embed(c, name, sizes.get(name, 1 << 35))
+
+    for name in to_legacy:
+        if dry_run:
+            print(f"  legacy  {name:44s} -> {c.legacy_dir}")
+            continue
+        submit_legacy(c, name, sizes.get(name, 1 << 35))
 
     for name in to_rustle:
         expected = sizes.get(name, 1 << 62)  # unknown is not the same as small
@@ -321,15 +368,15 @@ def main(dry_run: bool = False) -> None:
             "expts.preprocess.preprocess:rustler",
             args={
                 "dataset": name,
-                "raw_dir": RAW_DIR,
-                "out_dir": OUT_DIR,
-                "source_repo": SOURCE_REPO,
+                "raw_dir": c.raw_dir,
+                "out_dir": c.out_dir,
+                "source_repo": c.source_repo,
             },
             resources=resources,
             name=f"pre-{name}",
             setup=SETUP,
             repo_root=REPO_ROOT,
-            log_root=LOG_ROOT,
+            log_root=log_root(c),
             clone_root=CLONE_ROOT,
             secrets_dir=SECRETS_DIR,
             clone_ttl_days=7,
@@ -337,8 +384,8 @@ def main(dry_run: bool = False) -> None:
         # Queued now, held by slurm until its rustler stage succeeds: the GPU
         # queue fills itself behind the cpu one, with nothing to poll and no
         # second pass to remember to run.
-        submit_embed(name, expected, after=job.id)
+        submit_embed(c, name, expected, after=job.id)
 
 
 if __name__ == "__main__":
-    main(dry_run="--dry-run" in sys.argv)
+    main(pick(sys.argv), dry_run="--dry-run" in sys.argv)
