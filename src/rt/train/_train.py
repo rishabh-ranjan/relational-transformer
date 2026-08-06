@@ -333,21 +333,6 @@ def main(
     # ---- data: re-seed by resumed step so the stream does not replay ----
     data_seed = seed + SEED_STRIDE * start_step
     train_tasks = get_tasks(pre_dir, db_task_list, ("train",))
-    if is_main:
-        # total_bs items enter the model per optimizer step, so the whole run
-        # consumes total_steps * total_bs items. Printed against the stream's
-        # size (tasks * items_per_task) so it is obvious how many times the
-        # mixture is repeated -- the quantity a data-scaling run is varying.
-        total_items = total_steps * total_bs
-        stream_items = len(train_tasks) * items_per_task
-        print(
-            f"pretraining on {len(train_tasks)} tasks from {pre_dir}: "
-            f"{total_items:_} items over {total_steps:_} steps "
-            f"(bs {total_bs}), vs {stream_items:_} distinct items "
-            f"({len(train_tasks)} tasks x {items_per_task:_}) "
-            f"= {total_items / stream_items:.2f} epochs",
-            flush=True,
-        )
     train_ds = TrainDataset(
         tasks=train_tasks,
         pre_dir=pre_dir,
@@ -373,6 +358,26 @@ def main(
         vector_db_path=vector_db_path,
         train_only_fallback=False,
     )
+    if is_main:
+        # total_bs items enter the model per optimizer step, so the whole run
+        # consumes total_steps * total_bs items. Printed against the stream's
+        # size so it is obvious how many times the data is repeated.
+        #
+        # That size is the sampler's own count, which is why this comes after
+        # the dataset is built: items_per_task is a *cap*, and multiplying it by
+        # the task count says what the run would see if every task were at least
+        # that large. On a single small task it is not close -- rel-f1's
+        # driver-top3 has 1_353 training items against a cap of 100_000 -- and
+        # the epoch count printed from the cap was wrong by that factor.
+        total_items = total_steps * total_bs
+        stream_items = train_ds.num_items
+        print(
+            f"training on {len(train_tasks)} tasks from {pre_dir}: "
+            f"{total_items:_} items over {total_steps:_} steps "
+            f"(bs {total_bs}), vs {stream_items:_} distinct items "
+            f"= {total_items / stream_items:.2f} epochs",
+            flush=True,
+        )
     loader = DataLoader(
         train_ds,
         batch_size=None,
@@ -673,12 +678,11 @@ def main(
         step_time = time.perf_counter() - step_t0
         step_t0 = time.perf_counter()
 
-        if is_main and step % 50 == 0:
-            print(
-                f"step {step}  loss {total_loss:.4f}  grad_norm {float(norm):.3f}  "
-                f"sec/step {step_time:.3f}  load_time {load_time:.3f}",
-                flush=True,
-            )
+        if is_main:
+            # Every step to wandb: a fine-tuning run is short, and a loss curve
+            # sampled every 50th step hides exactly the early movement these
+            # runs are about. stdout keeps the coarser cadence -- it is read by
+            # a human, and 10k lines is not.
             if use_wandb:
                 wandb.log(
                     {
@@ -689,6 +693,12 @@ def main(
                         "train/sec_per_step": step_time,
                         "train/load_time": load_time,
                     }
+                )
+            if step % 50 == 0:
+                print(
+                    f"step {step}  loss {total_loss:.4f}  grad_norm {float(norm):.3f}  "
+                    f"sec/step {step_time:.3f}  load_time {load_time:.3f}",
+                    flush=True,
                 )
 
         # Time-based resume checkpoint (preemption resilience), independent of
