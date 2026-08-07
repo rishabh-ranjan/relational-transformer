@@ -1,6 +1,18 @@
 """Submit the pretraining run. See [README.md](README.md)."""
 
-from roach.slurm import BLACKWELL, submit
+import dataclasses
+
+from roach.slurm import AMPERE_LO, submit
+
+# 8xA100, exclusive, on the preemptible il-lo queue. Exclusive takes the whole
+# node (and its memory) for the mixture's page cache, so cpus_per_task goes back
+# to 128/8. ampere9 is misbehaving: list every other ampere node instead.
+AMPERE_LO_EXCL = dataclasses.replace(
+    AMPERE_LO,
+    exclusive=True,
+    cpus_per_task=16,
+    nodelist="ampere1,ampere2,ampere3,ampere4,ampere5,ampere6,ampere7,ampere8",
+)
 
 
 def main() -> None:
@@ -72,9 +84,9 @@ def main() -> None:
             wandb_disabled=False,
             out_root="/dfs/user/ranjanr/ckpts",
         ),
-        # 4xB200 on il-lo: preemptible, and the run checkpoints, so the low
+        # 8xA100 on il-lo: preemptible, and the run checkpoints, so the low
         # priority queue costs wall clock, not work
-        resources=BLACKWELL,
+        resources=AMPERE_LO_EXCL,
         name="pretrain",
         repo_root="/lfs/hyperturing1/0/ranjanr/clones/rishabh-ranjan/relational-transformer",
         log_root="/dfs/user/ranjanr/slurm-logs/rishabh-ranjan/relational-transformer/expts/pretrain",
