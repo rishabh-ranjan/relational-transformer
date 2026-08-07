@@ -157,58 +157,12 @@ def resources_for(expected_bytes: int) -> Resources:
     )
 
 
-# rtx8000 nodes, ten cards each.
+# The rtx8000 nodes, and every card on one. A long pole always asks for all ten
+# and waits for a node that can give them: sizing the request down to what
+# happened to be free at submit time undercut the one job whose length sets the
+# stage's makespan, and it queued behind its rustler stage anyway.
 BIG_NODES = ("hyperturing1", "hyperturing2")
-MAX_BIG_GPUS = 10
-
-
-def biggest_free_gpu_node() -> tuple[str, int]:
-    """The hyperturing with the most free GPUs right now, and how many.
-
-    Read at submit time rather than fixed, because a request for ten cards on a
-    node holding eight is a job that queues behind whatever is using the other
-    two -- which for a database this size means the sweep waits on the scheduler
-    instead of on the work. Asking for what is free starts now.
-
-    Falls back to the full ten if slurm cannot be read or nothing is free: a job
-    that queues is recoverable, a job asking for zero GPUs is not.
-    """
-    best = (BIG_NODES[0], MAX_BIG_GPUS)
-    try:
-        out = subprocess.run(
-            [
-                "sinfo",
-                "-h",
-                "-n",
-                ",".join(BIG_NODES),
-                "-O",
-                "NodeHost:20,Gres:30,GresUsed:30",
-            ],
-            capture_output=True,
-            text=True,
-            timeout=30,
-        ).stdout
-    except (OSError, subprocess.SubprocessError):
-        return best
-
-    free: dict[str, int] = {}
-    for line in out.splitlines():
-        parts = line.split()
-        if len(parts) < 3:
-            continue
-        node, gres, used = parts[0], parts[1], parts[2]
-        try:
-            # "gpu:rtx8000:10" and "gpu:rtx8000:4(IDX:0-3)"
-            total = int(gres.split(":")[2].split("(")[0])
-            taken = int(used.split(":")[2].split("(")[0])
-        except (IndexError, ValueError):
-            continue
-        free[node] = max(0, min(MAX_BIG_GPUS, total) - taken)
-
-    node = max(free, key=lambda n: free[n], default=None)
-    if node is None or free[node] == 0:
-        return best
-    return node, free[node]
+BIG_GPUS = 10
 
 
 def embed_resources(text_bytes_: int) -> Resources:
@@ -238,25 +192,22 @@ def embed_resources(text_bytes_: int) -> Resources:
     # are the better cards here. Everything else takes the one-GPU shape below,
     # which is what lets the rest of the sweep run alongside it.
     if text_bytes_ >= BIG_TEXT_BYTES:
-        node, gpus = biggest_free_gpu_node()
         return Resources(
             partition="il",
             account="infolab",
             qos="il-lo",
             time=walltime,
-            gpus=str(gpus),
-            # Same four cpus per GPU the six-GPU shape uses: the dataloader
-            # feeding each worker is what these are for.
-            cpus_per_task=4 * gpus,
+            gpus=str(BIG_GPUS),
+            # Four cpus per GPU, the same ratio the one-GPU shape uses: the
+            # dataloader feeding each worker is what these are for.
+            cpus_per_task=4 * BIG_GPUS,
             ntasks=1,
             exclusive=False,
             mem=None,
             mem_per_gpu="40G",
             constraint=None,
-            # Pinned to the node the count was measured on: "10 GPUs" is only
-            # schedulable where 10 are actually free, and asking the pair would
-            # let slurm pick the other one and hold the job until it drains.
-            nodelist=node,
+            # Either hyperturing, whichever frees ten cards first.
+            nodelist=",".join(BIG_NODES),
         )
 
     return Resources(
