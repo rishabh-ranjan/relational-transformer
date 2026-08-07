@@ -473,7 +473,10 @@ def main(
             device_ids=[local_rank],
             find_unused_parameters=False,
             gradient_as_bucket_view=True,
-            broadcast_buffers=False,
+            # The successor to broadcast_buffers=False. It differs in still
+            # syncing buffers at init, which costs nothing here: the model
+            # registers no buffers at all.
+            forward_sync_buffers=False,
             static_graph=not accumulates,
         )
 

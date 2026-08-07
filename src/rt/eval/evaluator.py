@@ -291,10 +291,8 @@ class Evaluator:
                         dtype=masks_cat.dtype,
                         device=device,
                     )
-                    dist.all_gather_into_tensor(
-                        labels_gathered, labels_cat.contiguous()
-                    )
-                    dist.all_gather_into_tensor(masks_gathered, masks_cat.contiguous())
+                    dist.all_gather_single(labels_gathered, labels_cat.contiguous())
+                    dist.all_gather_single(masks_gathered, masks_cat.contiguous())
                 else:
                     labels_gathered = labels_cat
                     masks_gathered = masks_cat
@@ -311,9 +309,7 @@ class Evaluator:
                             dtype=nidx_cat.dtype,
                             device=device,
                         )
-                        dist.all_gather_into_tensor(
-                            nidx_gathered, nidx_cat.contiguous()
-                        )
+                        dist.all_gather_single(nidx_gathered, nidx_cat.contiguous())
                     else:
                         nidx_gathered = nidx_cat
                     if global_rank == 0:
@@ -329,7 +325,7 @@ class Evaluator:
                             dtype=nlabels_cat.dtype,
                             device=device,
                         )
-                        dist.all_gather_into_tensor(
+                        dist.all_gather_single(
                             nlabels_gathered, nlabels_cat.contiguous()
                         )
                     else:
@@ -346,9 +342,7 @@ class Evaluator:
                                 dtype=preds.dtype,
                                 device=device,
                             )
-                            dist.all_gather_into_tensor(
-                                preds_gathered, preds.contiguous()
-                            )
+                            dist.all_gather_single(preds_gathered, preds.contiguous())
                             preds = preds_gathered
                         if global_rank == 0:
                             preds_by_prefix_np[prefix] = (
