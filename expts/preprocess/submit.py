@@ -57,7 +57,12 @@ KEEP = ("db-task-lists", "legacy")
 # unfinished tree riding along -- but finalize.py verifies both before it pushes
 # anything, and a second upload call is a second thing that can fail after the
 # first has already changed the repo. Which it did. None if there is none.
-LEGACY_DIR = f"/dfs/user/ranjanr/share/stanford-star/{NAME}-preprocessed/legacy"
+#
+# The build directory is named separately from the repo it publishes to: this
+# is a rebuild from scratch beside the live one, so the old output stays
+# readable until the new one verifies and replaces it on the Hub.
+OUT_NAME = f"{NAME}-preprocessed-new"
+LEGACY_DIR = f"/dfs/user/ranjanr/share/stanford-star/{OUT_NAME}/legacy"
 
 # NAME = "the-join"
 # SOURCE_REPO = "stanford-star/the-join"
@@ -66,10 +71,11 @@ LEGACY_DIR = f"/dfs/user/ranjanr/share/stanford-star/{NAME}-preprocessed/legacy"
 # # partially: nothing in the build says which.
 # CURATED = "rt-j-dbs.json"
 # KEEP = ("db-task-lists",)
+# OUT_NAME = f"{NAME}-preprocessed"
 # LEGACY_DIR = None
 
 RAW_DIR = f"/dfs/user/ranjanr/share/stanford-star/{NAME}"
-OUT_DIR = f"/dfs/user/ranjanr/share/stanford-star/{NAME}-preprocessed"
+OUT_DIR = f"/dfs/user/ranjanr/share/stanford-star/{OUT_NAME}"
 LOG_ROOT = f"/dfs/user/ranjanr/slurm-logs/preprocess-{NAME}"
 SIZES = Path(__file__).with_name(f"sizes-{NAME}.json")
 REPO_ROOT = "/lfs/hyperturing1/0/ranjanr/clones/rishabh-ranjan/relational-transformer"
