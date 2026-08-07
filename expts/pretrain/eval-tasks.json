@@ -36,6 +36,10 @@
   "user-ignore"
  ],
  [
+  "rel-event",
+  "user-repeat"
+ ],
+ [
   "rel-f1",
   "driver-dnf"
  ],

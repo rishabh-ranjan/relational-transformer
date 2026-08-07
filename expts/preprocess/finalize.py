@@ -156,7 +156,12 @@ def task_lists() -> None:
                 dropped.append(f"{name}/{task['name']}")
                 continue
             every.append([name, task["name"]])
-            by_kind[task["kind"]].append([name, task["name"]])
+            # "forecast" is every task that ships a label table, not only the
+            # ones whose `kind` says so: RelBench's rel-event/user-repeat is
+            # kind "external" and is otherwise an entity task like its
+            # siblings, so keying on the literal kind loses it.
+            kind = "autocomplete" if task["kind"] == "autocomplete" else "forecast"
+            by_kind[kind].append([name, task["name"]])
 
     if unsupported:
         print(f"  {len(unsupported)} task(s) left out: unsupported task type, e.g.")
