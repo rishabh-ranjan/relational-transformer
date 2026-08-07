@@ -213,7 +213,12 @@ def submit_one(db: str, task: str, resources: Resources):
             db_task_list=[(db, task)],
             pre_dir="/dfs/user/ranjanr/share/stanford-star/relbench-preprocessed",
             tokens_per_gpu=2**17,
-            num_workers=16,
+            # Loader workers are processes, and the job only owns
+            # `cpus_per_task` cores: two are held back for the training process
+            # itself and the one eval worker below, so a b200 slot (36) keeps
+            # the 16 this has always used while an a100 slot (14) asks for 12
+            # instead of oversubscribing its allocation.
+            num_workers=min(16, resources.cpus_per_task - 2),
             prefetch_factor=2,
             ctx_size_list=[1024],
             local_ctx_size_list=[1024],
