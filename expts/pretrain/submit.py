@@ -2,22 +2,8 @@
 
     pixi run python expts/pretrain/submit.py
 
-One file, and every argument written where it is passed: `rt.train:main` is the
-target, so there is no per-experiment wrapper to keep in step with it, and the
-call below is both the recipe and the record of what ran. Change a number here
-and the diff is the experiment.
-
-One run, not a sweep. Training is the mixture of `(db, task)` pairs in
-`db_task_list`, read from the Join; in-loop validation is the benchmark's
-forecast tasks on the val split, so the run reports transfer while it trains.
-
-Run it from a clean, pushed checkout: the job clones the commit you submit from.
-Edit it freely -- it takes no arguments, and the next submission wants a
-different shape anyway (see expts/README.md).
-
-**Resuming.** A preempted run is requeued and picks up its own `resume.pt`. A
-run that hits its wall clock is not: resubmit with the same `run_id`
-(`submit(..., run_id=...)`) and it resumes from the same checkpoint.
+One run, not a sweep: the Join's mixture for training, the benchmark's forecast
+tasks for in-loop validation. See [README.md](README.md).
 """
 
 from roach.slurm import BLACKWELL, submit
@@ -95,22 +81,20 @@ def main() -> None:
             wandb_disabled=False,
             out_root="/dfs/user/ranjanr/ckpts",
         ),
-        # 4xB200; il-lo is preemptible and the run checkpoints, so the low
+        # 4xB200 on il-lo: preemptible, and the run checkpoints, so the low
         # priority queue costs wall clock, not work
         resources=BLACKWELL,
         name="pretrain",
         repo_root="/lfs/hyperturing1/0/ranjanr/clones/rishabh-ranjan/relational-transformer",
         log_root="/dfs/user/ranjanr/slurm-logs/rishabh-ranjan/relational-transformer/expts/pretrain",
-        # the node's own big disk, not /tmp (the 280G root filesystem): clones
-        # are shared per commit and hold the pixi env, which pixi hardlinks from
-        # the package cache only when the two are on the same filesystem
+        # the node's own big disk, not /tmp (the 280G root filesystem)
         clone_root="/lfs/local/0/roach_clones",
         secrets_dir="/dfs/user/ranjanr/.secrets",
         # this run is long, and clones are swept after a week unused
         clone_ttl_days=7,
-        # No setup: `pixi install` already builds the rustler extension and puts
-        # it in src/rt/ -- the project is an editable dependency of its own
-        # environment.
+        # No setup: `pixi install` already builds the rustler extension into
+        # src/rt/, and `pixi run build-sampler` on top of it rebuilds the whole
+        # pyo3 stack for no different result.
     )
 
 

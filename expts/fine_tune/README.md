@@ -15,23 +15,16 @@ fine-tuned arm has to beat.
 pixi run python expts/fine_tune/submit.py
 ```
 
-One job per task, one GPU each, submitting `rt.train:main` directly. `plan()`
-hands out the best slots this cluster will give a one-GPU job, best first:
-`il-interactive` (2 GPUs per user, 12h, highest priority), then `il` (2 b200 and
-10 a100 per user, 7d), then preemptible `il-lo` (21d). Both `il` tiers come
-before either `il-lo` tier: a free A100 that starts now beats a B200 queued
-behind another user's reservation on the cluster's one Blackwell node.
-
-The file takes no arguments and is expected to be edited for each submission --
-see [`expts/README.md`](../README.md).
+One job per task, one GPU each. `plan()` hands out the best slots this cluster
+will give a one-GPU job, best first; its docstring is the reasoning for the
+order.
 
 Logs and `args.json` land in `/dfs/user/ranjanr/slurm-logs/fine-tune`,
 checkpoints and `params.json` under `/dfs/user/ranjanr/ckpts/rtv2/fine-tune/<run_id>`.
 
-**When it stops.** A preempted run is requeued and resumes from its own
-`resume.pt`; nothing to do. A run that hits its wall clock is not requeued --
-`il-interactive`'s 12 hours is the one to watch -- so resubmit it with the same
-`run_id` (`submit(..., run_id=...)`) and it picks up the same checkpoint.
+**Wall clock is the one stop that needs you.** Preemption requeues and resumes
+itself; a `TIMEOUT` job does not, so resubmit with the same `run_id`.
+`il-interactive`'s 12 hours is the one to watch.
 
 ## What is fixed and what is not
 

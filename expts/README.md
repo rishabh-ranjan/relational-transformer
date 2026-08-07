@@ -61,6 +61,24 @@ reconstructing anything from a conversation or a shell history.
 Not a diary. It is the difference between an experiment that can be re-run and
 one that merely happened; `preprocess/` is the worked example.
 
+## Say it once
+
+**Every fact has one home, and the others point at it.** These conventions live
+here; an experiment's README covers what is specific to that experiment; a module
+docstring covers what is specific to that module. A paragraph that would be true
+of any experiment in this directory belongs here and nowhere else — restating it
+in a submit script's docstring means two copies to keep true, and the copy nobody
+edits is the one that goes stale.
+
+So: no docstring re-explains that submit scripts are edited rather than
+configured, that the job clones the commit you submit from, or what `clone_root`
+and `setup=` are for — [`roach.slurm`](../src/roach/slurm/README.md) and this
+file already do. Same downward: an experiment README does not re-derive its own
+module docstrings.
+
+Concise, and only what the reader cannot get from the code. Prefer a link to a
+summary.
+
 ## Submitting
 
 Jobs go through [`roach.slurm`](../src/roach/slurm/README.md) — read that

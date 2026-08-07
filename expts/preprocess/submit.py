@@ -2,14 +2,11 @@
 
     pixi run python expts/preprocess/submit.py
 
-One job per database rather than a job array over shards, because the
-collection's work is lopsided -- the median database preprocesses to ~43 MiB and
-the largest to 76 GiB -- so a fixed worker shape is either too thin for the
-giants or wasteful for the 500-database tail. Per database, resources come from
-what the previous build's output measured (`sizes.py`), and slurm places them.
-
-Re-running is the resume: a database whose output is already complete is not
-resubmitted, and one that is queued or running is not duplicated.
+Per database, resources come from what the previous build's output measured
+(`sizes.py`), and slurm places them. Re-running is the resume: a database whose
+output is already complete is not resubmitted, and one that is queued or running
+is not duplicated. Why one job per database, and why two stages, is in
+[README.md](README.md).
 """
 
 import json

@@ -9,17 +9,10 @@ rustler and the embedding step leaves a directory that looks finished, and
 publishing it would put a hole in the pretraining data that only shows up in a
 run weeks later.
 
-`upload` mirrors -- it pushes the build and then deletes the database
-directories the Hub has and this build does not, which is what makes it a
-replacement rather than a merge with whatever was there before. Root files
-(README.md, .gitattributes) are left alone; they are not this sweep's to own,
-and neither is anything in the collection's `keep`.
-
-Nothing is published until **everything** is ready. A collection with a
-`legacy/` tree -- the same databases under RT-v1's boolean typing, which the
-released RT-v1 checkpoints read -- has that tree verified alongside the build,
-and a problem in either means neither goes. The Hub keeps the previous version,
-whole, until there is a whole new one to put in its place.
+`upload` mirrors rather than merges, and nothing goes out until the whole
+replacement -- including any `legacy/` tree -- verifies; see
+[README.md](README.md). Root files (README.md, .gitattributes) are left alone,
+and so is anything in the collection's `keep`.
 
 (The Hub has no atomic multi-file swap: `upload_large_folder` commits in
 batches. What is guaranteed here is that nothing starts going out until the

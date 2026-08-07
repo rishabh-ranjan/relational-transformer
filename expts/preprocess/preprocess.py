@@ -1,29 +1,15 @@
 """One database of the Join, in two stages that slurm schedules separately.
 
 Composed from `rt.preprocess`'s primitives rather than its `many` loop, for two
-reasons this sweep needs and that loop cannot express: the raw data is read from
-a directory downloaded once (639 databases fetched per job would be 639 Hub
-round-trips, and the Hub rate-limits long before that), while `meta.json` still
-has to record the Hub spec the data came from -- where it was read and what it
-is are different facts.
-
-The two stages are separate jobs because they want opposite things, and one job
-doing both gets neither:
-
-* `rustler` is **single-threaded and cpu-only** -- measured, `TotalCPU` equals
-  `Elapsed` on every database -- so its concurrency should be bounded by memory
-  and by nothing else. It is also ~70% of the work, and near-100% on the big
-  databases.
-* `embed` wants a GPU for a few seconds to a few minutes.
-
-Run together, every rustler stage holds a GPU it is not using, and 50 GPUs
-across five nodes caps the sweep at 50 concurrent databases no matter how much
-memory is free. Apart, the cpu stage runs as wide as memory allows and the GPU
-stage is a short queue behind it.
+reasons that loop cannot express: the raw data is read from a directory
+downloaded once, while `meta.json` still has to record the Hub spec the data
+came from -- where it was read and what it is are different facts.
 
 Both stages are idempotent, because a preempted job is requeued onto the same
 arguments: work already finished is skipped, work interrupted part-way is redone
 from the start.
+
+Why they are two jobs is in [README.md](README.md).
 """
 
 import json

@@ -2,21 +2,9 @@
 
     pixi run python expts/fine_tune/submit.py
 
-One file, and every argument written where it is passed: `rt.train:main` is the
-target, so there is no per-experiment wrapper to keep in step with it, and the
-call below is both the recipe and the record of what ran. Change a number here
-and the diff is the experiment.
-
-The values are pretraining's (the released RT-J recipe, `examples/train.py`).
-What fine-tuning changes is the data: one `(db, task)` pair instead of a mixture,
-read from the *benchmark* directory rather than the Join, so a run trains where
-it is evaluated and train/eval differ only in split. `load_ckpt_path=None` is the
-random-init control -- what the architecture learns from the task alone, which is
-the number the pretrained arm has to beat.
-
-Run it from a clean, pushed checkout: the job clones the commit you submit from.
-Edit it freely -- it takes no arguments, and the next submission wants a
-different shape anyway (see expts/README.md).
+The values are pretraining's (the released RT-J recipe, `examples/train.py`);
+what fine-tuning changes is the data and `load_ckpt_path`, the arm. See
+[README.md](README.md).
 """
 
 from roach.slurm import Resources, submit
@@ -274,9 +262,7 @@ def submit_one(db: str, task: str, resources: Resources):
         name=f"{db}-{task}",
         repo_root="/lfs/hyperturing1/0/ranjanr/clones/rishabh-ranjan/relational-transformer",
         log_root="/dfs/user/ranjanr/slurm-logs/rishabh-ranjan/relational-transformer/expts/fine-tune",
-        # the node's own big disk, not /tmp (the 280G root filesystem): clones
-        # are shared per commit and hold the pixi env, which pixi hardlinks from
-        # the package cache only when the two are on the same filesystem
+        # the node's own big disk, not /tmp (the 280G root filesystem)
         clone_root="/lfs/local/0/roach_clones",
         secrets_dir="/dfs/user/ranjanr/.secrets",
         # No setup: `pixi install` already builds the rustler extension and puts

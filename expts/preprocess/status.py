@@ -3,13 +3,10 @@
     pixi run python expts/preprocess/status.py
     watch -n60 pixi run python expts/preprocess/status.py
 
-Progress is measured in estimated *seconds of work*, per stage. Counting
-databases would say a sweep was 97% done with a quarter of the work left, and
-counting output bytes gets the two stages wrong in opposite directions: rustler
-tracks output size (~21 s/GiB, measured), while the embedding stage tracks text
-and the two are not proportional -- text is 12% of RelBench's output and 1.7% of
-the Join's. A database counts twice, once as each stage finishes, so progress
-moves with the work rather than jumping when a database completes.
+Progress is measured in estimated *seconds of work*, per stage, from the two
+sizes in `sizes.py` -- counting databases would say a sweep was 97% done with a
+quarter of the work left. A database counts twice, once as each stage finishes,
+so progress moves with the work rather than jumping when a database completes.
 
 The rate comes from samples this script leaves in `progress.jsonl` next to the
 job logs, so an ETA is available from the second invocation onward and does not

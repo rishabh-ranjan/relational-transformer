@@ -1,27 +1,17 @@
 """How big each database's preprocessed output comes out.
 
-Written by the previous published build, read here for two things a rebuild
-cannot know in advance: how much cpu and memory to ask slurm for per database,
-and how far along the sweep really is. Both matter because these collections are
-extremely lopsided -- the Join's median database preprocesses to ~43 MiB and its
-largest to 76 GiB -- so counting datasets would report a sweep as nearly
-finished while most of the work remained.
+Written by the previous published build, read here to size each job and to
+weight progress. Two numbers per database, because the two stages scale on
+different things (see [README.md](README.md)):
 
-Two numbers per database, because the two stages scale on different things:
-
-* ``out`` -- total output bytes. rustler tracks this closely (~21 s/GiB).
-* ``text`` -- bytes of ``text.json``. The embedding stage tracks *text*, and
-  output size predicts it badly: rel-amazon is 48% of RelBench's output and 78%
-  of its strings, and join-bird-codebase-comments took 5983 s to embed 1.1 GiB
-  of text while join-overture-maps took 9398 s for 8.0 GiB.
+* ``out`` -- total output bytes, which rustler tracks.
+* ``text`` -- bytes of ``text.json``, which the embedding stage tracks.
 
 Text bytes are themselves a proxy -- the cost is per string, not per byte -- so
 anything with the build in front of it should prefer ``num_text_strings`` from
 ``meta.json``. This is for what has not been built yet.
 
-Regenerate with ``python expts/preprocess/sizes.py`` for whichever collection
-``submit.py`` currently names (needs the Hub; it reads file sizes only,
-downloading nothing).
+Regenerate for whichever collection ``submit.py`` currently names.
 """
 
 import json

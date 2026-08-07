@@ -3,10 +3,6 @@
     pixi run python expts/preprocess/download.py
     pixi run python expts/preprocess/download.py --repair
 
-Once, and not per job: the collection is 639 databases in 28k files, and a job
-that resolved its own database from the Hub would be one of 639 clients doing it
-at the same time.
-
 **By git, not by the Hub's file API.** `snapshot_download` resolves and fetches
 each file separately, so 28k files means 28k `xet-read-token` calls, and the Hub
 starts answering those with HTTP 429 long before the download finishes. git-lfs
