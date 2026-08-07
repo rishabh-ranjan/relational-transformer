@@ -163,6 +163,9 @@ def resources_for(expected_bytes: int) -> Resources:
 # stage's makespan, and it queued behind its rustler stage anyway.
 BIG_NODES = ("hyperturing1", "hyperturing2")
 BIG_GPUS = 10
+# Where the single-GPU jobs go: the 2080Ti nodes, so they never stand between a
+# long pole and the ten free cards it needs.
+SMALL_NODES = ("turing1", "turing2", "turing3")
 
 
 def embed_resources(text_bytes_: int) -> Resources:
@@ -242,10 +245,16 @@ def embed_resources(text_bytes_: int) -> Resources:
         # and did not run out.
         mem_per_gpu="240G",
         constraint=None,
-        # All five rtx8000/2080Ti nodes. hyperturing1 was excluded for a while:
-        # its GPUs threw "uncorrectable ECC error" on 18 jobs of the previous
-        # build. The card has since been fixed, so it takes embed work again.
-        nodelist="hyperturing1,hyperturing2,turing1,turing2,turing3",
+        # The turings only, leaving both hyperturings for the ten-card jobs.
+        # Left to slurm, three single-GPU jobs land on a hyperturing and hold it
+        # below ten free cards, and a long pole waits on three jobs that would
+        # have run just as fast anywhere -- an RTX8000 is 9% faster than a
+        # 2080Ti, which is nothing against a stage that cannot start.
+        #
+        # (hyperturing1's GPUs threw "uncorrectable ECC error" on 18 jobs of the
+        # previous build; that card has since been fixed, which is what lets
+        # BIG_NODES be both hyperturings again.)
+        nodelist=",".join(SMALL_NODES),
     )
 
 
