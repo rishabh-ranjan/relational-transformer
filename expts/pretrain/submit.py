@@ -25,7 +25,7 @@ def main() -> None:
             # `cpus_per_task` cores per task
             num_workers=16,
             prefetch_factor=2,
-            ctx_size_list=[256, 512, 1024, 2048, 4096, 8192],
+            ctx_size_list=[512, 1024, 2048, 4096, 8192],
             local_ctx_size_list=[256, 512, 1024, 2048, 4096, 8192],
             bfs_width_list=[8, 16, 32, 64, 128, 256],
             prefer_latest_list=[False, True],
@@ -36,29 +36,29 @@ def main() -> None:
             # optimization
             lr=5e-4,
             wd=0.1,
-            warmup_steps=2000,
+            warmup_steps=2_000,
             grad_norm_max=1.0,
-            total_bs=512,
+            total_bs=1024,
             total_steps=100_001,
             swa_momentum=0.9995,
             seed=0,
             mmap_populate=True,
             timeout_per_item=10.0,
-            eval_freq=2000,
-            keep_all_ckpts=False,
+            eval_freq=1_000,
+            keep_all_ckpts=True,
             vector_db_path=None,
             resume_save_mins=20.0,
             # in-loop validation: the benchmark's forecast tasks, val split
             eval_splits=["val"],
             eval_db_task_list="/dfs/user/ranjanr/share/stanford-star/relbench-preprocessed/db-task-lists/forecast.json",
             eval_pre_dir="/dfs/user/ranjanr/share/stanford-star/relbench-preprocessed",
-            eval_tokens_per_gpu=2**17,
+            eval_tokens_per_gpu=2**18,
             eval_num_workers=1,
             eval_prefetch_factor=2,
             eval_num_walks=10_000,
             eval_walk_length=20,
             eval_items_per_task=1024,
-            eval_ctx_size_list=[4096],
+            eval_ctx_size_list=[8192],
             eval_mmap_populate=True,
             eval_shuffle_seed=0,
             eval_context_seed=0,
@@ -78,14 +78,8 @@ def main() -> None:
         name="pretrain",
         repo_root="/lfs/hyperturing1/0/ranjanr/clones/rishabh-ranjan/relational-transformer",
         log_root="/dfs/user/ranjanr/slurm-logs/rishabh-ranjan/relational-transformer/expts/pretrain",
-        # the node's own big disk, not /tmp (the 280G root filesystem)
         clone_root="/lfs/local/0/roach_clones",
         secrets_dir="/dfs/user/ranjanr/.secrets",
-        # this run is long, and clones are swept after a week unused
-        clone_ttl_days=7,
-        # No setup: `pixi install` already builds the rustler extension into
-        # src/rt/, and `pixi run build-sampler` on top of it rebuilds the whole
-        # pyo3 stack for no different result.
     )
 
 
