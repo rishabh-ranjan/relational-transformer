@@ -135,32 +135,23 @@ def a100(qos: str, time: str) -> Resources:
 def plan(n: int) -> list[Resources]:
     """The best n slots this cluster will give one-GPU jobs, best first.
 
-    Blackwell before Ampere, and within a card the QOS in priority order, each
-    taken up to the limit that makes the next one necessary:
+    Everything sits on `il-lo`: preemptible, effectively uncapped, 21d wall.
+    The capped tiers (`il-interactive` at 2 GPUs, `il` at 2 b200 and 10 a100)
+    are what a sweep reaches for when it wants to be un-preemptible, and the
+    price of that is a per-user ceiling that leaves the tail of the sweep
+    queued behind its own head. This sweep would rather hold every card it can
+    and give them back when someone with priority asks: each run checkpoints
+    and resumes, at a preemption and at its time limit alike, so the
+    low-priority queue costs wall clock, not work.
 
-    * `il-interactive` caps a user at 2 GPUs of any kind (12h wall, highest
-      priority, not preempted). A job requeues itself at that wall.
-    * `il` caps b200 at 2 and a100 at 10 per user (7d wall, not preempted).
-    * `il-lo` is preemptible and effectively uncapped (21d wall).
-
-    A whole card better beats a faster one: an idle a100 on `il` starts now,
-    while blackwell1 is one node whose eight cards the rest of the cluster wants
-    too -- measured, three b200 `il-lo` jobs sat pending behind another user's
-    reservation while a100s were free. So both `il` tiers come before either
-    `il-lo` tier, and the b200 `il-lo` share stops at 4, which is what is left of
-    blackwell1 once the four above are held.
-
-    Every one of these runs checkpoints and resumes, at a preemption and at its
-    time limit alike, so the low-priority queue costs wall clock, not work.
+    Blackwell before Ampere within that, and the b200 share stops at 4 --
+    blackwell1 is one node whose eight cards the rest of the cluster wants too,
+    and measured, three b200 `il-lo` jobs sat pending behind another user's
+    reservation while a100s were free. A whole card that starts now beats a
+    faster one that does not.
     """
-    tiers = [
-        (2, b200("il-interactive", "12:00:00")),
-        (2, b200("il", "7-00:00:00")),
-        (10, a100("il", "7-00:00:00")),
-        (4, b200("il-lo", "21-00:00:00")),
-    ]
-    out = [r for count, r in tiers for _ in range(count)][:n]
-    # whatever is left goes to the queue with no cap
+    out = [b200("il-lo", "21-00:00:00")] * min(n, 4)
+    # whatever is left goes to the ampere queue, which has no cap of its own
     out += [a100("il-lo", "21-00:00:00")] * (n - len(out))
     return out
 
