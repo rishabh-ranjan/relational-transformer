@@ -38,8 +38,9 @@ Those two paths are what `examples/train.py` passes (`pre_dir="data/the-join-pre
 run at that path.
 
 The task mixture is given by `db_task_list` — `(db, task)` pairs as a
-JSON file. Every name must be a task the db actually ships (recorded in its
-`meta.json`). The curated lists ship with the data, under
+JSON file. Names resolve against the tasks the db ships (recorded in its
+`meta.json`); one the build cannot predict — a recommendation task, or an
+entry left over from an older build — is reported and ignored, not fatal. The curated lists ship with the data, under
 `<pre_dir>/db-task-lists/`: `forecast.json` (every forecast task in the Join),
 `autocomplete.json` (every `kind: autocomplete` task — predict a column of a db
 table, train-split only), `all.json` (both), and `rt-j.json` (the curated RT-J

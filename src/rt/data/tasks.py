@@ -2,7 +2,7 @@
 
 The set of tasks to train or evaluate on is always given explicitly as a
 ``db_task_list``: a list of ``(db_name, task_name)`` pairs, a local path to a
-JSON file holding such a list. ``task_name`` is always a task recorded in the
+JSON file holding such a list. ``task_name`` names a task recorded in the
 db's ``meta.json``: a forecast/external task, or an autocomplete task
 (``kind: autocomplete``, a manifest-only task dir whose target is a column of a
 db table). There is no enumerate-everything fallback and no on-the-fly column

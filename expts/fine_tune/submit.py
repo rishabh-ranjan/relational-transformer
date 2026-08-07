@@ -14,6 +14,7 @@ TASKS = (
     ("rel-f1", "driver-top3"),
     ("rel-event", "user-attendance"),
     ("rel-event", "user-ignore"),
+    ("rel-event", "user-repeat"),
     ("rel-trial", "site-success"),
     ("rel-trial", "study-adverse"),
     ("rel-trial", "study-outcome"),
