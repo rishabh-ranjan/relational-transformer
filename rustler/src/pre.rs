@@ -515,6 +515,13 @@ pub fn main(cli: Cli) {
                 continue;
             }
             let tm: TaskManifest = load_yaml(&tm_path);
+            // Recommendation tasks have no clf/reg target, so nothing
+            // downstream can build a Task from one. Skipped whole: not listed
+            // in meta.json, and their label tables are not read either, so a
+            // build carries no nodes for a task it cannot serve.
+            if tm.task_type.as_deref() == Some("link_prediction") {
+                continue;
+            }
             let task_name = task_dir.file_name().unwrap().to_str().unwrap().to_string();
             let fkeys = tm.fkeys();
             let mut splits: Vec<&str> = Vec::new();
@@ -535,16 +542,6 @@ pub fn main(cli: Cli) {
                         tcol_name: tm.time_col.clone(),
                     });
                 }
-            }
-            // Recommendation tasks (`link_prediction`) have no clf/reg target,
-            // so nothing downstream can build a Task from one; listing them in
-            // meta.json only produces task lists that break at load time. Their
-            // label tables are still ingested above: they are ordinary context
-            // like any other table, and dropping them would change the node
-            // layout -- which is what makes this change patchable into an
-            // existing build by rewriting meta.json alone.
-            if tm.task_type.as_deref() == Some("link_prediction") {
-                continue;
             }
             let mut task_meta = serde_json::json!({
                 "name": task_name,
