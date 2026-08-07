@@ -8,9 +8,6 @@ tasks for in-loop validation. See [README.md](README.md).
 
 from roach.slurm import BLACKWELL, submit
 
-PRE_DIR = "/dfs/user/ranjanr/share/stanford-star/the-join-preprocessed"
-EVAL_PRE_DIR = "/dfs/user/ranjanr/share/stanford-star/relbench-preprocessed"
-
 
 def main() -> None:
     submit(
@@ -27,8 +24,8 @@ def main() -> None:
             materialize_attn_masks=True,
             load_ckpt_path=None,
             # data: the Join's mixture
-            db_task_list=f"{PRE_DIR}/db-task-lists/rt-j.json",
-            pre_dir=PRE_DIR,
+            db_task_list="/dfs/user/ranjanr/share/stanford-star/the-join-preprocessed/db-task-lists/rt-j.json",
+            pre_dir="/dfs/user/ranjanr/share/stanford-star/the-join-preprocessed",
             tokens_per_gpu=2**17,
             # loader workers are processes, and the job only owns
             # `cpus_per_task` cores per task
@@ -59,8 +56,8 @@ def main() -> None:
             resume_save_mins=20.0,
             # in-loop validation: the benchmark's forecast tasks, val split
             eval_splits=["val"],
-            eval_db_task_list=f"{EVAL_PRE_DIR}/db-task-lists/forecast.json",
-            eval_pre_dir=EVAL_PRE_DIR,
+            eval_db_task_list="/dfs/user/ranjanr/share/stanford-star/relbench-preprocessed/db-task-lists/forecast.json",
+            eval_pre_dir="/dfs/user/ranjanr/share/stanford-star/relbench-preprocessed",
             eval_tokens_per_gpu=2**17,
             eval_num_workers=1,
             eval_prefetch_factor=2,
