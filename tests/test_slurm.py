@@ -10,7 +10,7 @@ import inspect
 import pytest
 
 from roach.slurm import Resources, check_args, resolve, timestamp
-from roach.slurm._submit import _overlap, launch
+from roach.slurm._submit import launch
 from roach.slurm._submit import submit as submit_fn
 import re
 from importlib.resources import files
@@ -18,8 +18,6 @@ from roach.slurm import (
     AMPERE,
     AMPERE_LO,
     BLACKWELL,
-    BLACKWELL_INTERACTIVE,
-    BLACKWELL_INTERACTIVE_1GPU,
 )
 
 
@@ -184,48 +182,11 @@ def test_job_env_is_not_inherited():
     assert '"--export=NONE"' in inspect.getsource(submit_fn)
 
 
-def test_a_call_that_crosses_from_the_submitting_shell_exports_almost_nothing():
-    """One rule, two layers: nothing from the submitting shell, everything from
-    the job's own environment. sbatch says NONE; the driver step of an
-    overlapping run cannot, because srun execve's a step with exactly what you
-    exported and NONE could not even find bash -- so it names the two variables
-    that get bash started, and nothing that came from this shell."""
-    src = inspect.getsource(_overlap)
-    assert "--export=ALL" not in src
-    assert "--export=PATH=" in src and "USER=" in src
-
-
 def test_the_launcher_lets_srun_inherit_the_job_environment():
     """--export=NONE (which keeps the submit shell out of the job) also stops
     srun from passing the job's own environment to its tasks, so `pixi` is not
     on their PATH; SLURM_EXPORT_ENV=ALL puts it back."""
-    for overlap in (None, "12345"):
-        line = launch(ampere(), "pkg:main", "/args.json", overlap)
-        assert "--export=ALL" in line
-
-
-def test_an_overlapping_run_states_its_shape_in_full():
-    """The driver script runs as a one-task step of somebody else's allocation,
-    so srun inherits *that* shape unless the ranks' own is spelled out -- one
-    task on one cpu with no gpu, which is not a training job. --overlap is what
-    keeps the two steps from waiting on each other."""
-    line = launch(ampere(gpus="b200:4", cpus_per_task=36), "p:m", "/a.json", "999")
-    for flag in (
-        "--jobid=999",
-        "--overlap",
-        "--ntasks=4",
-        "--cpus-per-task=36",
-        # every rank sees every card, so LOCAL_RANK indexes them; --gpus-per-task
-        # would give each rank one card as device 0 and rank 1 an ordinal that
-        # does not exist
-        "--gres=gpu:4",
-    ):
-        assert flag in line
-    assert "--jobid" not in launch(ampere(), "p:m", "/a.json", None)
-
-
-def test_a_cpu_only_overlapping_run_asks_for_no_gpu():
-    assert "--gres" not in launch(ampere(gpus="0"), "p:m", "/a.json", "1")
+    assert "--export=ALL" in launch(ampere(), "pkg:main", "/args.json")
 
 
 def test_presets_are_one_rank_per_gpu():
@@ -236,8 +197,6 @@ def test_presets_are_one_rank_per_gpu():
         AMPERE,
         AMPERE_LO,
         BLACKWELL,
-        BLACKWELL_INTERACTIVE,
-        BLACKWELL_INTERACTIVE_1GPU,
     ):
         assert preset.ranks == int(preset.gpus.rpartition(":")[2])
         assert preset.ranks * preset.cpus_per_task <= 288  # the widest node here

@@ -175,9 +175,7 @@ on_timeout() {
         scancel --signal=TERM --quiet "$SLURM_JOB_ID" || true
     fi
 }
-# Only a batch job can be requeued. An overlapping run is a step of an
-# allocation somebody else is holding, and requeueing that would throw away
-# their allocation, so submit() splices a 0 here for it.
+# 0 when submit() was told not to (timeout_grace_secs=0).
 if [[ @REQUEUE_ON_TIMEOUT@ == 1 ]]; then trap on_timeout USR1; else trap '' USR1; fi
 # srun refuses to start when SLURM_CPUS_PER_TASK disagrees with the allocation's
 # SLURM_TRES_PER_TASK ("cpus-per-task set by two different environment
@@ -197,10 +195,7 @@ unset SLURM_CPUS_PER_TASK
 # that finds the environment wrong should say so, or fix it, rather than run on
 # in whatever state it was left in.
 #
-# The srun line itself is filled in by submit(): a batch job starts its ranks in
-# its own allocation, an overlapping job starts them as a sibling step of an
-# allocation somebody else is holding. Everything above this point is identical
-# either way.
+# The srun line itself is filled in by submit().
 @LAUNCH@ &
 srun_pid=$!
 

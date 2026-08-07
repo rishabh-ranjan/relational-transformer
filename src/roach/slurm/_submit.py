@@ -105,54 +105,23 @@ def _git(*args: str) -> str:
     ).stdout.strip()
 
 
-def launch(
-    resources: Resources, target: str, args_path: str, overlap: str | None
-) -> str:
+def launch(resources: Resources, target: str, args_path: str) -> str:
     """The srun line that starts the ranks, spliced into the batch script.
 
-    One rank per GPU either way; what differs is whose allocation they run in.
-
-    `--export=ALL`, on both. There is one rule, applied at two layers: **nothing
-    from the submitting shell, everything from the job's own environment.** These
-    sruns are the second layer -- they run *inside* the job, after env.sh has
-    built the node-local HOME, the caches, the PATH to pixi and the tokens, and
-    without ALL they would start the ranks nearly empty and find none of it. The
-    calls that cross from the submitting shell (`sbatch --export=NONE`, and the
-    driver step in `_overlap`) are the first layer, and they say the opposite,
-    for the same reason: that shell's HOME does not exist on the node and its
-    environment holds API tokens slurm would record.
+    `--export=ALL`. There is one rule, applied at two layers: **nothing from the
+    submitting shell, everything from the job's own environment.** This srun is
+    the second layer -- it runs *inside* the job, after env.sh has built the
+    node-local HOME, the caches, the PATH to pixi and the tokens, and without
+    ALL it would start the ranks nearly empty and find none of it. The
+    `sbatch --export=NONE` that crosses from the submitting shell is the first
+    layer, and says the opposite for the same reason: that shell's HOME does not
+    exist on the node and its environment holds API tokens slurm would record.
 
     `--frozen`: the clone is shared, so a rank that re-solved would rewrite
     pixi.lock underneath every other job at this commit.
     """
     run = f'pixi run --frozen python -m roach.slurm.run "{target}" "{args_path}"'
-    if overlap is None:
-        return f"srun --export=ALL --label --kill-on-bad-exit=1 \\\n    {run}"
-    # A step of somebody else's allocation. The shape has to be stated in full:
-    # this script is itself running as a one-task step of that allocation, so
-    # srun would otherwise inherit *its* shape (one task, one cpu, no gpu of its
-    # own) through the SLURM_* variables slurm sets for a step. --overlap is what
-    # lets the ranks take resources the driver step is nominally holding --
-    # without it the sibling step waits for a step that is waiting for it.
-    flags = [
-        f"--jobid={overlap}",
-        "--overlap",
-        "--export=ALL",
-        "--label",
-        "--kill-on-bad-exit=1",
-        f"--ntasks={resources.ranks}",
-        f"--cpus-per-task={resources.cpus_per_task}",
-    ]
-    gpus = int(resources.gpus.rpartition(":")[2])
-    if gpus:
-        # Per step, not per task. --gpus-per-task hands each rank its own
-        # CUDA_VISIBLE_DEVICES holding one card, which every rank then sees as
-        # device 0 -- and rank 1, which sets LOCAL_RANK=1 like the batch path
-        # does, asks for an ordinal that does not exist ("invalid device
-        # ordinal"). The batch path gives every task the node's whole gres and
-        # lets LOCAL_RANK index it; this matches that.
-        flags.append(f"--gres=gpu:{gpus}")
-    return "srun " + " ".join(flags) + f" \\\n    {run}"
+    return f"srun --export=ALL --label --kill-on-bad-exit=1 \\\n    {run}"
 
 
 def submit(
@@ -168,7 +137,6 @@ def submit(
     setup: tuple[str, ...] = (),
     run_id: str | None = None,
     after: str | None = None,
-    overlap: str | None = None,
     timeout_grace_secs: int = 300,
 ) -> Job:
     """Run ``target(**args)`` on ``resources``, one rank per GPU.
@@ -189,12 +157,6 @@ def submit(
     request, not a guarantee -- slurm rounds it to the minute and delivers it
     around that point -- so leave room over what a checkpoint actually costs.
 
-    ``overlap`` is the id of an allocation somebody is *holding* (see
-    ``roach.slurm.interactive``). The run then goes in as a step of that
-    allocation instead of as a job of its own: nothing is queued, and a run that
-    crashes takes its step down and leaves the allocation standing for the next
-    attempt. ``resources`` still says what the ranks get -- gpus, cpus, ntasks --
-    but partition, qos, time and node are the allocation's, not this call's.
     """
     os.chdir(repo_root)
     # The job runs from the repo root, so targets are importable relative to it
@@ -229,14 +191,10 @@ def submit(
         "@SECRETS_DIR@": str(secrets_dir),
         "@SETUP@": "\n".join(setup),
         "@ENV@": env_sh,
-        "@LAUNCH@": launch(resources, target, str(args_path), overlap),
-        # An overlapping run has no job of its own to requeue.
-        "@REQUEUE_ON_TIMEOUT@": "1" if overlap is None and timeout_grace_secs else "0",
+        "@LAUNCH@": launch(resources, target, str(args_path)),
+        "@REQUEUE_ON_TIMEOUT@": "1" if timeout_grace_secs else "0",
     }.items():
         script = script.replace(key, value)
-
-    if overlap is not None:
-        return _overlap(script, overlap, name, run_id, log_root, target, resources)
 
     log = log_root / f"{run_id}_%j.out"
     flags = [
@@ -284,67 +242,3 @@ def submit(
         log=Path(str(log).replace("%j", job_id)),
         target=target,
     )
-
-
-def _overlap(
-    script: str,
-    overlap: str,
-    name: str,
-    run_id: str,
-    log_root: Path,
-    target: str,
-    resources: Resources,
-) -> Job:
-    """Run the same script as a step of an allocation somebody is holding.
-
-    There is no sbatch here, so nothing queues and nothing requeues: the point of
-    an overlapping run is that the *allocation* is the durable thing and the run
-    is disposable. The driver step is one task -- it clones, builds and then
-    starts the ranks as a sibling step (see `launch`) -- and it is detached from
-    this shell, so closing the terminal that submitted it does not kill it.
-    """
-    log = log_root / f"{run_id}_{overlap}.out"
-    flags = [
-        f"--jobid={overlap}",
-        # the ranks are a step of the same allocation; without this each waits
-        # for the other's resources
-        "--overlap",
-        f"--job-name={name}",
-        # One task -- it clones, builds, and starts the ranks -- but every cpu
-        # the ranks will want. The ranks are a *nested* step: slurm puts them in
-        # a cgroup under this one, so they can only ever be bound to the cpus
-        # this step holds, whatever their own --cpus-per-task says. A driver on
-        # one cpu produced a training run pinned to a single core (two
-        # hyperthreads) with 16 dataloader workers fighting over it, while
-        # `scontrol show step` cheerfully reported CPUs=36.
-        "--ntasks=1",
-        f"--cpus-per-task={resources.ranks * resources.cpus_per_task}",
-        "--chdir=/tmp",
-        # Nothing from this shell, exactly as the batch path's --export=NONE:
-        # its HOME does not exist on the node and its environment holds API
-        # tokens slurm would record. Not NONE itself, though, and this is the
-        # one place the two layers cannot be spelled the same way: sbatch gives
-        # a batch script a default environment with a PATH, while srun execve's
-        # the step with what you exported and nothing else -- NONE here died at
-        # `execve(): bash: No such file or directory`, before a line of the
-        # script ran. So: the two variables that get bash started, and the
-        # script builds the rest.
-        f"--export=PATH=/usr/local/bin:/usr/bin:/bin,USER={os.environ.get('USER', '')}",
-    ]
-    env = {
-        k: v for k, v in os.environ.items() if not k.startswith(("SLURM_", "SBATCH_"))
-    }
-    with open(log, "ab") as fh:
-        proc = subprocess.Popen(
-            ["srun", *flags, "bash", "-s"],
-            stdin=subprocess.PIPE,
-            stdout=fh,
-            stderr=subprocess.STDOUT,
-            env=env,
-            start_new_session=True,
-        )
-    assert proc.stdin is not None
-    proc.stdin.write(script.encode())
-    proc.stdin.close()
-    print(f"{name}: step of {overlap}  run_id {run_id}  log {log}")
-    return Job(id=overlap, run_id=run_id, log=log, target=target)

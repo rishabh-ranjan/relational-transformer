@@ -10,7 +10,7 @@ gpu, gpus per QOS) are policy, and the scheduler reports them better than a
 stale copy in here would.
 """
 
-from dataclasses import dataclass, replace
+from dataclasses import dataclass
 
 
 @dataclass(frozen=True)
@@ -155,47 +155,3 @@ BLACKWELL = Resources(
     nodelist="blackwell1",
 )
 """4xB200. Roughly 3x an 8xA100 job's throughput in the runs measured so far."""
-
-BLACKWELL_INTERACTIVE = Resources(
-    partition="il",
-    account="infolab",
-    qos="il-interactive",  # priority 1500 -- the highest here, and it preempts nothing
-    time="12:00:00",  # the QOS cap; a held allocation has to be renewed after that
-    gpus="b200:2",  # the QOS caps *all* gpus at 2 per user, so this is the whole budget
-    cpus_per_task=36,  # 288 cores / 8 gpus on blackwell1, the site's per-gpu share
-    ntasks=None,
-    exclusive=False,
-    mem="750000M",  # 2 gpus' share of the node, under MaxMemPerCPU=10700 x 72 cpus
-    mem_per_gpu=None,
-    constraint=None,
-    nodelist="blackwell1",
-)
-"""2xB200 on the interactive QOS: the shape to *hold* while iterating.
-
-Use it when the work is a quick edit-run-look loop rather than a run you submit
-and leave. Hold it once with ``roach.slurm.interactive.hold`` and put every run
-inside it with ``submit(..., overlap=<job id>)``: the runs are steps of one
-allocation, so nothing queues between attempts (seconds, not the minutes a fresh
-b200 job waits), and a run that crashes -- or that you cancel -- takes its step
-down and leaves the allocation standing for the next one.
-
-Two GPUs is the whole interactive budget (`il-interactive` caps gpus at 2 per
-user), and 12 hours is the QOS wall clock, so a loop that outlives a working day
-needs the allocation renewed. Anything that should survive a night, a preemption
-or your laptop closing is a batch job on `BLACKWELL`/`AMPERE` instead: an
-interactive allocation is not requeued, and its runs are not resumed for you."""
-
-BLACKWELL_INTERACTIVE_1GPU = replace(
-    BLACKWELL_INTERACTIVE, gpus="b200:1", cpus_per_task=36, mem=None
-)
-"""One run's share of a held BLACKWELL_INTERACTIVE allocation.
-
-What you *hold* and what a run *takes* are two different shapes, which is why
-`submit(..., overlap=...)` keeps asking for resources: the allocation is 2
-b200s, and a run that wants one asks for one. Two of these fit side by side --
-a second arm, or a scratch run beside the one you are watching -- and a
-single-GPU run also keeps the comparison honest, since world size changes the
-data stream a run sees.
-
-`mem` is None because a step does not request memory: it takes it from the
-allocation that is already holding the node's share."""

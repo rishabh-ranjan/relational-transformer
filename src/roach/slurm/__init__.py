@@ -18,13 +18,10 @@ env.sh and the presets -- those describe this cluster and this user.
 # _submit rather than submit: a module and the function it exports cannot share
 # a name, or the re-export below shadows the module and `import roach.slurm.submit`
 # quietly hands you the function instead.
-from roach.slurm import interactive
 from roach.slurm.resources import (
     AMPERE,
     AMPERE_LO,
     BLACKWELL,
-    BLACKWELL_INTERACTIVE,
-    BLACKWELL_INTERACTIVE_1GPU,
     Resources,
 )
 from roach.slurm._submit import Job, check_args, submit, timestamp
@@ -34,12 +31,9 @@ __all__ = [
     "AMPERE",
     "AMPERE_LO",
     "BLACKWELL",
-    "BLACKWELL_INTERACTIVE",
-    "BLACKWELL_INTERACTIVE_1GPU",
     "Job",
     "Resources",
     "check_args",
-    "interactive",
     "resolve",
     "submit",
     "timestamp",
