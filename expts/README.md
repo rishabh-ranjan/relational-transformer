@@ -61,6 +61,31 @@ reconstructing anything from a conversation or a shell history.
 Not a diary. It is the difference between an experiment that can be re-run and
 one that merely happened; `preprocess/` is the worked example.
 
+## Commit what a re-run needs, delete the rest
+
+Two halves of one rule, and the second is the one that gets skipped.
+
+**Commit anything a future re-run would want**: the submit script, a curated
+list that cannot be recomputed, a measurement that cost a sweep to produce. If
+regenerating it needs a resource that may be gone, keep the artifact and not
+only the recipe.
+
+**Delete everything else, wherever it landed** — the scratch clone, the probe
+job's logs and checkpoints, the throwaway script that answered one question, the
+half-finished output of a run nobody will read. Not only under `expts/`: the
+shared filesystem, the node-local disks and `/tmp` are where this collects, and
+nothing sweeps them for you. A file kept "just in case" is a file the next
+person has to work out the status of.
+
+The test is not "was this useful?" but **"would I read this next time, or write
+it again?"** A one-off script that took ten minutes and depended on a state of
+the world that has since moved on is faster to rewrite than to trust, so it is
+residue however clever it was. Keep it only when re-deriving it is the expensive
+part.
+
+Clean up when the question is answered, not later: the person who knows which
+files were the experiment and which were the scaffolding is you, now.
+
 ## Say it once
 
 **Every fact has one home, and the others point at it.** These conventions live
