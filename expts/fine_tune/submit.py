@@ -1,11 +1,4 @@
-"""Fine-tune a Relational Transformer on one task, and submit one job per task.
-
-    pixi run python expts/fine_tune/submit.py
-
-The values are pretraining's (the released RT-J recipe, `examples/train.py`);
-what fine-tuning changes is the data and `load_ckpt_path`, the arm. See
-[README.md](README.md).
-"""
+"""Submit one fine-tuning job per task. See [README.md](README.md)."""
 
 from roach.slurm import Resources, submit
 

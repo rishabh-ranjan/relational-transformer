@@ -1,10 +1,4 @@
-"""Pretrain a Relational Transformer on the Join, and submit that one run.
-
-    pixi run python expts/pretrain/submit.py
-
-One run, not a sweep: the Join's mixture for training, the benchmark's forecast
-tasks for in-loop validation. See [README.md](README.md).
-"""
+"""Submit the pretraining run. See [README.md](README.md)."""
 
 from roach.slurm import BLACKWELL, submit
 
