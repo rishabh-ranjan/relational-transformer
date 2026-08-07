@@ -60,8 +60,8 @@ KEEP = ("db-task-lists", "legacy")
 #
 # The build directory is named separately from the repo it publishes to, so a
 # rebuild can be staged beside the live one (`-preprocessed-new`) and promoted
-# into place once it verifies. It has been promoted; this is that build.
-OUT_NAME = f"{NAME}-preprocessed"
+# into place once it verifies. This is a rebuild, staged beside the live tree.
+OUT_NAME = f"{NAME}-preprocessed-new"
 LEGACY_DIR = f"/dfs/user/ranjanr/share/stanford-star/{OUT_NAME}/legacy"
 
 # NAME = "the-join"
