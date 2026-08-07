@@ -74,8 +74,10 @@ def resolve_db_task_list(db_task_list) -> list[tuple[str, str]]:
 def get_tasks(pre_dir, db_task_list, splits) -> list[Task]:
     """Build full :class:`Task` objects for a db_task_list at the given splits.
 
-    Every name in the list must be an explicit task recorded in the db's
-    ``meta.json`` -- there is no on-the-fly resolution of column specs.
+    Names resolve against the explicit tasks recorded in the db's ``meta.json``
+    -- there is no on-the-fly resolution of column specs. A name the build does
+    not offer as a clf/reg target is reported and ignored, not raised on: a
+    published list outlives the build it was written for.
 
     Forecast/external tasks carry a label table per split, so they are emitted
     once per requested split that the task actually ships. Autocomplete tasks
@@ -93,6 +95,7 @@ def get_tasks(pre_dir, db_task_list, splits) -> list[Task]:
         by_db.setdefault(db, []).append(name)
 
     out: list[Task] = []
+    ignored: list[str] = []
     for db, names in by_db.items():
         meta = read_meta(pre_dir, db)
         explicit = {
@@ -103,10 +106,13 @@ def get_tasks(pre_dir, db_task_list, splits) -> list[Task]:
         for name in names:
             t = explicit.get(name)
             if t is None:
-                raise ValueError(
-                    f"{db}: task {name!r} is not a task in meta.json "
-                    f"({sorted(explicit)})"
-                )
+                # A published list can name a task this build does not offer as
+                # something to predict: a recommendation task (link_prediction,
+                # which has no clf/reg target), or an entry left over from an
+                # older build. Ignoring it keeps a stale list from taking down a
+                # run over a task nobody could have trained on anyway.
+                ignored.append(f"{db}/{name}")
+                continue
             tt = _TASK_TYPE[t["task_type"]]
             leaks = tuple(
                 (str(tbl), str(col)) for tbl, col in t.get("remove_columns") or ()
@@ -132,4 +138,9 @@ def get_tasks(pre_dir, db_task_list, splits) -> list[Task]:
             for split in splits:
                 if split in t.get("splits", []):
                     out.append(Task(db, name, t["target_col"], tt, split, leaks))
+
+    if ignored:
+        print(f"ignored {len(ignored)} task(s) this build cannot predict:", flush=True)
+        for name in ignored:
+            print(f"  {name}", flush=True)
     return out
