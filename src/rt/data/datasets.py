@@ -11,7 +11,6 @@ import torch
 from torch.utils.data import Dataset, IterableDataset
 
 from rt.data.resolve import get_column_index, resolve_pre_dir
-from rt.progress import log
 
 from rt.rustler import Sampler
 
@@ -91,7 +90,9 @@ class RustlerDataset:
         drop_column_indices = []
         skipped_tasks = []
 
+        num_tasks = 0
         for task in tasks:
+            num_tasks += 1
             db_name = task.db_name
             table_name = task.table_name
             target_column = task.target_column
@@ -143,13 +144,14 @@ class RustlerDataset:
                 skipped_tasks.append((task_name, e))
 
         if skipped_tasks and local_rank == 0 and not quiet:
-            log(tasks_skipped=len(skipped_tasks))
+            # prose, not a record: `log` values have to be whitespace-free, and
+            # underscoring an error message to fit that made it unreadable.
+            print(
+                f"skipped {len(skipped_tasks)} of {num_tasks} tasks:",
+                flush=True,
+            )
             for task_name, e in skipped_tasks:
-                log(
-                    indent=1,
-                    task_skipped=task_name,
-                    error=str(e).replace(" ", "_"),
-                )
+                print(f"  {task_name}: {e}", flush=True)
 
         self.world_size = world_size
         self.sampler = Sampler(

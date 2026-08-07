@@ -123,8 +123,11 @@ def get_column_index(
     target = f"{column_name} of {table_name}"
 
     if target not in column_index:
+        # the usual cause is preprocessing dropping the column as constant
+        # (n_unique <= 1), which makes the task degenerate anyway
         raise ValueError(
-            f'Column "{target}" not found in {pre_dir}/{db_name}/column_index.json.'
+            f'no column "{target}" in {db_name} '
+            "(dropped in preprocessing, most likely constant)"
         )
 
     return column_index[target]
