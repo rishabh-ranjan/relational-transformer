@@ -8,8 +8,8 @@ from pathlib import Path
 from roach.slurm import AMPERE, submit
 
 # The in-loop validation tasks, listed here rather than by path: RelBench's
-# published `forecast.json` also carries recommendation (link_prediction)
-# tasks, which rt.train cannot build a Task from and dies on. Read at submit
+# published `forecast.json` also carries recommendation tasks, which
+# rt.train cannot build a Task from. Read at submit
 # time and passed inline -- this repo lives on the submitting host's local
 # disk, so a path into it does not resolve on the compute node.
 EVAL_TASKS = [

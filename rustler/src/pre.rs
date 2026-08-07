@@ -150,7 +150,7 @@ struct TaskManifest {
 
 impl TaskManifest {
     /// Foreign keys of a task label table: its entity column(s) point into the
-    /// database entity table(s) (src/dst for link-prediction tasks).
+    /// database entity table(s) (src/dst for recommendation tasks).
     fn fkeys(&self) -> HashMap<String, String> {
         let mut m = HashMap::new();
         for (col, table) in [

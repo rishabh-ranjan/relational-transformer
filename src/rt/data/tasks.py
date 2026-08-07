@@ -22,7 +22,7 @@ from pathlib import Path
 from rt.data.resolve import read_meta
 
 # relbench task_type -> RT task_type. Only node-level clf/reg tasks are modeled;
-# link_prediction (recommendation) tasks are skipped.
+# recommendation tasks are skipped.
 _TASK_TYPE = {"binary_classification": "clf", "regression": "reg"}
 
 
@@ -107,10 +107,10 @@ def get_tasks(pre_dir, db_task_list, splits) -> list[Task]:
             t = explicit.get(name)
             if t is None:
                 # A published list can name a task this build does not offer as
-                # something to predict: a recommendation task (link_prediction,
-                # which has no clf/reg target), or an entry left over from an
-                # older build. Ignoring it keeps a stale list from taking down a
-                # run over a task nobody could have trained on anyway.
+                # something to predict: a recommendation task (which has no
+                # clf/reg target), or an entry left over from an older build.
+                # Ignoring it keeps a stale list from taking down a run over a
+                # task nobody could have trained on anyway.
                 ignored.append(f"{db}/{name}")
                 continue
             tt = _TASK_TYPE[t["task_type"]]
