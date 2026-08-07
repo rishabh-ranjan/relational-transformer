@@ -73,7 +73,8 @@ A database is preprocessed by **two jobs**, not one:
   over 200 databases: `TotalCPU` equals `Elapsed` on every one, so the stage is
   single-threaded, and `MaxRSS` is about twice a database's output. It is ~70%
   of the work and near-100% on the big ones.
-* **`embed`** — **six GPUs in one job**, 24 cpus, memory per GPU.
+* **`embed`** — **one GPU**, 4 cpus, memory per GPU. The exception is a
+  database above `BIG_TEXT_BYTES`, which takes a whole hyperturing (ten cards):
   sentence-transformers runs a worker per device, so one rank wants all of them
   (`ntasks=1`), not a rank each.
 
@@ -175,12 +176,13 @@ a request for 8 GPUs.
 | hyperturing2 — Quadro RTX 8000 | 929 texts/s | 3,769 texts/s | 4.06× | 68% |
 | turing3 — GeForce RTX 2080 Ti | 849 texts/s | 3,643 texts/s | 4.29× | 71% |
 
-Two things follow. **Six GPUs are worth about four**, which is why the stage
-takes a node's worth rather than one card — the ten databases that are 88% of
-the stage each finish in a quarter of the time instead of queueing behind a
-single GPU. And **the card barely matters**: 9% between an RTX 8000 and a 2080
-Ti, so there is nothing to gain by routing text-heavy databases at the better
-hardware.
+Two things follow. **Six GPUs are worth about four**, and ten are worth less
+still — which is why only the long poles get a node's worth. For a database that
+embeds in minutes on one card, the extra cards buy minutes and cost the sweep
+five slots another database could have used, so everything under
+`BIG_TEXT_BYTES` takes one GPU and they all run at once. And **the card barely
+matters**: 9% between an RTX 8000 and a 2080 Ti, so there is nothing to gain by
+routing text-heavy databases at the better hardware.
 
 The 68–71% efficiency is per-chunk fan-out overhead. Larger `CHUNK` in
 `rt.preprocess.embed` would recover some of it, at the cost of peak memory.

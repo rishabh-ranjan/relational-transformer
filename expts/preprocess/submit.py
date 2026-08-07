@@ -48,6 +48,12 @@ TARGET_REPO = "stanford-star/relbench-preprocessed"
 # A task list that cannot be derived from the build. None when every list the
 # collection publishes can be recomputed from the metas.
 CURATED = None
+# A database with this much text is the embedding stage's long pole and gets a
+# whole hyperturing; everything under it gets one GPU. Per collection, because
+# it is a cut through that collection's text sizes: 1.5 GiB puts rel-amazon
+# (11 GiB) and rel-stack (2.0 GiB) on ten cards and leaves rel-trial (1.2 GiB)
+# and the four small ones on one each.
+BIG_TEXT_BYTES = 3 << 29
 # Directories the published repo carries that are not a database of this build,
 # and that the mirror upload must therefore not delete. legacy/ is RT-v1 boolean
 # typing, which the released RT-v1 checkpoints read.
@@ -70,6 +76,8 @@ LEGACY_DIR = f"/dfs/user/ranjanr/share/stanford-star/{OUT_NAME}/legacy"
 # # rt-j is a whitelist of 475 databases, 126 excluded wholesale and none
 # # partially: nothing in the build says which.
 # CURATED = "rt-j-dbs.json"
+# # join-overture-maps (8.0 GiB of text) is the one this catches.
+# BIG_TEXT_BYTES = 9 << 30
 # KEEP = ("db-task-lists",)
 # OUT_NAME = f"{NAME}-preprocessed"
 # LEGACY_DIR = None
@@ -149,11 +157,6 @@ def resources_for(expected_bytes: int) -> Resources:
     )
 
 
-# A database with this much text is the embedding stage's long pole, and gets a
-# whole hyperturing instead of the usual six GPUs. Set above the second-largest
-# in either collection (rel-stack 2.0 GiB, join-overture-maps 8.0 GiB is the one
-# other database this catches) so it stays the exception it is meant to be.
-BIG_TEXT_BYTES = 9 << 30
 # rtx8000 nodes, ten cards each.
 BIG_NODES = ("hyperturing1", "hyperturing2")
 MAX_BIG_GPUS = 10
@@ -232,7 +235,7 @@ def embed_resources(text_bytes_: int) -> Resources:
     # The long pole gets a whole hyperturing. One database sets this stage's
     # makespan -- rel-amazon is 11 GiB of text against 2 GiB for the next one --
     # so it is the one worth giving every card on a node to, and the rtx8000s
-    # are the better cards here. Everything else keeps the six-GPU shape below,
+    # are the better cards here. Everything else takes the one-GPU shape below,
     # which is what lets the rest of the sweep run alongside it.
     if text_bytes_ >= BIG_TEXT_BYTES:
         node, gpus = biggest_free_gpu_node()
@@ -261,17 +264,18 @@ def embed_resources(text_bytes_: int) -> Resources:
         account="infolab",
         qos="il-lo",
         time=walltime,
-        # SEVERAL GPUs in one job. sentence-transformers runs a worker per
-        # device, and measured on 2M texts that is 4.06x on six RTX8000s (68%
-        # efficiency) and 4.29x on six 2080Tis (71%) -- so the stage's own skew
-        # stops mattering: ten databases are 88% of it, and each of those now
-        # finishes in a quarter of the time instead of queueing behind one card.
+        # ONE GPU. Fanning out over several is only worth a job's while for the
+        # long poles above: six cards return 4.06x on an RTX8000 node and 4.29x
+        # on a 2080Ti one (68-71% efficiency), so a database that embeds in
+        # minutes on one card buys minutes and costs five cards that another
+        # database could have run on whole. Below the threshold the stage is
+        # wide, not deep -- every database gets a card and they all run at once.
         # Card type barely matters: one RTX8000 does 929 texts/s against a
         # 2080Ti's 849, a 9% gap, so there is nothing to route.
-        gpus="6",
-        cpus_per_task=24,
-        # One rank with every GPU visible to it, not a rank per GPU:
-        # sentence-transformers does the fan-out itself.
+        gpus="1",
+        # Four cpus per GPU, the same ratio the big shape uses: the dataloader
+        # feeding the worker is what they are for.
+        cpus_per_task=4,
         ntasks=1,
         exclusive=False,
         mem=None,
@@ -280,7 +284,12 @@ def embed_resources(text_bytes_: int) -> Resources:
         # so with --mem the most GPUs a job can hold is RealMemory/240000M -- 3
         # on a turing, 8 on a hyperturing -- however little memory it asks for.
         # --mem-per-gpu replaces that default and lifts the limit.
-        mem_per_gpu="40G",
+        #
+        # 240G on one GPU, not the 40G a card needs: host memory is spent on the
+        # database's texts and their embeddings, which do not shrink when the
+        # job holds fewer cards. The six-GPU shape had the same 240G in total
+        # and did not run out.
+        mem_per_gpu="240G",
         constraint=None,
         # All five rtx8000/2080Ti nodes. hyperturing1 was excluded for a while:
         # its GPUs threw "uncorrectable ECC error" on 18 jobs of the previous
