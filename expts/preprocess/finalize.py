@@ -115,16 +115,47 @@ def verify_legacy() -> list[str]:
     return problems
 
 
+def _has_target(task: dict, column_index: dict) -> bool:
+    """Is this task's target column present in the build?
+
+    Preprocessing drops non-structural columns of database tables that hold a
+    single distinct value, so a task whose target is constant loses its entry
+    in `column_index.json` and can only be skipped at load time. Leaving it in
+    the list buys nothing: the task carries no signal to learn.
+
+    An autocomplete target lives on the entity table; a forecast target lives
+    on the task's own table, which is named after the task. Accept either.
+    """
+    target = task["target_col"]
+    return any(
+        f"{target} of {table}" in column_index
+        for table in (task["entity_table"], task["name"])
+    )
+
+
 def task_lists() -> None:
     """Write `db-task-lists/` from the metas this build just produced."""
     out = Path(OUT_DIR)
     by_kind: dict[str, list[list[str]]] = defaultdict(list)
     every: list[list[str]] = []
+    dropped: list[str] = []
     for name in databases(out):
         meta = json.loads((out / name / "meta.json").read_text())
+        column_index = json.loads((out / name / "column_index.json").read_text())
         for task in meta.get("tasks", []):
+            if not _has_target(task, column_index):
+                dropped.append(f"{name}/{task['name']}")
+                continue
             every.append([name, task["name"]])
             by_kind[task["kind"]].append([name, task["name"]])
+
+    if dropped:
+        print(
+            f"  {len(dropped)} task(s) left out: target column dropped in "
+            "preprocessing (constant), e.g."
+        )
+        for task_name in dropped[:5]:
+            print(f"    {task_name}")
 
     lists = {
         "all": every,
