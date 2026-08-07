@@ -536,6 +536,16 @@ pub fn main(cli: Cli) {
                     });
                 }
             }
+            // Recommendation tasks (`link_prediction`) have no clf/reg target,
+            // so nothing downstream can build a Task from one; listing them in
+            // meta.json only produces task lists that break at load time. Their
+            // label tables are still ingested above: they are ordinary context
+            // like any other table, and dropping them would change the node
+            // layout -- which is what makes this change patchable into an
+            // existing build by rewriting meta.json alone.
+            if tm.task_type.as_deref() == Some("link_prediction") {
+                continue;
+            }
             let mut task_meta = serde_json::json!({
                 "name": task_name,
                 // Autocomplete tasks ship as a manifest only (no train/val/test
