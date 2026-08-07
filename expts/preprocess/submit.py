@@ -58,10 +58,10 @@ KEEP = ("db-task-lists", "legacy")
 # anything, and a second upload call is a second thing that can fail after the
 # first has already changed the repo. Which it did. None if there is none.
 #
-# The build directory is named separately from the repo it publishes to: this
-# is a rebuild from scratch beside the live one, so the old output stays
-# readable until the new one verifies and replaces it on the Hub.
-OUT_NAME = f"{NAME}-preprocessed-new"
+# The build directory is named separately from the repo it publishes to, so a
+# rebuild can be staged beside the live one (`-preprocessed-new`) and promoted
+# into place once it verifies. It has been promoted; this is that build.
+OUT_NAME = f"{NAME}-preprocessed"
 LEGACY_DIR = f"/dfs/user/ranjanr/share/stanford-star/{OUT_NAME}/legacy"
 
 # NAME = "the-join"
