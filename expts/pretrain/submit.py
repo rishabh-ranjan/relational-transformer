@@ -11,7 +11,10 @@ from roach.slurm import AMPERE_LO, submit
 # tasks, which rt.train cannot build a Task from and dies on. Read at submit
 # time and passed inline -- this repo lives on the submitting host's local
 # disk, so a path into it does not resolve on the compute node.
-EVAL_TASKS = json.loads(Path(__file__).with_name("eval-tasks.json").read_text())
+EVAL_TASKS = [
+    (db, task)
+    for db, task in json.loads(Path(__file__).with_name("eval-tasks.json").read_text())
+]
 
 # 8xA100, exclusive, on the preemptible il-lo queue. Exclusive takes the whole
 # node (and its memory) for the mixture's page cache, so cpus_per_task goes back
