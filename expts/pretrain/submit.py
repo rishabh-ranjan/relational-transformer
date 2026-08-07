@@ -1,8 +1,17 @@
 """Submit the pretraining run. See [README.md](README.md)."""
 
 import dataclasses
+import json
+from pathlib import Path
 
 from roach.slurm import AMPERE_LO, submit
+
+# The in-loop validation tasks, listed here rather than by path: RelBench's
+# published `forecast.json` also carries recommendation (link_prediction)
+# tasks, which rt.train cannot build a Task from and dies on. Read at submit
+# time and passed inline -- this repo lives on the submitting host's local
+# disk, so a path into it does not resolve on the compute node.
+EVAL_TASKS = json.loads(Path(__file__).with_name("eval-tasks.json").read_text())
 
 # 8xA100, exclusive, on the preemptible il-lo queue. Exclusive takes the whole
 # node (and its memory) for the mixture's page cache, so cpus_per_task goes back
@@ -62,7 +71,7 @@ def main() -> None:
             resume_save_mins=20.0,
             # in-loop validation: the benchmark's forecast tasks, val split
             eval_splits=["val"],
-            eval_db_task_list="/dfs/user/ranjanr/share/stanford-star/relbench-preprocessed/db-task-lists/forecast.json",
+            eval_db_task_list=EVAL_TASKS,
             eval_pre_dir="/dfs/user/ranjanr/share/stanford-star/relbench-preprocessed",
             eval_tokens_per_gpu=2**18,
             eval_num_workers=1,

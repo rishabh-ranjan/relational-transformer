@@ -115,6 +115,11 @@ def verify_legacy() -> list[str]:
     return problems
 
 
+# What `rt.data.tasks` can build a Task from. A list naming anything else is
+# not a list a training run can load: `get_tasks` raises on the first one.
+SUPPORTED_TASK_TYPES = ("binary_classification", "regression")
+
+
 def _has_target(task: dict, column_index: dict) -> bool:
     """Is this task's target column present in the build?
 
@@ -139,15 +144,24 @@ def task_lists() -> None:
     by_kind: dict[str, list[list[str]]] = defaultdict(list)
     every: list[list[str]] = []
     dropped: list[str] = []
+    unsupported: list[str] = []
     for name in databases(out):
         meta = json.loads((out / name / "meta.json").read_text())
         column_index = json.loads((out / name / "column_index.json").read_text())
         for task in meta.get("tasks", []):
+            if task.get("task_type") not in SUPPORTED_TASK_TYPES:
+                unsupported.append(f"{name}/{task['name']} ({task.get('task_type')})")
+                continue
             if not _has_target(task, column_index):
                 dropped.append(f"{name}/{task['name']}")
                 continue
             every.append([name, task["name"]])
             by_kind[task["kind"]].append([name, task["name"]])
+
+    if unsupported:
+        print(f"  {len(unsupported)} task(s) left out: unsupported task type, e.g.")
+        for task_name in unsupported[:5]:
+            print(f"    {task_name}")
 
     if dropped:
         print(
