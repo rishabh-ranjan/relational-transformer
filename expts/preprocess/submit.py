@@ -149,6 +149,65 @@ def resources_for(expected_bytes: int) -> Resources:
     )
 
 
+# A database with this much text is the embedding stage's long pole, and gets a
+# whole hyperturing instead of the usual six GPUs. Set above the second-largest
+# in either collection (rel-stack 2.0 GiB, join-overture-maps 8.0 GiB is the one
+# other database this catches) so it stays the exception it is meant to be.
+BIG_TEXT_BYTES = 9 << 30
+# rtx8000 nodes, ten cards each.
+BIG_NODES = ("hyperturing1", "hyperturing2")
+MAX_BIG_GPUS = 10
+
+
+def biggest_free_gpu_node() -> tuple[str, int]:
+    """The hyperturing with the most free GPUs right now, and how many.
+
+    Read at submit time rather than fixed, because a request for ten cards on a
+    node holding eight is a job that queues behind whatever is using the other
+    two -- which for a database this size means the sweep waits on the scheduler
+    instead of on the work. Asking for what is free starts now.
+
+    Falls back to the full ten if slurm cannot be read or nothing is free: a job
+    that queues is recoverable, a job asking for zero GPUs is not.
+    """
+    best = (BIG_NODES[0], MAX_BIG_GPUS)
+    try:
+        out = subprocess.run(
+            [
+                "sinfo",
+                "-h",
+                "-n",
+                ",".join(BIG_NODES),
+                "-O",
+                "NodeHost:20,Gres:30,GresUsed:30",
+            ],
+            capture_output=True,
+            text=True,
+            timeout=30,
+        ).stdout
+    except (OSError, subprocess.SubprocessError):
+        return best
+
+    free: dict[str, int] = {}
+    for line in out.splitlines():
+        parts = line.split()
+        if len(parts) < 3:
+            continue
+        node, gres, used = parts[0], parts[1], parts[2]
+        try:
+            # "gpu:rtx8000:10" and "gpu:rtx8000:4(IDX:0-3)"
+            total = int(gres.split(":")[2].split("(")[0])
+            taken = int(used.split(":")[2].split("(")[0])
+        except (IndexError, ValueError):
+            continue
+        free[node] = max(0, min(MAX_BIG_GPUS, total) - taken)
+
+    node = max(free, key=lambda n: free[n], default=None)
+    if node is None or free[node] == 0:
+        return best
+    return node, free[node]
+
+
 def embed_resources(text_bytes_: int) -> Resources:
     """The GPU stage. A bare count, not a type: these nodes carry rtx8000s and
     2080tis and MiniLM does not care which.
@@ -169,6 +228,37 @@ def embed_resources(text_bytes_: int) -> Resources:
     ):
         if text_bytes_ < limit:
             break
+
+    # The long pole gets a whole hyperturing. One database sets this stage's
+    # makespan -- rel-amazon is 11 GiB of text against 2 GiB for the next one --
+    # so it is the one worth giving every card on a node to, and the rtx8000s
+    # are the better cards here. Everything else keeps the six-GPU shape below,
+    # which is what lets the rest of the sweep run alongside it.
+    if text_bytes_ >= BIG_TEXT_BYTES:
+        node, gpus = biggest_free_gpu_node()
+        return Resources(
+            partition="il",
+            account="infolab",
+            qos="il-lo",
+            time=walltime,
+            gpus=str(gpus),
+            # Same four cpus per GPU the six-GPU shape uses: the dataloader
+            # feeding each worker is what these are for.
+            cpus_per_task=4 * gpus,
+            ntasks=1,
+            exclusive=False,
+            mem=None,
+            mem_per_gpu="40G",
+            constraint=None,
+            # Pinned to the node the count was measured on: "10 GPUs" is only
+            # schedulable where 10 are actually free, and asking the pair would
+            # let slurm pick the other one and hold the job until it drains.
+            # Includes hyperturing1, whose ECC failures the normal embed
+            # nodelist avoids -- a job this long is worth the better cards, and
+            # a failed one is resubmitted onto whichever node is free then.
+            nodelist=node,
+        )
+
     return Resources(
         partition="il",
         account="infolab",

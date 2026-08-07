@@ -2,9 +2,10 @@
 
 import dataclasses
 import json
+import sys
 from pathlib import Path
 
-from roach.slurm import AMPERE_LO, submit
+from roach.slurm import AMPERE, submit
 
 # The in-loop validation tasks, listed here rather than by path: RelBench's
 # published `forecast.json` also carries recommendation (link_prediction)
@@ -16,15 +17,22 @@ EVAL_TASKS = [
     for db, task in json.loads(Path(__file__).with_name("eval-tasks.json").read_text())
 ]
 
-# 8xA100, exclusive, on the preemptible il-lo queue. Exclusive takes the whole
-# node (and its memory) for the mixture's page cache, so cpus_per_task goes back
-# to 128/8. ampere9 is misbehaving: list every other ampere node instead.
-AMPERE_LO_EXCL = dataclasses.replace(
-    AMPERE_LO,
-    exclusive=True,
-    cpus_per_task=16,
+# 8xA100 exclusive on the `il` queue. il-lo cost more than it saved here: the
+# run needs ~33 minutes of page-cache population before its first step, and
+# preemption arrived faster than that, so attempts kept dying before they could
+# checkpoint. `il` is not preemptible; its 7-day cap is handled by the requeue
+# path, which resumes from the run's own checkpoint.
+#
+# ampere9 is misbehaving: list every other ampere node instead.
+AMPERE_EXCL = dataclasses.replace(
+    AMPERE,
     nodelist="ampere1,ampere2,ampere3,ampere4,ampere5,ampere6,ampere7,ampere8",
 )
+
+# Relaunch an existing run (`python submit.py <run_id>`) instead of starting a
+# new one: the run id names the checkpoint directory, so the job resumes from
+# where the last attempt left off rather than from step 0.
+RUN_ID = sys.argv[1] if len(sys.argv) > 1 else None
 
 
 def main() -> None:
@@ -96,10 +104,9 @@ def main() -> None:
             wandb_disabled=False,
             out_root="/dfs/user/ranjanr/ckpts",
         ),
-        # 8xA100 on il-lo: preemptible, and the run checkpoints, so the low
-        # priority queue costs wall clock, not work
-        resources=AMPERE_LO_EXCL,
+        resources=AMPERE_EXCL,
         name="pretrain",
+        run_id=RUN_ID,
         repo_root="/lfs/hyperturing1/0/ranjanr/clones/rishabh-ranjan/relational-transformer",
         log_root="/dfs/user/ranjanr/slurm-logs/rishabh-ranjan/relational-transformer/expts/pretrain",
         clone_root="/lfs/local/0/roach_clones",
