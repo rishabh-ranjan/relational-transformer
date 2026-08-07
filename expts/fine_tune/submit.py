@@ -164,7 +164,10 @@ def main() -> None:
         submit_one(db, task, resources)
 
 
-def submit_one(db: str, task: str, resources: Resources):
+def submit_one(db: str, task: str, resources: Resources, run_id: str | None = None):
+    """One job. `run_id` names an existing run instead of minting a new one,
+    which is how a job that was cancelled -- moved to another queue, say --
+    comes back and resumes from its own checkpoint rather than from step 0."""
     return submit(
         "rt.train:main",
         args=dict(
@@ -248,6 +251,7 @@ def submit_one(db: str, task: str, resources: Resources):
         # the node's own big disk, not /tmp (the 280G root filesystem)
         clone_root="/lfs/local/0/roach_clones",
         secrets_dir="/dfs/user/ranjanr/.secrets",
+        run_id=run_id,
         # No setup: `pixi install` already builds the rustler extension and puts
         # it in src/rt/ -- the project is an editable dependency of its own
         # environment. Running `pixi run build-sampler` here as well rebuilt the
