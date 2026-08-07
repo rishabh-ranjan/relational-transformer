@@ -253,9 +253,6 @@ def embed_resources(text_bytes_: int) -> Resources:
             # Pinned to the node the count was measured on: "10 GPUs" is only
             # schedulable where 10 are actually free, and asking the pair would
             # let slurm pick the other one and hold the job until it drains.
-            # Includes hyperturing1, whose ECC failures the normal embed
-            # nodelist avoids -- a job this long is worth the better cards, and
-            # a failed one is resubmitted onto whichever node is free then.
             nodelist=node,
         )
 
@@ -285,10 +282,10 @@ def embed_resources(text_bytes_: int) -> Resources:
         # --mem-per-gpu replaces that default and lifts the limit.
         mem_per_gpu="40G",
         constraint=None,
-        # hyperturing1's GPUs threw "uncorrectable ECC error" on 18 jobs; the
-        # cpu stage is unaffected, so only this one avoids it. Put hyperturing1
-        # back once the card is replaced or the node is drained.
-        nodelist="hyperturing2,turing1,turing2,turing3",
+        # All five rtx8000/2080Ti nodes. hyperturing1 was excluded for a while:
+        # its GPUs threw "uncorrectable ECC error" on 18 jobs of the previous
+        # build. The card has since been fixed, so it takes embed work again.
+        nodelist="hyperturing1,hyperturing2,turing1,turing2,turing3",
     )
 
 

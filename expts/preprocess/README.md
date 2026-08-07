@@ -127,13 +127,8 @@ Hub's recorded size), a stale `SLURM_CPUS_PER_TASK` (roach unsets it), and an
 embedding that would take two days on one GPU (it takes six). The reasoning
 lives next to each, in the module that implements it.
 
-What is left is hardware and policy, which no amount of code will fix:
+What is left is policy, which no amount of code will fix:
 
-* **hyperturing1's GPUs throw `uncorrectable ECC error`.** 18 jobs died on it.
-  `EMBED_NODES` in `submit.py` excludes that node from the GPU stage -- its cpus
-  are fine and still take rustler work. **Put it back when the card is
-  replaced**, and report the node meanwhile; a workaround in an experiment is
-  not a fix for a broken card.
 * **`il-lo` is preemptible.** Nothing to do about it: both stages are
   idempotent, so a requeued job costs the work in flight and nothing else.
 
@@ -150,7 +145,7 @@ quietly break either:
 
 | node | cpus | memory | GPUs |
 |---|---|---|---|
-| hyperturing1 | 252 | 2011 G | 10 × RTX8000 48G (ECC faults) |
+| hyperturing1 | 252 | 2011 G | 10 × RTX8000 48G |
 | hyperturing2 | 252 | 2011 G | 10 × RTX8000 48G |
 | turing1 | 80 | 754 G | 10 × 2080Ti 12G |
 | turing2 | 80 | 754 G | 10 × 2080Ti |
