@@ -519,7 +519,12 @@ pub fn main(cli: Cli) {
             // downstream can build a Task from one. Skipped whole: not listed
             // in meta.json, and their label tables are not read either, so a
             // build carries no nodes for a task it cannot serve.
-            if tm.task_type.as_deref() == Some("link_prediction") {
+            // "link_prediction" is what RelBench called this before the rename;
+            // accepted so a dataset built from an older manifest still skips.
+            if matches!(
+                tm.task_type.as_deref(),
+                Some("recommendation") | Some("link_prediction")
+            ) {
                 continue;
             }
             let task_name = task_dir.file_name().unwrap().to_str().unwrap().to_string();
