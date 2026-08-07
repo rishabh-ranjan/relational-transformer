@@ -326,44 +326,56 @@ def fully_downloaded(names: list[str]) -> set[str]:
     return ready
 
 
-def submit_legacy(name: str, expected_bytes: int):
-    """The RT-v1 variant. One job: transform, rustler and embed together."""
+def submit_legacy_rustler(name: str, expected_bytes: int):
+    """The cpu stage of the RT-v1 variant: boolean transform, then rustler.
+
+    The same shape as the main build's rustler stage, and split from its
+    embedding for the same reason: run as one job it held ten GPUs through a
+    transform and a rustler run that never touched them, and the main build's
+    long poles queued behind cards nothing was using.
+    """
     return submit(
-        "expts.preprocess.preprocess:legacy",
+        "expts.preprocess.preprocess:legacy_rustler",
         args={
             "dataset": name,
             "raw_dir": RAW_DIR,
             "out_dir": LEGACY_DIR,
-            "source_repo": SOURCE_REPO,
-            "embedder": EMBEDDER,
-            "batch_size": 1024,
         },
-        resources=embed_resources(expected_bytes),
-        name=f"leg-{name}",
+        resources=resources_for(expected_bytes),
+        name=f"lpre-{name}",
         setup=SETUP,
-        repo_root="/lfs/hyperturing1/0/ranjanr/clones/rishabh-ranjan/relational-transformer",
+        repo_root=REPO_ROOT,
         log_root=LOG_ROOT,
-        # the node's own big disk, not /tmp (the 280G root filesystem): clones
-        # are shared per commit and hold the pixi env, which pixi hardlinks from
-        # the package cache only when the two are on the same filesystem
-        clone_root="/lfs/local/0/roach_clones",
-        secrets_dir="/dfs/user/ranjanr/.secrets",
+        clone_root=CLONE_ROOT,
+        secrets_dir=SECRETS_DIR,
     )
 
 
-def submit_embed(name: str, expected_bytes: int, after: str | None = None):
+def submit_embed(
+    name: str,
+    expected_bytes: int,
+    after: str | None = None,
+    *,
+    out_dir: str = OUT_DIR,
+    prefix: str = "emb",
+):
     """The GPU stage for one database, optionally held until its rustler job
-    succeeds -- which is how the two stages are submitted in one pass."""
+    succeeds -- which is how the two stages are submitted in one pass.
+
+    `out_dir` because the legacy tree's GPU stage is this one: legacy writes
+    rustler's usual artifacts, just into its own directory, so the only thing
+    that differs is where to read them and what to call the job.
+    """
     return submit(
         "expts.preprocess.preprocess:embed",
         args={
             "dataset": name,
-            "out_dir": OUT_DIR,
+            "out_dir": out_dir,
             "embedder": EMBEDDER,
             "batch_size": 1024,
         },
         resources=embed_resources(expected_bytes),
-        name=f"emb-{name}",
+        name=f"{prefix}-{name}",
         setup=SETUP,
         repo_root="/lfs/hyperturing1/0/ranjanr/clones/rishabh-ranjan/relational-transformer",
         log_root=LOG_ROOT,
@@ -413,9 +425,10 @@ def main() -> None:
     pre_running, emb_running = queued_names("pre-"), queued_names("emb-")
     print(f"{len(names)} databases in {RAW_DIR}, {len(ready)} fully downloaded")
 
-    leg_running = queued_names("leg-")
-    legacy_out = Path(LEGACY_DIR)
-    to_rustle, to_embed, to_legacy, done, busy, waiting = [], [], [], 0, 0, 0
+    lpre_running, lemb_running = queued_names("lpre-"), queued_names("lemb-")
+    legacy_out = Path(LEGACY_DIR) if LEGACY_DIR else None
+    to_rustle, to_embed, done, busy, waiting = [], [], 0, 0, 0
+    to_legacy_rustle, to_legacy_embed = [], []
     for name in names:
         d = out / name
         if is_done(d, EMBEDDER):
@@ -433,25 +446,46 @@ def main() -> None:
             to_rustle.append(name)
         # The legacy tree is independent of the main build: it reads the same
         # raw data and writes its own directory, so it neither waits for nor
-        # blocks the collection.
-        if (
-            LEGACY_DIR
-            and name in ready
-            and name not in leg_running
-            and not is_done(legacy_out / name, EMBEDDER)
-        ):
-            to_legacy.append(name)
+        # blocks the collection. Its two stages are decided exactly as the main
+        # build's are, off the same predicates over its own directory.
+        if not LEGACY_DIR or name not in ready:
+            continue
+        ld = legacy_out / name
+        if is_done(ld, EMBEDDER):
+            continue
+        if is_rustler_done(ld):
+            if name not in lemb_running:
+                to_legacy_embed.append(name)
+        elif name not in lpre_running:
+            to_legacy_rustle.append(name)
     print(f"  {done} complete, {busy} queued or running, {waiting} still downloading")
     print(
         f"  submitting {len(to_rustle)} rustler + {len(to_embed)} embed"
-        + (f" + {len(to_legacy)} legacy" if LEGACY_DIR else "")
+        + (
+            f" + {len(to_legacy_rustle)} legacy rustler"
+            f" + {len(to_legacy_embed)} legacy embed"
+            if LEGACY_DIR
+            else ""
+        )
     )
 
     for name in to_embed:
         submit_embed(name, text_bytes(sizes, name, 1 << 33))
 
-    for name in to_legacy:
-        submit_legacy(name, text_bytes(sizes, name, 1 << 33))
+    for name in to_legacy_embed:
+        submit_embed(
+            name, text_bytes(sizes, name, 1 << 33), out_dir=LEGACY_DIR, prefix="lemb"
+        )
+
+    for name in to_legacy_rustle:
+        job = submit_legacy_rustler(name, out_bytes(sizes, name, 1 << 62))
+        submit_embed(
+            name,
+            text_bytes(sizes, name, 1 << 33),
+            after=job.id,
+            out_dir=LEGACY_DIR,
+            prefix="lemb",
+        )
 
     for name in to_rustle:
         expected = out_bytes(sizes, name, 1 << 62)  # unknown is not small

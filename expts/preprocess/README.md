@@ -60,8 +60,12 @@ every resource number is written at the call that passes it.
 
 `relbench` also publishes `legacy/`: the same databases under RT-v1's boolean
 typing, which the released RT-v1 checkpoints need. `submit.py` builds it
-alongside the main sweep, into its own directory, and `finalize.py upload`
-verifies it together with the build — **a problem in either publishes
+alongside the main sweep, into its own directory, **in the same two stages** --
+`lpre-` (boolean transform + rustler, cpu-only) and `lemb-`, which is the main
+build's embed target pointed at the legacy tree. It was one job once, and that
+job held ten GPUs through a transform and a rustler run that never touched them,
+which queued the main build's long poles behind cards nothing was using.
+`finalize.py upload` verifies it together with the build — **a problem in either publishes
 neither**. The Hub keeps the previous version, whole, until there is a whole new
 one to replace it with.
 

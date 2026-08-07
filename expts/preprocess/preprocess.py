@@ -26,7 +26,7 @@ from rt.preprocess import (
     run_rustler_pre,
     update_meta_with_embeddings,
 )
-from rt.preprocess.legacy import preprocess_one_legacy
+from rt.preprocess.legacy import rustler_one_legacy
 
 
 def is_rustler_done(pre_dataset_dir: Path) -> bool:
@@ -127,21 +127,22 @@ def embed(
     )
 
 
-def legacy(
+def legacy_rustler(
     *,
     dataset: str,
     raw_dir: str,
     out_dir: str,
-    source_repo: str,
-    embedder: str,
-    batch_size: int,
 ) -> None:
-    """The RT-v1 variant of one database: boolean typing, then the usual pipeline.
+    """The cpu stage of the RT-v1 variant: boolean transform, then rustler.
 
-    One job rather than two, unlike the main build. It is a handful of databases
-    rather than 639, and `rt.preprocess.legacy` does the transform, rustler and
-    the embedding in one call -- splitting it would mean reaching into that
-    module for the sake of a stage that is not the long pole here.
+    The same shape as `rustler` above, and for the same reason -- it is one
+    thread and no GPU, and running it inside the embedding job meant every
+    legacy database held ten cards through a phase that never touched them,
+    which is what kept the main build's long poles queued behind it.
+
+    Its GPU stage is `embed`, unchanged: legacy writes rustler's usual artifacts
+    into its own directory, so the stage that reads them does not care which
+    tree it is pointed at.
 
     Writes beside the main build, not inside it, so an unfinished legacy tree
     cannot ride along with the upload that replaces the collection. The RT-v1
@@ -149,20 +150,12 @@ def legacy(
     """
     out_root = Path(out_dir)
     pre_dataset_dir = out_root / dataset
-    if is_done(pre_dataset_dir, embedder):
-        print(f"= {dataset}: legacy already done", flush=True)
+    if is_rustler_done(pre_dataset_dir):
+        print(f"= {dataset}: legacy rustler already done", flush=True)
         return
 
     started = time.monotonic()
-    preprocess_one_legacy(
-        f"{raw_dir}/{dataset}",
-        out_root,
-        embedder=embedder,
-        batch_size=batch_size,
-        upload_repo=None,  # published by finalize.py, with the rest of the build
-        private=True,
-        revision=None,
-    )
+    rustler_one_legacy(f"{raw_dir}/{dataset}", out_root)
     # rt.preprocess.legacy writes the boolean-cast copy of the raw database to
     # <out>/_transformed on its way through. It is scratch -- a relbench-format
     # copy of data that is already published elsewhere -- and this directory is
@@ -172,7 +165,7 @@ def legacy(
         if leftover.is_dir() and not any(leftover.iterdir()):
             leftover.rmdir()
     print(
-        f"= {dataset}: legacy {time.monotonic() - started:.0f}s  "
+        f"= {dataset}: legacy rustler {time.monotonic() - started:.0f}s  "
         f"{dir_bytes(pre_dataset_dir) / 2**30:.2f} GiB",
         flush=True,
     )

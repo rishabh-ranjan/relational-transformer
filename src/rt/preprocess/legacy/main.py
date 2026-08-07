@@ -131,6 +131,38 @@ def transform_dataset(dataset_dir: Path, out_dataset_dir: Path, db_name: str) ->
     return out_dataset_dir
 
 
+def rustler_one_legacy(
+    spec: str,
+    out_dir: Path,
+    *,
+    revision: str | None = None,
+) -> Path:
+    """The cpu half of the legacy pipeline: transform, then rustler `pre`.
+
+    Exported separately from :func:`preprocess_one_legacy` because the embedding
+    that follows it wants a GPU and this wants one thread, and a caller
+    scheduling the two -- expts/preprocess does, on slurm -- can only ask for
+    each what it needs if it can run them as two calls. Whoever wants both in
+    one process still has `preprocess_one_legacy`, which is these two calls.
+
+    Leaves the transformed copy in ``<out_dir>/_transformed/<name>``: it is
+    scratch, and deleting it is the caller's, since only the caller knows
+    whether anything else still needs to read it.
+    """
+    out_dir = Path(out_dir).expanduser()
+    dataset_dir = resolve_dataset_dir(spec, revision=revision)
+    name = dataset_name(dataset_dir)
+
+    tf_dir = out_dir / "_transformed" / name
+    print(f"=== legacy-transforming {name} ({spec}) -> {tf_dir} ===", flush=True)
+    transform_dataset(dataset_dir, tf_dir, name)
+
+    pre_dataset_dir = out_dir / name
+    print(f"=== preprocessing {name} -> {pre_dataset_dir} ===", flush=True)
+    run_rustler_pre(tf_dir, out_dir, source=spec, skip_tasks=False)
+    return pre_dataset_dir
+
+
 def preprocess_one_legacy(
     spec: str,
     out_dir: Path,
@@ -147,16 +179,8 @@ def preprocess_one_legacy(
     ``upload_repo``."""
 
     out_dir = Path(out_dir).expanduser()
-    dataset_dir = resolve_dataset_dir(spec, revision=revision)
-    name = dataset_name(dataset_dir)
-
-    tf_dir = out_dir / "_transformed" / name
-    print(f"=== legacy-transforming {name} ({spec}) -> {tf_dir} ===", flush=True)
-    transform_dataset(dataset_dir, tf_dir, name)
-
-    pre_dataset_dir = out_dir / name
-    print(f"=== preprocessing {name} -> {pre_dataset_dir} ===", flush=True)
-    run_rustler_pre(tf_dir, out_dir, source=spec, skip_tasks=False)
+    pre_dataset_dir = rustler_one_legacy(spec, out_dir, revision=revision)
+    name = pre_dataset_dir.name
     d_text = embed_dataset(pre_dataset_dir, embedder, batch_size)
     update_meta_with_embeddings(pre_dataset_dir, embedder, d_text)
 
