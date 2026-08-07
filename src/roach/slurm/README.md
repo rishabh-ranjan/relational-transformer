@@ -40,10 +40,10 @@ happened to export.
    `SLURM_PROCID`/`LOCALID`/`NTASKS` to `RANK`/`LOCAL_RANK`/`WORLD_SIZE`, so
    `torch.distributed` comes up with no launcher.
 
-## Preemption
+## Preemption and the wall clock
 
-Because each rank is a slurm *task*, slurm's SIGTERM reaches all of them
-directly. The contract is:
+Both end the same way, and neither needs you. Because each rank is a slurm
+*task*, SIGTERM reaches all of them directly. The contract is:
 
 * your function handles SIGTERM and writes a resumable checkpoint (atomically:
   temp file, fsync, rename);
@@ -51,6 +51,21 @@ directly. The contract is:
   down mid-save;
 * slurm requeues the job, and because `run_id` is fixed, the next attempt
   resumes from that checkpoint.
+
+Slurm does that requeue for preemption and node failure only: **`TIMEOUT` is a
+normal ending and no setting makes it a requeue.** So the batch script asks for
+`--signal=B:USR1@<timeout_grace_secs>` (300s by default), and on that signal it
+sends its own steps the same SIGTERM slurm would have, waits for them, and calls
+`scontrol requeue` itself. A run therefore survives its wall clock exactly as it
+survives preemption -- the ranks cannot tell the two apart -- and long runs stop
+needing a person to notice and resubmit them.
+
+Requeued once, never twice: the signal is delivered once, it is acted on only
+while the ranks are still running, and preemption never reaches that code
+because it arrives as SIGTERM, which the batch script ignores. Set
+`timeout_grace_secs=0` to opt out; raise it if a checkpoint takes longer than
+five minutes to write. An overlapping run (below) has no job of its own and is
+never requeued.
 
 Pass `run_id=` to relaunch an existing run by hand -- same wandb run, same
 output directory, same checkpoint.

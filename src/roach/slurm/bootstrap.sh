@@ -136,7 +136,49 @@ cp pixi.lock "@LOG_ROOT@/@RUN_ID@.pixi.lock"
 # reaches every rank directly. They save resume.pt at the next step boundary and
 # exit; this script only has to outlive them, hence the ignored trap. Slurm
 # requeues the job itself, and the run id is fixed, so the next attempt resumes.
-trap '' TERM USR1
+trap '' TERM
+
+# --------------------------------------------------------------------------- #
+# The wall clock, made to look like a preemption.
+#
+# Slurm requeues on preemption and node failure and on nothing else: TIMEOUT is
+# a normal ending, and no configuration turns it into a requeue (RequeueExit
+# keys off the script's exit code, which a job killed at its limit never gets to
+# choose). So a run that would otherwise resume from its own checkpoint just
+# stops, and someone has to notice and resubmit it.
+#
+# submit() asks for `--signal=B:USR1@<grace>`, which reaches *this script* that
+# many seconds before the limit -- B: is what keeps it off the ranks, so they see
+# exactly one SIGTERM whichever way the job ends, sent from here instead of by
+# slurm. From the ranks' side the two paths are then identical: save at the next
+# step boundary and exit. What differs is who requeues, and here that is us.
+#
+# Requeued once, never twice. The signal fires once; `timed_out` is set only if
+# the ranks were still running when it arrived (a run that finished inside the
+# grace window is finished, not timed out); and preemption cannot reach this
+# code, because it sends SIGTERM, which is ignored above -- slurm requeues that
+# one itself. If both somehow happen, the `scontrol requeue` below is against a
+# job slurm has already requeued and fails, which is reported, not retried.
+# --------------------------------------------------------------------------- #
+timed_out=0
+on_timeout() {
+    if [[ -n ${srun_pid:-} ]] && kill -0 "$srun_pid" 2>/dev/null; then
+        timed_out=1
+        echo "=== $(date -Is) wall clock is near: stopping the ranks to requeue ==="
+        # Through slurm, and not `kill -TERM $srun_pid`, for two reasons. The
+        # tasks run under slurmstepd on their own nodes, so a local signal only
+        # reaches srun and relies on it to relay; and srun is a child of this
+        # script, which ignores SIGTERM above -- an ignored disposition is
+        # inherited, so that signal would be dropped before srun ever saw it.
+        # scancel delivers to the steps and, without --batch, not to this
+        # script, which is exactly what preemption does.
+        scancel --signal=TERM --quiet "$SLURM_JOB_ID" || true
+    fi
+}
+# Only a batch job can be requeued. An overlapping run is a step of an
+# allocation somebody else is holding, and requeueing that would throw away
+# their allocation, so submit() splices a 0 here for it.
+if [[ @REQUEUE_ON_TIMEOUT@ == 1 ]]; then trap on_timeout USR1; else trap '' USR1; fi
 # srun refuses to start when SLURM_CPUS_PER_TASK disagrees with the allocation's
 # SLURM_TRES_PER_TASK ("cpus-per-task set by two different environment
 # variables"), and a stale value reaches a job easily enough -- a submitting
@@ -160,4 +202,28 @@ unset SLURM_CPUS_PER_TASK
 # allocation somebody else is holding. Everything above this point is identical
 # either way.
 @LAUNCH@ &
-wait $!
+srun_pid=$!
+
+# A trapped signal interrupts `wait`, which then returns 128+signum with the
+# ranks still running -- so wait again rather than treating that as their exit.
+while :; do
+    status=0
+    # `|| status=$?` and not `while ! wait`: the latter reports the status of
+    # the negation, which is how the ranks' exit code turns into a silent 0.
+    wait "$srun_pid" || status=$?
+    if (( status > 128 )) && kill -0 "$srun_pid" 2>/dev/null; then continue; fi
+    break
+done
+
+if (( timed_out )); then
+    echo "=== $(date -Is) ranks exited $status; requeueing job $SLURM_JOB_ID ==="
+    if scontrol requeue "$SLURM_JOB_ID"; then
+        # The requeue kills this job. Outlive that so a fast exit here cannot
+        # race the controller into recording the job as COMPLETED instead.
+        sleep 300
+        echo "!!! still running 300s after requeue: it did not take"
+    else
+        echo "!!! requeue refused; resubmit by hand with the same run_id"
+    fi
+fi
+exit "$status"

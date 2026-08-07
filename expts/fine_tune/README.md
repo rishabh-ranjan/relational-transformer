@@ -22,9 +22,9 @@ order.
 Logs and `args.json` land in `/dfs/user/ranjanr/slurm-logs/fine-tune`,
 checkpoints and `params.json` under `/dfs/user/ranjanr/ckpts/rtv2/fine-tune/<run_id>`.
 
-**Wall clock is the one stop that needs you.** Preemption requeues and resumes
-itself; a `TIMEOUT` job does not, so resubmit with the same `run_id`.
-`il-interactive`'s 12 hours is the one to watch.
+Neither preemption nor the wall clock needs you: both requeue and resume from
+the run's own checkpoint (see [`roach.slurm`](../../src/roach/slurm/README.md)),
+which matters most on `il-interactive`'s 12 hours.
 
 ## What is fixed and what is not
 

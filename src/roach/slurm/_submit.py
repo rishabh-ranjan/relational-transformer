@@ -169,6 +169,7 @@ def submit(
     run_id: str | None = None,
     after: str | None = None,
     overlap: str | None = None,
+    timeout_grace_secs: int = 300,
 ) -> Job:
     """Run ``target(**args)`` on ``resources``, one rank per GPU.
 
@@ -180,6 +181,13 @@ def submit(
     want different hardware can be submitted in one pass instead of polling for
     the first stage to finish. The wait is on success: if the dependency fails,
     slurm cancels this job rather than leaving it pending forever.
+
+    ``timeout_grace_secs`` is how long before the wall clock the ranks are told
+    to stop, so the job can checkpoint and requeue itself instead of ending as
+    TIMEOUT (see bootstrap.sh). 300s matches this cluster's preemption GraceTime;
+    0 disables it and a job that hits its limit then simply stops. It is a
+    request, not a guarantee -- slurm rounds it to the minute and delivers it
+    around that point -- so leave room over what a checkpoint actually costs.
 
     ``overlap`` is the id of an allocation somebody is *holding* (see
     ``roach.slurm.interactive``). The run then goes in as a step of that
@@ -222,6 +230,8 @@ def submit(
         "@SETUP@": "\n".join(setup),
         "@ENV@": env_sh,
         "@LAUNCH@": launch(resources, target, str(args_path), overlap),
+        # An overlapping run has no job of its own to requeue.
+        "@REQUEUE_ON_TIMEOUT@": "1" if overlap is None and timeout_grace_secs else "0",
     }.items():
         script = script.replace(key, value)
 
@@ -245,6 +255,10 @@ def submit(
         f"--output={log}",
         f"--error={log}",
     ]
+    if timeout_grace_secs:
+        # B: the batch script only. The ranks are signalled by it, not by slurm,
+        # so preemption and the wall clock look the same to them.
+        flags.append(f"--signal=B:USR1@{timeout_grace_secs}")
     if after:
         # kill-on-invalid-dep, or a dependency that can never be satisfied
         # leaves this job pending until someone notices it by hand.

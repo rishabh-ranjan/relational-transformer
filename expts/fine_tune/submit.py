@@ -139,8 +139,7 @@ def plan(n: int) -> list[Resources]:
     taken up to the limit that makes the next one necessary:
 
     * `il-interactive` caps a user at 2 GPUs of any kind (12h wall, highest
-      priority, not preempted). A job that hits that wall stops; resubmit it
-      with the same run_id and it resumes from its own checkpoint.
+      priority, not preempted). A job requeues itself at that wall.
     * `il` caps b200 at 2 and a100 at 10 per user (7d wall, not preempted).
     * `il-lo` is preemptible and effectively uncapped (21d wall).
 
@@ -151,8 +150,8 @@ def plan(n: int) -> list[Resources]:
     `il-lo` tier, and the b200 `il-lo` share stops at 4, which is what is left of
     blackwell1 once the four above are held.
 
-    Every one of these runs is preemption-safe -- it checkpoints and resumes --
-    so the low-priority queue costs wall clock, not work.
+    Every one of these runs checkpoints and resumes, at a preemption and at its
+    time limit alike, so the low-priority queue costs wall clock, not work.
     """
     tiers = [
         (2, b200("il-interactive", "12:00:00")),

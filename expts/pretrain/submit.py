@@ -25,9 +25,9 @@ def main() -> None:
             # `cpus_per_task` cores per task
             num_workers=16,
             prefetch_factor=2,
-            ctx_size_list=[512, 1024, 2048, 4096],
-            local_ctx_size_list=[256, 512, 1024, 2048, 4096],
-            bfs_width_list=[16, 64, 256],
+            ctx_size_list=[256, 512, 1024, 2048, 4096, 8192],
+            local_ctx_size_list=[256, 512, 1024, 2048, 4096, 8192],
+            bfs_width_list=[8, 16, 32, 64, 128, 256],
             prefer_latest_list=[False, True],
             num_walks=10_000,
             walk_length=20,

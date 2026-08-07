@@ -16,11 +16,8 @@ Logs and `args.json` land in
 `/dfs/user/ranjanr/slurm-logs/rishabh-ranjan/relational-transformer/expts/pretrain`,
 checkpoints and `params.json` under `/dfs/user/ranjanr/ckpts/rtv2/<project>/<run_id>`.
 
-**Wall clock is the one stop that needs you.** Preemption requeues and resumes
-itself; a `TIMEOUT` job does not, and slurm has no setting that changes that
-(`JobRequeue`/`PreemptMode=REQUEUE` cover preemption and node failure only).
-Resubmit with the same `run_id` and it picks up the same checkpoint. At 21 days
-this run should not reach the limit; a 12h `il-interactive` one would.
+Neither preemption nor the wall clock needs you: both requeue and resume from
+the run's own checkpoint (see [`roach.slurm`](../../src/roach/slurm/README.md)).
 
 ## Inputs
 
