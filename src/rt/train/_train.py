@@ -102,11 +102,15 @@ def move(batch, device):
 def eval_avg_metrics(evaluator, nets_with_prefix, ctx_size_list):
     """Per-task and mean metric, per net prefix, eval split and metric name::
 
-        {prefix: {split: {"auc": {"mean": v, "rel-f1/driver-dnf": v, ...},
-                          "mae": {"mean": v, ...}}}}
+        {prefix: {split: {"auroc": {"mean": v, "rel-f1/driver-dnf": v, ...},
+                          "nmae": {"mean": v, ...}}}}
 
-    Metrics are named after what they are -- ``auc`` for clf tasks, ``mae``
-    for reg -- and ``"mean"`` is the average over that split's tasks of that
+    Metrics are named after what they are -- ``auroc`` for clf tasks, ``nmae``
+    for reg (the labels and predictions the evaluator hands over are on the
+    normalized scale, so a plain MAE over them is already MAE / train-target
+    std) -- and both are in percent, the units of the published baselines in
+    ``expts/fine_tune/results.md`` and so of the targets plotted beside them.
+    ``"mean"`` is the average over that split's tasks of that
     type. Splits are kept apart: an evaluator built with ``eval_splits=["val",
     "test"]`` yields both, and averaging them together would both hide the
     test curve and contaminate val-driven checkpoint selection.
@@ -116,7 +120,7 @@ def eval_avg_metrics(evaluator, nets_with_prefix, ctx_size_list):
     per ctx size and its per-task value spans all of them.
     """
 
-    metric_names = {"clf": "auc", "reg": "mae"}
+    metric_names = {"clf": "auroc", "reg": "nmae"}
     # split -> metric_name -> task_key -> [values over ctx sizes]
     acc = {
         p: {s: {m: {} for m in metric_names.values()} for s in evaluator.eval_splits}
@@ -128,6 +132,9 @@ def eval_avg_metrics(evaluator, nets_with_prefix, ctx_size_list):
         for _, prefix in nets_with_prefix:
             try:
                 _, v = metric_for(task.task_type, labels, preds_by_prefix[prefix])
+                # Percent, like results.md: a curve and the published target
+                # it is plotted against have to be in the same units.
+                v *= 100.0
             except ValueError:
                 # e.g. a single-class slice -> ROC AUC undefined; skip this task.
                 continue
@@ -641,10 +648,13 @@ def main(
         # Selection is val-only: a test split may be evaluated alongside for
         # its curves, but must never pick the checkpoint. With no val split
         # configured, nothing is selected.
-        for prefix, kind in [("", "live"), ("swa_", "swa")]:
+        for prefix, kind in [("", "live"), ("swa/", "swa")]:
             if prefix not in metrics or "val" not in metrics[prefix]:
                 continue
-            for tt, metric, better in [("clf", "auc", max), ("reg", "mae", min)]:
+            for tt, metric, better in [
+                ("clf", "auroc", max),
+                ("reg", "nmae", min),
+            ]:
                 v = metrics[prefix]["val"][metric].get("mean")
                 if v is None:
                     continue
@@ -663,7 +673,7 @@ def main(
         nets = [(raw_net, "")]
         if swa.n > 0:
             swa.sync_to(swa_net.named_parameters())
-            nets.append((swa_net, "swa_"))
+            nets.append((swa_net, "swa/"))
         metrics = {}
         for tag, evaluator in evaluators:
             tagged_nets = [(n, tag + p) for n, p in nets]
@@ -676,7 +686,8 @@ def main(
             consider(metrics, step)
         if is_main:
             if use_wandb:
-                # {prefix}{metric}/{split}/mean and .../{db}/{table}
+                # {metric}/{split}/mean and .../{db}/{table}, the swa twin
+                # of each under a "swa/" prefix.
                 wandb.log(
                     {
                         "step": step,
@@ -809,7 +820,7 @@ def main(
                         # draws as a horizontal line across the whole x-range
                         # of the panel its metric lives in -- wandb has no
                         # reference-line primitive, a flat series is the line.
-                        **{f"{k}/target": v for k, v in targets.items()},
+                        **{f"target/{k}": v for k, v in targets.items()},
                     }
                 )
 

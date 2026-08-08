@@ -1,6 +1,12 @@
 """Submit one fine-tuning job per task. See [README.md](README.md)."""
 
+import functools
+import json
+from pathlib import Path
+
 from roach.slurm import Resources, submit
+
+HERE = Path(__file__).parent
 
 # The forecast tasks of these four databases whose type RT models: predict a
 # label at a timestamp from what is known before it. Nothing else is here --
@@ -24,67 +30,79 @@ TASKS = (
 )
 
 
-def targets_for(db: str, task: str) -> dict[str, float]:
-    """The best published number for this task, keyed by the wandb metric it
-    bounds: the best of every model in expts/fine_tune/results.md, over both
-    the default and the HPO arm.
+@functools.cache
+def published_best() -> dict[str, float]:
+    """The best published number per wandb metric key, from results.csv.
 
-    In the raw units `rt.train` logs (AUC as a fraction, MAE unnormalized), not
-    results.md's percentages, so a value sits on the same axis as the curve it
-    bounds. `rt.train` logs these at every step, which draws them as horizontal
-    lines (wandb has no reference-line primitive); `workspace.py` is what puts
-    curve and target in one panel, and reads them from here.
+    Computed the same way `make_results.py` builds results.md -- over the
+    default and the HPO arm of every model, AUROC as a percent and MAE
+    normalized by the train-target std and taken as a percent -- so a target
+    is literally the bolded number in that table, and lands on the same axis
+    as the curve `rt.train` logs beside it. Derived rather than pasted: the
+    pasted list had raw MAE where the run logs nMAE (`rel-trial/study-adverse`
+    read 40.4 against a curve that lives near 12).
 
-    Only this task's entries: a target for a task a run never evaluates would
-    draw a line in a panel that has no curve.
+    `{metric}/{split}/mean` comes along too: the best mean over that table's
+    whole task set. A single-task run's own "mean" is that one task, so this
+    line says where the field's best all-round model sits, not what this run
+    is being asked to beat.
     """
+    import pandas as pd
+    from huggingface_hub import hf_hub_download
+
+    stds = json.load(
+        open(
+            hf_hub_download(
+                "stanford-star/relbench", "regression_stds.json", repo_type="dataset"
+            )
+        )
+    )["stds"]
+
+    raw = pd.read_csv(HERE / "results.csv")
+    raw["pair"] = raw.dataset + "/" + raw.task
+    # Both arms of every model, exactly as make_results.py splits them: the
+    # default config, and the trial the search selected. A row can be both
+    # (the default won the search), in which case it stands in both arms.
+    dflt = raw[raw.config_tag == "default"].assign(arm="D")
+    hpo = raw[raw.selected].assign(arm="H")
+    d = pd.concat([dflt, hpo])
+    d["row"] = d.model + " (" + d.arm + ")"
+
+    out: dict[str, float] = {}
+    for task_type, metric, higher in [
+        ("BINARY_CLASSIFICATION", "auroc", True),
+        ("REGRESSION", "nmae", False),
+    ]:
+        sub = d[d.task_type == task_type]
+        best = max if higher else min
+        for split in ("val", "test"):
+            v = sub[f"{split}_score"] * 100
+            if not higher:
+                v = v / sub.pair.map(stds)
+            for pair, x in v.groupby(sub.pair):
+                out[f"{metric}/{split}/{pair}"] = float(best(x))
+            # A model's mean is over that table's whole task set, so the means
+            # are taken per model+arm and the best of those is the target.
+            out[f"{metric}/{split}/mean"] = float(best(v.groupby(sub.row).mean()))
+    return out
+
+
+def targets_for(db: str, task: str) -> dict[str, float]:
+    """The published bests this task's run should draw as reference lines.
+
+    Only this task's entries, plus the `mean` line for the metric it is scored
+    by: a target for a task a run never evaluates would draw a line in a panel
+    that has no curve. `rt.train` logs each as a constant at every step (wandb
+    has no reference-line primitive, a flat series is the line) under a
+    `target/` prefix, and `workspace.py` pairs it with the curve it bounds.
+    """
+    keys = published_best()
+    metrics = {k.split("/")[0] for k in keys if k.endswith(f"/{db}/{task}")}
     return {
         k: v
-        for k, v in {
-            "auc/test/rel-amazon/item-churn": 0.830527,
-            "auc/test/rel-amazon/user-churn": 0.704596,
-            "auc/test/rel-avito/user-clicks": 0.679955,
-            "auc/test/rel-avito/user-visits": 0.669391,
-            "auc/test/rel-event/user-ignore": 0.884695,
-            "auc/test/rel-event/user-repeat": 0.78496,
-            "auc/test/rel-f1/driver-dnf": 0.730298,
-            "auc/test/rel-f1/driver-top3": 0.811207,
-            "auc/test/rel-hm/user-churn": 0.70569,
-            "auc/test/rel-stack/user-badge": 0.888748,
-            "auc/test/rel-stack/user-engagement": 0.907587,
-            "auc/test/rel-trial/study-outcome": 0.755003,
-            "auc/val/rel-amazon/item-churn": 0.824893,
-            "auc/val/rel-amazon/user-churn": 0.706883,
-            "auc/val/rel-avito/user-clicks": 0.672679,
-            "auc/val/rel-avito/user-visits": 0.703479,
-            "auc/val/rel-event/user-ignore": 0.8774,
-            "auc/val/rel-event/user-repeat": 0.746042,
-            "auc/val/rel-f1/driver-dnf": 0.685578,
-            "auc/val/rel-f1/driver-top3": 0.73869,
-            "auc/val/rel-hm/user-churn": 0.707665,
-            "auc/val/rel-stack/user-badge": 0.900339,
-            "auc/val/rel-stack/user-engagement": 0.90639,
-            "auc/val/rel-trial/study-outcome": 0.706512,
-            "mae/test/rel-amazon/item-ltv": 46.7891,
-            "mae/test/rel-amazon/user-ltv": 14.3119,
-            "mae/test/rel-avito/ad-ctr": 0.0310402,
-            "mae/test/rel-event/user-attendance": 0.234435,
-            "mae/test/rel-f1/driver-position": 3.74971,
-            "mae/test/rel-hm/item-sales": 0.0531676,
-            "mae/test/rel-stack/post-votes": 0.0648983,
-            "mae/test/rel-trial/site-success": 0.324851,
-            "mae/test/rel-trial/study-adverse": 40.3657,
-            "mae/val/rel-amazon/item-ltv": 43.235,
-            "mae/val/rel-amazon/user-ltv": 12.022,
-            "mae/val/rel-avito/ad-ctr": 0.0291652,
-            "mae/val/rel-event/user-attendance": 0.228424,
-            "mae/val/rel-f1/driver-position": 3.50024,
-            "mae/val/rel-hm/item-sales": 0.0640494,
-            "mae/val/rel-stack/post-votes": 0.058982,
-            "mae/val/rel-trial/site-success": 0.339356,
-            "mae/val/rel-trial/study-adverse": 42.9937,
-        }.items()
+        for k, v in keys.items()
         if k.endswith(f"/{db}/{task}")
+        or (k.endswith("/mean") and k.split("/")[0] in metrics)
     }
 
 
@@ -237,7 +255,7 @@ def submit_one(db: str, task: str, resources: Resources, run_id: str | None = No
             eval_lcs_bw_pl_grid=[(1024, 1024, True)],
             # logging
             targets=targets_for(db, task),
-            project="2026-08-06-fine_tune",
+            project="2026-08-07-fine_tune",
             entity="rtv2",
             run_name=f"{db}/{task}",
             wandb_disabled=False,
