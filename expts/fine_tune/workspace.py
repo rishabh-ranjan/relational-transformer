@@ -22,6 +22,7 @@ UI, or the next run of it drops your changes.
 import wandb
 import wandb_workspaces.reports.v2.interface as wr
 import wandb_workspaces.workspaces as ws
+from wandb_workspaces.workspaces.internal import execute_graphql
 
 from submit import TASKS, targets_for
 
@@ -85,6 +86,36 @@ def section(name: str, keys: list[str], all_keys: set[str], x: str) -> ws.Sectio
     )
 
 
+VIEWS_QUERY = """
+query Views($entityName: String, $name: String) {
+    project(name: $name, entityName: $entityName) {
+        allViews(viewType: "project-view") {
+            edges { node { id name displayName updatedAt } }
+        }
+    }
+}
+"""
+
+
+def existing_view(display_name: str) -> tuple[str, str]:
+    """The (internal name, id) of the saved view titled `display_name`.
+
+    A view's identity to wandb is its slug (`nw-4gxr4eybu76-v`) and id, not
+    the title shown in the UI; `Workspace.save()` mints a fresh slug whenever
+    it has none, so saving a freshly built `Workspace` piles up a new copy
+    each run rather than replacing the last. Handing it back the slug of the
+    view already carrying our title turns the save into an overwrite.
+    """
+    api = wandb.Api()
+    resp = execute_graphql(api, VIEWS_QUERY, {"entityName": ENTITY, "name": PROJECT})
+    nodes = [e["node"] for e in resp["project"]["allViews"]["edges"]]
+    mine = sorted(
+        (n for n in nodes if n["displayName"] == display_name),
+        key=lambda n: n["updatedAt"],
+    )
+    return (mine[-1]["name"], mine[-1]["id"]) if mine else ("", "")
+
+
 def main() -> None:
     keys = project_keys()
     # A key that is some other key's twin or target gets no panel of its own:
@@ -133,6 +164,7 @@ def main() -> None:
         sections=sections,
         settings=ws.WorkspaceSettings(x_axis="step"),
     )
+    workspace._internal_name, workspace._internal_id = existing_view(VIEW)
     workspace.save()
     print(workspace.url)
 
