@@ -101,8 +101,13 @@ def project_keys(entity: str, project: str) -> set[str]:
     for run in api.runs(f"{entity}/{project}"):
         keys |= set(run.summary.keys())
         keys |= set(run.systemMetrics.keys())
-    # Targets this sweep will log but no run has reached yet.
-    keys |= {target_key(k) for db, task in TASKS for k in targets_for(db, task)}
+    # The sweep's own metrics and their targets, whether or not a run has got
+    # that far: a task still queueing at the first eval should have its panel
+    # waiting for it, not appear halfway through the sweep. Both halves are
+    # seeded -- the target alone would land in a panel of its own.
+    for db, task in TASKS:
+        for k in targets_for(db, task):
+            keys |= {k, target_key(k)}
     return keys - INTERNAL
 
 
