@@ -1,5 +1,6 @@
-"""Build the wandb workspace for this experiment: one panel per metric, each
-holding the live curve, its SWA twin, and the published target.
+"""Build the wandb workspace for this experiment: a panel for every key the
+project logs -- metrics and machine telemetry alike -- with each metric's SWA
+twin and published target folded into the panel of the curve they belong to.
 
     pixi run python expts/fine_tune/workspace.py
 
@@ -7,12 +8,18 @@ wandb has no horizontal-reference-line primitive, so `rt.train` logs each
 target from `submit.targets_for` as a constant at every step -- a flat series.
 That series is a metric key of its own (`{key}/target`), and wandb's default
 auto-panels would put it in a panel by itself; this script is what pairs it
-with the curve it bounds.
+with the curve it bounds. The same goes for the `swa_` twins.
+
+The key list comes from the runs themselves (the summary of every run, plus
+the system stream), so a metric added to `rt.train` shows up here as soon as
+one run has logged it -- no edit to this file needed. Targets the sweep will
+log but has not yet are folded in from `submit.targets_for`.
 
 It rewrites the saved view named below wholesale -- edit this script, not the
 UI, or the next run of it drops your changes.
 """
 
+import wandb
 import wandb_workspaces.reports.v2.interface as wr
 import wandb_workspaces.workspaces as ws
 
@@ -24,37 +31,101 @@ PROJECT = "2026-08-06-fine_tune"
 # saving again overwrites it rather than piling up "Unsaved view" copies.
 VIEW = "targets"
 
+# wandb's own bookkeeping series. Panels for these say nothing about a run.
+INTERNAL = {"_runtime", "_step", "_timestamp", "_wandb", "step"}
 
-def panel(key: str) -> wr.LinePlot:
+
+def swa_twins(key: str) -> list[str]:
+    """The names an SWA twin of `key` could go by.
+
+    `rt.train` prefixes the whole key (`swa_auc/val/mean`) in some places and
+    only the leaf (`val/swa_clf`) in others; both spellings are offered and
+    the caller keeps whichever the project actually logs.
+    """
+    head, sep, leaf = key.rpartition("/")
+    return [f"swa_{key}", f"{head}{sep}swa_{leaf}"] if sep else [f"swa_{key}"]
+
+
+def panel(key: str, keys: set[str], x: str) -> wr.LinePlot:
     """The metric, its SWA twin, and the target, on one y-axis.
 
     The keys are given exactly (not as a regex prefix) so `auc/val/mean` does
     not swallow the per-task curves, and the target is listed last so it
     draws on top of the curve it bounds.
     """
-    return wr.LinePlot(
-        title=key,
-        x="step",
-        y=[key, f"swa_{key}", f"{key}/target"],
-        smoothing_show_original=True,
+    y = [key]
+    y += [t for t in swa_twins(key) if t in keys]
+    if f"{key}/target" in keys:
+        y.append(f"{key}/target")
+    return wr.LinePlot(title=key, x=x, y=y, smoothing_show_original=True)
+
+
+def project_keys() -> set[str]:
+    """Every key logged by any run in the project, system stream included.
+
+    A run's summary carries one entry per metric key it ever logged, so the
+    union over runs is the project's key space; `systemMetrics` is the same
+    thing for the telemetry stream, which the summary does not cover.
+    """
+    api = wandb.Api()
+    keys: set[str] = set()
+    for run in api.runs(f"{ENTITY}/{PROJECT}"):
+        keys |= set(run.summary.keys())
+        keys |= set(run.systemMetrics.keys())
+    # Targets this sweep will log but no run has reached yet.
+    keys |= {f"{k}/target" for db, task in TASKS for k in targets_for(db, task)}
+    return keys - INTERNAL
+
+
+def section(name: str, keys: list[str], all_keys: set[str], x: str) -> ws.Section:
+    return ws.Section(
+        name=name,
+        panels=[panel(k, all_keys, x) for k in keys],
+        is_open=True,
     )
 
 
 def main() -> None:
-    # Only the tasks this sweep actually submits: a panel whose keys no run
-    # logs renders empty.
-    keys = [k for db, task in TASKS for k in targets_for(db, task)]
+    keys = project_keys()
+    # A key that is some other key's twin or target gets no panel of its own:
+    # it already rides along in that key's panel.
+    folded = {t for k in keys for t in swa_twins(k) if t in keys}
+    folded |= {f"{k}/target" for k in keys if f"{k}/target" in keys}
+    leaders = sorted(keys - folded)
+
+    system = [k for k in leaders if k.startswith("system.")]
+    metrics = [k for k in leaders if not k.startswith("system.")]
+
     sections = []
+    shown: set[str] = set()
     for split in ("val", "test"):
-        panels = [panel(k) for k in sorted(keys) if f"/{split}/" in k]
-        if panels:
+        # The published-target comparisons lead: they are what the sweep is
+        # for. Only keys that actually have a target belong here.
+        targeted = [k for k in metrics if f"/{split}/" in k and f"{k}/target" in keys]
+        if targeted:
             sections.append(
-                ws.Section(
-                    name=f"{split} vs published best",
-                    panels=panels,
-                    is_open=True,
-                )
+                section(f"{split} vs published best", targeted, keys, "step")
             )
+            shown |= set(targeted)
+
+    rest = [k for k in metrics if k not in shown]
+    # Everything else the training loop logs, grouped by its top-level
+    # namespace so a section is one family of curves.
+    for ns in sorted({k.split("/")[0] for k in rest}):
+        sections.append(
+            section(ns, [k for k in rest if k.split("/")[0] == ns], keys, "step")
+        )
+
+    # Telemetry is sampled on a wall-clock timer, not on the training step, so
+    # it is plotted against runtime; `step` would bunch it all at the origin.
+    if system:
+        gpu = [k for k in system if k.startswith("system.gpu.")]
+        host = [k for k in system if not k.startswith("system.gpu.")]
+        if gpu:
+            sections.append(section("system: gpu", gpu, keys, "_runtime"))
+        if host:
+            sections.append(section("system: host", host, keys, "_runtime"))
+
     workspace = ws.Workspace(
         entity=ENTITY,
         project=PROJECT,
