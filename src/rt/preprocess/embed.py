@@ -98,6 +98,14 @@ def _watched_pool(model: SentenceTransformer, devices: list[str]):
         raise
     finally:
         stop.set()
+        # Drop whatever is still buffered rather than joining the feeder threads
+        # that would flush it. A pool abandoned mid-chunk has work queued for a
+        # pipe nobody is draining any more, and `Queue.close()` leaves a feeder
+        # that the interpreter joins on the way out -- which is a second way to
+        # hang holding ten GPUs, reached only on the path out of the first.
+        for q in (pool["input"], pool["output"]):
+            with contextlib.suppress(Exception):
+                q.cancel_join_thread()
         with contextlib.suppress(Exception):
             model.stop_multi_process_pool(pool)
 

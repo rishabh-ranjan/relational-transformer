@@ -1,6 +1,6 @@
 # Results
 
-## Classification, val (ROC-AUC %, higher is better)
+## Classification, val (AUROC %, higher is better)
 
 | rank | model                  |   mean   | f/top3   | e/repeat   |  f/dnf   | t/outcm   | e/ignore   | v/clicks   | v/visits   | s/engage   | a/ichurn   | s/badge   | h/churn   | a/uchurn   |
 |:-----|:-----------------------|---------:|---------:|-----------:|---------:|----------:|-----------:|-----------:|-----------:|-----------:|-----------:|----------:|----------:|-----------:|
@@ -27,7 +27,7 @@
 | 19   | dummy (D)              |   50.0   |   50.0   |     50.0   |   50.0   |    50.0   |     50.0   |     50.0   |     50.0   |     50.0   |     50.0   |    50.0   |    50.0   |     50.0   |
 | 19   | dummy (H)              |   50.0   |   50.0   |     50.0   |   50.0   |    50.0   |     50.0   |     50.0   |     50.0   |     50.0   |     50.0   |    50.0   |    50.0   |     50.0   |
 
-## Classification, test (ROC-AUC %, higher is better)
+## Classification, test (AUROC %, higher is better)
 
 | rank | model                  |   mean   | f/top3   | e/repeat   |  f/dnf   | t/outcm   | e/ignore   | v/clicks   | v/visits   | s/engage   | a/ichurn   | s/badge   | h/churn   | a/uchurn   |
 |:-----|:-----------------------|---------:|---------:|-----------:|---------:|----------:|-----------:|-----------:|-----------:|-----------:|-----------:|----------:|----------:|-----------:|

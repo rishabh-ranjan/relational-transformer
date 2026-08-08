@@ -140,10 +140,10 @@ What is left is hardware and policy, which no amount of code will fix:
   GPU stage -- its cpus are fine and still take rustler work. **Put it back only
   once the card is actually replaced**, and report the node meanwhile.
 
-  The failure mode is worse than a crash: it kills one sentence-transformers
-  worker, the pool waits forever for chunks that worker will never return, and
-  the job sits holding ten cards until its walltime runs out. Nothing notices --
-  `status.py` reports it as running, because it is.
+  The hang that made this expensive is fixed: `rt.preprocess.embed` now owns the
+  worker pool and watches it, so a dead worker fails the job in ~10s instead of
+  leaving it to hold ten cards until its walltime runs out. A bad card still
+  costs the work in flight, which is what a bad card should cost.
 * **`il-lo` is preemptible.** Nothing to do about it: both stages are
   idempotent, so a requeued job costs the work in flight and nothing else.
 
