@@ -25,11 +25,13 @@ UI, or the next run of it drops your changes.
 """
 
 import argparse
+import json
 import math
 
 import wandb
 import wandb_workspaces.reports.v2.interface as wr
 import wandb_workspaces.workspaces as ws
+import wandb_workspaces.workspaces.internal as internal
 from wandb_workspaces.workspaces.internal import execute_graphql
 
 from submit import TASKS, targets_for
@@ -44,6 +46,10 @@ VIEW = "targets"
 # order they should appear.
 METRICS = ("auroc", "nmae")
 SPLITS = ("val", "test")
+
+# The app-managed telemetry section. Its charts are generated client-side, so
+# the saved spec carries the name and nothing else.
+SYSTEM = "System"
 
 # wandb's own bookkeeping series. Panels for these say nothing about a run.
 INTERNAL = {"_runtime", "_step", "_timestamp", "_wandb", "step"}
@@ -181,13 +187,13 @@ def build(entity: str, project: str, view: str) -> ws.Workspace:
         sections.append(
             section(ns, [k for k in rest if k.split("/")[0] == ns], keys, "step")
         )
-    # Telemetry is the app's own: a section literally named "System" is filled
-    # in at render time from the system stream (that is how the default
-    # workspace shows those charts -- its saved spec holds an empty section of
-    # that name). Panels we write ourselves against the `system.*` keys the
-    # API reports render blank, so the section is left empty on purpose.
+    # Telemetry is the app's own: the default workspace holds a *panel-less*
+    # section named "System" that the app fills at render time. `save` is what
+    # marks it auto (see there); an empty section alone renders empty, and
+    # panels written by hand against the `system.*` keys the API reports render
+    # blank too.
     if any(k.startswith("system.") for k in keys):
-        sections.append(ws.Section(name="System", panels=[], is_open=False))
+        sections.append(ws.Section(name=SYSTEM, panels=[], is_open=False))
 
     workspace = ws.Workspace(
         entity=entity,
@@ -202,6 +208,54 @@ def build(entity: str, project: str, view: str) -> ws.Workspace:
     return workspace
 
 
+UPSERT = """
+mutation Upsert($id: ID, $entityName: String, $projectName: String, $name: String,
+                $displayName: String, $type: String, $spec: String) {
+    upsertView(input: {id: $id, entityName: $entityName, projectName: $projectName,
+                       name: $name, displayName: $displayName, type: $type,
+                       spec: $spec, createdUsing: WANDB_SDK}) {
+        view { id name }
+    }
+}
+"""
+
+
+def save(workspace: ws.Workspace) -> str:
+    """Save the workspace, with the System section marked auto.
+
+    `wandb_workspaces` has no field for `isPanelsAuto`, the flag that tells the
+    app to generate a section's panels itself -- which is the only way the
+    system charts appear, since nothing in the run's logged keys draws them.
+    So the spec is serialized, the flag set on that one section, and the
+    result upserted directly rather than through `Workspace.save()`.
+    """
+    view = workspace._to_model()
+    if not view.name:
+        view.name = internal._generate_view_name()
+    spec = json.loads(view.spec.model_dump_json(by_alias=True, exclude_none=True))
+    for s in spec["section"]["panelBankConfig"]["sections"]:
+        if s["name"] == SYSTEM:
+            s["isPanelsAuto"] = True
+            s["defaultName"] = SYSTEM
+
+    resp = execute_graphql(
+        wandb.Api(),
+        UPSERT,
+        {
+            "id": view.id or None,
+            "entityName": view.entity,
+            "projectName": view.project,
+            "name": view.name,
+            "displayName": view.display_name,
+            "type": "project-view",
+            "spec": json.dumps(spec),
+        },
+    )
+    workspace._internal_name = resp["upsertView"]["view"]["name"]
+    workspace._internal_id = resp["upsertView"]["view"]["id"]
+    return workspace.url
+
+
 def main() -> None:
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument("--entity", default=ENTITY)
@@ -209,9 +263,7 @@ def main() -> None:
     p.add_argument("--view", default=VIEW)
     a = p.parse_args()
 
-    workspace = build(a.entity, a.project, a.view)
-    workspace.save()
-    print(workspace.url)
+    print(save(build(a.entity, a.project, a.view)))
 
 
 if __name__ == "__main__":
