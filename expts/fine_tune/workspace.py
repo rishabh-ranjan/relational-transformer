@@ -174,21 +174,20 @@ def build(entity: str, project: str, view: str) -> ws.Workspace:
             [k for k in leaders if k in {f"{m}/{split}/mean" for m in METRICS}],
         )
 
-    # Everything else, so nothing a run logs goes missing from the view:
-    # grouped by top-level namespace, telemetry against runtime because it is
-    # sampled on a wall-clock timer and `step` would bunch it at the origin.
-    rest = [k for k in leaders if k not in shown]
-    for ns in sorted({k.split("/")[0] for k in rest if not k.startswith("system.")}):
+    # Everything else, so nothing a run logs goes missing from the view,
+    # grouped by top-level namespace.
+    rest = [k for k in leaders if k not in shown and not k.startswith("system.")]
+    for ns in sorted({k.split("/")[0] for k in rest}):
         sections.append(
             section(ns, [k for k in rest if k.split("/")[0] == ns], keys, "step")
         )
-    for name, pred in [
-        ("system: gpu", lambda k: k.startswith("system.gpu.")),
-        ("system: host", lambda k: k.startswith("system.") and ".gpu." not in k),
-    ]:
-        picked = [k for k in rest if pred(k)]
-        if picked:
-            sections.append(section(name, picked, keys, "_runtime"))
+    # Telemetry is the app's own: a section literally named "System" is filled
+    # in at render time from the system stream (that is how the default
+    # workspace shows those charts -- its saved spec holds an empty section of
+    # that name). Panels we write ourselves against the `system.*` keys the
+    # API reports render blank, so the section is left empty on purpose.
+    if any(k.startswith("system.") for k in keys):
+        sections.append(ws.Section(name="System", panels=[], is_open=False))
 
     workspace = ws.Workspace(
         entity=entity,
