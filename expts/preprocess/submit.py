@@ -157,11 +157,18 @@ def resources_for(expected_bytes: int) -> Resources:
     )
 
 
-# The rtx8000 nodes, and every card on one. A long pole always asks for all ten
+# The rtx8000 node, and every card on it. A long pole always asks for all ten
 # and waits for a node that can give them: sizing the request down to what
 # happened to be free at submit time undercut the one job whose length sets the
 # stage's makespan, and it queued behind its rustler stage anyway.
-BIG_NODES = ("hyperturing1", "hyperturing2")
+#
+# hyperturing1 is not here. Its GPUs still throw "uncorrectable ECC error": one
+# recurred on 2026-08-07 in emb-rel-amazon, and the failure is worse than a
+# crash -- it kills one sentence-transformers worker, the pool waits forever for
+# chunks that worker will never return, and the job holds ten cards doing
+# nothing until its walltime runs out. Its cpus are fine and still take rustler
+# work. Put it back when the card is actually replaced.
+BIG_NODES = ("hyperturing2",)
 BIG_GPUS = 10
 # Where the single-GPU jobs go: the 2080Ti nodes, so they never stand between a
 # long pole and the ten free cards it needs.
@@ -251,9 +258,6 @@ def embed_resources(text_bytes_: int) -> Resources:
         # have run just as fast anywhere -- an RTX8000 is 9% faster than a
         # 2080Ti, which is nothing against a stage that cannot start.
         #
-        # (hyperturing1's GPUs threw "uncorrectable ECC error" on 18 jobs of the
-        # previous build; that card has since been fixed, which is what lets
-        # BIG_NODES be both hyperturings again.)
         nodelist=",".join(SMALL_NODES),
     )
 
