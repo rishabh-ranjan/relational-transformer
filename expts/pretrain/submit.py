@@ -5,7 +5,7 @@ import json
 import sys
 from pathlib import Path
 
-from roach.slurm import AMPERE, submit
+from roach.slurm import AMPERE_LO, submit
 
 # The in-loop validation tasks, listed here rather than by path: RelBench's
 # published `forecast.json` also carries recommendation tasks, which
@@ -17,16 +17,19 @@ EVAL_TASKS = [
     for db, task in json.loads(Path(__file__).with_name("eval-tasks.json").read_text())
 ]
 
-# 8xA100 exclusive on the `il` queue. il-lo cost more than it saved here: the
-# run needs ~33 minutes of page-cache population before its first step, and
-# preemption arrived faster than that, so attempts kept dying before they could
-# checkpoint. `il` is not preemptible; its 7-day cap is handled by the requeue
-# path, which resumes from the run's own checkpoint.
+# 4 nodes x 8xA100 on the preemptible il-lo queue. il caps a100 at 10 per user,
+# so 32 of them is only reachable here; the run checkpoints and resumes, at a
+# preemption and at its time limit alike, so the low-priority queue costs wall
+# clock rather than work.
 #
-# ampere9 is misbehaving: list every other ampere node instead.
-AMPERE_EXCL = dataclasses.replace(
-    AMPERE,
-    nodelist="ampere1,ampere2,ampere3,ampere4,ampere5,ampere6,ampere7,ampere8",
+# Exclusive: the mixture is populated into each node's page cache, which wants
+# the node's memory, and cpus_per_task goes back to 128/8 with it.
+AMPERE_LO_4N = dataclasses.replace(
+    AMPERE_LO,
+    nodes=4,
+    exclusive=True,
+    cpus_per_task=16,
+    nodelist="ampere2,ampere6,ampere8,ampere9",
 )
 
 # Relaunch an existing run (`python submit.py <run_id>`) instead of starting a
@@ -104,7 +107,7 @@ def main() -> None:
             wandb_disabled=False,
             out_root="/dfs/user/ranjanr/ckpts",
         ),
-        resources=AMPERE_EXCL,
+        resources=AMPERE_LO_4N,
         name="pretrain",
         run_id=RUN_ID,
         repo_root="/lfs/hyperturing1/0/ranjanr/clones/rishabh-ranjan/relational-transformer",

@@ -54,6 +54,11 @@ class Resources:
     and lifts it."""
     constraint: str | None
     nodelist: str | None
+    nodes: int = 1
+    """How many nodes to hold. `gpus`, `cpus_per_task` and `ntasks` are all
+    per-node, so this multiplies the job: 4 nodes of "a100:8" is 32 ranks. DDP
+    spans them without any extra configuration -- every rank is a slurm task and
+    roach.slurm.run reads its identity from srun (see `set_torch_dist_env`)."""
 
     def __post_init__(self) -> None:
         kind, sep, count = self.gpus.rpartition(":")
@@ -67,15 +72,22 @@ class Resources:
             raise ValueError(f"cpus_per_task must be >= 1, got {self.cpus_per_task}")
         if self.ntasks is not None and self.ntasks < 1:
             raise ValueError(f"ntasks must be >= 1 or None, got {self.ntasks}")
+        if self.nodes < 1:
+            raise ValueError(f"nodes must be >= 1, got {self.nodes}")
         if self.mem and self.mem_per_gpu:
             raise ValueError("give mem or mem_per_gpu, not both")
 
     @property
-    def ranks(self) -> int:
-        """How many tasks srun starts: `ntasks` if given, else one per GPU."""
+    def ranks_per_node(self) -> int:
+        """Tasks per node: `ntasks` if given, else one per GPU."""
         if self.ntasks is not None:
             return self.ntasks
         return max(1, int(self.gpus.rpartition(":")[2]))
+
+    @property
+    def ranks(self) -> int:
+        """How many tasks srun starts in total, across every node."""
+        return self.nodes * self.ranks_per_node
 
     def sbatch_flags(self) -> list[str]:
         flags = [
@@ -83,8 +95,8 @@ class Resources:
             f"--account={self.account}",
             f"--qos={self.qos}",
             f"--time={self.time}",
-            "--nodes=1",
-            f"--ntasks-per-node={self.ranks}",
+            f"--nodes={self.nodes}",
+            f"--ntasks-per-node={self.ranks_per_node}",
             f"--cpus-per-task={self.cpus_per_task}",
         ]
         if self.gpus != "0":

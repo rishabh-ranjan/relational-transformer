@@ -125,7 +125,22 @@ clone_at_commit() {  # <dir> <url> <commit> <prepare-fn>
     echo "clone: $dir @ $(git -C "$dir" rev-parse --short HEAD)"
 }
 
-clone_at_commit "$REPO_DIR" "@REPO@" "@COMMIT@" prepare_repo
+# Every node needs its own clone: the clone root is node-local storage, and
+# this script -- the batch step -- runs on the first node only. One srun task
+# per node does the same preparation everywhere, and they do not contend: each
+# node has its own disk, its own lock file and its own pixi cache. The
+# functions travel to those shells through the environment (`export -f`), and
+# --export=ALL carries the HOME, PATH, caches and tokens the node setup above
+# just established, so a node prepares under exactly the environment its ranks
+# will run in.
+export -f git_auth git_clone seed_lock prepare_repo clone_at_commit
+export REPO_DIR
+if (( ${SLURM_NNODES:-1} > 1 )); then
+    srun --nodes="$SLURM_NNODES" --ntasks-per-node=1 --export=ALL \
+        bash -c 'clone_at_commit "$REPO_DIR" "@REPO@" "@COMMIT@" prepare_repo'
+else
+    clone_at_commit "$REPO_DIR" "@REPO@" "@COMMIT@" prepare_repo
+fi
 
 cd "$REPO_DIR"
 # What this run's environment actually was, next to its logs. A record, not a

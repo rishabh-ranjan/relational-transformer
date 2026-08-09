@@ -168,7 +168,7 @@ def test_the_job_scripts_take_no_configuration_from_the_environment():
     which is how the same submission produces two different runs."""
 
     # who we are, and what slurm tells the job about itself: not configuration
-    runtime = {"USER", "SLURM_RESTART_COUNT"}
+    runtime = {"USER", "SLURM_RESTART_COUNT", "SLURM_NNODES"}
     for name in ("bootstrap.sh", "env.sh"):
         text = files("roach.slurm").joinpath(name).read_text()
         read = set(re.findall(r"\$\{([A-Z_]+):-", text))
