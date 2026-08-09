@@ -17,19 +17,19 @@ EVAL_TASKS = [
     for db, task in json.loads(Path(__file__).with_name("eval-tasks.json").read_text())
 ]
 
-# 4 nodes x 8xA100 on the preemptible il-lo queue. il caps a100 at 10 per user,
-# so 32 of them is only reachable here; the run checkpoints and resumes, at a
+# 2 nodes x 8xA100 on the preemptible il-lo queue. il caps a100 at 10 per user,
+# so 16 of them is only reachable here; the run checkpoints and resumes, at a
 # preemption and at its time limit alike, so the low-priority queue costs wall
 # clock rather than work.
 #
 # Exclusive: the mixture is populated into each node's page cache, which wants
 # the node's memory, and cpus_per_task goes back to 128/8 with it.
-AMPERE_LO_4N = dataclasses.replace(
+AMPERE_LO_2N = dataclasses.replace(
     AMPERE_LO,
-    nodes=4,
+    nodes=2,
     exclusive=True,
     cpus_per_task=16,
-    nodelist="ampere2,ampere6,ampere8,ampere9",
+    nodelist="ampere3,ampere9",
 )
 
 # Relaunch an existing run (`python submit.py <run_id>`) instead of starting a
@@ -107,7 +107,7 @@ def main() -> None:
             wandb_disabled=False,
             out_root="/dfs/user/ranjanr/ckpts",
         ),
-        resources=AMPERE_LO_4N,
+        resources=AMPERE_LO_2N,
         name="pretrain",
         run_id=RUN_ID,
         repo_root="/lfs/hyperturing1/0/ranjanr/clones/rishabh-ranjan/relational-transformer",
