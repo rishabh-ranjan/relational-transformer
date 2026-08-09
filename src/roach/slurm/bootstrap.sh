@@ -16,7 +16,14 @@ mkdir -p "@CLONE_ROOT@"
 # environment exists, so roach is not importable yet, and inlining also pins the
 # node setup to the submission instead of to whatever is installed later. It
 # comes before the clones so they get the job's HOME, PATH, caches and token.
+#
+# A function because a multi-node job has to run it on every node it holds, not
+# just the one the batch step landed on: HOME, pixi and the caches are per-node
+# things that no amount of environment forwarding can create remotely.
+roach_node_env() {
 @ENV@
+}
+roach_node_env
 
 # --------------------------------------------------------------------------- #
 # Clones are keyed by commit and shared by every job at that commit on the node.
@@ -133,11 +140,15 @@ clone_at_commit() {  # <dir> <url> <commit> <prepare-fn>
 # --export=ALL carries the HOME, PATH, caches and tokens the node setup above
 # just established, so a node prepares under exactly the environment its ranks
 # will run in.
-export -f git_auth git_clone seed_lock prepare_repo clone_at_commit
+export -f roach_node_env git_auth git_clone seed_lock prepare_repo clone_at_commit
 export REPO_DIR
 if (( ${SLURM_NNODES:-1} > 1 )); then
+    # Each node sets itself up and builds its own clone. They do not contend:
+    # every node has its own disk, lock file and pixi cache. The functions
+    # travel through the environment (`export -f`), and --export=ALL carries
+    # the tokens and cache paths this shell already holds.
     srun --nodes="$SLURM_NNODES" --ntasks-per-node=1 --export=ALL \
-        bash -c 'clone_at_commit "$REPO_DIR" "@REPO@" "@COMMIT@" prepare_repo'
+        bash -c 'roach_node_env; clone_at_commit "$REPO_DIR" "@REPO@" "@COMMIT@" prepare_repo'
 else
     clone_at_commit "$REPO_DIR" "@REPO@" "@COMMIT@" prepare_repo
 fi

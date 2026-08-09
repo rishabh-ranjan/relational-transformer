@@ -119,9 +119,18 @@ def launch(resources: Resources, target: str, args_path: str) -> str:
 
     `--frozen`: the clone is shared, so a rank that re-solved would rewrite
     pixi.lock underneath every other job at this commit.
+
+    `--chdir`: srun otherwise hands the tasks this shell's *resolved* cwd, and
+    the clone root is a per-node symlink (/lfs/local/0 -> /lfs/<host>/0), so on
+    a multi-node job every rank would be sent to the batch node's path -- which
+    does not exist on any other node. `$REPO_DIR` is the unresolved one, and
+    each node resolves it to its own disk.
     """
     run = f'pixi run --frozen python -m roach.slurm.run "{target}" "{args_path}"'
-    return f"srun --export=ALL --label --kill-on-bad-exit=1 \\\n    {run}"
+    return (
+        "srun --export=ALL --chdir=$REPO_DIR --label --kill-on-bad-exit=1 \\\n"
+        f"    {run}"
+    )
 
 
 def submit(
