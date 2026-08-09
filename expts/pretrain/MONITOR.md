@@ -1,62 +1,143 @@
-# Babysitting a pretraining run
+# Running and babysitting the pretraining run
 
-The run is long, preemptible, and resumes from its own checkpoint, so
-monitoring is about keeping a job *scheduled*, not about restarting work. These
-are the rules a future run (or agent) should follow directly.
+Everything a session needs to start this run, keep it on the best hardware the
+cluster will give it, and not lose work when it is interrupted. Written for
+whoever picks it up next, with no context from the session that wrote it.
 
-## Submit
+The run is long (100k steps, days), preemptible, and resumes from its own
+checkpoint. So babysitting is about keeping a job *scheduled and as wide as
+possible* -- never about redoing work.
 
-`submit.py` pins the shape. Today that is 8xA100, `--exclusive`, qos `il-lo`
-(21d wall, preemptible), with an explicit `nodelist`.
+## The one thing to know first
 
-- `--exclusive` is deliberate: the mixture is populated into the page cache, so
-  the job wants the node's whole memory. With it, `cpus_per_task` is 128/8=16
-  (the 14-per-gpu site limit only applies to shared jobs).
-- The node set is expressed as a `nodelist` of the healthy nodes, not as an
-  exclusion, because `Resources` has no exclude field.
-- `submit` clones the commit you submitted from, so **commit and push before
-  submitting** or the job runs stale code.
+**A run is its `run_id`.** It names the checkpoint directory under
+`/dfs/user/ranjanr/ckpts/rtv2/<project>/<run_id>`, and passing it back to
+`submit.py` resumes from `resume.pt` -- model, optimizers, schedulers, SWA,
+step, best-so-far -- instead of starting at step 0.
 
-## Watch
+```
+pixi run python expts/pretrain/submit.py                    # new run, prints its run_id
+pixi run python expts/pretrain/submit.py <run_id>           # resume that run
+```
 
-Two watches, both cheap:
+Resume is **GPU-count flexible**: a run stopped on 32 GPUs comes back on 8, or
+the other way round, and the data stream is re-seeded by the resumed step so
+nothing is replayed. That is what makes the scaling policy below free to take.
 
-1. **Queue state** -- poll `squeue -j <id> -h -o "%T %R %N"` every 60s and emit
-   only on change. This catches PENDING->RUNNING, the node it landed on, and a
-   preemption (which shows up as the job going back to PENDING under the *same*
-   job id, since slurm requeues it). When the job leaves the queue entirely,
-   read the terminal state from `sacct -j <id> -X -n -o State,ExitCode`.
-2. **The log** -- `tail -F` the job's `.out` and grep for
-   `Traceback|Error|FAILED|assert|Killed|OOM|out of memory|PREEMPT|requeu|restarts=|CANCELLED`
-   plus a progress signal. Grep the failure signatures, not only the happy path:
-   silence from a success-only filter looks identical to a crashloop.
+Submitting *without* a run_id when you meant to resume silently starts a second
+run from scratch. Read the run_id out of the last log or `ls -t` the ckpt dir
+before you submit.
 
-`restarts=N` in the log banner is the requeue counter; a bump with the run
-resuming from its checkpoint is normal and needs no action.
+## Keeping it on the best shape: `autoscale.py`
 
-## Bad nodes
+```
+pixi run python expts/pretrain/autoscale.py <run_id> --dry-run   # decide, print
+pixi run python expts/pretrain/autoscale.py <run_id>             # decide, act
+```
 
-Nodes go bad and come back. Treat the node set as something to revise, not as a
-constant:
+One pass reads the cluster, picks the shape, and gets there. Idempotent: a pass
+with nothing to do prints a line and exits. **Run it every ~10 minutes while
+the run is alive**, and after every preemption.
 
-- Drop a node from the `nodelist` when jobs on it fail in ways healthy nodes do
-  not. (ampere9 was the case that motivated this.)
-- A requeued job keeps the nodelist it was submitted with. If it is stuck
-  PENDING because its nodes are all busy, widen it in place rather than
-  resubmitting -- resubmitting loses queue priority:
+The policy it implements:
 
-  ```
-  scontrol update JobId=<id> NodeList=ampere1,...,ampere8
-  ```
+- **Widest whole-node shape wins** -- 4 nodes, else 2, else 1, at 8 a100 each.
+- **Only whole nodes count.** The job is `--exclusive` (the mixture is
+  populated into each node's page cache and wants the node's memory), so a node
+  carrying anyone else's job is no use, even if its GPUs are idle. The test is
+  allocated CPUs == 0, not free GPUs.
+- **Never queue for a bigger shape.** An upgrade is worth having only if slurm
+  starts it *now*, so the job names exactly the nodes already idle. A queued
+  4-node job that waits is strictly worse than a 2-node job that runs.
+- **Upgrade only on a strictly higher node count.** Cancelling a running job
+  costs ~45 minutes of page-cache population; a lateral move is pure loss. The
+  job's own nodes count as available when weighing an upgrade -- they return to
+  the pool when it is cancelled, so 2 -> 4 needs two *more* free nodes.
+- **A pending job is not progress.** If the run is queued and anything whole is
+  free, replace it with a job that starts.
+- **One node goes to `il` when it fits.** `il` is not preemptible but caps a100
+  at 10 per user, so it holds one node's eight and nothing wider. If this
+  user's other `il` jobs already hold more than 2, it falls back to `il-lo`.
+- **Everything wider is `il-lo`**: preemptible, effectively uncapped, 21d wall.
 
-- Before re-including a node that was dropped, check it is actually healthy
-  (`sinfo -p il -o "%n %G %t %C %m"`, plus a short job on it) -- an exclusion is
-  a hypothesis with a date on it, not a permanent fact.
-- Prefer whichever ampere node is fully idle: an `--exclusive` job cannot start
-  on a node carrying any other job.
+## Watching it
 
-## When to interrupt a human
+Two cheap watches, both worth having:
 
-Preemption, requeue, and pending are routine -- do not escalate them. Escalate
-a crash that repeats across restarts, an OOM, or a job that has left the queue
-with a non-zero exit.
+1. **Queue state** -- poll `squeue -j <id> -h -o "%T %R %N"` every 60s, emit on
+   change. Catches PENDING -> RUNNING, the nodes it landed on, and preemption
+   (which reappears as PENDING under the *same* job id, since slurm requeues).
+   When it leaves the queue entirely, `sacct -j <id> -X -n -o State,ExitCode`.
+2. **The log** -- `tail -F` the `.out` and grep for
+   `Traceback|Error|FAILED|Killed|OOM|out of memory|PREEMPT|requeu|restarts=|CANCELLED`
+   plus a progress signal. Grep the failure signatures, not only the happy
+   path: silence from a success-only filter is indistinguishable from a
+   crashloop. Filter out `task_skipped`-style bulk lines or the watch drowns.
+
+Logs and `args.json` are under
+`/dfs/user/ranjanr/slurm-logs/rishabh-ranjan/relational-transformer/expts/pretrain`,
+named `<run_id>_<jobid>.out`. A requeued job appends to a new file for the new
+job id, same run_id.
+
+`restarts=N` in the log banner is the requeue counter. A bump, followed by the
+run resuming from its checkpoint, is normal and needs no action.
+
+## What is normal and what is not
+
+Routine, do not escalate:
+
+- **Preemption on `il-lo`.** The ranks catch the signal, save at the next step
+  boundary (`preempted_at_step: N`), and slurm requeues. Note that slurm sends
+  the job's requested `USR1` at the start of the *preemption* grace window too,
+  so the log says "wall clock is near" for a preemption -- the action taken is
+  right either way.
+- **`time_to_first_step: ~45m`.** Page-cache population (`mmap_populate=True`)
+  plus ~1m compile. It is why short slots make no progress at all, and why
+  upgrades are only worth a strictly wider shape.
+- **`tasks_skipped` / `ignored` lines at startup.** Tasks the build cannot
+  predict. Zero is expected now; a non-zero count means the published task
+  lists and the build disagree (see below).
+
+Escalate to a human:
+
+- A crash that repeats across restarts, or an OOM (as opposed to the allocator
+  OOM *warning*, which is recoverable).
+- The job leaving the queue with a non-zero exit.
+- Time-to-first-step consistently exceeding the interval between preemptions --
+  the run is livelocked and needs a non-preemptible queue or a smaller shape.
+
+## Gotchas that have actually bitten
+
+- **Swapping `pre_dir` under a running job does not kill it.** The mmapped file
+  handles follow the old inodes, so it keeps evaluating against the data it
+  started with, silently, until it restarts. After replacing a preprocessed
+  directory, requeue or resubmit the run deliberately.
+- **`/lfs/local/0` is a per-node symlink** to `/lfs/<host>/0`. Anything that
+  resolves a path on one node and uses it on another breaks; multi-node jobs
+  pass `--chdir=$REPO_DIR` (the unresolved path) for exactly this reason.
+- **Every node of a multi-node job needs setting up**, not just the batch node:
+  node-local HOME, pixi and the clone. `roach.slurm.bootstrap` does this with
+  one srun task per node. A node that has never been used pays ~7 minutes the
+  first time.
+- **Nodes go bad and come back.** ampere9 once failed every job in its first
+  second (`mkdir`: Input/output error) and was excluded for a while; it is fine
+  now. Treat an exclusion as a hypothesis with a date on it -- check with
+  `sinfo` and a short job before re-including or continuing to avoid a node.
+- **A concurrent `git add -A` in this clone** can sweep your edits into someone
+  else's commit. Check `git log -1 --stat` after committing.
+
+## Inputs the run needs
+
+Both must exist before submitting, and are produced by
+[`expts/preprocess`](../preprocess/README.md):
+
+- `pre_dir` -- the Join, preprocessed. `db_task_list` is its `rt-j.json`.
+- `eval_pre_dir` -- RelBench, preprocessed. The in-loop validation tasks are
+  listed in [`eval-tasks.json`](eval-tasks.json) beside this file and passed
+  inline, because this repo lives on the submitting host's local disk and a
+  path into it does not resolve on a compute node.
+
+If startup reports skipped or ignored tasks, the lists and the build have
+diverged: regenerate the lists with
+`expts/preprocess/finalize.py task-lists`, which drops tasks whose target
+column preprocessing dropped and tasks whose type is not modelled.

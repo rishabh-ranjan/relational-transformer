@@ -1,11 +1,11 @@
 """Submit the pretraining run. See [README.md](README.md)."""
 
+import argparse
 import dataclasses
 import json
-import sys
 from pathlib import Path
 
-from roach.slurm import AMPERE_LO, submit
+from roach.slurm import AMPERE_LO, Resources, submit
 
 # The in-loop validation tasks, listed here rather than by path: RelBench's
 # published `forecast.json` also carries recommendation tasks, which
@@ -17,28 +17,48 @@ EVAL_TASKS = [
     for db, task in json.loads(Path(__file__).with_name("eval-tasks.json").read_text())
 ]
 
-# 2 nodes x 8xA100 on the preemptible il-lo queue. il caps a100 at 10 per user,
-# so 16 of them is only reachable here; the run checkpoints and resumes, at a
-# preemption and at its time limit alike, so the low-priority queue costs wall
-# clock rather than work.
+# The pretraining shape, as a function of what the cluster will give right now.
+# `nodes` x 8xA100, exclusive: the mixture is populated into each node's page
+# cache, which wants the node's whole memory, and cpus_per_task is 128/8 with
+# it. See [autoscale.py](autoscale.py), which picks the shape and resubmits.
 #
-# Exclusive: the mixture is populated into each node's page cache, which wants
-# the node's memory, and cpus_per_task goes back to 128/8 with it.
-AMPERE_LO_2N = dataclasses.replace(
-    AMPERE_LO,
-    nodes=2,
-    exclusive=True,
-    cpus_per_task=16,
-    nodelist="ampere3,ampere9",
-)
+# il-lo is preemptible and effectively uncapped, which is the only way to hold
+# more than 10 a100s; `il` is not preemptible but caps a100 at 10 per user, so
+# it fits a single node and nothing larger. The run checkpoints and resumes
+# either way, so a preemption costs wall clock rather than work.
+def resources(nodes: int, qos: str, nodelist: str) -> Resources:
+    return dataclasses.replace(
+        AMPERE_LO,
+        nodes=nodes,
+        qos=qos,
+        time="21-00:00:00" if qos == "il-lo" else "7-00:00:00",
+        exclusive=True,
+        cpus_per_task=16,
+        nodelist=nodelist,
+    )
 
-# Relaunch an existing run (`python submit.py <run_id>`) instead of starting a
-# new one: the run id names the checkpoint directory, so the job resumes from
-# where the last attempt left off rather than from step 0.
-RUN_ID = sys.argv[1] if len(sys.argv) > 1 else None
+
+def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
+    p = argparse.ArgumentParser(description=__doc__)
+    p.add_argument(
+        "run_id",
+        nargs="?",
+        help="relaunch this run instead of starting a new one; the run id names "
+        "the checkpoint directory, so the job resumes where it left off",
+    )
+    p.add_argument("--nodes", type=int, default=1)
+    p.add_argument("--qos", default="il-lo", choices=("il-lo", "il"))
+    p.add_argument(
+        "--nodelist",
+        default="ampere1,ampere2,ampere3,ampere4,ampere5,ampere6,ampere7,ampere8,ampere9",
+        help="nodes to run on. Naming exactly the free ones is how a job starts "
+        "immediately rather than queueing behind whatever else wants them.",
+    )
+    return p.parse_args(argv)
 
 
 def main() -> None:
+    args = parse_args()
     submit(
         "rt.train:main",
         args=dict(
@@ -107,9 +127,9 @@ def main() -> None:
             wandb_disabled=False,
             out_root="/dfs/user/ranjanr/ckpts",
         ),
-        resources=AMPERE_LO_2N,
+        resources=resources(args.nodes, args.qos, args.nodelist),
         name="pretrain",
-        run_id=RUN_ID,
+        run_id=args.run_id,
         repo_root="/lfs/hyperturing1/0/ranjanr/clones/rishabh-ranjan/relational-transformer",
         log_root="/dfs/user/ranjanr/slurm-logs/rishabh-ranjan/relational-transformer/expts/pretrain",
         clone_root="/lfs/local/0/roach_clones",
