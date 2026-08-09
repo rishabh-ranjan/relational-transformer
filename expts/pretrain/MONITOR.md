@@ -8,6 +8,34 @@ The run is long (100k steps, days), preemptible, and resumes from its own
 checkpoint. So babysitting is about keeping a job *scheduled and as wide as
 possible* -- never about redoing work.
 
+## Picking up a run already in flight
+
+Nothing needs to be told to you. Find the run, then start the loop:
+
+```
+squeue -u $USER -h -n pretrain -o "%i|%T|%D|%N|%q"   # job id | state | nodes | hosts | qos
+ls -t /dfs/user/ranjanr/slurm-logs/rishabh-ranjan/relational-transformer/expts/pretrain/*.out | head -1
+```
+
+The log file is `<run_id>_<jobid>.out`, so its name gives you the run_id -- the
+one thing everything else is keyed on. `grep -c resume_saved_at_step` on it and
+`tail` tell you where the run has got to; `total_steps` in `args.json` beside it
+is where it is going (100_001).
+
+If `squeue` shows no `pretrain` job, the run is stopped, not finished: check
+the last log's tail and `sacct -j <jobid> -X -n -o State,ExitCode` for why, then
+resubmit it with its run_id (below). A run is finished when its log says so and
+the step count has reached `total_steps` -- not because the queue is empty.
+
+Then, for the life of the run, every ~10 minutes:
+
+```
+pixi run python expts/pretrain/autoscale.py <run_id>
+```
+
+and keep the two watches of [Watching it](#watching-it) armed. Everything else
+in this file is what to do when one of them fires.
+
 ## The one thing to know first
 
 **A run is its `run_id`.** It names the checkpoint directory under
@@ -96,7 +124,7 @@ Routine, do not escalate:
   upgrades are only worth a strictly wider shape.
 - **`tasks_skipped` / `ignored` lines at startup.** Tasks the build cannot
   predict. Zero is expected now; a non-zero count means the published task
-  lists and the build disagree (see below).
+  lists and the build disagree (see "Inputs the run needs").
 
 Escalate to a human:
 
@@ -108,10 +136,6 @@ Escalate to a human:
 
 ## Gotchas that have actually bitten
 
-- **Swapping `pre_dir` under a running job does not kill it.** The mmapped file
-  handles follow the old inodes, so it keeps evaluating against the data it
-  started with, silently, until it restarts. After replacing a preprocessed
-  directory, requeue or resubmit the run deliberately.
 - **`/lfs/local/0` is a per-node symlink** to `/lfs/<host>/0`. Anything that
   resolves a path on one node and uses it on another breaks; multi-node jobs
   pass `--chdir=$REPO_DIR` (the unresolved path) for exactly this reason.
