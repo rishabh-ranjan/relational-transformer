@@ -30,6 +30,9 @@ It writes your personal workspace -- the view the project's URL opens on, so
 the layout is there without picking anything from the view menu -- and writes
 it wholesale: edit this script, not the UI, or the next run drops your changes.
 
+Runs are grouped by `run_name`, so a task interrupted and requeued reads as one
+curve rather than one curve per attempt; see the runset settings in `build`.
+
 New runs show up in the view on their own: every run in the project is in its
 runset (no filters), no run limit is written (a panel draws the whole sweep,
 and without the "Limited to N runs" caption any `max_runs` value earns), and
@@ -373,9 +376,17 @@ def build(entity: str, project: str) -> ws.Workspace:
         # panel by rerunning the script, which folds it into the section it
         # belongs to rather than into an auto-generated one.
         auto_generate_panels=False,
-        # Crashed runs out of the runset: a run that died mid-sweep leaves a
-        # truncated curve behind that reads as a real arm.
-        runset_settings=ws.RunsetSettings(filters=[ws.Metric("State") != "crashed"]),
+        # One line per task, not per slurm attempt. A requeue -- preemption,
+        # wall limit, node failure -- resumes from the checkpoint under a fresh
+        # wandb run named `{task}-{jobid}.{n}`, so a task's history is spread
+        # over as many runs as it was interrupted, each starting at the epoch it
+        # resumed from. `run_name` is `submit`'s `{db}/{task}` and is the same
+        # across all of them, so grouping on it draws the segments as one curve.
+        #
+        # No state filter: an interrupted segment is left `crashed`, which is
+        # indistinguishable from a real crash, and dropping those is what leaves
+        # a task's curve starting mid-training.
+        runset_settings=ws.RunsetSettings(groupby=[ws.Config("run_name")]),
     )
     workspace._internal_name, workspace._internal_id = name, id
     return workspace
