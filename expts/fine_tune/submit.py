@@ -223,7 +223,11 @@ def main() -> None:
                 # data: one task, from the benchmark data rather than the Join
                 db_task_list=[(db, task)],
                 pre_dir="/dfs/user/ranjanr/share/stanford-star/relbench-preprocessed",
-                tokens_per_gpu=2**17,
+                # The full-attention block puts a fourth (B, S, S) attention's
+                # activations on the card: 2**17 tokens fits a b200's 180G and
+                # OOMs an a100's 80G, so the a100 slot halves its microbatch and
+                # grad accumulation makes up the same total_bs.
+                tokens_per_gpu=2**17 if resources.gpus.startswith("b200") else 2**16,
                 # Loader workers are processes, and the job only owns
                 # `cpus_per_task` cores: two are held back for the training process
                 # itself and the one eval worker below, so a b200 slot (36) keeps
