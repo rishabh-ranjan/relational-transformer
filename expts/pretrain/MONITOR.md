@@ -158,6 +158,11 @@ Escalate to a human:
   `sinfo` and a short job before re-including or continuing to avoid a node.
 - **A concurrent `git add -A` in this clone** can sweep your edits into someone
   else's commit. Check `git log -1 --stat` after committing.
+- **`submit.py` refuses a dirty or unpushed tree**, and this clone is shared, so
+  a pass can fail on a working tree that is clean again a minute later.
+  `autoscale.py` cancels before it submits, so a failed submit leaves the run
+  with *no job*; it now retries once and then exits non-zero with the command to
+  rerun. A non-zero autoscale pass means the run is down -- act on it.
 
 ## Inputs the run needs
 

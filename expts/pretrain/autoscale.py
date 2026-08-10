@@ -29,6 +29,7 @@ import argparse
 import re
 import subprocess
 import sys
+import time
 from pathlib import Path
 
 HERE = Path(__file__).parent
@@ -125,8 +126,32 @@ def submit(run_id: str, nodes: int, qos: str, hosts: list[str], dry: bool) -> No
         ",".join(hosts),
     ]
     print("  $ " + " ".join(cmd))
-    if not dry:
-        print(subprocess.run(cmd, text=True, capture_output=True).stdout.strip())
+    if dry:
+        return
+    # A failing submit says nothing on stdout -- the reason is on stderr and the
+    # exit code -- so printing only stdout turns it into a blank line and a pass
+    # that looks like it worked. That is the worst failure this script has: every
+    # path that reaches here after a `scancel` has already given the nodes up, so
+    # a swallowed error leaves the run with no job at all until someone notices.
+    #
+    # `submit.py` refuses a dirty or unpushed tree, and this clone is shared with
+    # other sessions, so one pass can fail on a working tree that is clean again
+    # a minute later. Retry once before giving up.
+    for attempt in (1, 2):
+        out = subprocess.run(cmd, text=True, capture_output=True)
+        if out.returncode == 0 and out.stdout.strip():
+            print(out.stdout.strip())
+            return
+        print(f"  submit failed (attempt {attempt}, exit {out.returncode})")
+        for stream in (out.stdout, out.stderr):
+            if stream.strip():
+                print("    " + stream.strip().replace("\n", "\n    "))
+        if attempt == 1:
+            time.sleep(30)
+    raise SystemExit(
+        f"  submit failed twice: run {run_id} now has NO job. Fix the cause above "
+        f"and resubmit with\n  $ " + " ".join(cmd)
+    )
 
 
 def main(argv: list[str] | None = None) -> None:
