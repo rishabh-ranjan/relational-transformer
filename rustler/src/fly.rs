@@ -1770,11 +1770,7 @@ impl Sampler {
             let mut chosen: Vec<i32> = Vec::with_capacity(bfs_width);
             let mut drawn: HashSet<usize> = HashSet::with_capacity(budget);
             let mut draws = 0;
-            // A node with no p2f edges draws nothing. The scan this replaced
-            // iterated the list and so handled that by construction; drawing a
-            // position does not -- `random_range(0..0)` panics ("cannot sample
-            // empty range"), which fails the whole item and, in eval, every
-            // item of every task.
+            // No p2f edges: nothing to draw from, and `random_range` panics.
             while !p2f_edges.is_empty() && chosen.len() < bfs_width && draws < budget {
                 if draws & (DEADLINE_CHECK_EVERY - 1) == 0 {
                     check_deadline(deadline);
