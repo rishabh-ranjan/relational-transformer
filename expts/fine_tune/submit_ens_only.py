@@ -18,20 +18,28 @@ from submit_hpo_only import b200, ckpt_for
 
 
 def plan(n: int) -> list[Resources]:
-    """The best n slots this cluster will give one-GPU jobs, best first.
+    """One slot per task, in the order `main` hands out tasks: largest train
+    set first.
 
-    `il-interactive` caps at 2 gpus of any type, `il` at 10 together with only
-    2 b200, `il-lo` is preemptible and uncapped. Blackwell throughout while
-    blackwell1 has the cards: a test pass per context seed is the whole wall
-    clock, and there are `test_ensemble_size` of them.
+    An eval run does not checkpoint. A preemption or a wall limit restarts it
+    from ensemble size 1, so what a slot is worth here is how sure it is to
+    hold the whole run -- the opposite of `submit.plan`, where a short or
+    preemptible slot costs minutes. So the safest slots go to the longest runs
+    and the 12-hour ones to the shortest, rather than the best slots first.
 
-    Recount and rewrite this before every submission.
+    `il` is uncapped at 10 gpus but only 2 b200 and is not preemptible: those
+    two go to the two largest. `il-lo` is preemptible and uncapped, 21 days.
+    `il-interactive` is 2 gpus of any type but only 12 hours. Blackwell
+    throughout while blackwell1 has the cards -- a test pass per context seed
+    is the whole wall clock, and there are `test_ensemble_size` of them.
 
-    An eval run does not checkpoint: a preemption restarts it from the top, so
-    `il-lo` costs wall clock in whole runs rather than in minutes.
+    Recount and rewrite this before every submission: 3 of blackwell1's 8 b200
+    are idle, so the four non-preemptible jobs here queue one deep.
     """
-    out = [b200("il-interactive", "12:00:00")] * min(n, 2)
-    out += [b200("il-lo", "21-00:00:00")] * (n - len(out))
+    assert n <= 5, "il-interactive takes 2 gpus, and the tiers above it 3"
+    out = [b200("il", "7-00:00:00")] * min(n, 2)
+    out += [b200("il-lo", "21-00:00:00")] * min(n - len(out), 1)
+    out += [b200("il-interactive", "12:00:00")] * (n - len(out))
     return out
 
 
