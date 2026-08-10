@@ -84,6 +84,15 @@ The policy it implements:
   the pool when it is cancelled, so 2 -> 4 needs two *more* free nodes.
 - **A pending job is not progress.** If the run is queued and anything whole is
   free, replace it with a job that starts.
+- **Among equally free nodes, take the warm one.** Nodes this run has been on
+  in the last 12 hours (`sacct --name pretrain`) still hold the mixture in
+  their page cache, which is nearly all of time-to-first-step. `autoscale.py`
+  orders the free nodes warmest-first and names them, so a requeue or an
+  upgrade lands back on them when they are free. It only ever *orders* nodes it
+  has already established are idle -- it never waits for a warm one, so this
+  cannot conflict with "never queue for a bigger shape". Warmth is a guess: a
+  node's cache is evicted by whatever ran there next, so a warm pick can still
+  pay a cold startup.
 - **One node goes to `il` when it fits.** `il` is not preemptible but caps a100
   at 10 per user, so it holds one node's eight and nothing wider. If this
   user's other `il` jobs already hold more than 2, it falls back to `il-lo`.

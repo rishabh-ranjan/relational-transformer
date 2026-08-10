@@ -18,6 +18,10 @@ that fits under `il`, whose 10-a100-per-user cap stops at one node's eight but
 which is not preemptible -- so a 1-node run goes there when the cap allows, and
 only falls back to il-lo when it does not.
 
+Among nodes that are equally free, it asks for the ones this run has been on in
+the last few hours: they still hold the mixture in their page cache, which is
+nearly all of time-to-first-step. That is an ordering, never a wait.
+
 What it will not do is trade a running job for a marginal gain: an upgrade
 cancels a job that is making progress and pays for page-cache population again
 -- ~25-45 minutes on a node the run has not used recently, a few minutes on one
@@ -41,6 +45,10 @@ JOB_NAME = "pretrain"
 IL_A100_CAP = 10
 NODE_GPUS = 8
 SHAPES = (4, 2, 1)
+# How far back a node counts as "warm" -- still holding the mixture in its page
+# cache. Short on purpose: the guess is free when right and costs nothing when
+# wrong, but a stale one would keep steering the run at a cold node.
+WARM_HOURS = 12
 
 
 def all_amperes() -> list[str]:
@@ -80,6 +88,48 @@ def il_a100_held(exclude_job: str | None) -> int:
         if m:
             held += int(m.group(1))
     return held
+
+
+def warm_nodes(within_hours: int = WARM_HOURS) -> list[str]:
+    """Ampere nodes this run has been on recently, most recent first.
+
+    The mixture stays in a node's page cache after the job ends, and populating
+    it is nearly all of time-to-first-step: coming back to a node the run left
+    an hour ago costs minutes where a cold node costs tens of them. So among
+    nodes that are *equally free right now*, ask for the warm ones by name.
+
+    This never makes the run wait: the caller only ever orders nodes it has
+    already established are idle, so naming them still starts immediately --
+    the never-queue-for-a-shape rule is untouched.
+
+    Warmth decays invisibly (another job's data evicts ours), so this is a
+    preference, not a guarantee, and the window is deliberately short.
+    """
+    fmt = "JobID,NodeList,End"
+    out = sh(
+        "sacct",
+        "-u",
+        sh("whoami").strip(),
+        "-n",
+        "-X",
+        "--name",
+        JOB_NAME,
+        "--starttime",
+        f"now-{within_hours}hours",
+        "-o",
+        fmt,
+        "-P",
+    )
+    seen: dict[str, str] = {}
+    for line in out.splitlines():
+        _job, nodelist, end = (line.split("|") + ["", "", ""])[:3]
+        if not nodelist or nodelist.startswith("None"):
+            continue
+        for host in sh("scontrol", "show", "hostnames", nodelist).split():
+            if host.startswith("ampere"):
+                # "Unknown" is a job still running: warmest there is.
+                seen[host] = "9999" if end.startswith("Unknown") else end
+    return [h for h, _ in sorted(seen.items(), key=lambda kv: kv[1], reverse=True)]
 
 
 def current_job() -> dict | None:
@@ -165,14 +215,22 @@ def main(argv: list[str] | None = None) -> None:
     # This job's own nodes come back to the pool if it is cancelled, so an
     # upgrade from 2 to 4 needs two *more* free nodes, not four.
     running = job and job["state"] == "RUNNING"
-    available = sorted(
-        set(idle) | set(job["hosts"] if running else []),
-        key=lambda n: int(n.removeprefix("ampere")),
+    free = set(idle) | set(job["hosts"] if running else [])
+    # Warm first (most recently used first), then the rest by node number. Only
+    # the ordering changes -- every node here is already free, so preferring a
+    # warm one buys a first step in minutes instead of tens of minutes without
+    # ever making the job wait for a particular host.
+    warm = [n for n in warm_nodes() if n in free]
+    available = warm + sorted(
+        free - set(warm), key=lambda n: int(n.removeprefix("ampere"))
     )
     held = il_a100_held(exclude_job=job["id"] if job else None)
     nodes, qos, hosts = plan(available, held)
     state = f"{job['nodes']}-node {job['qos']} ({job['state']})" if job else "no job"
-    print(f"job: {state}  idle: {idle or '-'}  best: {nodes or '-'}-node {qos}")
+    print(
+        f"job: {state}  idle: {idle or '-'}  warm+free: {warm or '-'}  "
+        f"best: {nodes or '-'}-node {qos}"
+    )
 
     if job and job["state"] not in ("RUNNING", "PENDING"):
         print("  job is neither running nor pending; leaving it alone")
