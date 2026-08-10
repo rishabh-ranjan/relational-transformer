@@ -30,6 +30,11 @@ Outside `expts/`, write for eventual release.
 
 - **Explicit over defaulted.** Public entry points take every argument at the
   call site; do not add a default that hides a choice from the caller.
+- **Fail loudly, do not handle corner cases.** Support the path that is meant to
+  work; for everything else assert. No `try`/`except` that swallows, no fallback
+  branch, no defensive default that lets a wrong config run. Every unsupported
+  case must crash loudly at the point it is first knowable — a silent bug is far
+  worse than a crash.
 - **Match the surrounding module** in naming, comment density and idiom rather
   than importing a new style.
 - **Keep examples runnable and minimal.** An example shows one path end to end,
