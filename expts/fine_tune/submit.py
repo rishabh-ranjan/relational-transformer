@@ -16,16 +16,16 @@ HERE = Path(__file__).parent
 # change a sweep.
 TASKS = (
     ("rel-avito", "ad-ctr"),
-    ("rel-avito", "user-clicks"),
-    ("rel-avito", "user-visits"),
-    ("rel-f1", "driver-dnf"),
-    ("rel-f1", "driver-position"),
-    ("rel-f1", "driver-top3"),
+    # ("rel-avito", "user-clicks"),
+    # ("rel-avito", "user-visits"),
+    # ("rel-f1", "driver-dnf"),
+    # ("rel-f1", "driver-position"),
+    # ("rel-f1", "driver-top3"),
     ("rel-event", "user-attendance"),
-    ("rel-event", "user-ignore"),
+    # ("rel-event", "user-ignore"),
     ("rel-event", "user-repeat"),
-    ("rel-trial", "site-success"),
-    ("rel-trial", "study-adverse"),
+    # ("rel-trial", "site-success"),
+    # ("rel-trial", "study-adverse"),
     ("rel-trial", "study-outcome"),
 )
 
