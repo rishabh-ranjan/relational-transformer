@@ -1,6 +1,10 @@
 # Working on this repo
 
-Environment and commands: see [Development](README.md#development).
+The whole repository is private on GitHub. "Public" here never means git
+visibility: it means the code is meant to be *exported* to the broader public
+one day — released with the package, read by someone who arrived from the paper.
+`src/`, `examples/`, `docs/`, `byod/`, `README.md` are public in that sense.
+`expts/` is private internal research and stays that way.
 
 ## Comments and docs are operational
 
@@ -22,8 +26,7 @@ Say it once:
 
 ## Code style
 
-This is released, public-facing library code (`src/`, `examples/`, `docs/`,
-`byod/`) — write it for a reader who arrives from the paper.
+Outside `expts/`, write for eventual release.
 
 - **Explicit over defaulted.** Public entry points take every argument at the
   call site; do not add a default that hides a choice from the caller.

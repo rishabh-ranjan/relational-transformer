@@ -1,6 +1,8 @@
 # Working under expts/
 
-Private internal research code. The repo-wide rules in
+Private internal research code: never exported to the broader public, unlike the
+rest of the repo (the GitHub repo itself is private either way). The repo-wide
+rules in
 [`../CLAUDE.md`](../CLAUDE.md) still hold; these override them here.
 [`README.md`](README.md) has the workflow (submitting, watching jobs, cleanup).
 
