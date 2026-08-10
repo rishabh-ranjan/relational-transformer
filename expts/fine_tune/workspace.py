@@ -20,15 +20,15 @@ the system stream), so this works against any project, and a metric added to
 `rt.train` shows up as soon as one run has logged it. Targets the sweep will
 log but has not yet are folded in from `submit.targets_for`.
 
-It rewrites the saved view named below wholesale -- edit this script, not the
-UI, or the next run of it drops your changes. The same layout is written to
-your personal workspace too, which is what the project's URL opens on, so the
-project lands on this view without having to pick it from the view menu
-(`--no-default` to leave the personal workspace alone).
+It writes your personal workspace -- the view the project's URL opens on, so
+the layout is there without picking anything from the view menu -- and writes
+it wholesale: edit this script, not the UI, or the next run drops your changes.
 
 New runs show up in the view on their own: every run in the project is in its
-runset (no filters), and `max_runs` is lifted off the SDK's default of 10 so a
-whole sweep draws rather than the first ten runs. Panels are not automatic --
+runset (no filters), and both ten-run defaults are lifted -- `max_runs`, so a
+panel draws the whole sweep rather than the ten runs that sort first, and the
+run feed's page size, so the run list is not stuck on 1-10. Panels are not
+automatic --
 `auto_generate_panels` is off, so a key this script has not seen gets its panel
 by rerunning the script.
 """
@@ -40,16 +40,12 @@ import math
 import wandb
 import wandb_workspaces.reports.v2.interface as wr
 import wandb_workspaces.workspaces as ws
-import wandb_workspaces.workspaces.internal as internal
 from wandb_workspaces.workspaces.internal import execute_graphql
 
 from submit import TASKS, targets_for
 
 ENTITY = "rtv2"
 PROJECT = "2026-08-07-fine_tune"
-# The saved view this script owns. Saving reuses the view already carrying
-# this title (see `existing_view`), so a rerun replaces it in place.
-VIEW = "targets"
 
 # The metric families that get a hand-arranged `dashboard:` section, in the
 # order they should appear.
@@ -63,10 +59,15 @@ SYSTEM = "System"
 # wandb's own bookkeeping series. Panels for these say nothing about a run.
 INTERNAL = {"_runtime", "_step", "_timestamp", "_wandb", "step"}
 
-# How many runs a panel draws. `WorkspaceSettings` defaults this to 10, which
-# silently truncates a sweep to whichever ten runs sort first -- the saved view
-# then looks frozen as later runs arrive. High enough here to cover the sweep.
+# How many runs a panel draws. Defaults to 10, which truncates a sweep to
+# whichever ten runs sort first -- the view then looks frozen as later runs
+# arrive. High enough here that every run of a sweep is drawn.
 MAX_RUNS = 1000
+
+# How many runs the run list shows before paging. Also 10 by default, which is
+# what opens the list on "1-10"; 100 is what the app allows (it clamps anything
+# larger down to this).
+PAGE_SIZE = 100
 
 
 def swa_key(key: str) -> str:
@@ -142,34 +143,15 @@ query Views($entityName: String, $name: String) {
 """
 
 
-def existing_view(entity: str, project: str, display_name: str) -> tuple[str, str]:
-    """The (internal name, id) of the saved view titled `display_name`.
-
-    A view's identity to wandb is its slug (`nw-4gxr4eybu76-v`) and id, not
-    the title shown in the UI; `Workspace.save()` mints a fresh slug whenever
-    it has none, so saving a freshly built `Workspace` piles up a new copy
-    each run rather than replacing the last. Handing it back the slug of the
-    view already carrying our title turns the save into an overwrite.
-    """
-    api = wandb.Api()
-    resp = execute_graphql(api, VIEWS_QUERY, {"entityName": entity, "name": project})
-    nodes = [e["node"] for e in resp["project"]["allViews"]["edges"]]
-    mine = sorted(
-        (n for n in nodes if n["displayName"] == display_name),
-        key=lambda n: n["updatedAt"],
-    )
-    return (mine[-1]["name"], mine[-1]["id"]) if mine else ("", "")
-
-
 def personal_view(entity: str, project: str) -> tuple[str, str, str]:
     """The (internal name, id, title) of the viewer's own workspace view.
 
-    Opening a project lands on the personal workspace, not on any saved view,
-    so that is the one to overwrite to make this layout the default -- there is
-    no "set this saved view as default" anywhere in the API. Its slug is
-    derived from the username rather than random, which is what lets us address
-    it before it exists (a project never visited in the UI has no such view
-    yet, and upserting the slug creates it).
+    Opening a project lands on the personal workspace, so that is the view this
+    script writes -- a saved view of its own would have to be picked from the
+    view menu every time, and there is no "make this one the default" anywhere
+    in the API. Its slug is derived from the username rather than random, which
+    is what lets us address it before it exists (a project never visited in the
+    UI has no such view yet, and upserting the slug creates it).
     """
     api = wandb.Api()
     username = api.viewer.username
@@ -182,7 +164,7 @@ def personal_view(entity: str, project: str) -> tuple[str, str, str]:
     return slug, "", f"{username.capitalize()}'s workspace"
 
 
-def build(entity: str, project: str, view: str) -> ws.Workspace:
+def build(entity: str, project: str) -> ws.Workspace:
     keys = project_keys(entity, project)
     # A key that is some other key's twin or target gets no panel of its own:
     # it already rides along in that key's panel.
@@ -230,10 +212,11 @@ def build(entity: str, project: str, view: str) -> ws.Workspace:
     if any(k.startswith("system.") for k in keys):
         sections.append(ws.Section(name=SYSTEM, panels=[], is_open=False))
 
+    name, id, display_name = personal_view(entity, project)
     workspace = ws.Workspace(
         entity=entity,
         project=project,
-        name=view,
+        name=display_name,
         sections=sections,
         settings=ws.WorkspaceSettings(x_axis="step", max_runs=MAX_RUNS),
         # The sections here are the whole view: the app is not to append panels
@@ -242,9 +225,7 @@ def build(entity: str, project: str, view: str) -> ws.Workspace:
         # belongs to rather than into an auto-generated one.
         auto_generate_panels=False,
     )
-    workspace._internal_name, workspace._internal_id = existing_view(
-        entity, project, view
-    )
+    workspace._internal_name, workspace._internal_id = name, id
     return workspace
 
 
@@ -260,12 +241,7 @@ mutation Upsert($id: ID, $entityName: String, $projectName: String, $name: Strin
 """
 
 
-def save(
-    workspace: ws.Workspace,
-    name: str = "",
-    id: str = "",
-    display_name: str = "",
-) -> str:
+def save(workspace: ws.Workspace) -> str:
     """Save the workspace, with the System section marked auto.
 
     `wandb_workspaces` has no field for `isPanelsAuto`, the flag that tells the
@@ -274,14 +250,12 @@ def save(
     So the spec is serialized, the flag set on that one section, and the
     result upserted directly rather than through `Workspace.save()`.
 
-    `name`/`id`/`display_name` override which view the spec lands in, so the
-    same built workspace can be written to both the saved view and the personal
-    workspace.
+    The run feed's page size gets the same treatment, for the same reason: no
+    field for it either, and its default of 10 is what makes the run list open
+    on "1-10" with the rest of the sweep behind a pager.
     """
     view = workspace._to_model()
-    view.name = name or view.name or internal._generate_view_name()
-    view.id = id if name else view.id
-    view.display_name = display_name or view.display_name
+    view.spec.section.run_sets[0].run_feed.page_size = PAGE_SIZE
     spec = json.loads(view.spec.model_dump_json(by_alias=True, exclude_none=True))
     for s in spec["section"]["panelBankConfig"]["sections"]:
         if s["name"] == SYSTEM:
@@ -303,27 +277,18 @@ def save(
     )
     workspace._internal_name = resp["upsertView"]["view"]["name"]
     workspace._internal_id = resp["upsertView"]["view"]["id"]
-    return workspace.url
+    # Not `workspace.url`: that builds a `?nw=` link to a saved view, and the
+    # personal workspace is what the bare project URL opens.
+    return f"https://wandb.ai/{workspace.entity}/{workspace.project}"
 
 
 def main() -> None:
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument("--entity", default=ENTITY)
     p.add_argument("--project", default=PROJECT)
-    p.add_argument("--view", default=VIEW)
-    p.add_argument(
-        "--no-default",
-        action="store_true",
-        help="leave the personal workspace alone (write only the saved view)",
-    )
     a = p.parse_args()
 
-    workspace = build(a.entity, a.project, a.view)
-    print(save(workspace))
-    if not a.no_default:
-        name, id, display_name = personal_view(a.entity, a.project)
-        save(workspace, name=name, id=id, display_name=display_name)
-        print(f"https://wandb.ai/{a.entity}/{a.project}")
+    print(save(build(a.entity, a.project)))
 
 
 if __name__ == "__main__":
