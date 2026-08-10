@@ -23,11 +23,11 @@ log but has not yet are folded in from `submit.targets_for`.
 It rewrites the saved view named below wholesale -- edit this script, not the
 UI, or the next run of it drops your changes.
 
-The view stays live once written: every run in the project is in its runset (no
-filters), `max_runs` is lifted off the SDK's default of 10 so a whole sweep
-draws rather than the first ten runs, and `auto_generate_panels` is left on so
-the app appends panels for keys logged after this script last ran. Rerunning it
-is only needed to re-fold a *new* key into a curated `dashboard:` section.
+New runs show up in the view on their own: every run in the project is in its
+runset (no filters), and `max_runs` is lifted off the SDK's default of 10 so a
+whole sweep draws rather than the first ten runs. Panels are not automatic --
+`auto_generate_panels` is off, so a key this script has not seen gets its panel
+by rerunning the script.
 """
 
 import argparse
@@ -212,12 +212,11 @@ def build(entity: str, project: str, view: str) -> ws.Workspace:
         name=view,
         sections=sections,
         settings=ws.WorkspaceSettings(x_axis="step", max_runs=MAX_RUNS),
-        # The curated sections above are a snapshot of the key space at the time
-        # this script ran; leaving auto-generation on is what keeps the view
-        # live, letting the app append panels for keys logged after that. The
-        # SDK defaults it off, which is what makes an SDK-built view stale the
-        # moment a run logs something new.
-        auto_generate_panels=True,
+        # The sections here are the whole view: the app is not to append panels
+        # of its own for keys logged after this script ran. A new key gets its
+        # panel by rerunning the script, which folds it into the section it
+        # belongs to rather than into an auto-generated one.
+        auto_generate_panels=False,
     )
     workspace._internal_name, workspace._internal_id = existing_view(
         entity, project, view
