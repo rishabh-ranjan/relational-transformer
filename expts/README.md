@@ -25,9 +25,11 @@ the full wall clock while filling the shared filesystem. Reporting a submission
 as finished before the checks below have passed is reporting work that was not
 done.
 
-Check twice, at minimum: once right after submitting, and again once the runs
-are past startup — a few minutes, longer with `compile=True`, and long enough
-that step lines must have appeared by then. Every time:
+Check right after submitting, again once the runs are past startup — a few
+minutes, longer with `compile=True`, and long enough that step lines must have
+appeared by then — and then **at regular intervals until every job has
+finished**. A sweep that runs for days is watched for days; a run breaks, stalls
+or gets preempted long after it started training fine. Every time:
 
 - read the log of **every** job, not a sample of them, and confirm each one
   reaches steps and its loss moves. A log that stops after the data stats is
@@ -36,8 +38,8 @@ that step lines must have appeared by then. Every time:
 - cancel what is broken, delete what it wrote, fix the cause, resubmit.
 
 Jobs that are still queued are not off the hook: they get the same checks once
-they start. Keep checking until every job you submitted has been seen training
-or has been cancelled.
+they start. The watch ends only when every job you submitted has completed or
+been cancelled — not when they have all been seen training once.
 
 ## Submitting
 
