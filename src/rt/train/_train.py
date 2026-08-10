@@ -905,7 +905,8 @@ def main(
                 if is_cuda:
                     torch.cuda.synchronize()
                 log(
-                    mem_guard_passed_at_ctx=step_ctx,
+                    mem_guard_passed=step,
+                    ctx=step_ctx,
                     peak=fmt_bytes(torch.cuda.max_memory_allocated())
                     if is_cuda
                     else "-",
