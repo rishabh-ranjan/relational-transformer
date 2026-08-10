@@ -275,17 +275,7 @@ def submit_one(
             eval_db_task_list=[(db, task)],
             eval_pre_dir="/dfs/user/ranjanr/share/stanford-star/relbench-preprocessed",
             eval_tokens_per_gpu=2**18,
-            # One worker is what makes the *first* eval batch a wall: eval_bs is
-            # eval_tokens_per_gpu // ctx = 256 items, and each item's context
-            # costs eval_num_walks * eval_walk_length = 200k random neighbour
-            # lookups into mmap'd data, so nothing at all is logged until one
-            # process has done ~51M of them. Trimming the split (below) makes
-            # the eval shorter but leaves that first batch exactly as slow;
-            # splitting it across workers is what shortens it. 8 fits beside
-            # the 16 train workers in a b200 slot's 36 cpus, and the sampled
-            # contexts do not depend on worker count (shuffle_seed and
-            # context_seed are per item), so the metrics are unchanged.
-            eval_num_workers=8,
+            eval_num_workers=1,
             eval_prefetch_factor=2,
             eval_num_walks=10_000,
             eval_walk_length=20,
