@@ -229,7 +229,9 @@ def main() -> None:
                 num_walks=0,
                 walk_length=20,
                 mask_prob_max=0.0,
-                items_per_task=2**16,
+                # the whole train stream, not a cap: 2_000 steps at total_bs
+                # 128 is what bounds how much of it a run sees
+                items_per_task=1_000_000_000,
                 lr=5e-4,
                 wd=0.1,
                 warmup_steps=100,
@@ -252,7 +254,10 @@ def main() -> None:
                 eval_prefetch_factor=2,
                 eval_num_walks=10_000,
                 eval_walk_length=20,
-                eval_items_per_task=1024,
+                # the in-loop eval reads a 2**16-item prefix of each split,
+                # so at eval_freq it is a real score rather than a trajectory
+                # sketch -- and the dominant cost of the run
+                eval_items_per_task=2**16,
                 eval_ctx_size_list=[1024],
                 eval_mmap_populate=True,
                 eval_shuffle_seed=0,

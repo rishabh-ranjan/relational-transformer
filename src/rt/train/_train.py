@@ -450,17 +450,19 @@ def main(
         vector_db_path=vector_db_path,
         train_only_fallback=False,
     )
+    # total_bs items enter the model per optimizer step, so the whole run
+    # consumes total_steps * total_bs items. Measured against the stream's size,
+    # so it says how many times the data is repeated -- printed here, and logged
+    # per step as the fractional `epoch` axis.
+    #
+    # That size has to be the sampler's own count, which is why this comes
+    # after the dataset is built: items_per_task is a *cap*, and a task can
+    # hold far fewer items than it (rel-f1's driver-top3 has 1_353 training
+    # items against a cap of 100_000).
+    total_items = total_steps * total_bs
+    stream_items = train_ds.num_items
+    epochs_per_step = total_bs / stream_items
     if is_main:
-        # total_bs items enter the model per optimizer step, so the whole run
-        # consumes total_steps * total_bs items. Printed against the stream's
-        # size, so it says how many times the data is repeated.
-        #
-        # That size has to be the sampler's own count, which is why this comes
-        # after the dataset is built: items_per_task is a *cap*, and a task can
-        # hold far fewer items than it (rel-f1's driver-top3 has 1_353 training
-        # items against a cap of 100_000).
-        total_items = total_steps * total_bs
-        stream_items = train_ds.num_items
         log(
             train_tasks_loaded=len(train_tasks),
             elapsed=fmt_duration(time.time() - train_init_tic),
@@ -747,6 +749,7 @@ def main(
                 wandb.log(
                     {
                         "step": step,
+                        "epoch": step * epochs_per_step,
                         **{
                             f"{p}{metric}/{split}/{task_key}": v
                             for p, by_split in metrics.items()
@@ -943,6 +946,7 @@ def main(
                 wandb.log(
                     {
                         "step": step,
+                        "epoch": step * epochs_per_step,
                         "train/loss": total_loss,
                         "train/lr": scheds[0].get_last_lr()[0],
                         "train/grad_norm": float(norm),

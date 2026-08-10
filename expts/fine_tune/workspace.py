@@ -19,6 +19,10 @@ That series is a metric key of its own (`target/{key}`), and wandb's default
 auto-panels would put it in a panel by itself; this script is what pairs it
 with the curve it bounds. The same goes for the `swa/` twins.
 
+Every panel is drawn against `epoch`, the fractional pass over the train stream
+`rt.train` logs each step: tasks differ by orders of magnitude in size, so a
+step means something different in each run and an epoch does not.
+
 The leading `dashboard:` sections are the hand-arranged ones -- one per metric
 and split, sized so the whole set is on one page -- and every remaining key
 gets a panel further down, grouped by namespace: nothing a run logs is dropped
@@ -82,8 +86,9 @@ COLS = 8
 # the saved spec carries the name and nothing else.
 SYSTEM = "System"
 
-# wandb's own bookkeeping series. Panels for these say nothing about a run.
-INTERNAL = {"_runtime", "_step", "_timestamp", "_wandb", "step"}
+# wandb's own bookkeeping series, plus the two axes every panel is drawn
+# against. Panels for these say nothing about a run.
+INTERNAL = {"_runtime", "_step", "_timestamp", "_wandb", "step", "epoch"}
 
 # Keys whose panel gets a log y-axis: timings whose interesting structure is
 # the occasional order-of-magnitude spike, which a linear axis flattens the
@@ -365,7 +370,7 @@ def build(entity: str, project: str) -> ws.Workspace:
 
     sections, shown = [], set()
 
-    def dashboard(name: str, picked: list[str], x: str = "step") -> None:
+    def dashboard(name: str, picked: list[str], x: str = "epoch") -> None:
         if picked:
             sections.append(section(f"dashboard: {name}", picked, keys, x))
             shown.update(picked)
@@ -393,7 +398,7 @@ def build(entity: str, project: str) -> ws.Workspace:
     # (loss, grad norm, lr). Hand-ordered because the namespace grouping below
     # sorts alphabetically, which interleaves the two halves.
     train = [
-        panel(k, keys, "step") if k else step_vs_runtime()
+        panel(k, keys, "epoch") if k else step_vs_runtime()
         for k in TRAIN_ORDER
         if k is None or k in leaders
     ]
@@ -417,7 +422,7 @@ def build(entity: str, project: str) -> ws.Workspace:
                 ns,
                 [k for k in rest if k.split("/")[0] == ns],
                 keys,
-                "step",
+                "epoch",
                 is_open=False,
             )
         )
@@ -438,7 +443,7 @@ def build(entity: str, project: str) -> ws.Workspace:
         # No `max_runs` here, and `strip_max_runs` takes out the default the
         # SDK writes in its place -- see there for why any value is the wrong
         # one.
-        settings=ws.WorkspaceSettings(x_axis="step"),
+        settings=ws.WorkspaceSettings(x_axis="epoch"),
         # The sections here are the whole view: the app is not to append panels
         # of its own for keys logged after this script ran. A new key gets its
         # panel by rerunning the script, which folds it into the section it
