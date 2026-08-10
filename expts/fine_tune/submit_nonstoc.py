@@ -17,7 +17,7 @@ TASKS = (
     # ("rel-f1", "driver-top3"),
     ("rel-event", "user-attendance"),
     # ("rel-event", "user-ignore"),
-    ("rel-event", "user-repeat"),
+    # ("rel-event", "user-repeat"),
     # ("rel-trial", "site-success"),
     # ("rel-trial", "study-adverse"),
     ("rel-trial", "study-outcome"),
@@ -159,17 +159,19 @@ def a100(qos: str, time: str) -> Resources:
 def plan(n: int) -> list[Resources]:
     """The best n slots this cluster will give one-GPU jobs, best first.
 
-    Amperes on the capped, un-preemptible tiers first, and what those tiers
-    have left is what the rest of this user's jobs are not already holding:
-    `il-interactive` caps at 2 gpus and `il` at 10 of any type, so the counts
-    here are the free remainder, not the ceiling. Whatever is over that falls
-    to `il-lo`, which is preemptible but uncapped.
+    Whatever blackwell1 has idle, on `il-lo`: an un-preemptible b200 is out of
+    reach (`il` allows 2 and its 10-gpu ceiling is spent on the pretrain job),
+    and a free card now beats a protected one later. The ampere shape below is
+    the one to come back to when blackwell1 is full: what the capped tiers have
+    left over, `il-interactive` (2 gpus) and `il` (10) minus what this user's
+    other jobs already hold.
 
     A run checkpoints and resumes, at a preemption and at its wall limit
     alike, so either costs a requeue rather than work.
     """
-    out = [a100("il-interactive", "12:00:00")] * min(n, 1)
-    out += [a100("il", "7-00:00:00")] * min(max(n - len(out), 0), 2)
+    out = [b200("il-lo", "21-00:00:00")] * min(n, 2)
+    # out = [a100("il-interactive", "12:00:00")] * min(n, 1)
+    # out += [a100("il", "7-00:00:00")] * min(max(n - len(out), 0), 2)
     out += [a100("il-lo", "21-00:00:00")] * (n - len(out))
     return out
 
