@@ -17,6 +17,16 @@ A submit script is edited, not configured — no arguments, no flags, no
 submission before submitting**: the job clones that commit. Rewrite the file
 freely, git holds the variants.
 
+Nothing in it is settled, and the resource plan least of all. **Work out which
+gpus and which qos this submission should ask for at the moment you submit** —
+from the priority order under [Submitting](#submitting), from what the cluster
+has free and the caps
+allow right now, and from whatever you have just been told — and write that
+answer into the file. What the plan said last time is a record of a different
+cluster and a different instruction, not a default to inherit: read it as one
+more variant git is holding for you. The same goes for the task list, the
+hyperparameters, and every other value in the call.
+
 ## Watch every job you submit
 
 **A submission is not done when `sbatch` returns — it is done when you have
