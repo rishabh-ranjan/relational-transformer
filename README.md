@@ -96,7 +96,9 @@ prediction task, and infer with a released checkpoint:
 ## Development
 
 We use [pixi](https://pixi.sh) to manage one self-contained
-environment (Python, PyTorch + CUDA, Rust, and all dependencies), built on first use.
+environment (Python, PyTorch + CUDA, Rust, and all dependencies), built on first
+use. There is nothing to build past `pixi install`: the native Rust extension is
+compiled as part of the project's own editable install.
 
 ```bash
 git clone https://github.com/stanford-star/relational-transformer.git

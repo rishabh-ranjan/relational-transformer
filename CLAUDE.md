@@ -1,15 +1,6 @@
 # Working on this repo
 
-## Environment
-
-[pixi](https://pixi.sh) manages one self-contained environment (Python, PyTorch +
-CUDA, Rust, all dependencies), built on first use. There is nothing to build past
-`pixi install`: the rustler extension is compiled as part of the editable install.
-
-```bash
-pixi run pytest                        # the test suite
-pixi run python examples/train.py      # or eval.py, preprocess.py, ...
-```
+Environment and commands: see [Development](README.md#development).
 
 ## Comments and docs are operational
 
