@@ -9,15 +9,15 @@ from roach.slurm import Resources, submit
 HERE = Path(__file__).parent
 
 TASKS = (
-    # ("rel-avito", "ad-ctr"),
+    ("rel-avito", "ad-ctr"),
     # ("rel-avito", "user-clicks"),
     # ("rel-avito", "user-visits"),
     # ("rel-f1", "driver-dnf"),
     # ("rel-f1", "driver-position"),
     # ("rel-f1", "driver-top3"),
-    # ("rel-event", "user-attendance"),
+    ("rel-event", "user-attendance"),
     # ("rel-event", "user-ignore"),
-    # ("rel-event", "user-repeat"),
+    ("rel-event", "user-repeat"),
     # ("rel-trial", "site-success"),
     # ("rel-trial", "study-adverse"),
     ("rel-trial", "study-outcome"),
@@ -119,10 +119,9 @@ def targets_for(db: str, task: str) -> dict[str, float]:
 def ckpt_for(db: str, task: str) -> str:
     """The RT-P weights this task warm-starts from.
 
-    The published checkpoint carries one head per task type, in its own
-    subdirectory of the repo, so which one a run loads follows from the task's
-    `task_type` in results.csv. Local, not `stanford-star/rt-p`: a compute node
-    has no Hub access, and every node can read this path.
+    One head per task type, each in its own subdirectory, so which one a run
+    loads follows from the task's `task_type` in results.csv. A local mirror
+    rather than `stanford-star/rt-p`: a compute node has no Hub access.
     """
     import pandas as pd
 
@@ -175,18 +174,16 @@ def a100(qos: str, time: str) -> Resources:
 def plan(n: int) -> list[Resources]:
     """The best n slots this cluster will give one-GPU jobs, best first.
 
-    Everything sits on `il-lo`: preemptible, effectively uncapped, 21d wall.
-    The un-preemptible tiers have nothing left for this user -- `il`'s ceiling
-    is 10 gpus of *any* type, not 10 per type, so its b200 allowance of 2 is
-    unreachable while the stoc arm holds 10 amperes there, and
-    `il-interactive`'s 2 are held too.
+    `il-lo` is preemptible, effectively uncapped and 21d; `il` and
+    `il-interactive` are not preemptible but capped per user -- `il` at 10 gpus
+    of *any* type together, `il-interactive` at 2 -- so a sweep wider than the
+    cap queues behind its own head. A run checkpoints and resumes, at a
+    preemption and at its wall limit alike, so a low-priority slot costs wall
+    clock rather than work; switch the tier here when the caps are free.
 
-    Blackwell before Ampere within that, and the b200 share stops at whatever
-    blackwell1 has idle: its eight cards are wanted cluster-wide, so a b200
-    `il-lo` job past that queues while amperes turn over. A whole card that
-    starts now beats a faster one that does not. A run checkpoints and resumes,
-    at a preemption and at its wall limit alike, so a low-priority slot costs
-    wall clock rather than work.
+    Blackwell before Ampere, and the b200 share stops at 2: blackwell1 is one
+    node whose eight cards the whole cluster wants, and a b200 job past what it
+    has idle queues while amperes turn over.
     """
     out = [b200("il-lo", "21-00:00:00")] * min(n, 2)
     out += [a100("il-lo", "21-00:00:00")] * (n - len(out))
@@ -258,12 +255,12 @@ def main() -> None:
                 targets=targets_for(db, task),
                 project="2026-08-07-fine_tune",
                 entity="rtv2",
-                run_name=f"{name} rtp",
+                run_name=name,
                 wandb_disabled=False,
                 out_root="/dfs/user/ranjanr/ckpts",
             ),
             resources=resources,
-            name=f"{db}-{task}-rtp",
+            name=f"{db}-{task}",
             repo_root="/lfs/hyperturing1/0/ranjanr/clones/rishabh-ranjan/relational-transformer",
             log_root="/dfs/user/ranjanr/slurm-logs/rishabh-ranjan/relational-transformer/expts/fine-tune",
             clone_root="/lfs/local/0/roach_clones",
