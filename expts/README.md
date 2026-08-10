@@ -47,6 +47,27 @@ or gets preempted long after it started training fine. Every time:
 - `ls -laS` the log directory and `df -h` the output filesystem;
 - cancel what is broken, delete what it wrote, fix the cause, resubmit.
 
+**A pending job is a job to diagnose, not a job to wait for.** `squeue -u
+$USER -o "%.8i %.30j %.14q %.9T %R"` prints a reason beside every one, and only
+some of them mean the queue is working:
+
+- `Priority`, `Resources` — waiting on a card that is genuinely busy. Leave it,
+  and keep watching: it still has to start.
+- `ReqNodeNotAvail` — pinned by `nodelist` to a node with nothing free. It will
+  sit there however long you leave it, because no other node can take it.
+  Resubmit on a pool that has cards.
+- `QOSMaxGRESPerUser`, `QOSMaxJobsPerUser`, `AssocMaxGRES` — over your own cap,
+  usually behind your own other sweep. Move it to `il-lo` or wait the sweep
+  out, deliberately.
+- `PartitionTimeLimit`, `QOSMaxWallDurationPerJob` — the job asks for longer
+  than the qos allows and will never run. Fix the plan.
+- `launch failed requeued held`, `JobHeldUser`, `JobHeldAdmin` — dead. Cancel,
+  fix, resubmit.
+
+Everything below `Priority` in that list is a submission that did not happen.
+Reporting a sweep as submitted while its jobs sit on one of those reasons is
+reporting work that was not done.
+
 Jobs that are still queued are not off the hook: they get the same checks once
 they start. The watch ends only when every job you submitted has completed or
 been cancelled — not when they have all been seen training once.
@@ -76,11 +97,58 @@ submit("expts.<name>.<module>:<function>", args={...}, resources=BLACKWELL,
 - **`/tmp` is for a job's own scratch on its node, named after the run** — never
   for code, never for anything to be read afterwards (it is node-local, and a
   `#SBATCH -o /tmp/...` log vanishes).
-- **Take the best slots available, absent an explicit instruction otherwise.**
-  Blackwell first, for as many cards as are free, then Ampere for the rest. QoS
-  in the same spirit: `il-interactive` first, then `il`, then `il-lo`. The
-  earlier tiers are capped per user and the later ones are not, so a sweep wider
-  than the caps spills down the list rather than queueing behind itself.
+- **Take the best slots available, absent an explicit instruction otherwise** —
+  where "best" is what gets the sweep finished soonest, not what has the
+  fastest card. See [Cards and caps](#cards-and-caps).
+
+## Cards and caps
+
+Read the cluster at the moment you submit; the numbers below are the shape, not
+today's state:
+
+```
+sinfo -p il -N -o "%N %G %C %t"                  # what exists, and what is down
+squeue -p il -h -t RUNNING -o "%N %b" | sort | uniq -c   # what is actually busy
+sacctmgr -np show qos format=Name,Priority,MaxTRESPU,MaxWall,Preempt
+squeue -u $USER -h -o "%b %T" | sort | uniq -c   # what you are already holding
+```
+
+The `il` partition is one blackwell node and nine amperes, plus older cards:
+
+| nodes | cards each |
+| --- | --- |
+| `ampere1`-`ampere9` | 8 x a100 |
+| `blackwell1` | 8 x b200 |
+| `hyperturing1`-`hyperturing2` | 10 x rtx8000 |
+| `turing1`-`turing3` | 10 x 2080ti |
+| `hyperion1`, `hyperion3` | 3-4 x titanxp |
+
+and three qos tiers, each cap **per user, across all of your jobs**:
+
+| qos | priority | wall | cap | preemption |
+| --- | --- | --- | --- | --- |
+| `il-interactive` | 1500 | 12h | 2 gpus of any type | preempts `il-lo` |
+| `il` | 1000 | 7d | 10 gpus, of which at most 2 b200 | preempts `il-lo` |
+| `il-lo` | 100 | 21d | 100 gpus | preemptible |
+
+Choosing:
+
+- **The fastest card is not the shortest queue.** `submit.b200` pins
+  `nodelist="blackwell1"`: one node, 8 cards, shared with everyone else's long
+  jobs. The a100s are eight nodes behind no nodelist, so a queued job takes the
+  first card that frees anywhere. A single long job wants the fast card; a wide
+  sweep of short jobs wants the big pool, and gets nothing from a card that is
+  twice as fast but never free.
+- **Your own jobs are what you queue behind.** A cap is per user, so a sweep
+  already holding `il`'s ten gpus makes every further `il` job wait on your
+  sweep rather than on the cluster. Check before choosing the tier.
+- **`il-lo` is the only uncapped tier**, and the right one for anything wider
+  than a cap. What preemption costs is whatever the job cannot resume from:
+  nothing for a training run that checkpoints, the whole run for an eval that
+  does not.
+- **A tier's wall clock has to hold the job**, and a job that cannot resume has
+  to fit inside it in one go: `il-interactive`'s 12 hours is a slot for a short
+  run, not a smaller share of a long one.
 
 ## What every experiment owes
 
