@@ -203,9 +203,9 @@ def main() -> None:
         print(f"  {name:28s} {resources.gpus} {resources.qos:15s} {resources.time}")
         submit(
             "rt.train:main",
+            # Do not put comments inside this dict: it is a config block,
+            # and reading it means scanning the values.
             args=dict(
-                # model: RT-J's dims, so a fine-tuned run and a pretrained
-                # checkpoint are the same architecture
                 embedder="all-MiniLM-L12-v2",
                 d_text=384,
                 num_blocks=12,
@@ -217,13 +217,8 @@ def main() -> None:
                 skip_full_attn=True,
                 loss_fn="huber",
                 load_ckpt_path=None,
-                # data: one task, from the benchmark data rather than the Join
                 db_task_list=[(db, task)],
                 pre_dir="/dfs/user/ranjanr/share/stanford-star/relbench-preprocessed",
-                # The full-attention block puts a fourth (B, S, S) attention's
-                # activations on the card: 2**17 tokens fits a b200's 180G and
-                # OOMs an a100's 80G, so the a100 slot halves its microbatch and
-                # grad accumulation makes up the same total_bs.
                 tokens_per_gpu=2**17 if resources.gpus.startswith("b200") else 2**16,
                 num_workers=resources.cpus_per_task,
                 prefetch_factor=2,
@@ -235,14 +230,11 @@ def main() -> None:
                 walk_length=20,
                 mask_prob_max=0.0,
                 items_per_task=2**16,
-                # optimization: pretraining's, unchanged
                 lr=5e-4,
                 wd=0.1,
                 warmup_steps=100,
                 grad_norm_max=1.0,
                 total_bs=128,
-                # pretraining's 100k steps is a mixture's worth of data, not one
-                # task's: the one number this experiment sets on its own
                 total_steps=2_000,
                 swa_momentum=0.999,
                 seed=0,
@@ -252,7 +244,6 @@ def main() -> None:
                 keep_all_ckpts=False,
                 vector_db_path=None,
                 resume_save_mins=20.0,
-                # in-loop validation: the task it is trained on, on the val split
                 eval_splits=["val", "test"],
                 eval_db_task_list=[(db, task)],
                 eval_pre_dir="/dfs/user/ranjanr/share/stanford-star/relbench-preprocessed",
@@ -261,13 +252,6 @@ def main() -> None:
                 eval_prefetch_factor=2,
                 eval_num_walks=10_000,
                 eval_walk_length=20,
-                # The in-loop eval is a *trajectory* val, not a final score: it runs
-                # at every eval_freq and only has to say which way the curve is
-                # going, so it reads a fixed 1024-item prefix of each split. The
-                # whole split is hours per eval: rel-avito/user-clicks is 21_183 val
-                # + 47_996 test items, each assembled from eval_num_walks=10_000
-                # random walks by a single loader worker. A final number comes from
-                # scoring the selected checkpoint on the full split, not from this.
                 eval_items_per_task=1024,
                 eval_ctx_size_list=[1024],
                 eval_mmap_populate=True,
@@ -275,7 +259,6 @@ def main() -> None:
                 eval_context_seed=0,
                 eval_vector_db_path=None,
                 eval_lcs_bw_pl_grid=[(1024, 1024, True)],
-                # logging
                 targets=targets_for(db, task),
                 project="2026-08-07-fine_tune",
                 entity="rtv2",
