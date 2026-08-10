@@ -266,31 +266,44 @@ def main(
 
     use_wandb = (not wandb_disabled) and is_main
     if use_wandb:
+        # One wandb run per *attempt*, grouped under the run_id -- not one
+        # resumed wandb run for the whole thing. A resumed run never rewrites
+        # its output.log (wandb#4727), so its Logs tab freezes at whatever the
+        # last cleanly-exited attempt left there, and every attempt of a
+        # preemptible run is killed rather than exiting cleanly: the tab was
+        # showing lines from days earlier. A fresh id streams its console live
+        # and the tab is correct. The group is what keeps this one experiment:
+        # attempts cover disjoint `step` ranges, so a group draws one curve.
+        # A requeued job keeps its job id, so the restart counter is part of
+        # what makes an attempt unique -- without it the second attempt of a
+        # requeued job would collide with the first and `resume="never"` would
+        # (correctly) refuse to start.
+        job = os.environ.get("SLURM_JOB_ID")
+        attempt = (
+            f"{job}.{os.environ.get('SLURM_RESTART_COUNT', '0')}"
+            if job
+            else f"{int(time.time())}"
+        )
         wandb.init(
             project=project,
             entity=entity,
-            name=run_name,
-            id=run_id,
-            resume="allow",
+            name=f"{run_name}-{attempt}" if run_name else attempt,
+            id=f"{run_id}-{attempt}",
+            group=run_id,
+            resume="never",
             config=params,
             settings=wandb.Settings(
-                # Without this the run has a single output.log, uploaded on
-                # finish and overwritten by the next attempt: a preempted or
-                # SIGKILLed attempt uploads nothing, so the Logs tab of a
-                # long preemptible run sits frozen at whatever the last
-                # cleanly-exited attempt left there. Multipart writes
-                # timestamped chunks and uploads each as it closes, so the tab
-                # follows a live run and keeps every attempt's output.
+                # Downloadable, live console while the attempt is running --
+                # it will not survive to upload an output.log on finish.
                 console_multipart=True,
                 console_chunk_max_seconds=60,
             ),
         )
-        # Log against our own step axis rather than wandb's internal counter.
-        # A resumed run rewinds to the last resume.pt, so it re-logs steps the
-        # previous attempt already sent; wandb's counter only moves forward and
-        # would drop every one of them ("Tried to log to step N that is less
-        # than the current step M ... this data will be ignored"), silently
-        # losing the window between the last checkpoint and the preemption.
+        # Log against our own step axis rather than wandb's internal counter,
+        # which starts at 0 for every attempt: it is the only axis on which the
+        # attempts of a group line up into one curve. It also keeps the window
+        # between the last checkpoint and a preemption -- steps an attempt
+        # re-runs after the rewind -- from being read as a step 0 restart.
         wandb.define_metric("step")
         wandb.define_metric("*", step_metric="step")
 
