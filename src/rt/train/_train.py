@@ -60,6 +60,9 @@ import wandb
 # Re-seed offset applied per resumed step so a resumed stream does not replay.
 SEED_STRIDE = 1_000_003
 
+# The val metric each task type is selected on, and which direction wins.
+BEST_METRICS = [("clf", "auroc", max), ("reg", "nmae", min)]
+
 
 def setup_dist(num_workers: int = 0):
     """Return (device, rank, local_rank, world_size, ddp). Honors torchrun env.
@@ -384,8 +387,10 @@ def main(
 
     scheds = [optim.lr_scheduler.LambdaLR(o, lr_lambda) for o in opts]
 
-    # best (kind, step, value) trackers, persisted across resumes
-    best = {"clf": None, "reg": None}
+    # best (step, value) trackers, one per (task type, kind), persisted across
+    # resumes: the live and the swa net are selected separately, and the
+    # overall best is whichever of the two wins at the end.
+    best = {tt: {"live": None, "swa": None} for tt, _, _ in BEST_METRICS}
     start_step = 0
     resume_evaled_at = None
 
@@ -416,7 +421,13 @@ def main(
             s.load_state_dict(sd)
         swa.load_state_dict(ck["swa"])
         start_step = ck["step"]
-        best = ck.get("best", best)
+        best = ck["best"]
+        assert all(
+            isinstance(v, dict) and set(v) == {"live", "swa"} for v in best.values()
+        ), (
+            f"{resume_path} carries a per-task-type best tracker; it predates "
+            "per-kind selection and cannot be resumed"
+        )
         resume_evaled_at = ck.get("evaled_at", start_step)
         if is_main:
             log(
@@ -688,8 +699,8 @@ def main(
 
         With ``keep_all_ckpts=False`` the only checkpoints that must survive
         are the ones ``best`` still points at -- a best from an earlier eval
-        is copied to best_clf/best_reg only at the very end, so its file has
-        to live until then. The latest step needs no file of its own:
+        is copied to its ``best_*`` name only at the very end, so its file has
+        to live until then, for the live and the swa winner alike. The latest step needs no file of its own:
         resume.pt is rewritten at every eval and once more at the end, and it
         carries the same weights.
         """
@@ -697,7 +708,8 @@ def main(
             return
         keep = {
             f"{'swa_' if b['kind'] == 'swa' else ''}steps={b['step']}.safetensors"
-            for b in best.values()
+            for by_kind in best.values()
+            for b in by_kind.values()
             if b is not None
         }
         for f in out_dir.glob("*steps=*.safetensors"):
@@ -711,16 +723,13 @@ def main(
         for prefix, kind in [("", "live"), ("swa/", "swa")]:
             if prefix not in metrics or "val" not in metrics[prefix]:
                 continue
-            for tt, metric, better in [
-                ("clf", "auroc", max),
-                ("reg", "nmae", min),
-            ]:
+            for tt, metric, better in BEST_METRICS:
                 v = metrics[prefix]["val"][metric].get("mean")
                 if v is None:
                     continue
-                cur = best[tt]
+                cur = best[tt][kind]
                 if cur is None or better(v, cur["value"]) == v:
-                    best[tt] = {
+                    best[tt][kind] = {
                         "kind": kind,
                         "step": step,
                         "value": v,
@@ -992,28 +1001,37 @@ def main(
     prune_ckpts()
     save_resume(step)
     if is_main:
-        for tt, label in [("clf", "best_clf"), ("reg", "best_reg")]:
-            b = best[tt]
-            if b is None:
-                log(skipped=label, task_type=tt, reason="no_val_tasks")
+        # best_live_{tt} and best_swa_{tt} are each net's own val winner;
+        # best_{tt} is the better of the two, so a reader that wants one
+        # checkpoint per task type has the name it always had.
+        for tt, _, better in BEST_METRICS:
+            by_kind = {k: b for k, b in best[tt].items() if b is not None}
+            if not by_kind:
+                log(skipped=f"best_{tt}", task_type=tt, reason="no_val_tasks")
                 continue
-            src = out_dir / (
-                f"swa_steps={b['step']}.safetensors"
-                if b["kind"] == "swa"
-                else f"steps={b['step']}.safetensors"
-            )
-            if src.exists():
-                shutil.copyfile(src, out_dir / f"{label}.safetensors")
-            else:
-                log(warning="best_ckpt_missing", label=label, expected=src)
-            log(
-                saved=label,
-                kind=b["kind"],
-                step=b["step"],
-                metric=b["metric"],
-                value=f"{b['value']:.4f}",
-                path=f"{label}.safetensors",
-            )
+            top = better(b["value"] for b in by_kind.values())
+            overall = next(b for b in by_kind.values() if b["value"] == top)
+            for label, b in [
+                *((f"best_{kind}_{tt}", b) for kind, b in by_kind.items()),
+                (f"best_{tt}", overall),
+            ]:
+                src = out_dir / (
+                    f"swa_steps={b['step']}.safetensors"
+                    if b["kind"] == "swa"
+                    else f"steps={b['step']}.safetensors"
+                )
+                if src.exists():
+                    shutil.copyfile(src, out_dir / f"{label}.safetensors")
+                else:
+                    log(warning="best_ckpt_missing", label=label, expected=src)
+                log(
+                    saved=label,
+                    kind=b["kind"],
+                    step=b["step"],
+                    metric=b["metric"],
+                    value=f"{b['value']:.4f}",
+                    path=f"{label}.safetensors",
+                )
         log(load_with=f"rt.model.load_rt_model('{out_dir}/best_clf.safetensors')")
     if use_wandb:
         wandb.finish()

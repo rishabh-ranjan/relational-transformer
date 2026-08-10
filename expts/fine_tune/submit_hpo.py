@@ -1,0 +1,139 @@
+"""Tune the eval context per task on the fine-tuned checkpoints, one job per
+task. See [README.md](README.md)."""
+
+import json
+from pathlib import Path
+
+from roach.slurm import Resources, submit
+
+from submit import TASKS, ntrain
+
+CKPT_ROOT = Path("/dfs/user/ranjanr/ckpts/rtv2/2026-08-08-fine_tune")
+
+
+def ckpt_for(db: str, task: str) -> str:
+    """The fine-tuned weights for this task: the best-on-val checkpoint of the
+    most recent run named `{db}/{task}` under `CKPT_ROOT`.
+
+    A weights *file*, not the run directory: `config.json` names
+    `model.safetensors`, which a training run never writes, so pointing
+    `load_ckpt_path` at the directory fails to resolve. The sibling
+    `config.json` still supplies the dims.
+
+    `best_{clf,reg}` is the better of the live and the swa net on validation,
+    so which of the two exists follows from the task type; a run that has not
+    reached its first eval has neither, and asserting here beats a job that
+    dies minutes in. `best_swa_*`/`best_live_*` sit beside it -- glob one of
+    those instead to tune one net's weights rather than the winner's.
+    """
+    runs = sorted(
+        d
+        for d in CKPT_ROOT.iterdir()
+        if json.loads((d / "params.json").read_text())["run_name"] == f"{db}/{task}"
+    )
+    assert runs, f"no run named {db}/{task} under {CKPT_ROOT}"
+    run = runs[-1]
+    best = [
+        p
+        for p in run.glob("best_*.safetensors")
+        if p.stem in ("best_clf", "best_reg")
+        # if p.stem in ("best_swa_clf", "best_swa_reg")
+    ]
+    assert len(best) == 1, f"{run} holds {[p.name for p in best]}, want one"
+    return str(best[0])
+
+
+def b200(qos: str, time: str) -> Resources:
+    """One B200. 36 cpus is blackwell1's 288 cores split eight ways, and the
+    memory is that share of the node -- under the site's MaxMemPerCPU of 10700M
+    times 36, which is what an explicit --mem is capped at."""
+    return Resources(
+        partition="il",
+        account="infolab",
+        qos=qos,
+        time=time,
+        gpus="b200:1",
+        cpus_per_task=36,
+        ntasks=None,
+        exclusive=False,
+        mem="375000M",
+        mem_per_gpu=None,
+        constraint=None,
+        nodelist="blackwell1",
+    )
+
+
+def plan(n: int) -> list[Resources]:
+    """The best n slots this cluster will give one-GPU jobs, best first.
+
+    `il-interactive` is idle and caps at 2 gpus of any type; `il`'s 10-gpu cap
+    is spent in full by the fine-tuning sweep these checkpoints come from, so
+    the rest drop to preemptible `il-lo` rather than queue behind it.
+    Blackwell throughout: blackwell1 has the cards free, and eval is one pass
+    per grid entry, so the faster card is the whole wall clock.
+
+    Recount and rewrite this before every submission.
+
+    An eval run does not checkpoint: a preemption restarts it from the top, so
+    `il-lo` costs wall clock in whole runs rather than in minutes.
+    """
+    out = [b200("il-interactive", "12:00:00")] * min(n, 2)
+    out += [b200("il-lo", "21-00:00:00")] * (n - len(out))
+    return out
+
+
+def main() -> None:
+    tasks = sorted(TASKS, key=lambda p: -ntrain()[f"{p[0]}/{p[1]}"])
+    for (db, task), resources in zip(tasks, plan(len(tasks)), strict=True):
+        name = f"{db}/{task}"
+        print(f"  {name:28s} {resources.gpus} {resources.qos:15s} {resources.time}")
+        submit(
+            "rt.eval:main",
+            # Do not put comments inside this dict: it is a config block,
+            # and reading it means scanning the values.
+            args=dict(
+                load_ckpt_path=ckpt_for(db, task),
+                embedder="all-MiniLM-L12-v2",
+                d_text=384,
+                num_blocks=12,
+                d_model=512,
+                num_heads=8,
+                d_ff=2048,
+                splits=["test"],
+                db_task_list=[(db, task)],
+                pre_dir="/dfs/user/ranjanr/share/stanford-star/relbench-preprocessed",
+                tokens_per_gpu=2**18,
+                num_workers=resources.cpus_per_task,
+                prefetch_factor=2,
+                num_walks=10_000,
+                walk_length=20,
+                items_per_task=2**16,
+                ctx_size_list=[2048],
+                mmap_populate=True,
+                shuffle_seed=0,
+                context_seed=0,
+                vector_db_path=None,
+                lcs_bw_pl_grid=[
+                    (lcs, bw, pl)
+                    for lcs in (512, 1024, 2048)
+                    for bw in (64, 128, 256)
+                    for pl in (True, False)
+                ],
+                ensemble_size=4,
+                project="2026-08-10-fine_tune_hpo",
+                entity="rtv2",
+                out_root="/dfs/user/ranjanr/ckpts",
+                wandb_disabled=True,
+            ),
+            resources=resources,
+            name=f"hpo-{db}-{task}",
+            repo_root="/lfs/hyperturing1/0/ranjanr/clones/rishabh-ranjan/relational-transformer",
+            log_root="/dfs/user/ranjanr/slurm-logs/rishabh-ranjan/relational-transformer/expts/fine-tune-hpo",
+            clone_root="/lfs/local/0/roach_clones",
+            secrets_dir="/dfs/user/ranjanr/.secrets",
+            run_id=None,
+        )
+
+
+if __name__ == "__main__":
+    main()

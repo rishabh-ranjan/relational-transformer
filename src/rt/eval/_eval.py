@@ -172,7 +172,11 @@ def main(
             "eval.context_seed only applies to single-config runs"
         )
 
-        val_tasks = get_tasks(pre_dir, db_task_list, ("val",))
+        # A one-entry grid is a fixed context config: nothing to tune, so no
+        # val split is read at all.
+        val_tasks = (
+            get_tasks(pre_dir, db_task_list, ("val",)) if len(grid) > 1 else None
+        )
         test_tasks = get_tasks(pre_dir, db_task_list, ("test",))
         if not test_tasks:
             raise SystemExit(f"no tasks found in {pre_dir}")
@@ -368,52 +372,61 @@ def run_ensemble(
     """Context-tuned + ensembled evaluation.
 
     Tune: for each task, pick the (local_ctx_size, bfs_width, prefer_latest) in
-    ``grid`` with the best *validation* metric. Ensemble: on test, run that config with
-    ``ensemble_size`` context seeds and average the per-item predictions, then
-    score the averaged submission through relbench's evaluator.
+    ``grid`` with the best *validation* metric. A one-entry ``grid`` is a fixed
+    context config instead: no val split is touched and ``val_tasks`` must be
+    ``None``. Ensemble: on test, run the chosen config with ``ensemble_size``
+    context seeds and average the per-item predictions, scoring the average
+    through relbench's evaluator after *every* seed -- so one run yields the
+    whole metric-vs-ensemble-size curve, and the submission CSVs are those of
+    the full ensemble.
     """
 
     embedder = eval_kwargs["embedder"]
     ddp = eval_kwargs.get("ddp", False)
     is_main = eval_kwargs.get("global_rank", 0) == 0
 
-    # ---- tune on val: best context config per task ----
-    best = {}  # (db, table) -> {"cfg", "value", "task_type"}
-    for cfg in grid:
-        lcs, bw, pl = cfg
-        # Tuning always reads context seed 0; the seed sweep is a test-side
-        # ensembling concern (below), not part of picking the best config.
-        ev = build_evaluator(
-            val_tasks,
-            pre_dir,
-            ctx_size=ctx_size,
-            local_ctx_size=lcs,
-            bfs_width=bw,
-            prefer_latest=pl,
-            context_seed=0,
-            **eval_kwargs,
-        )
-        for task, _c, labels, preds_by_prefix, _nl in ev.evaluate_raw(
-            [(model, "")], [ctx_size]
-        ):
-            _, v = metric_for(task.task_type, labels, preds_by_prefix[""])
-            key = (task.db_name, task.table_name)
-            if key not in best or _is_better(task.task_type, v, best[key]["value"]):
-                best[key] = {"cfg": cfg, "value": v, "task_type": task.task_type}
-            log(
-                indent=1,
-                tune_task=f"{task.db_name}/{task.table_name}",
-                cfg=str(cfg).replace(" ", ""),
-                value=f"{v:.4f}",
+    if len(grid) == 1:
+        assert val_tasks is None, "a one-entry grid tunes nothing; pass val_tasks=None"
+        best = {(t.db_name, t.table_name): {"cfg": grid[0]} for t in test_tasks}
+    else:
+        # ---- tune on val: best context config per task ----
+        best = {}  # (db, table) -> {"cfg", "value", "task_type"}
+        for cfg in grid:
+            lcs, bw, pl = cfg
+            # Tuning always reads context seed 0; the seed sweep is a test-side
+            # ensembling concern (below), not part of picking the best config.
+            ev = build_evaluator(
+                val_tasks,
+                pre_dir,
+                ctx_size=ctx_size,
+                local_ctx_size=lcs,
+                bfs_width=bw,
+                prefer_latest=pl,
+                context_seed=0,
+                **eval_kwargs,
             )
+            for task, _c, labels, preds_by_prefix, _nl in ev.evaluate_raw(
+                [(model, "")], [ctx_size]
+            ):
+                _, v = metric_for(task.task_type, labels, preds_by_prefix[""])
+                key = (task.db_name, task.table_name)
+                if key not in best or _is_better(task.task_type, v, best[key]["value"]):
+                    best[key] = {"cfg": cfg, "value": v, "task_type": task.task_type}
+                log(
+                    indent=1,
+                    tune_task=f"{task.db_name}/{task.table_name}",
+                    cfg=str(cfg).replace(" ", ""),
+                    value=f"{v:.4f}",
+                )
 
-    # Only rank 0 saw the tuning metrics, so only it knows the winning configs.
-    # Every rank must group the test tasks identically -- otherwise the ranks
-    # run different task/seed sequences and hang on mismatched collectives.
-    if ddp:
-        payload = [best if is_main else None]
-        dist.broadcast_object_list(payload, src=0)
-        best = payload[0]
+        # Only rank 0 saw the tuning metrics, so only it knows the winning
+        # configs. Every rank must group the test tasks identically -- otherwise
+        # the ranks run different task/seed sequences and hang on mismatched
+        # collectives.
+        if ddp:
+            payload = [best if is_main else None]
+            dist.broadcast_object_list(payload, src=0)
+            best = payload[0]
 
     # ---- ensemble on test: best config per task, averaged over context seeds ----
     groups = defaultdict(list)
@@ -423,7 +436,9 @@ def run_ensemble(
             groups[b["cfg"]].append(t)
 
     csv_out_dir = None if csv_out_dir is None else Path(csv_out_dir).expanduser()
-    by_metric: dict[str, list[float]] = {}
+    # size -> metric -> per-task values, so the mean curve is logged per size
+    # too; `results` is the full ensemble, the run's headline number.
+    curve: dict[int, dict[str, list[float]]] = defaultdict(lambda: defaultdict(list))
     results = {}
     if is_main:
         log(eval_mode="ensembled", ctx_size=ctx_size)
@@ -449,41 +464,50 @@ def run_ensemble(
                 if key not in acc:
                     acc[key] = [labels, np.zeros_like(p), task, node_idxs]
                 acc[key][1] += p
-        for key, (labels, sp, task, node_idxs) in acc.items():
-            preds = sp / ensemble_size
-            mname, mval, n, align, _ = _emit_and_score(
-                csv_out_dir,
-                task,
-                pre_dir,
-                embedder,
-                labels,
-                preds,
-                node_idxs,
-            )
-            by_metric.setdefault(mname, []).append(mval)
-            results[f"{task.db_name}/{task.table_name}"] = {
-                "metric": mname,
-                "value": mval,
-                "cfg": cfg,
-                "n": n,
-            }
-            log(
-                indent=1,
-                task=f"{task.db_name}/{task.table_name}",
-                cfg=str(cfg).replace(" ", ""),
-                metric=mname,
-                value=f"{mval:.4f}",
-                n=n,
-                align=align,
-            )
+            size = seed + 1
+            full = size == ensemble_size
+            for key, (labels, sp, task, node_idxs) in acc.items():
+                preds = sp / size
+                # Only the full ensemble writes a submission: every size scores
+                # into the same per-task path, so a partial one would be
+                # overwritten anyway.
+                mname, mval, n, align, _ = _emit_and_score(
+                    csv_out_dir if full else None,
+                    task,
+                    pre_dir,
+                    embedder,
+                    labels,
+                    preds,
+                    node_idxs,
+                )
+                curve[size][mname].append(mval)
+                if full:
+                    results[f"{task.db_name}/{task.table_name}"] = {
+                        "metric": mname,
+                        "value": mval,
+                        "cfg": cfg,
+                        "n": n,
+                    }
+                log(
+                    indent=1,
+                    task=f"{task.db_name}/{task.table_name}",
+                    cfg=str(cfg).replace(" ", ""),
+                    ens_size=size,
+                    metric=mname,
+                    value=f"{mval:.4f}",
+                    n=n,
+                    align=align,
+                )
     if not is_main:
         return results
-    for name, vals in by_metric.items():
-        log(
-            mean_metric=name,
-            value=f"{sum(vals) / len(vals):.4f}",
-            over_tasks=len(vals),
-        )
+    for size in sorted(curve):
+        for name, vals in curve[size].items():
+            log(
+                ens_size=size,
+                mean_metric=name,
+                value=f"{sum(vals) / len(vals):.4f}",
+                over_tasks=len(vals),
+            )
     if csv_out_dir is not None:
         log(csv_dir=csv_out_dir)
     return results

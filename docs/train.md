@@ -8,8 +8,12 @@ by mean validation metric.
 
 Checkpoints land in the per-run directory
 `<out-root>/<entity>/<project>/<id>/` as `steps=<N>.safetensors` (live) and
-`swa_steps=<N>.safetensors` (SWA); at the end the run copies the best classifier
-and regressor to `best_clf.safetensors` / `best_reg.safetensors`. With
+`swa_steps=<N>.safetensors` (SWA); at the end the run copies each net's best
+classifier and regressor to `best_live_clf.safetensors` /
+`best_swa_clf.safetensors` (and the `reg` pair), plus `best_clf.safetensors` /
+`best_reg.safetensors` for whichever of the two nets won. Selection is by mean
+**validation** metric only -- AUROC for clf, NMAE for reg -- so a test split
+evaluated alongside never picks a checkpoint. With
 `keep_all_ckpts=False` only the checkpoints the best-so-far still points at are
 kept -- the rest are deleted as they are superseded, and the latest weights stay
 available in `resume.pt` (rewritten at every eval and once more at the end). Multi-GPU is
