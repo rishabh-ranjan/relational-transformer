@@ -211,11 +211,7 @@ def main() -> None:
     tasks = [t for t in tasks if t not in scored and job_name(*t) not in in_flight()]
     # Re-scoring a task whose curve is stale: name them, and the filter above
     # is what would otherwise skip them. Leave commented in the normal case.
-    tasks = [
-        ("rel-amazon", "user-churn"),
-        ("rel-amazon", "user-ltv"),
-        ("rel-hm", "item-sales"),
-    ]
+    # tasks = [("rel-amazon", "user-churn")]
     ckpts = {t: ckpt_for(*t) for t in tasks}
     for (db, task), resources in zip(tasks, plan(len(tasks)), strict=True):
         name = f"{db}/{task}"
