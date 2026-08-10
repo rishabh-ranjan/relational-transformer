@@ -27,24 +27,26 @@ def plan(n: int) -> list[Resources]:
     preemptible slot costs minutes. So the safest slots go to the longest runs
     and the 12-hour ones to the shortest, rather than the best slots first.
 
-    `il` is uncapped at 10 gpus but only 2 b200 and is not preemptible: those
-    two go to the two largest. `il-lo` is preemptible and uncapped, 21 days.
-    `il-interactive` is 2 gpus of any type but only 12 hours. Blackwell
-    throughout while blackwell1 has the cards -- a test pass per context seed
-    is the whole wall clock, and there are `test_ensemble_size` of them.
+    `il-lo` is preemptible and uncapped at 21 days, `il-interactive` is 2 gpus
+    of any type but only 12 hours, and `il` is not used at all: its cap is 10
+    gpus of any kind together, which `submit.py`'s amperes already hold, so an
+    `il` job here waits on those rather than on a card. Blackwell throughout
+    while blackwell1 has them -- a test pass per context seed is the whole wall
+    clock, and there are `test_ensemble_size` of them.
 
-    Recount and rewrite this before every submission: 3 of blackwell1's 8 b200
-    are idle, so the four non-preemptible jobs here queue one deep.
+    Recount and rewrite this before every submission.
     """
-    assert n <= 5, "il-interactive takes 2 gpus, and the tiers above it 3"
-    out = [b200("il", "7-00:00:00")] * min(n, 2)
-    out += [b200("il-lo", "21-00:00:00")] * min(n - len(out), 1)
+    assert n <= 5, "il-interactive takes 2 gpus, and il-lo the 3 ahead of them"
+    out = [b200("il-lo", "21-00:00:00")] * min(n, 3)
     out += [b200("il-interactive", "12:00:00")] * (n - len(out))
     return out
 
 
 def main() -> None:
     tasks = sorted(TASKS, key=lambda p: -ntrain()[f"{p[0]}/{p[1]}"])
+    # Resubmitting part of a sweep: slice, and `plan` hands the sliced list its
+    # first slots. Leave it commented when submitting the whole thing.
+    tasks = tasks[:2]
     # Every checkpoint before any job: `ckpt_for` asserts, and a task whose
     # fine-tuning run has not reached its first eval must abort the submission
     # rather than leave the tasks ahead of it queued and the rest not.
