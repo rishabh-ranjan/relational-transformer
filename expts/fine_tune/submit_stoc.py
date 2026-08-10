@@ -258,7 +258,7 @@ def main() -> None:
                 eval_shuffle_seed=0,
                 eval_context_seed=0,
                 eval_vector_db_path=None,
-                eval_lcs_bw_pl_grid=[(1024, 1024, True)],
+                eval_lcs_bw_pl_grid=[(1024, 128, True)],
                 targets=targets_for(db, task),
                 project="2026-08-07-fine_tune",
                 entity="rtv2",
