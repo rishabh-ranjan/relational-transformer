@@ -19,13 +19,25 @@ freely, git holds the variants.
 
 ## Watch every job you submit
 
-A job is not finished when `sbatch` returns. Nothing alerts you, and a broken
-run holds its GPU for the full wall clock while filling the shared filesystem.
-Shortly after a submission, and again as it runs:
+**A submission is not done when `sbatch` returns — it is done when you have
+seen the jobs train.** Nothing alerts you, and a broken run holds its GPU for
+the full wall clock while filling the shared filesystem. Reporting a submission
+as finished before the checks below have passed is reporting work that was not
+done.
 
-- read the log and confirm the run reaches steps and the loss moves;
+Check twice, at minimum: once right after submitting, and again once the runs
+are past startup — a few minutes, longer with `compile=True`, and long enough
+that step lines must have appeared by then. Every time:
+
+- read the log of **every** job, not a sample of them, and confirm each one
+  reaches steps and its loss moves. A log that stops after the data stats is
+  not yet evidence of anything;
 - `ls -laS` the log directory and `df -h` the output filesystem;
 - cancel what is broken, delete what it wrote, fix the cause, resubmit.
+
+Jobs that are still queued are not off the hook: they get the same checks once
+they start. Keep checking until every job you submitted has been seen training
+or has been cancelled.
 
 ## Submitting
 
