@@ -52,6 +52,11 @@ submit("expts.<name>.<module>:<function>", args={...}, resources=BLACKWELL,
 - **`/tmp` is for a job's own scratch on its node, named after the run** — never
   for code, never for anything to be read afterwards (it is node-local, and a
   `#SBATCH -o /tmp/...` log vanishes).
+- **Take the best slots available, absent an explicit instruction otherwise.**
+  Blackwell first, for as many cards as are free, then Ampere for the rest. QoS
+  in the same spirit: `il-interactive` first, then `il`, then `il-lo`. The
+  earlier tiers are capped per user and the later ones are not, so a sweep wider
+  than the caps spills down the list rather than queueing behind itself.
 
 ## What every experiment owes
 
