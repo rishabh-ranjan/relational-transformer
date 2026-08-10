@@ -787,13 +787,19 @@ def main(
     # minutes, next to the resume that chose the shape. Optimizer state is
     # already loaded above, so this eval sees the run's true peak.
     evaled_at = None
+    # ...and force it, rather than leaving it to the `eval_freq` test: resume.pt
+    # is written on a wall-clock timer as well as at every eval, so a resume
+    # step is usually *not* a multiple of eval_freq (37852, 38012, 38120 are
+    # real ones from this run) and the test alone would skip it after all.
+    force_eval = True
     # Measured on this process's first step, not on global step 0: a resumed job
     # never sees step 0, and its memory is what matters when it is the job that
     # runs out. `ctx_size_list` varies the activation term step to step, so this
     # is one sample of it, not the maximum.
     measure_mem = device.startswith("cuda")
     while step < total_steps:
-        if eval_freq and step % eval_freq == 0 and step != evaled_at:
+        if eval_freq and (force_eval or (step % eval_freq == 0 and step != evaled_at)):
+            force_eval = False
             run_eval(step)
             checkpoint(step)
             prune_ckpts()
