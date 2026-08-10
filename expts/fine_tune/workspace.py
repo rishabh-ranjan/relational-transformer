@@ -21,7 +21,10 @@ the system stream), so this works against any project, and a metric added to
 log but has not yet are folded in from `submit.targets_for`.
 
 It rewrites the saved view named below wholesale -- edit this script, not the
-UI, or the next run of it drops your changes.
+UI, or the next run of it drops your changes. The same layout is written to
+your personal workspace too, which is what the project's URL opens on, so the
+project lands on this view without having to pick it from the view menu
+(`--no-default` to leave the personal workspace alone).
 
 New runs show up in the view on their own: every run in the project is in its
 runset (no filters), and `max_runs` is lifted off the SDK's default of 10 so a
@@ -158,6 +161,27 @@ def existing_view(entity: str, project: str, display_name: str) -> tuple[str, st
     return (mine[-1]["name"], mine[-1]["id"]) if mine else ("", "")
 
 
+def personal_view(entity: str, project: str) -> tuple[str, str, str]:
+    """The (internal name, id, title) of the viewer's own workspace view.
+
+    Opening a project lands on the personal workspace, not on any saved view,
+    so that is the one to overwrite to make this layout the default -- there is
+    no "set this saved view as default" anywhere in the API. Its slug is
+    derived from the username rather than random, which is what lets us address
+    it before it exists (a project never visited in the UI has no such view
+    yet, and upserting the slug creates it).
+    """
+    api = wandb.Api()
+    username = api.viewer.username
+    slug = "nw-nwuser" + "".join(c for c in username if c.isalnum()) + "-w"
+    resp = execute_graphql(api, VIEWS_QUERY, {"entityName": entity, "name": project})
+    nodes = [e["node"] for e in resp["project"]["allViews"]["edges"]]
+    mine = [n for n in nodes if n["name"] == slug]
+    if mine:
+        return slug, mine[0]["id"], mine[0]["displayName"]
+    return slug, "", f"{username.capitalize()}'s workspace"
+
+
 def build(entity: str, project: str, view: str) -> ws.Workspace:
     keys = project_keys(entity, project)
     # A key that is some other key's twin or target gets no panel of its own:
@@ -236,7 +260,12 @@ mutation Upsert($id: ID, $entityName: String, $projectName: String, $name: Strin
 """
 
 
-def save(workspace: ws.Workspace) -> str:
+def save(
+    workspace: ws.Workspace,
+    name: str = "",
+    id: str = "",
+    display_name: str = "",
+) -> str:
     """Save the workspace, with the System section marked auto.
 
     `wandb_workspaces` has no field for `isPanelsAuto`, the flag that tells the
@@ -244,10 +273,15 @@ def save(workspace: ws.Workspace) -> str:
     system charts appear, since nothing in the run's logged keys draws them.
     So the spec is serialized, the flag set on that one section, and the
     result upserted directly rather than through `Workspace.save()`.
+
+    `name`/`id`/`display_name` override which view the spec lands in, so the
+    same built workspace can be written to both the saved view and the personal
+    workspace.
     """
     view = workspace._to_model()
-    if not view.name:
-        view.name = internal._generate_view_name()
+    view.name = name or view.name or internal._generate_view_name()
+    view.id = id if name else view.id
+    view.display_name = display_name or view.display_name
     spec = json.loads(view.spec.model_dump_json(by_alias=True, exclude_none=True))
     for s in spec["section"]["panelBankConfig"]["sections"]:
         if s["name"] == SYSTEM:
@@ -277,9 +311,19 @@ def main() -> None:
     p.add_argument("--entity", default=ENTITY)
     p.add_argument("--project", default=PROJECT)
     p.add_argument("--view", default=VIEW)
+    p.add_argument(
+        "--no-default",
+        action="store_true",
+        help="leave the personal workspace alone (write only the saved view)",
+    )
     a = p.parse_args()
 
-    print(save(build(a.entity, a.project, a.view)))
+    workspace = build(a.entity, a.project, a.view)
+    print(save(workspace))
+    if not a.no_default:
+        name, id, display_name = personal_view(a.entity, a.project)
+        save(workspace, name=name, id=id, display_name=display_name)
+        print(f"https://wandb.ai/{a.entity}/{a.project}")
 
 
 if __name__ == "__main__":
