@@ -17,8 +17,10 @@ just because this script did not anticipate it, telemetry included.
 
 The key list comes from the runs themselves (the summary of every run, plus
 the system stream), so this works against any project, and a metric added to
-`rt.train` shows up as soon as one run has logged it. Targets the sweep will
-log but has not yet are folded in from `submit.targets_for`.
+`rt.train` shows up as soon as one run has logged it. On top of that the whole
+benchmark is seeded from `submit.published_best` -- all 21 RelBench forecast
+tasks, curve and target alike -- so a task the sweep has not run yet, or runs
+later, has its panel waiting rather than needing this script rerun.
 
 It writes your personal workspace -- the view the project's URL opens on, so
 the layout is there without picking anything from the view menu -- and writes
@@ -28,10 +30,9 @@ New runs show up in the view on their own: every run in the project is in its
 runset (no filters), no run limit is written (a panel draws the whole sweep,
 and without the "Limited to N runs" caption any `max_runs` value earns), and
 the run feed's page size is lifted off 10 so the run list is not stuck on
-1-10. Panels are not
-automatic --
-`auto_generate_panels` is off, so a key this script has not seen gets its panel
-by rerunning the script.
+1-10. Panels are not automatic -- `auto_generate_panels` is off, so a key this
+script has not seen gets its panel by rerunning the script; seeding the whole
+benchmark above is what keeps that from being every new task.
 """
 
 import argparse
@@ -43,7 +44,7 @@ import wandb_workspaces.reports.v2.interface as wr
 import wandb_workspaces.workspaces as ws
 from wandb_workspaces.workspaces.internal import execute_graphql
 
-from submit import TASKS, targets_for
+from submit import published_best
 
 ENTITY = "rtv2"
 PROJECT = "2026-08-07-fine_tune"
@@ -162,13 +163,17 @@ def project_keys(entity: str, project: str) -> set[str]:
     for run in api.runs(f"{entity}/{project}"):
         keys |= set(run.summary.keys())
         keys |= set(run.systemMetrics.keys())
-    # The sweep's own metrics and their targets, whether or not a run has got
-    # that far: a task still queueing at the first eval should have its panel
-    # waiting for it, not appear halfway through the sweep. Both halves are
+    # Every task the benchmark has, whether or not a run has ever logged it --
+    # not just the ones this sweep has submitted so far. `published_best` is
+    # keyed by the same `{metric}/{split}/{db}/{task}` names `rt.train` logs,
+    # and its task set is exactly RelBench's 21 forecast tasks (`results.csv`
+    # covers the whole of `db-task-lists/forecast.json`, checked), so seeding
+    # the lot is what makes the view outlive the run set: a task uncommented in
+    # `submit.TASKS`, or an arm submitted by hand, starts logging into a panel
+    # that is already there instead of into no panel at all. Both halves are
     # seeded -- the target alone would land in a panel of its own.
-    for db, task in TASKS:
-        for k in targets_for(db, task):
-            keys |= {k, target_key(k)}
+    for k in published_best():
+        keys |= {k, target_key(k)}
     return keys - INTERNAL
 
 
