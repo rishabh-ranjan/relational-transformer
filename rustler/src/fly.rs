@@ -1664,7 +1664,6 @@ impl Sampler {
         // p2f_ftr: vector of vectors, one per depth level, for p2f edges
         let mut f2p_ftr: Vec<(usize, i32)> = Vec::with_capacity(64);
         let mut p2f_ftr: Vec<Vec<i32>> = vec![vec![start_idx]];
-        let mut db_p2f_ftr: Vec<i32> = Vec::with_capacity(bfs_width);
 
         loop {
             check_deadline(deadline);
@@ -1712,9 +1711,6 @@ impl Sampler {
             // Get p2f edges and process them
             let p2f_edges = get_p2f_edges(dataset, node_idx);
 
-            // Reuse pre-allocated storage for db edges to be subsampled
-            db_p2f_ftr.clear();
-
             // The edges are sorted by timestamp, so we can binary search to find valid ones
             let valid_edges = p2f_edges.as_slice().partition_point(|edge| {
                 edge.timestamp.is_none()
@@ -1724,19 +1720,39 @@ impl Sampler {
             // Filter valid edges by table constraints
             let p2f_edges = &p2f_edges.as_slice()[..valid_edges];
 
-            for (i, edge) in p2f_edges.iter().enumerate() {
-                if i & (DEADLINE_CHECK_EVERY - 1) == 0 {
-                    check_deadline(deadline);
-                }
+            // bfs_width is applied to the valid edges themselves, so the work
+            // here is O(bfs_width) rather than O(p2f degree): the sample is
+            // drawn from the index range and only the drawn edges are ever
+            // looked at. That distinction is the difference between a run and
+            // a hang. A relbench node's p2f degree reaches 44.5M
+            // (rel-event `users`) and is routinely 10^5-10^6 on the small
+            // hub tables every walk passes through (rel-avito `Category`
+            // averages 140k children over 68 rows, `Location` peaks at 1.3M),
+            // and a scan of that per visited node -- to bucket edges that were
+            // then subsampled to 32 -- is what made a rel-avito run produce no
+            // step at all.
+            //
+            // The cap covers db and task edges alike. It used to exempt task
+            // edges, taking every one and capping only db edges, which cannot
+            // be done without reading every edge to find out which is which.
+            // Measured across all seven relbench datasets, a node's task edges
+            // number at most 366 (rel-f1 `drivers`, summed over every task and
+            // split) and typically 1-15, against db degrees five orders of
+            // magnitude larger, so a uniform draw takes essentially the same
+            // task edges the exemption did.
+            let idxs = if p2f_edges.len() > bfs_width {
+                index::sample(rng, p2f_edges.len(), bfs_width).into_vec()
+            } else {
+                (0..p2f_edges.len()).collect::<Vec<_>>()
+            };
+
+            for &i in idxs.iter() {
+                check_deadline(deadline);
+                let edge = &p2f_edges[i];
                 // include edges to task table only if seed node belongs to the task table
                 if edge.table_name_idx != start_node.table_name_idx
                     && edge.table_type != ArchivedTableType::Db
                 {
-                    continue;
-                }
-
-                if edge.table_type == ArchivedTableType::Db {
-                    db_p2f_ftr.push(edge.node_idx.into());
                     continue;
                 }
 
@@ -1746,22 +1762,6 @@ impl Sampler {
                     }
                 }
                 p2f_ftr[depth + 1].push(edge.node_idx.into());
-            }
-
-            // Subsample DB edges based on bfs_width
-            let idxs = if db_p2f_ftr.len() > bfs_width {
-                index::sample(rng, db_p2f_ftr.len(), bfs_width).into_vec()
-            } else {
-                (0..db_p2f_ftr.len()).collect::<Vec<_>>()
-            };
-
-            for idx in idxs.iter() {
-                if depth + 1 >= p2f_ftr.len() {
-                    for _i in p2f_ftr.len()..=depth + 1 {
-                        p2f_ftr.push(vec![]);
-                    }
-                }
-                p2f_ftr[depth + 1].push(db_p2f_ftr[*idx]);
             }
         }
     }
