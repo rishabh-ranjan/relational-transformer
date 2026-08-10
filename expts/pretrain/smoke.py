@@ -127,7 +127,10 @@ def main() -> None:
         ),
         name="pretrain-smoke",
         repo_root="/lfs/hyperturing1/0/ranjanr/clones/rishabh-ranjan/relational-transformer",
-        log_root="/dfs/user/ranjanr/slurm-logs/rishabh-ranjan/relational-transformer/expts/pretrain",
+        # Its own log directory: MONITOR.md identifies the live run by the
+        # newest log under the run's log_root, and a smoke test landing there
+        # would answer with its own run_id.
+        log_root="/dfs/user/ranjanr/slurm-logs/rishabh-ranjan/relational-transformer/expts/pretrain/smoke",
         clone_root="/lfs/local/0/roach_clones",
         secrets_dir="/dfs/user/ranjanr/.secrets",
     )
