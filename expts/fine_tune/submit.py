@@ -214,14 +214,16 @@ def main() -> None:
     # nothing has yet measured the difference on a task. ad-ctr is regression
     # and has only the one loss to run.
     arms = [
-        ("rel-avito", "ad-ctr", None),
+        ("rel-avito", "ad-ctr", "huber"),
         ("rel-avito", "user-clicks", "bce"),
         ("rel-avito", "user-clicks", "huber"),
         ("rel-avito", "user-visits", "bce"),
         ("rel-avito", "user-visits", "huber"),
     ]
     for (db, task, loss_fn), resources in zip(arms, plan(len(arms)), strict=True):
-        name = f"{db}/{task}" + (f"/{loss_fn}" if loss_fn else "")
+        # `db/task (loss)`, as the loss arms already submitted to this project
+        # are named -- the workspace sorts them together.
+        name = f"{db}/{task} ({loss_fn})"
         print(f"  {name:28s} {resources.gpus} {resources.qos:15s} {resources.time}")
         submit_one(db, task, resources, loss_fn=loss_fn, run_name=name)
 
