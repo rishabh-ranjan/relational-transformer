@@ -11,10 +11,34 @@ Tasks go out largest train set first: the curve that takes longest starts
 first, and the small ones fill the slots behind it.
 """
 
+import json
+
 from roach.slurm import Resources, submit
 
-from submit import TASKS, ntrain, targets_for
-from submit_hpo_only import b200, ckpt_for
+from submit import ntrain, published_best, targets_for
+from submit_hpo_only import CKPT_ROOT, b200, ckpt_for
+
+
+def ready() -> list[tuple[str, str]]:
+    """The benchmark tasks that can be ensembled now, largest train set first.
+
+    Not `submit.TASKS`: that is whatever `submit.py` last submitted, which a
+    partial resubmission narrows to a handful, and this experiment is the whole
+    benchmark. `published_best` is keyed by all 21 forecast tasks.
+
+    A task whose fine-tuning run has not written a `best_*` yet is skipped
+    rather than aborting the submission: those runs are still going, and this
+    is rerun as they land.
+    """
+    tasks = {
+        tuple(k.split("/")[2:]) for k in published_best() if not k.endswith("/mean")
+    }
+    done = {
+        tuple(json.loads((d / "params.json").read_text())["run_name"].split("/"))
+        for d in CKPT_ROOT.iterdir()
+        if any(p.stem in ("best_clf", "best_reg") for p in d.glob("best_*.safetensors"))
+    }
+    return sorted(tasks & done, key=lambda p: -ntrain()[f"{p[0]}/{p[1]}"])
 
 
 def plan(n: int) -> list[Resources]:
@@ -34,22 +58,24 @@ def plan(n: int) -> list[Resources]:
     while blackwell1 has them -- a test pass per context seed is the whole wall
     clock, and there are `test_ensemble_size` of them.
 
+    A whole 16-seed curve on a b200 is minutes, not hours, so 12 hours is no
+    constraint on the two `il-interactive` slots and preemption on the rest
+    costs one restart at worst.
+
     Recount and rewrite this before every submission.
     """
-    assert n <= 5, "il-interactive takes 2 gpus, and il-lo the 3 ahead of them"
-    out = [b200("il-lo", "21-00:00:00")] * min(n, 3)
-    out += [b200("il-interactive", "12:00:00")] * (n - len(out))
+    out = [b200("il-interactive", "12:00:00")] * min(n, 2)
+    out += [b200("il-lo", "21-00:00:00")] * (n - len(out))
     return out
 
 
 def main() -> None:
-    tasks = sorted(TASKS, key=lambda p: -ntrain()[f"{p[0]}/{p[1]}"])
-    # Resubmitting part of a sweep: slice, and `plan` hands the sliced list its
-    # first slots. Leave it commented when submitting the whole thing.
-    # tasks = tasks[:2]
-    # Every checkpoint before any job: `ckpt_for` asserts, and a task whose
-    # fine-tuning run has not reached its first eval must abort the submission
-    # rather than leave the tasks ahead of it queued and the rest not.
+    tasks = ready()
+    # Rerunning after more fine-tuning runs land: slice off the ones already
+    # scored, so this does not queue a second curve for them. `plan` hands the
+    # sliced list its first slots. Leave it commented to submit all that are
+    # ready.
+    tasks = tasks[:2]
     ckpts = {t: ckpt_for(*t) for t in tasks}
     for (db, task), resources in zip(tasks, plan(len(tasks)), strict=True):
         name = f"{db}/{task}"
