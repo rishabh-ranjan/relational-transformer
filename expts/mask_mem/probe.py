@@ -6,6 +6,7 @@ import time
 import torch
 from torch.nn.attention.flex_attention import create_block_mask
 
+from rt.model.net import _kv_sizes
 from rt.progress import log
 
 
@@ -128,7 +129,7 @@ def mask_mod(node_idxs, f2p_nbr_idxs, col_name_idxs, table_name_idxs, is_padding
             & (table_name_idxs[b, q] == table_name_idxs[b, kv])
         ) & not_pad
 
-    return {
+    block_masks = {
         name: create_block_mask(
             mask_mod=mod,
             B=batch_size,
@@ -139,7 +140,17 @@ def mask_mod(node_idxs, f2p_nbr_idxs, col_name_idxs, table_name_idxs, is_padding
             _compile=True,
         )
         for name, mod in (("feat", feat_mod), ("nbr", nbr_mod), ("col", col_mod))
-    }, None
+    }
+    # The dense path gets kv_sizes for free by summing a mask it already has;
+    # this path has to derive them, and that cost belongs in the comparison.
+    kv_sizes = _kv_sizes(
+        node_idxs.contiguous(),
+        f2p_nbr_idxs.contiguous(),
+        col_name_idxs.contiguous(),
+        table_name_idxs.contiguous(),
+        is_padding.contiguous(),
+    )
+    return block_masks, kv_sizes
 
 
 def main(
