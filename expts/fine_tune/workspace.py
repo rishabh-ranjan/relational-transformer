@@ -60,6 +60,11 @@ SYSTEM = "System"
 # wandb's own bookkeeping series. Panels for these say nothing about a run.
 INTERNAL = {"_runtime", "_step", "_timestamp", "_wandb", "step"}
 
+# Keys whose panel gets a log y-axis: timings whose interesting structure is
+# the occasional order-of-magnitude spike, which a linear axis flattens the
+# rest of the curve to draw.
+LOG_Y = {"train/load_time", "train/sec_per_step"}
+
 # How many runs the run list shows before paging. Also 10 by default, which is
 # what opens the list on "1-10"; 100 is what the app allows (it clamps anything
 # larger down to this).
@@ -84,7 +89,9 @@ def panel(key: str, keys: set[str], x: str) -> wr.LinePlot:
     draws on top of the curve it bounds.
     """
     y = [k for k in (key, swa_key(key), target_key(key)) if k in keys]
-    return wr.LinePlot(title=key, x=x, y=y, smoothing_show_original=True)
+    return wr.LinePlot(
+        title=key, x=x, y=y, smoothing_show_original=True, log_y=key in LOG_Y or None
+    )
 
 
 def section(name: str, keys: list[str], all_keys: set[str], x: str) -> ws.Section:
