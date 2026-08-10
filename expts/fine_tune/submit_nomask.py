@@ -9,15 +9,15 @@ from roach.slurm import Resources, submit
 HERE = Path(__file__).parent
 
 TASKS = (
-    ("rel-avito", "ad-ctr"),
+    # ("rel-avito", "ad-ctr"),
     # ("rel-avito", "user-clicks"),
     # ("rel-avito", "user-visits"),
     # ("rel-f1", "driver-dnf"),
     # ("rel-f1", "driver-position"),
     # ("rel-f1", "driver-top3"),
-    ("rel-event", "user-attendance"),
+    # ("rel-event", "user-attendance"),
     # ("rel-event", "user-ignore"),
-    ("rel-event", "user-repeat"),
+    # ("rel-event", "user-repeat"),
     # ("rel-trial", "site-success"),
     # ("rel-trial", "study-adverse"),
     ("rel-trial", "study-outcome"),
@@ -168,7 +168,8 @@ def plan(n: int) -> list[Resources]:
     A run checkpoints and resumes, at a preemption and at its wall limit
     alike, so either costs a requeue rather than work.
     """
-    out = [b200("il-lo", "21-00:00:00")] * min(n, 2)
+    # out = [b200("il-lo", "21-00:00:00")] * min(n, 2)
+    out = [a100("il", "7-00:00:00")] * min(n, 1)
     out += [a100("il-lo", "21-00:00:00")] * (n - len(out))
     return out
 
