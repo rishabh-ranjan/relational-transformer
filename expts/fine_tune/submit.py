@@ -190,15 +190,15 @@ def plan(n: int) -> list[Resources]:
     `il-lo` is preemptible, effectively uncapped and 21d.
 
     So `il` goes entirely to amperes: it caps b200 at 2 either way, and its
-    general cap buys more by being spent on the card it does not restrict.
-    Blackwells take `il-interactive` and then drop straight to `il-lo`, which
-    is what bounds the b200 share at 4.
+    general cap buys more by being spent on the card it does not restrict. The
+    blackwell share is what blackwell1 has idle at submission time -- 2 here,
+    which `il-interactive` covers on its own. Recount and rewrite this before
+    every submission.
 
     A run checkpoints and resumes, at a preemption and at its wall limit alike,
     so a short or low-priority slot costs wall clock rather than work.
     """
     out = [b200("il-interactive", "12:00:00")] * min(n, 2)
-    out += [b200("il-lo", "21-00:00:00")] * min(n - len(out), 2)
     out += [a100("il", "7-00:00:00")] * min(n - len(out), 10)
     out += [a100("il-lo", "21-00:00:00")] * (n - len(out))
     return out
@@ -255,7 +255,7 @@ def main() -> None:
                 eval_db_task_list=[(db, task)],
                 eval_pre_dir="/dfs/user/ranjanr/share/stanford-star/relbench-preprocessed",
                 eval_tokens_per_gpu=2**18,
-                eval_num_workers=1,
+                eval_num_workers=resources.cpus_per_task,
                 eval_prefetch_factor=2,
                 eval_num_walks=10_000,
                 eval_walk_length=20,
