@@ -40,6 +40,3 @@ local/
 
 # maturin develop builds the extension in-place into the source tree
 src/rt/rustler*.so
-
-# workspace.py caches the wandb queries it reads beside itself
-expts/fine_tune/.workspace_cache.json
