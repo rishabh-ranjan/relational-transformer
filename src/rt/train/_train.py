@@ -273,6 +273,17 @@ def main(
             id=run_id,
             resume="allow",
             config=params,
+            settings=wandb.Settings(
+                # Without this the run has a single output.log, uploaded on
+                # finish and overwritten by the next attempt: a preempted or
+                # SIGKILLed attempt uploads nothing, so the Logs tab of a
+                # long preemptible run sits frozen at whatever the last
+                # cleanly-exited attempt left there. Multipart writes
+                # timestamped chunks and uploads each as it closes, so the tab
+                # follows a live run and keeps every attempt's output.
+                console_multipart=True,
+                console_chunk_max_seconds=60,
+            ),
         )
         # Log against our own step axis rather than wandb's internal counter.
         # A resumed run rewinds to the last resume.pt, so it re-logs steps the
@@ -375,6 +386,7 @@ def main(
     # best (kind, step, value) trackers, persisted across resumes
     best = {"clf": None, "reg": None}
     start_step = 0
+    resume_evaled_at = None
 
     # ---- warm start (model weights only; optimizer/SWA/step start fresh) ----
     # resume.pt takes precedence: a preempted warm-started run must continue,
@@ -397,6 +409,7 @@ def main(
         swa.load_state_dict(ck["swa"])
         start_step = ck["step"]
         best = ck.get("best", best)
+        resume_evaled_at = ck.get("evaled_at", start_step)
         if is_main:
             log(
                 resumed_from=resume_path,
@@ -636,6 +649,13 @@ def main(
                         "swa": swa.state_dict(),
                         "step": step,
                         "best": best,
+                        # Whether an eval has already been logged *at* this
+                        # step. A resume-step eval is skipped only when the
+                        # previous attempt actually ran it (an eval-boundary
+                        # save); a preemption save that lands on an eval
+                        # multiple must re-run it, or that step's val point is
+                        # missing from wandb forever.
+                        "evaled_at": evaled_at,
                     },
                     f,
                 )
@@ -782,9 +802,13 @@ def main(
     # loses at most that much progress. The save is atomic (tmp+rename) and rank
     # 0 only; we don't count it in sec/step (step_t0 is reset after).
     last_resume_t = time.perf_counter()
-    # A resume starts at a step whose eval already ran (resume.pt is written at
-    # every eval), so don't repeat it. A fresh run's step 0 is not that case.
-    evaled_at = start_step if start_step > 0 else None
+    # Skip the resume-step eval only if the checkpoint records that it ran.
+    # resume.pt is written at every eval *and* on a timer / at preemption, so
+    # "resumed at an eval multiple" does not imply "already evaled there":
+    # assuming it did left holes at exactly the steps a preemption landed on.
+    # Older checkpoints have no `evaled_at`; fall back to the old assumption
+    # rather than re-running an eval that was almost certainly already logged.
+    evaled_at = resume_evaled_at if start_step > 0 else None
     is_cuda = device.startswith("cuda")
 
     # Memory guard: run one eval-shaped batch *before* the first training step.
@@ -822,10 +846,10 @@ def main(
     while step < total_steps:
         if eval_freq and step % eval_freq == 0 and step != evaled_at:
             run_eval(step)
+            evaled_at = step  # before save_resume, which persists it
             checkpoint(step)
             prune_ckpts()
             save_resume(step)
-            evaled_at = step
             step_t0 = time.perf_counter()  # don't count eval/ckpt in step time
 
         total_loss = 0.0
