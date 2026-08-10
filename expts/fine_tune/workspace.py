@@ -3,6 +3,15 @@ project logs -- metrics and machine telemetry alike -- with each metric's SWA
 twin and published target folded into the panel of the curve they belong to.
 
     pixi run python expts/fine_tune/workspace.py [--project 2026-08-07-fine_tune]
+                                                 [--refresh]
+
+What the script reads -- the project's key space, the id of the view to write,
+the published bests and the task sizes -- is remembered in
+`.workspace_cache.json` beside this script, which is most of a cold run; all of
+it moves slowly enough that a stale answer costs nothing, and `--refresh`
+refetches the lot. Pass it after adding a metric to `rt.train`, so the metric
+gets a panel; a new *task* needs no refresh, since the benchmark is seeded from
+`submit.published_best` and a new results.csv re-reads itself.
 
 wandb has no horizontal-reference-line primitive, so `rt.train` logs each
 target from `submit.targets_for` as a constant at every step -- a flat series.
@@ -37,15 +46,17 @@ benchmark above is what keeps that from being every new task.
 
 import argparse
 import functools
+import hashlib
 import json
 import math
+from pathlib import Path
 
 import wandb
 import wandb_workspaces.reports.v2.interface as wr
 import wandb_workspaces.workspaces as ws
 from wandb_workspaces.workspaces.internal import execute_graphql
 
-from submit import ntrain, published_best
+from submit import HERE, ntrain, published_best
 
 ENTITY = "rtv2"
 PROJECT = "2026-08-07-fine_tune"
@@ -96,6 +107,65 @@ TRAIN_ORDER = (
 PAGE_SIZE = 100
 
 
+# Where the answers to the project's read-only queries are kept between runs.
+# Beside the script rather than in a temp dir so it survives a reboot, and out
+# of git: it is derived from the project, not source.
+CACHE = Path(__file__).parent / ".workspace_cache.json"
+
+# Set by `--refresh`: fetch every cached query afresh and write what comes back.
+REFRESH = False
+
+
+def cached(key: str, make):
+    """`make()`, remembered in CACHE under `key` across runs.
+
+    The queries this wraps are the script's whole network cost bar the save
+    itself, and their answers move slowly: the key space grows only when a run
+    logs a metric no run logged before, and the personal view's slug and id
+    never change once it exists. So they are read from disk by default and
+    refetched on `--refresh`, which is what to pass after adding a metric to
+    `rt.train` (a new *task* needs no refresh -- `published_best` seeds the
+    whole benchmark, cache or no cache).
+
+    Cached is the plain JSON `make()` returns, so the caller gets lists back
+    where it stored tuples or sets; each caller re-imposes its own type.
+    """
+    store = json.loads(CACHE.read_text()) if CACHE.exists() else {}
+    if not REFRESH and key in store:
+        return store[key]
+    store[key] = value = make()
+    CACHE.write_text(json.dumps(store, indent=2, sort_keys=True) + "\n")
+    return value
+
+
+def uncache(key: str) -> None:
+    """Forget `key`, so the next run fetches it again."""
+    store = json.loads(CACHE.read_text()) if CACHE.exists() else {}
+    if store.pop(key, None) is not None:
+        CACHE.write_text(json.dumps(store, indent=2, sort_keys=True) + "\n")
+
+
+def targets() -> dict[str, float]:
+    """`submit.published_best`, cached across runs.
+
+    Cached for what computing it *imports* rather than for the arithmetic:
+    pandas and huggingface_hub are half a second of import between them, and
+    the two functions here are the only thing in this script that wants either.
+    Keyed by a digest of results.csv so a new results table is picked up on its
+    own -- the rest of the input is a file in a HuggingFace dataset repo, which
+    `--refresh` covers.
+    """
+    digest = hashlib.sha256((HERE / "results.csv").read_bytes()).hexdigest()[:16]
+    return cached(f"published_best/{digest}", published_best)
+
+
+def sizes() -> dict[str, float]:
+    """`submit.ntrain`, cached across runs -- see `targets`. No digest: its one
+    input is RelBench's published task stats, so `--refresh` is the way it is
+    ever re-read."""
+    return cached("ntrain", ntrain)
+
+
 @functools.cache
 def api() -> wandb.Api:
     """One `Api` for the whole script: each one re-reads the settings files and
@@ -120,7 +190,7 @@ def task_size(key: str) -> float:
     column order. A key naming no task -- or a task RelBench's stats do not
     cover -- sorts last, where it does not disturb the tasks' order.
     """
-    return ntrain().get("/".join(key.split("/")[2:]), math.inf)
+    return sizes().get("/".join(key.split("/")[2:]), math.inf)
 
 
 def panel(key: str, keys: set[str], x: str) -> wr.LinePlot:
@@ -169,7 +239,7 @@ def section(
     )
 
 
-def project_keys(entity: str, project: str) -> set[str]:
+def logged_keys(entity: str, project: str) -> list[str]:
     """Every key logged by any run in the project, system stream included.
 
     A run's summary carries one entry per metric key it ever logged, so the
@@ -195,6 +265,13 @@ def project_keys(entity: str, project: str) -> set[str]:
         if not page["pageInfo"]["hasNextPage"]:
             break
         cursor = page["pageInfo"]["endCursor"]
+    return sorted(keys)
+
+
+def project_keys(entity: str, project: str) -> set[str]:
+    """The key space the panels are built from: what the runs log, plus the
+    benchmark seeded below."""
+    keys = set(cached(f"keys/{entity}/{project}", lambda: logged_keys(entity, project)))
     # Every task the benchmark has, whether or not a run has ever logged it --
     # not just the ones this sweep has submitted so far. `published_best` is
     # keyed by the same `{metric}/{split}/{db}/{task}` names `rt.train` logs,
@@ -204,7 +281,7 @@ def project_keys(entity: str, project: str) -> set[str]:
     # `submit.TASKS`, or an arm submitted by hand, starts logging into a panel
     # that is already there instead of into no panel at all. Both halves are
     # seeded -- the target alone would land in a panel of its own.
-    for k in published_best():
+    for k in targets():
         keys |= {k, target_key(k)}
     return keys - INTERNAL
 
@@ -241,15 +318,31 @@ def personal_view(entity: str, project: str) -> tuple[str, str, str]:
     in the API. Its slug is derived from the username rather than random, which
     is what lets us address it before it exists (a project never visited in the
     UI has no such view yet, and upserting the slug creates it).
+    Cached across runs -- the slug is a function of the username and the id is
+    handed out once, when the view is first created. Note that the id is only
+    worth caching once it exists: the empty string this returns for a view that
+    has never been saved is not, since the very next `save` creates it.
     """
-    username = api().viewer.username
-    slug = "nw-nwuser" + "".join(c for c in username if c.isalnum()) + "-w"
-    resp = execute_graphql(api(), VIEWS_QUERY, {"entityName": entity, "name": project})
-    nodes = [e["node"] for e in resp["project"]["allViews"]["edges"]]
-    mine = [n for n in nodes if n["name"] == slug]
-    if mine:
-        return slug, mine[0]["id"], mine[0]["displayName"]
-    return slug, "", f"{username.capitalize()}'s workspace"
+
+    def look_up() -> list[str]:
+        username = api().viewer.username
+        slug = "nw-nwuser" + "".join(c for c in username if c.isalnum()) + "-w"
+        resp = execute_graphql(
+            api(), VIEWS_QUERY, {"entityName": entity, "name": project}
+        )
+        nodes = [e["node"] for e in resp["project"]["allViews"]["edges"]]
+        mine = [n for n in nodes if n["name"] == slug]
+        if mine:
+            return [slug, mine[0]["id"], mine[0]["displayName"]]
+        return [slug, "", f"{username.capitalize()}'s workspace"]
+
+    name, id, display_name = cached(f"view/{entity}/{project}", look_up)
+    if not id:
+        # Nothing to remember yet, and remembering "no id" would make every
+        # later run upsert a *new* view instead of this one. Drop it so the
+        # next run asks again, by which time `save` has created it.
+        uncache(f"view/{entity}/{project}")
+    return name, id, display_name
 
 
 def build(entity: str, project: str) -> ws.Workspace:
@@ -429,10 +522,19 @@ def save(workspace: ws.Workspace) -> str:
 
 
 def main() -> None:
+    global REFRESH
+
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument("--entity", default=ENTITY)
     p.add_argument("--project", default=PROJECT)
+    p.add_argument(
+        "--refresh",
+        action="store_true",
+        help="refetch the cached queries (see `cached`): pass this after "
+        "adding a metric to rt.train, so its panel appears",
+    )
     a = p.parse_args()
+    REFRESH = a.refresh
 
     print(save(build(a.entity, a.project)))
 

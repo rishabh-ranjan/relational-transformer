@@ -311,7 +311,7 @@ def submit_one(
             # task's: the one number this experiment sets on its own, and the
             # one a shorter probe run overrides
             total_steps=total_steps,
-            swa_momentum=1.0,
+            swa_momentum=0.999,
             seed=0,
             mmap_populate=True,
             timeout_per_item=10.0,
