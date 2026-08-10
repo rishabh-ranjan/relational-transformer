@@ -14,9 +14,14 @@ procedure could have picked. Both curves are cut to the shorter run's
 `total_steps` first, so a run that was allowed to train longer cannot win on
 having had more steps to pick a best from.
 
+One table per task type, since the two are scored by different metrics in
+different directions. The best val and the best test of a column are bolded
+independently; a `*` on an arm is a run still training, whose selected step is
+the best so far.
+
 Comparability is *effective*, not literal: a config key that cannot change the
-numbers being read is not a confound. What remains is printed under each table,
-and anything there makes the two rows a pair of numbers rather than a
+numbers being read is not a confound. What remains is printed under each pair
+of rows, and anything there makes the two rows a pair of numbers rather than a
 comparison.
 """
 
@@ -108,6 +113,12 @@ def confounds_of(run, ref, task) -> set[str]:
     return diff
 
 
+def bold(text: str, on: bool) -> str:
+    """`text`, bolded when `on` -- an ANSI escape, which a pipe keeps and a
+    terminal renders."""
+    return f"\033[1m{text}\033[0m" if on else text
+
+
 def best_by_val(run, val_key, test_key, higher_is_better, max_step):
     """`(step, val, test)` at the step where the val curve is best, up to
     `max_step`.
@@ -151,6 +162,7 @@ def main() -> None:
         else:
             base.setdefault(task, []).append(run)
 
+    tables = {"auroc": [], "nmae": []}
     for task in sorted(stoc):
         db, name = task
         # The comparison run is the *comparable* one, not simply the newest:
@@ -160,7 +172,7 @@ def main() -> None:
         # it), newest to break a tie.
         candidates = base.get(task, [])
         if not candidates:
-            print(f"{db}/{name}: no fixed-context run to compare against\n")
+            print(f"{db}/{name}: no fixed-context run to compare against")
             continue
         fewest = min(len(confounds_of(stoc[task], r, task)) for r in candidates)
         ref = max(
@@ -174,15 +186,13 @@ def main() -> None:
             if f"{m}/val/{db}/{name}" in stoc[task].summary
         ]
         if not metric_and_dir:
-            print(f"{db}/{name}: the stochastic run has logged no val metric yet\n")
+            print(f"{db}/{name}: the stochastic run has logged no val metric yet")
             continue
         metric, higher = metric_and_dir[0]
         horizon = min(stoc[task].config["total_steps"], ref.config["total_steps"])
 
-        # One row per arm, live and its SWA twin side by side. The two are
-        # separate selections -- the SWA weights peak at a different step --
-        # so each half of a row carries its own step.
-        arms = (("stoc", stoc[task]), ("fixed", ref))
+        # Live and its SWA twin are separate selections -- the SWA weights peak
+        # at a different step -- so each half of a row carries its own step.
         cells = {
             arm: {
                 prefix: best_by_val(
@@ -194,48 +204,62 @@ def main() -> None:
                 )
                 for prefix in ("", "swa/")
             }
-            for arm, run in arms
+            for arm, run in (("stoc", stoc[task]), ("fixed", ref))
         }
-        # A star marks the arm that won a column, so a table is read down its
-        # columns rather than by comparing pairs of numbers by eye.
-        pick = max if higher else min
-        best = {
-            (prefix, i): pick(
-                v[i] for c in cells.values() if (v := c[prefix]) is not None
-            )
-            for prefix in ("", "swa/")
-            for i in (1, 2)
-        }
-
-        print(
-            f"{db}/{name}  ({metric} {'up' if higher else 'down'}, "
-            f"best val step, first {horizon} steps)"
+        tables[metric].append(
+            {
+                "task": f"{db}/{name}",
+                "higher": higher,
+                "horizon": horizon,
+                "cells": cells,
+                "running": {
+                    "stoc": stoc[task].state == "running",
+                    "fixed": ref.state == "running",
+                },
+                "ref": ref,
+                "confounds": sorted(confounds_of(stoc[task], ref, task)),
+            }
         )
-        head = f"{'step':>7s} {'val':>9s} {'test':>9s}"
-        print(f"  {'':6s} {'live: ' + head}   {'swa: ' + head}")
-        for arm, _ in arms:
-            line = f"  {arm:6s}"
-            for prefix in ("", "swa/"):
-                got = cells[arm][prefix]
-                if got is None:
-                    line += f" {'-- no history --':>27s}  "
-                    continue
-                step, v, t = got
-                line += (
-                    f" {step:7d}"
-                    f" {v:8.2f}{'*' if v == best[prefix, 1] else ' '}"
-                    f" {t:8.2f}{'*' if t == best[prefix, 2] else ' '}  "
+
+    for metric, rows in tables.items():
+        if not rows:
+            continue
+        higher = rows[0]["higher"]
+        print(f"\n{metric} ({'higher' if higher else 'lower'} is better)")
+        head = f"{'step':>6s} {'val':>7s} {'test':>7s}"
+        print(f"  {'task':28s} {'arm':6s}  live {head}   swa {head}")
+        for row in rows:
+            # The winner of a column, val and test picked independently.
+            pick = max if row["higher"] else min
+            best = {
+                (prefix, i): pick(
+                    v[i] for c in row["cells"].values() if (v := c[prefix]) is not None
                 )
-            print(line)
-
-        print(f"  compared against: {ref.name}  ({ref.created_at})")
-        confounds = sorted(confounds_of(stoc[task], ref, task))
-        print(
-            "  effectively differs only in the sampler"
-            if not confounds
-            else f"  CONFOUNDED by: {confounds}"
-        )
-        print()
+                for prefix in ("", "swa/")
+                for i in (1, 2)
+            }
+            for j, arm in enumerate(("stoc", "fixed")):
+                label = arm + ("*" if row["running"][arm] else "")
+                line = f"  {row['task'] if j == 0 else '':28s} {label:6s}"
+                for prefix in ("", "swa/"):
+                    got = row["cells"][arm][prefix]
+                    if got is None:
+                        line += f"  {'-- no history --':>26s}"
+                        continue
+                    step, v, t = got
+                    line += f"       {step:6d}"
+                    for i, x in ((1, v), (2, t)):
+                        line += " " + bold(f"{x:7.2f}", x == best[prefix, i])
+                print(line)
+            print(
+                f"  {'':28s} first {row['horizon']} steps, "
+                f"against {row['ref'].name} ({row['ref'].created_at})"
+                + (
+                    ""
+                    if not row["confounds"]
+                    else f", CONFOUNDED by {row['confounds']}"
+                )
+            )
 
 
 if __name__ == "__main__":
