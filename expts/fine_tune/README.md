@@ -5,9 +5,7 @@ compares with the task-specific baselines.
 
 One submit script per arm, each a copy of the last with the arm's knobs turned:
 
-- `submit_full.py` -- random init, dense attention after each block's three
-  relational attentions (`skip_full_attn=False`), deterministic context;
-- `submit_stoc.py` -- random init, no dense attention, stochastic context;
+- `submit_stoc.py` -- random init, stochastic context;
 - `submit_rtp.py` -- `submit_stoc.py` warm-started from the published RT-P
   checkpoint.
 
@@ -44,9 +42,7 @@ pretraining only in what it is trained on:
   pretrained arm. RT-P is mirrored at
   `/dfs/user/ranjanr/share/stanford-star/rt-p` (compute nodes have no Hub
   access), one subdirectory per task type; refresh it with
-  `huggingface_hub.snapshot_download("stanford-star/rt-p", local_dir=...)`;
-- `skip_full_attn` is the other arm. `True` is the three relational attentions
-  per block; `False` adds a dense attention (pad mask only) after them.
+  `huggingface_hub.snapshot_download("stanford-star/rt-p", local_dir=...)`.
 
 `total_steps` is the one number this experiment sets on its own: pretraining's
 100k steps is a mixture's worth of data, not one task's.

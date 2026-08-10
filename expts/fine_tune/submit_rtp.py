@@ -211,7 +211,6 @@ def main() -> None:
                 d_ff=2048,
                 compile=True,
                 materialize_attn_masks=True,
-                skip_full_attn=True,
                 loss_fn="huber",
                 load_ckpt_path=ckpt_for(db, task),
                 db_task_list=[(db, task)],

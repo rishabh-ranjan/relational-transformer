@@ -110,15 +110,9 @@ class RelationalBlock(nn.Module):
         d_model,
         num_heads,
         d_ff,
-        skip_full_attn,
     ):
         super().__init__()
-        # "full" is dense attention over the whole context (pad mask only), and
-        # it runs last, after the three relational types have moved information
-        # along the schema.
         self.attn_types = ["col", "feat", "nbr"]
-        if not skip_full_attn:
-            self.attn_types = self.attn_types + ["full"]
         self.norms = nn.ModuleDict(
             {
                 attn_type: RMSNorm(d_model, eps=1e-6)
@@ -161,7 +155,7 @@ def _make_block_mask(mask, batch_size, q_seq_len, kv_seq_len, device):
 
 
 def _kv_sizes(node_idxs, f2p_nbr_idxs, col_name_idxs, table_name_idxs, is_padding):
-    # Exact per-query key counts for every attention type, computed without
+    # Exact per-query key counts for the three attention types, computed without
     # ever materializing a (B, S, S) tensor. Peak memory is O(B*S*F).
     #
     # Strategy: per batch row, sort the relevant key tensors and look up counts
@@ -233,14 +227,10 @@ def _kv_sizes(node_idxs, f2p_nbr_idxs, col_name_idxs, table_name_idxs, is_paddin
     hi_n = torch.searchsorted(flat_sorted, node_q, side="right")
     nbr_count = (hi_n - lo_n) * not_pad
 
-    # ---- full: every non-padding kv token, for every non-padding query.
-    full_count = not_pad.sum(-1, keepdim=True) * not_pad
-
     return {
         "feat": feat_count.unsqueeze(-1).bfloat16(),
         "nbr": nbr_count.unsqueeze(-1).bfloat16(),
         "col": col_count.unsqueeze(-1).bfloat16(),
-        "full": full_count.unsqueeze(-1).bfloat16(),
     }
 
 
@@ -261,14 +251,12 @@ class RelationalTransformer(nn.Module):
         d_ff,
         compile,
         materialize_attn_masks,
-        skip_full_attn,
         loss_fn="huber",
     ):
         super().__init__()
         if loss_fn not in ("huber", "bce"):
             raise ValueError(f"unknown loss_fn {loss_fn!r}; expected 'huber' or 'bce'")
         self.materialize_attn_masks = materialize_attn_masks
-        self.skip_full_attn = skip_full_attn
         self.loss_fn = loss_fn
         self.enc_dict = nn.ModuleDict(
             {
@@ -303,10 +291,7 @@ class RelationalTransformer(nn.Module):
             }
         )
         self.blocks = nn.ModuleList(
-            [
-                RelationalBlock(d_model, num_heads, d_ff, skip_full_attn)
-                for i in range(num_blocks)
-            ]
+            [RelationalBlock(d_model, num_heads, d_ff) for i in range(num_blocks)]
         )
         self.norm_out = RMSNorm(d_model, eps=1e-6)
         self.d_model = d_model
@@ -375,7 +360,6 @@ class RelationalTransformer(nn.Module):
                 if os.environ.get("RT_MATERIALIZE_ATTN_MASKS", "") == "0"
                 else m.get("materialize_attn_masks", True)
             ),
-            skip_full_attn=m["skip_full_attn"],
             loss_fn=m.get("loss_fn", "huber"),
         )
         model.load_state_dict(state_dict)
@@ -450,8 +434,6 @@ class RelationalTransformer(nn.Module):
                 "nbr": q_in_f2p & pad,
                 "col": same_col_table & pad,
             }
-            if not self.skip_full_attn:
-                attn_masks["full"] = pad
             kv_sizes = {
                 attn_type: attn_masks[attn_type].sum(dim=-1, keepdim=True).bfloat16()
                 for attn_type in attn_masks
@@ -499,9 +481,6 @@ class RelationalTransformer(nn.Module):
                 same_table = table_name_idxs_c[b, q_idx] == table_name_idxs_c[b, kv_idx]
                 return same_col & same_table & not_pad
 
-            def full_mask_mod(b, h, q_idx, kv_idx):
-                return (~is_padding_c[b, q_idx]) & (~is_padding_c[b, kv_idx])
-
             make_bm = partial(
                 create_block_mask,
                 B=batch_size,
@@ -516,8 +495,6 @@ class RelationalTransformer(nn.Module):
                 "nbr": make_bm(nbr_mask_mod),
                 "col": make_bm(col_mask_mod),
             }
-            if not self.skip_full_attn:
-                block_masks["full"] = make_bm(full_mask_mod)
 
             # Exact per-query key counts, computed analytically without (B, S, S).
             kv_sizes = _kv_sizes(

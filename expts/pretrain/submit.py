@@ -72,7 +72,6 @@ def main() -> None:
             d_ff=2048,
             compile=True,
             materialize_attn_masks=True,
-            skip_full_attn=True,
             loss_fn="huber",
             load_ckpt_path=None,
             # data: the Join's mixture

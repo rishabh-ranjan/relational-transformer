@@ -179,23 +179,54 @@ def main() -> None:
         metric, higher = metric_and_dir[0]
         horizon = min(stoc[task].config["total_steps"], ref.config["total_steps"])
 
-        print(f"{db}/{name}  ({metric}, best val step, first {horizon} steps)")
-        # The live curve and its SWA twin are separate selections: the SWA
-        # weights peak at a different step, so each table picks its own.
-        for kind, prefix in (("live", ""), ("swa", "swa/")):
-            val_key = f"{prefix}{metric}/val/{db}/{name}"
-            test_key = f"{prefix}{metric}/test/{db}/{name}"
-            print(f"  {kind:22s} {'step':>7s} {'val':>8s} {'test':>8s}")
-            for label, run in (
-                ("num_walks=10_000", stoc[task]),
-                ("num_walks=0", ref),
-            ):
-                got = best_by_val(run, val_key, test_key, higher, horizon)
+        # One row per arm, live and its SWA twin side by side. The two are
+        # separate selections -- the SWA weights peak at a different step --
+        # so each half of a row carries its own step.
+        arms = (("stoc", stoc[task]), ("fixed", ref))
+        cells = {
+            arm: {
+                prefix: best_by_val(
+                    run,
+                    f"{prefix}{metric}/val/{db}/{name}",
+                    f"{prefix}{metric}/test/{db}/{name}",
+                    higher,
+                    horizon,
+                )
+                for prefix in ("", "swa/")
+            }
+            for arm, run in arms
+        }
+        # A star marks the arm that won a column, so a table is read down its
+        # columns rather than by comparing pairs of numbers by eye.
+        pick = max if higher else min
+        best = {
+            (prefix, i): pick(
+                v[i] for c in cells.values() if (v := c[prefix]) is not None
+            )
+            for prefix in ("", "swa/")
+            for i in (1, 2)
+        }
+
+        print(
+            f"{db}/{name}  ({metric} {'up' if higher else 'down'}, "
+            f"best val step, first {horizon} steps)"
+        )
+        head = f"{'step':>7s} {'val':>9s} {'test':>9s}"
+        print(f"  {'':6s} {'live: ' + head}   {'swa: ' + head}")
+        for arm, _ in arms:
+            line = f"  {arm:6s}"
+            for prefix in ("", "swa/"):
+                got = cells[arm][prefix]
                 if got is None:
-                    print(f"    {label:20s} {'-- no history --':>25s}")
+                    line += f" {'-- no history --':>27s}  "
                     continue
                 step, v, t = got
-                print(f"    {label:20s} {step:7d} {v:8.2f} {t:8.2f}")
+                line += (
+                    f" {step:7d}"
+                    f" {v:8.2f}{'*' if v == best[prefix, 1] else ' '}"
+                    f" {t:8.2f}{'*' if t == best[prefix, 2] else ' '}  "
+                )
+            print(line)
 
         print(f"  compared against: {ref.name}  ({ref.created_at})")
         confounds = sorted(confounds_of(stoc[task], ref, task))

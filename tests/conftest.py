@@ -19,9 +19,7 @@ from rt.model import CONFIG_FILE, MODEL_FILE, save_model
 import polars as pl
 import yaml
 
-TINY_DIMS = dict(
-    num_blocks=2, d_model=16, d_text=8, num_heads=2, d_ff=32, skip_full_attn=True
-)
+TINY_DIMS = dict(num_blocks=2, d_model=16, d_text=8, num_heads=2, d_ff=32)
 
 
 @pytest.fixture(scope="session")
