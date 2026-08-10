@@ -35,15 +35,30 @@ the full wall clock while filling the shared filesystem. Reporting a submission
 as finished before the checks below have passed is reporting work that was not
 done.
 
+**Waiting for the jobs to exit is not monitoring.** A command that blocks until
+the queue is empty reports the end and nothing else: a run that stalled at hour
+two, a job preempted back to the start, a log that stopped moving, all of it
+arrives as one notification long after it could have been acted on. Monitoring
+is a *repeated* check while the jobs are still running, and every round of it
+ends in an answer to "is each job further along than last time?".
+
 Check right after submitting, again once the runs are past startup — a few
 minutes, longer with `compile=True`, and long enough that step lines must have
-appeared by then — and then **at regular intervals until every job has
-finished**. A sweep that runs for days is watched for days; a run breaks, stalls
+appeared by then — and then **on a fixed interval until every job has
+finished**, an interval short enough to catch a stall in the same session it
+happens. A sweep that runs for days is watched for days; a run breaks, stalls
 or gets preempted long after it started training fine. Every time:
 
 - read the log of **every** job, not a sample of them, and confirm each one
   reaches steps and its loss moves. A log that stops after the data stats is
   not yet evidence of anything;
+- **compare against the previous round, not against zero.** The check that a
+  job is alive is that its last line is *newer* than the one you saw last time.
+  A run whose log has not moved since the previous round is stalled, whatever
+  slurm says its state is;
+- know **what each job's progress line costs**, so a gap between lines can be
+  called normal or not: a training step is seconds, an eval pass over a whole
+  test split is minutes to hours;
 - `ls -laS` the log directory and `df -h` the output filesystem;
 - cancel what is broken, delete what it wrote, fix the cause, resubmit.
 
