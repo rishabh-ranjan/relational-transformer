@@ -5,24 +5,17 @@ submit jobs and it has to be committed: jobs clone the commit you submit from.
 
 ## Layout
 
-- **One file where one file will do**, `fine_tune/submit.py` being the shape to
-  copy: submit the entry point directly, every argument spelled out at the call.
-  A sweep is a loop around that call. A second file has to earn itself.
-- **No module-level `CONSTANTS` for a value one call site consumes.** Write the
-  value in the argument that takes it. Bulky or wanted twice: a function that
-  returns it, beside its use (`targets_for(db, task)`). `TASKS`, which the sweep
-  loops over, is the exception.
-- **Keep a derived input beside the file that uses it** — a curated task list, a
-  subset.
+`fine_tune/submit.py` is the shape to copy: submit the entry point directly,
+every argument spelled out at the call, a sweep as a loop around that call.
+Keep a derived input (a curated task list, a subset) beside the file that uses
+it.
 
 ## Editing submit.py
 
-- **Edit it, do not configure it.** No arguments, no flags, no `--dry-run`, no
-  `if variant == ...`. Expect to change the file every submission.
-- **Comment out to switch.** Leave the shape you are not using sitting there
-  commented; coming back to it is uncommenting.
-- **Commit every submission**, before submitting: the job clones that commit.
-  Rewrite the file freely, git holds the variants.
+A submit script is edited, not configured — no arguments, no flags, no
+`--dry-run`. Expect to change the file every submission, and **commit every
+submission before submitting**: the job clones that commit. Rewrite the file
+freely, git holds the variants.
 
 ## Watch every job you submit
 
@@ -72,10 +65,6 @@ again.
 - **Anything derived, expensive and depended on is committed beside the code.**
   If regenerating it needs a resource that may be gone, keep the artifact, not
   the recipe alone.
-- **What the code can prevent, it prevents** — a failure hit once is made
-  impossible, not documented. Prose is for what code cannot fix: bad hardware, a
-  preemptible queue, a rule a future change could break.
-
 `preprocess/` is the worked example.
 
 ## Commit what a re-run needs, delete the rest
@@ -88,23 +77,6 @@ again.
 - **The test is "would I read this next time, or write it again?"** Keep it only
   when re-deriving it is the expensive part.
 - **Clean up when the question is answered**, not later.
-
-## Say it once
-
-- **Every fact has one home, and the others point at it.** These conventions
-  live here; an experiment's README covers that experiment; a module docstring
-  covers that module. No docstring re-explains that submit scripts are edited
-  rather than configured, that a job clones the commit you submit from, or what
-  `clone_root` and `setup=` are for.
-- **Operational instructions only.** No history, no incident stories, no fixed
-  bugs, no rationale for a settled choice. Write what to run and what to check;
-  git holds how it came about.
-- **Only what the reader cannot get from the code.** Prefer a link to a summary.
-- **Code comments are operational too.** A comment says what the code does or
-  what a reader must know to change it safely. No history, no "previously we
-  ...", no incident stories, no bug a past edit fixed, no note that a value was
-  tuned or a line reordered. If the comment only makes sense to someone who saw
-  the old version, delete it; git holds that.
 
 ## What is specific to this repo
 
