@@ -215,7 +215,16 @@ def main() -> None:
         # are named -- the workspace sorts them together.
         name = f"{db}/{task} ({loss_fn})"
         print(f"  {name:28s} {resources.gpus} {resources.qos:15s} {resources.time}")
-        submit_one(db, task, resources, loss_fn=loss_fn, run_name=name)
+        # rel-avito trains on its whole stream rather than the 8192-item cap
+        # the other databases take.
+        submit_one(
+            db,
+            task,
+            resources,
+            loss_fn=loss_fn,
+            run_name=name,
+            items_per_task=1000_000_000,
+        )
 
 
 def submit_one(
