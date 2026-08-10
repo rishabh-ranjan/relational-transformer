@@ -143,16 +143,14 @@ Escalate to a human:
   node-local HOME, pixi and the clone. `roach.slurm.bootstrap` does this with
   one srun task per node. A node that has never been used pays ~7 minutes the
   first time.
-- **GPUDirect RDMA hangs multi-node jobs on the ampere nodes.** The run wedges
-  in the init-time model broadcast: every rank enqueues it, none starts it, the
-  log goes silent after `eval_tasks_loaded`, and the job burns its whole NCCL
-  watchdog timeout before dying `FAILED 134:0`. `setup_dist` now sets
-  `NCCL_NET_GDR_LEVEL=0` on those hosts, which fixes it. The tell, if it comes
-  back: GPUs at 100% util holding only ~2 GB, identical on every rank.
-  [`smoke.py`](smoke.py) reproduces or clears it in a minute.
-- **Cancelling a wedged job can drain its nodes.** The ranks do not die on
+- **A silent multi-node run is hung, not slow.** No log line for well over the
+  ~45m first step, GPUs at 100% util holding only ~2 GB on every rank: the
+  ranks are stuck in a collective and the job will sit there until its NCCL
+  watchdog times out. [`smoke.py`](smoke.py) says in a minute whether a pair of
+  nodes can train at all -- run it before putting a real run back on them.
+- **Cancelling a hung job can drain its nodes.** The ranks do not die on
   SIGKILL either, and slurm marks the node `Kill task failed`. Undraining needs
-  an admin, so a wedge can cost the nodes as well as the time.
+  an admin, so a hang can cost the nodes as well as the time.
 - **Nodes go bad and come back.** ampere9 once failed every job in its first
   second (`mkdir`: Input/output error) and was excluded for a while; it is fine
   now. Treat an exclusion as a hypothesis with a date on it -- check with
