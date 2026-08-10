@@ -59,14 +59,13 @@ BIG_TEXT_BYTES = 3 << 29
 # typing, which the released RT-v1 checkpoints read.
 KEEP = ("db-task-lists", "legacy")
 # Inside the collection's output, under the name it publishes at, so the whole
-# replacement is one folder and one upload. It was outside once, to stop an
-# unfinished tree riding along -- but finalize.py verifies both before it pushes
-# anything, and a second upload call is a second thing that can fail after the
-# first has already changed the repo. Which it did. None if there is none.
+# replacement is one folder and one upload: finalize.py verifies everything
+# before it pushes, and a second upload call is a second thing that can fail
+# after the first has already changed the repo. None if there is none.
 #
 # The build directory is named separately from the repo it publishes to, so a
 # rebuild can be staged beside the live one (`-preprocessed-new`) and promoted
-# into place once it verifies. It has been promoted; this is that build.
+# into place once it verifies.
 OUT_NAME = f"{NAME}-preprocessed"
 LEGACY_DIR = f"/dfs/user/ranjanr/share/stanford-star/{OUT_NAME}/legacy"
 
@@ -158,16 +157,15 @@ def resources_for(expected_bytes: int) -> Resources:
 
 
 # The rtx8000 node, and every card on it. A long pole always asks for all ten
-# and waits for a node that can give them: sizing the request down to what
-# happened to be free at submit time undercut the one job whose length sets the
-# stage's makespan, and it queued behind its rustler stage anyway.
+# and waits for a node that can give them: sizing the request down to whatever
+# is free at submit time undercuts the one job whose length sets the stage's
+# makespan, and it queues behind its rustler stage anyway.
 #
-# hyperturing1 is not here. Its GPUs still throw "uncorrectable ECC error": one
-# recurred on 2026-08-07 in emb-rel-amazon, and the failure is worse than a
-# crash -- it kills one sentence-transformers worker, the pool waits forever for
-# chunks that worker will never return, and the job holds ten cards doing
-# nothing until its walltime runs out. Its cpus are fine and still take rustler
-# work. Put it back when the card is actually replaced.
+# hyperturing1 is not here. Its GPUs throw "uncorrectable ECC error", which is
+# worse than a crash: it kills one sentence-transformers worker, the pool waits
+# forever for chunks that worker will never return, and the job holds ten cards
+# doing nothing until its walltime runs out. Its cpus are fine and still take
+# rustler work. Put it back when the card is replaced.
 BIG_NODES = ("hyperturing2",)
 BIG_GPUS = 10
 # Where the single-GPU jobs go: the 2080Ti nodes, so they never stand between a

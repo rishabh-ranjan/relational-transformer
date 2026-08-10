@@ -159,7 +159,7 @@ def legacy_rustler(
     # rt.preprocess.legacy writes the boolean-cast copy of the raw database to
     # <out>/_transformed on its way through. It is scratch -- a relbench-format
     # copy of data that is already published elsewhere -- and this directory is
-    # published, so it has to go. (It reached the Hub once: 247 files, 5.9 GiB.)
+    # published, so it has to go -- 247 files and 5.9 GiB of it.
     shutil.rmtree(out_root / "_transformed" / dataset, ignore_errors=True)
     for leftover in (out_root / "_transformed",):
         if leftover.is_dir() and not any(leftover.iterdir()):

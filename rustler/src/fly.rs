@@ -416,8 +416,8 @@ pub struct Sampler {
     // <table>.index` (with row vectors in `<…>_vectors.bin`). The lookup
     // is streamed: we do an initial small search and progressively
     // double the search size if the consumer asks for more seeds, so we
-    // never pre-fetch a fixed huge top-k upfront. When `None`, behavior
-    // is unchanged (random walk + same-table fallback).
+    // never pre-fetch a fixed huge top-k upfront. `None` selects seeds by
+    // random walk with a same-table fallback.
     #[cfg_attr(not(feature = "vecdb"), allow(dead_code))]
     vector_db_path: Option<String>,
 }
@@ -619,7 +619,7 @@ impl Sampler {
         // half a dozen files, so the guard is a catch_unwind around the load;
         // the tasks belonging to a dropped db are skipped in the loop after
         // this one. Without ignore_data_errors (eval, pre-validated inputs) the
-        // panic propagates as before.
+        // panic propagates.
         let try_load = |db_name: &String, table_names: &Vec<String>| {
             let compute = std::panic::AssertUnwindSafe(|| {
                 Self::load_dataset(

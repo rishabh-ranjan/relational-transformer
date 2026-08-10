@@ -109,10 +109,10 @@ def main() -> None:
             eval_splits=["val"],
             eval_db_task_list=EVAL_TASKS,
             eval_pre_dir="/dfs/user/ranjanr/share/stanford-star/relbench-preprocessed",
-            # Halved from 2**18 after the step-39000 eval left the card full
-            # enough that the next training forward OOM'd: the eval masks are
-            # `eval_tokens_per_gpu * 8192` bytes each, 2 GB at 2**18. Eval is
-            # slower for it, and only runs every `eval_freq` steps.
+            # Half of training's: the eval masks are
+            # `eval_tokens_per_gpu * 8192` bytes each (2 GB at 2**18), and an
+            # eval that fills the card OOMs the training forward after it. Eval
+            # is slower for it, and only runs every `eval_freq` steps.
             eval_tokens_per_gpu=2**17,
             eval_num_workers=1,
             eval_prefetch_factor=2,

@@ -5,11 +5,12 @@ rel-f1 alone and for 20 steps, so what it exercises is the *launch*: two nodes
 joining one process group, the init-time broadcast of the model across them,
 and a training step running to completion.
 
-That broadcast is what has actually broken. GPUDirect RDMA on the `ampere`
-nodes wedges it -- every rank enqueues the collective, none ever starts it, and
-the job burns its whole NCCL watchdog timeout looking like a slow start. Run
-this before trusting a multi-node shape after touching anything about
-distributed setup, or on nodes a run has just hung on:
+That broadcast is the fragile part: GPUDirect RDMA on the `ampere` nodes wedges
+it -- every rank enqueues the collective, none ever starts it, and the job burns
+its whole NCCL watchdog timeout looking like a slow start (`NCCL_NET_GDR_LEVEL=0`
+in `rt.train.setup_dist` is what keeps it off). Run this before trusting a
+multi-node shape after touching anything about distributed setup, or on nodes a
+run has just hung on:
 
 ```
 pixi run python expts/pretrain/smoke.py                          # 2 nodes, wherever
@@ -18,7 +19,8 @@ pixi run python expts/pretrain/smoke.py --nodelist ampere3,ampere9
 
 A pass is `time_to_first_step` in the log within a minute or so of the ranks
 starting, then `saved: best_clf` and a clean exit. A hang is silence, and means
-the fix is not working on those nodes -- do not start a real multi-node run.
+the RDMA workaround is not holding on those nodes -- do not start a real
+multi-node run.
 Data is small and page-cache population is off, so a slow start is a real
 signal here rather than the tens of minutes the full mixture costs on a node
 whose page cache is cold.

@@ -130,10 +130,9 @@ def submit(run_id: str, nodes: int, qos: str, hosts: list[str], dry: bool) -> No
     if dry:
         return
     # A failing submit says nothing on stdout -- the reason is on stderr and the
-    # exit code -- so printing only stdout turns it into a blank line and a pass
-    # that looks like it worked. That is the worst failure this script has: every
-    # path that reaches here after a `scancel` has already given the nodes up, so
-    # a swallowed error leaves the run with no job at all until someone notices.
+    # exit code -- so both are printed. Every path that reaches here after a
+    # `scancel` has already given the nodes up, and a swallowed error would
+    # leave the run with no job at all.
     #
     # `submit.py` refuses a dirty or unpushed tree, and this clone is shared with
     # other sessions, so one pass can fail on a working tree that is clean again

@@ -227,8 +227,8 @@ def upload(private: bool = False) -> None:
     api.create_repo(repo, repo_type="dataset", private=private, exist_ok=True)
 
     # One call: the legacy tree lives under out/legacy, so the whole
-    # replacement goes in a single operation. Two calls meant the second could
-    # fail after the first had already changed the published repo -- leaving new
+    # replacement goes in a single operation. With two, the second can fail
+    # after the first has already changed the published repo -- leaving new
     # databases beside an old legacy variant of them.
     print(f"uploading {out} -> {repo}")
     api.upload_large_folder(repo_id=repo, repo_type="dataset", folder_path=str(out))

@@ -1,5 +1,5 @@
 """Standalone evaluation drivers: simple runs, context-tuned + ensembled runs,
-and the eval CLI entry (RT checkpoints)."""
+and the eval entry point (RT checkpoints)."""
 
 import fnmatch
 import os
@@ -123,9 +123,9 @@ def main(
             ckpt_task_type=config["task_type"],
             evaluated_on="clf_and_reg",
         )
-    # The checkpoint carries the dims that built it; the arguments here
-    # are ignored here. Warn when they disagree so a stale CLI default is
-    # visible rather than silently shadowed.
+    # The checkpoint carries the dims that built it; the arguments here are
+    # ignored. Warn when they disagree, so a stale argument is visible rather
+    # than silently shadowed.
     ckpt_model = config.get("model", {})
     mismatches = [
         f"{k}: config={v} checkpoint={ckpt_model[k]}"

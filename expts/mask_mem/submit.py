@@ -9,7 +9,7 @@ def main() -> None:
     submit(
         "expts.mask_mem.probe:main",
         args=dict(
-            # The shape the pretraining run OOMs at: tokens_per_gpu=2**17 at
+            # The shape the pretraining run is memory-bound at: tokens_per_gpu=2**17 at
             # ctx 8192 gives 16 rows, and MAX_F2P_NBRS is rt.data's.
             batch_size=16,
             seq_len=8192,

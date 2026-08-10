@@ -110,7 +110,7 @@ def repair() -> int:
     interrupted fetch truncates one, and an LFS pointer is a 130-byte file
     standing in for a parquet. `submit.py` refuses to preprocess a database in
     that state, so the symptom is a sweep that stops making progress rather
-    than bad output -- and this is the fix.
+    than bad output.
     """
 
     d, repo = Path(RAW_DIR), SOURCE_REPO

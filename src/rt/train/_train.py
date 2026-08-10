@@ -2,7 +2,8 @@
 """Pretrain a Relational Transformer on preprocessed data (the Join).
 
 Self-supervised pretraining over every task in the preprocessed datasets at
-``--pre-dir`` (a local directory; download it up front, see docs/train.md). Features: Muon+AdamW optimization, stochastic
+``pre_dir`` (a local directory; download it up front, see docs/train.md).
+Features: Muon+AdamW optimization, stochastic
 weight averaging (SWA), periodic validation, checkpointing, and automatic
 selection of the best classifier / regressor checkpoint by mean validation
 metric across all live and SWA evaluations.
@@ -298,7 +299,7 @@ def main(
     seed_everything(seed + rank)
     # Rank 0 is the only writer; the other ranks read exactly one thing from
     # here, resume.pt. That needs no agreement between ranks: a resume only
-    # happens when --logger.id names an existing run, and then every rank
+    # happens when `run_id` names an existing run, and then every rank
     # derives the same path from its own config. An unset id defaults to a
     # per-rank timestamp, which names a fresh directory holding no resume.pt --
     # on every rank alike, so they still agree there is nothing to resume.

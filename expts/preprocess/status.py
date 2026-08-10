@@ -55,9 +55,9 @@ def gib(n: float) -> str:
     return f"{n / 2**30:,.1f} GiB"
 
 
-# Both stages, because a database is "being worked on" in either. Reading only
-# one prefix is how a database whose embed job is running gets reported as a
-# failure, on the strength of a superseded rustler job from before a fix.
+# Both stages, because a database is "being worked on" in either. Reading one
+# prefix only reports a database whose embed job is running as a failure, on the
+# strength of a superseded rustler job.
 STAGES = ("pre-", "emb-")
 
 
@@ -139,7 +139,7 @@ def stuck(names: set[str], done: set[str], limit: int = 8) -> list[str]:
     Not "jobs that failed today": a database that failed, was resubmitted and
     succeeded would be reported as broken forever, which trains you to ignore
     the line. What matters is whether it is finished or on its way -- a failure
-    with a successful retry behind it is history, not a problem.
+    with a successful retry behind it is not a problem.
 
     And not other collections' jobs: they share a job-name prefix, so a failure
     from a different sweep would otherwise be reported here as this one's, with
