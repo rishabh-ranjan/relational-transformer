@@ -49,6 +49,7 @@ import functools
 import hashlib
 import json
 import math
+import sys
 from pathlib import Path
 
 import wandb
@@ -115,6 +116,9 @@ CACHE = Path(__file__).parent / ".workspace_cache.json"
 # Set by `--refresh`: fetch every cached query afresh and write what comes back.
 REFRESH = False
 
+# Whether this run has already said it is reading from the cache.
+ANNOUNCED = False
+
 
 def cached(key: str, make):
     """`make()`, remembered in CACHE under `key` across runs.
@@ -130,8 +134,15 @@ def cached(key: str, make):
     Cached is the plain JSON `make()` returns, so the caller gets lists back
     where it stored tuples or sets; each caller re-imposes its own type.
     """
+    global ANNOUNCED
+
     store = json.loads(CACHE.read_text()) if CACHE.exists() else {}
     if not REFRESH and key in store:
+        if not ANNOUNCED:
+            # Once per run, not once per key, and on stderr: stdout is the URL,
+            # which wants to stay pipeable.
+            print("using cache. use --refresh to avoid.", file=sys.stderr)
+            ANNOUNCED = True
         return store[key]
     store[key] = value = make()
     CACHE.write_text(json.dumps(store, indent=2, sort_keys=True) + "\n")
