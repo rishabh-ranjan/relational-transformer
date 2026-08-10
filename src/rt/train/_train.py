@@ -710,9 +710,13 @@ def main(
         if not evaluators:
             return
         nets = [(raw_net, "")]
-        if swa.n > 0:
-            swa.sync_to(swa_net.named_parameters())
-            nets.append((swa_net, "swa/"))
+        # Unconditionally, including at n == 0, where the average is still the
+        # weights it was initialized from and the swa metrics just duplicate the
+        # live ones. An eval that runs one net when a later eval runs two is an
+        # eval that proves nothing about what the later one costs, and every
+        # eval here is also the memory check for the evals after it.
+        swa.sync_to(swa_net.named_parameters())
+        nets.append((swa_net, "swa/"))
         metrics = {}
         for tag, evaluator in evaluators:
             tagged_nets = [(n, tag + p) for n, p in nets]
