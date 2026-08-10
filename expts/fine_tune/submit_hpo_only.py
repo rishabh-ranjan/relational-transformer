@@ -117,13 +117,12 @@ def main() -> None:
                 shuffle_seed=0,
                 context_seed=0,
                 vector_db_path=None,
-                ctx_lcs_bw_pl_grid=[
-                    (ctx, lcs, bw, pl)
-                    for ctx in (512, 1024, 2048)
+                ctx_size_list=[512, 1024, 2048],
+                lcs_bw_pl_grid=[
+                    (lcs, bw, pl)
                     for lcs in (512, 1024, 2048)
                     for bw in (64, 128, 256)
                     for pl in (True, False)
-                    if lcs <= ctx
                 ],
                 val_ensemble_size=1,
                 test_ensemble_size=1,

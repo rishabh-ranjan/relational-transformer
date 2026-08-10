@@ -240,7 +240,7 @@ def _run_ensemble_worker(rank, port, ret):
 
     dist.init_process_group("gloo", rank=rank, world_size=WORLD_SIZE)
 
-    grid = [(CTX, 4, 8, True), (CTX, 4, 16, False)]
+    grid = [(4, 8, True), (4, 16, False)]
     val_tasks = [_named_task(f"t{i}", "val") for i in range(2)]
     test_tasks = [_named_task(f"t{i}", "test") for i in range(2)]
 
@@ -265,6 +265,7 @@ def _run_ensemble_worker(rank, port, ret):
         val_tasks,
         test_tasks,
         grid=grid,
+        ctx_sizes=[CTX],
         val_ensemble_size=1,
         test_ensemble_size=1,
         tune_only=False,

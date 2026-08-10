@@ -44,11 +44,13 @@ pixi run python expts/fine_tune/submit_hpo_only.py
 pixi run python expts/fine_tune/submit_ens.py
 ```
 
-`submit_hpo_ens.py` tunes a 36-entry grid on validation, then ensembles the
-winner over 4 context seeds on test. A grid entry is a whole context
-configuration -- `ctx_size` in {512, 1024, 2048} x `local_ctx_size` in
-{512, 1024, 2048} x `bfs_width` in {64, 128, 256} x `prefer_latest` in
-{True, False}, keeping only `local_ctx_size <= ctx_size`. It logs the test curve to wandb like `submit_ens_only.py`, and takes
+`submit_hpo_ens.py` tunes on validation, then ensembles the winner over 4
+context seeds on test. It chooses between 36 context configurations --
+`ctx_size` in {512, 1024, 2048} x `local_ctx_size` in {512, 1024, 2048} x
+`bfs_width` in {64, 128, 256} x `prefer_latest` in {True, False}, minus the
+combinations with `local_ctx_size > ctx_size` -- but pays only the 18 passes
+of `lcs_bw_pl_grid`: the three ctx sizes ride along on each pass as prefixes
+of the contexts it already built. It logs the test curve to wandb like `submit_ens_only.py`, and takes
 its task list, its checkpoints and its `items_per_task` from that script, so
 the tuned and untuned numbers are the same weights on the same rows.
 
