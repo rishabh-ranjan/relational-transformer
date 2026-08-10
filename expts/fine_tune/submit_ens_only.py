@@ -11,34 +11,112 @@ Tasks go out largest train set first: the curve that takes longest starts
 first, and the small ones fill the slots behind it.
 """
 
+import functools
 import json
+from pathlib import Path
 
+import wandb
 from roach.slurm import Resources, submit
 
-from submit import ntrain, published_best, targets_for
-from submit_hpo_only import CKPT_ROOT, b200, ckpt_for
+from ens_table import ENTITY, PROJECT, curves
+from submit import b200, ntrain, targets_for
+
+# The 21 RelBench forecast tasks, this experiment's own list rather than
+# `submit.TASKS`: that one is whatever the fine-tuning sweep last submitted,
+# which a partial resubmission narrows to a handful, and every task fine-tuning
+# has reached belongs here.
+TASKS = (
+    ("rel-amazon", "item-churn"),
+    ("rel-amazon", "item-ltv"),
+    ("rel-amazon", "user-churn"),
+    ("rel-amazon", "user-ltv"),
+    ("rel-avito", "ad-ctr"),
+    ("rel-avito", "user-clicks"),
+    ("rel-avito", "user-visits"),
+    ("rel-event", "user-attendance"),
+    ("rel-event", "user-ignore"),
+    ("rel-event", "user-repeat"),
+    ("rel-f1", "driver-dnf"),
+    ("rel-f1", "driver-position"),
+    ("rel-f1", "driver-top3"),
+    ("rel-hm", "item-sales"),
+    ("rel-hm", "user-churn"),
+    ("rel-stack", "post-votes"),
+    ("rel-stack", "user-badge"),
+    ("rel-stack", "user-engagement"),
+    ("rel-trial", "site-success"),
+    ("rel-trial", "study-adverse"),
+    ("rel-trial", "study-outcome"),
+)
+
+# Where `submit.py`'s fine-tuning runs land, and the wandb project they log to.
+CKPT_ROOT = Path("/dfs/user/ranjanr/ckpts/rtv2/2026-08-08-fine_tune")
+FINE_TUNE_PROJECT = "rtv2/2026-08-08-fine_tune"
+
+
+@functools.cache
+def run_dirs() -> dict[str, Path]:
+    """`{db}/{task}` -> the output directory of its most recent run."""
+    out: dict[str, list[Path]] = {}
+    for d in sorted(CKPT_ROOT.iterdir()):
+        name = json.loads((d / "params.json").read_text())["run_name"]
+        out.setdefault(name, []).append(d)
+    return {k: v[-1] for k, v in out.items()}
+
+
+def ckpt_for(db: str, task: str) -> str:
+    """The best-on-val checkpoint of that task's fine-tuning run *so far*.
+
+    `best_{clf,reg}.safetensors` is written only when a run reaches its final
+    eval, so waiting for it would mean waiting for the whole sweep. Until then
+    the same weights are already on disk under the name the periodic save gave
+    them: `rt.train` prunes every checkpoint its running best does not point
+    at, and keeps the live net's winner and the SWA net's.
+
+    Which of the two is the better -- what `best_{tt}` would end up being -- is
+    in the run's own val curve, so it is read from wandb: the highest AUROC or
+    the lowest nMAE over both nets and every attempt, and the step it happened
+    at names the file.
+    """
+    run = run_dirs()[f"{db}/{task}"]
+    metric, higher = task_metric(db, task)
+    key = f"{metric}/val/{db}/{task}"
+    best = None  # (value, filename), better first
+    for r in wandb.Api().runs(FINE_TUNE_PROJECT, {"config.run_name": f"{db}/{task}"}):
+        for row in r.scan_history(keys=["step", key, f"swa/{key}"]):
+            for k, name in ((key, "steps"), (f"swa/{key}", "swa_steps")):
+                v = row[k]
+                if v is None:
+                    continue
+                cand = (v, f"{name}={row['step']}.safetensors")
+                if best is None or (cand[0] > best[0]) == higher:
+                    best = cand
+    assert best is not None, f"no val curve for {db}/{task} in {FINE_TUNE_PROJECT}"
+    path = run / best[1]
+    assert path.exists(), f"{path} was pruned; the val curve says it is the best"
+    return str(path)
+
+
+def task_metric(db: str, task: str) -> tuple[str, bool]:
+    """The task's metric name and whether higher is better."""
+    keys = targets_for(db, task)
+    (metric,) = {k.split("/")[0] for k in keys if k.endswith(f"/{db}/{task}")}
+    return metric, metric == "auroc"
 
 
 def ready() -> list[tuple[str, str]]:
-    """The benchmark tasks that can be ensembled now, largest train set first.
+    """The tasks that can be ensembled now, largest train set first.
 
-    Not `submit.TASKS`: that is whatever `submit.py` last submitted, which a
-    partial resubmission narrows to a handful, and this experiment is the whole
-    benchmark. `published_best` is keyed by all 21 forecast tasks.
-
-    A task whose fine-tuning run has not written a `best_*` yet is skipped
-    rather than aborting the submission: those runs are still going, and this
-    is rerun as they land.
+    A task whose fine-tuning run has not written a checkpoint yet -- it has not
+    reached its first eval -- is skipped rather than aborting the submission:
+    that run is still going, and this is rerun as they land.
     """
-    tasks = {
-        tuple(k.split("/")[2:]) for k in published_best() if not k.endswith("/mean")
+    started = {
+        t
+        for t in TASKS
+        if any(run_dirs()[f"{t[0]}/{t[1]}"].glob("*steps=*.safetensors"))
     }
-    done = {
-        tuple(json.loads((d / "params.json").read_text())["run_name"].split("/"))
-        for d in CKPT_ROOT.iterdir()
-        if any(p.stem in ("best_clf", "best_reg") for p in d.glob("best_*.safetensors"))
-    }
-    return sorted(tasks & done, key=lambda p: -ntrain()[f"{p[0]}/{p[1]}"])
+    return sorted(started, key=lambda p: -ntrain()[f"{p[0]}/{p[1]}"])
 
 
 def plan(n: int) -> list[Resources]:
@@ -71,11 +149,11 @@ def plan(n: int) -> list[Resources]:
 
 def main() -> None:
     tasks = ready()
-    # Rerunning after more fine-tuning runs land: slice off the ones already
-    # scored, so this does not queue a second curve for them. `plan` hands the
-    # sliced list its first slots. Leave it commented to submit all that are
-    # ready.
-    # tasks = tasks[:2]
+    # A task that already has a curve is not queued a second one. Comment this
+    # out to re-ensemble them anyway -- worth it once a run has finished
+    # training and the checkpoint under its curve has moved.
+    scored = {tuple(name.split("/")) for name in curves(ENTITY, PROJECT)}
+    tasks = [t for t in tasks if t not in scored]
     ckpts = {t: ckpt_for(*t) for t in tasks}
     for (db, task), resources in zip(tasks, plan(len(tasks)), strict=True):
         name = f"{db}/{task}"
