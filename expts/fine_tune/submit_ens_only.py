@@ -33,6 +33,10 @@ def plan(n: int) -> list[Resources]:
 
 def main() -> None:
     tasks = sorted(TASKS, key=lambda p: -ntrain()[f"{p[0]}/{p[1]}"])
+    # Every checkpoint before any job: `ckpt_for` asserts, and a task whose
+    # fine-tuning run has not reached its first eval must abort the submission
+    # rather than leave the tasks ahead of it queued and the rest not.
+    ckpts = {t: ckpt_for(*t) for t in tasks}
     for (db, task), resources in zip(tasks, plan(len(tasks)), strict=True):
         name = f"{db}/{task}"
         print(f"  {name:28s} {resources.gpus} {resources.qos:15s} {resources.time}")
@@ -41,7 +45,7 @@ def main() -> None:
             # Do not put comments inside this dict: it is a config block,
             # and reading it means scanning the values.
             args=dict(
-                load_ckpt_path=ckpt_for(db, task),
+                load_ckpt_path=ckpts[db, task],
                 embedder="all-MiniLM-L12-v2",
                 d_text=384,
                 num_blocks=12,
