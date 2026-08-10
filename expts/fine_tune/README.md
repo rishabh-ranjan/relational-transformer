@@ -3,14 +3,10 @@
 What a Relational Transformer gets from training on one task, and how that
 compares with the task-specific baselines.
 
-`submit.py` is the default: stochastic context, warm-started from the published
-RT-P checkpoint. The arms it was chosen over each keep a submit script and a
-scan that reads the pair off wandb:
-
-- `submit_stoc.py` -- random init instead of RT-P; `scan_rtp.py` is gone, so
-  compare by hand or bring it back from git;
-- `submit_nonstoc.py` -- one fixed context instead of a sampled one, read by
-  `scan_stoc.py`.
+`submit.py` is the default: stochastic context without token masking,
+warm-started from the published RT-P checkpoint. One arm it was chosen over
+keeps a submit script of its own -- `submit_stoc.py`, random init instead of
+RT-P; `scan_rtp.py` is gone, so compare by hand or bring it back from git.
 
 Tasks are submitted smallest train set first, so the smallest (the leftmost
 column of `results.md`) answers first.

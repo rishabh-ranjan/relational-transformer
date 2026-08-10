@@ -221,7 +221,7 @@ def main() -> None:
                 prefer_latest_list=[False, True],
                 num_walks=10_000,
                 walk_length=20,
-                mask_prob_max=0.5,
+                mask_prob_max=0.0,
                 items_per_task=1_000_000_000,
                 lr=5e-4,
                 wd=0.1,

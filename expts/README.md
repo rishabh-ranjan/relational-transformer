@@ -78,6 +78,27 @@ again.
   when re-deriving it is the expensive part.
 - **Clean up when the question is answered**, not later.
 
+## Teardown
+
+"Tear down X" is one instruction, and it means all of this, without asking
+which parts:
+
+- **Kill every slurm job of X's** -- running, pending and requeued alike --
+  and nothing else's.
+- **Delete every file that exists only for X**: its submit script, its scan,
+  any derived input only it reads. Deleted, not commented out; git holds it.
+- **Take X out of everything that mentions it**: the experiment's README, a
+  shared workspace or results script, a sweep list that still names it.
+- **Delete X's scratch**: clones, logs and checkpoints under
+  `/lfs`, `/tmp` and `/dfs/user/<you>` alike.
+- **Keep the finding, not the machinery** -- a decision X settled belongs in
+  the experiment's README, in a sentence.
+- **Commit and push it as one change.** A half-torn-down experiment reads as a
+  live one.
+
+Whatever the answer was, the runs are over: an arm that keeps training after
+its question is answered is spending someone else's cards.
+
 ## What is specific to this repo
 
 - **Nothing to build past `pixi install`.** The rustler sampler is a compiled
