@@ -279,7 +279,17 @@ def submit_one(
             eval_prefetch_factor=2,
             eval_num_walks=10_000,
             eval_walk_length=20,
-            eval_items_per_task=1_000_000_000,
+            # The in-loop eval is a *trajectory* val, not a final score: it runs
+            # at every eval_freq and only has to say which way the curve is
+            # going, so it reads a fixed 1024-item prefix of each split, which
+            # is what the rt repo's fine-tuning recipe evaluates on too. The
+            # whole split is what made this hang: rel-avito/user-clicks is
+            # 21_183 val + 47_996 test items, each assembled from
+            # eval_num_walks=10_000 random walks by a single loader worker, so
+            # the step-0 eval alone was hours and the run logged nothing.
+            # A final number comes from scoring the selected checkpoint on the
+            # full split, not from this.
+            eval_items_per_task=1024,
             eval_ctx_size_list=[1024],
             eval_mmap_populate=True,
             eval_shuffle_seed=0,
