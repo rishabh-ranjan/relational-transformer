@@ -76,7 +76,8 @@ def main(
     context_seed: int,
     vector_db_path: str | None,
     lcs_bw_pl_grid: list[tuple[int, int, bool]],
-    ensemble_size: int,
+    val_ensemble_size: int,
+    test_ensemble_size: int,
     # where it lands
     run_id: str,
     project: str,
@@ -167,10 +168,15 @@ def main(
     )
     grid = lcs_bw_pl_grid
 
-    if len(grid) > 1 or ensemble_size > 1:
+    assert val_ensemble_size >= 1 and test_ensemble_size >= 1, "sizes are seed counts"
+    assert len(grid) > 1 or val_ensemble_size == 1, (
+        "a one-entry grid tunes nothing, so val_ensemble_size buys nothing"
+    )
+
+    if len(grid) > 1 or test_ensemble_size > 1:
         assert context_seed == 0, (
-            "ensembling sweeps context seeds 0..ensemble_size-1; a fixed "
-            "eval.context_seed only applies to single-config runs"
+            "ensembling sweeps context seeds 0..N-1; a fixed eval.context_seed "
+            "only applies to single-config runs"
         )
 
         # `splits` without "test" stops after tuning: the val scores land in
@@ -193,7 +199,8 @@ def main(
             val_tasks,
             test_tasks,
             grid=grid,
-            ensemble_size=ensemble_size,
+            val_ensemble_size=val_ensemble_size,
+            test_ensemble_size=test_ensemble_size,
             ctx_size=ctx_size,
             tune_only=tune_only,
             tuning_out_path=csv_out_dir.parent / "tuning.json",
@@ -373,7 +380,8 @@ def run_ensemble(
     test_tasks,
     *,
     grid,
-    ensemble_size,
+    val_ensemble_size,
+    test_ensemble_size,
     ctx_size,
     tune_only,
     tuning_out_path,
@@ -383,13 +391,18 @@ def run_ensemble(
     """Context-tuned + ensembled evaluation.
 
     Tune: for each task, pick the (local_ctx_size, bfs_width, prefer_latest) in
-    ``grid`` with the best *validation* metric. A one-entry ``grid`` is a fixed
-    context config instead: no val split is touched and ``val_tasks`` must be
-    ``None``. Ensemble: on test, run the chosen config with ``ensemble_size``
-    context seeds and average the per-item predictions, scoring the average
-    through relbench's evaluator after *every* seed -- so one run yields the
-    whole metric-vs-ensemble-size curve, and the submission CSVs are those of
-    the full ensemble.
+    ``grid`` with the best *validation* metric, each config scored on its
+    prediction averaged over ``val_ensemble_size`` context seeds. A one-entry
+    ``grid`` is a fixed context config instead: no val split is touched and
+    ``val_tasks`` must be ``None``. Ensemble: on test, run the chosen config
+    with ``test_ensemble_size`` context seeds and average the per-item
+    predictions, scoring the average through relbench's evaluator after *every*
+    seed -- so one run yields the whole metric-vs-ensemble-size curve, and the
+    submission CSVs are those of the full ensemble.
+
+    The two sizes are independent: tuning over one seed is much cheaper and
+    usually ranks the configs the same, while matching them scores a config on
+    the quantity it will be used at.
 
     Tuning writes every cfg's val score, and the winner per task, to
     ``tuning_out_path``. With ``tune_only`` the run stops there and never reads
@@ -409,30 +422,40 @@ def run_ensemble(
         scores = defaultdict(dict)  # (db, table) -> str(cfg) -> value
         for cfg in grid:
             lcs, bw, pl = cfg
-            # Tuning always reads context seed 0; the seed sweep is a test-side
-            # ensembling concern (below), not part of picking the best config.
-            ev = build_evaluator(
-                val_tasks,
-                pre_dir,
-                ctx_size=ctx_size,
-                local_ctx_size=lcs,
-                bfs_width=bw,
-                prefer_latest=pl,
-                context_seed=0,
-                **eval_kwargs,
-            )
-            for task, _c, labels, preds_by_prefix, _nl in ev.evaluate_raw(
-                [(model, "")], [ctx_size]
-            ):
-                _, v = metric_for(task.task_type, labels, preds_by_prefix[""])
-                key = (task.db_name, task.table_name)
-                if key not in best or _is_better(task.task_type, v, best[key]["value"]):
-                    best[key] = {"cfg": cfg, "value": v, "task_type": task.task_type}
+            # Each config is scored on the average over its own seeds, so a cfg
+            # is picked on the quantity it will be used at -- as long as
+            # val_ensemble_size matches the test one, which is the caller's
+            # business, not this loop's.
+            acc = {}  # key -> [labels, sum_preds, task_type]
+            for seed in range(val_ensemble_size):
+                ev = build_evaluator(
+                    val_tasks,
+                    pre_dir,
+                    ctx_size=ctx_size,
+                    local_ctx_size=lcs,
+                    bfs_width=bw,
+                    prefer_latest=pl,
+                    context_seed=seed,
+                    **eval_kwargs,
+                )
+                for task, _c, labels, preds_by_prefix, _nl in ev.evaluate_raw(
+                    [(model, "")], [ctx_size]
+                ):
+                    key = (task.db_name, task.table_name)
+                    p = preds_by_prefix[""].astype(np.float64)
+                    if key not in acc:
+                        acc[key] = [labels, np.zeros_like(p), task.task_type]
+                    acc[key][1] += p
+            for key, (labels, sp, task_type) in acc.items():
+                _, v = metric_for(task_type, labels, sp / val_ensemble_size)
+                if key not in best or _is_better(task_type, v, best[key]["value"]):
+                    best[key] = {"cfg": cfg, "value": v, "task_type": task_type}
                 scores[key][str(cfg)] = v
                 log(
                     indent=1,
-                    tune_task=f"{task.db_name}/{task.table_name}",
+                    tune_task="/".join(key),
                     cfg=str(cfg).replace(" ", ""),
+                    ens_size=val_ensemble_size,
                     value=f"{v:.4f}",
                 )
 
@@ -451,6 +474,7 @@ def run_ensemble(
                             "best_value": best[db, table]["value"],
                             "task_type": best[db, table]["task_type"],
                             "ctx_size": ctx_size,
+                            "val_ensemble_size": val_ensemble_size,
                             "val_scores": by_cfg,
                         }
                         for (db, table), by_cfg in scores.items()
@@ -483,7 +507,7 @@ def run_ensemble(
     for cfg, tasks in groups.items():
         lcs, bw, pl = cfg
         acc = {}  # key -> [labels, sum_preds, task, node_idxs]
-        for seed in range(ensemble_size):
+        for seed in range(test_ensemble_size):
             ev = build_evaluator(
                 tasks,
                 pre_dir,
@@ -503,7 +527,7 @@ def run_ensemble(
                     acc[key] = [labels, np.zeros_like(p), task, node_idxs]
                 acc[key][1] += p
             size = seed + 1
-            full = size == ensemble_size
+            full = size == test_ensemble_size
             for key, (labels, sp, task, node_idxs) in acc.items():
                 preds = sp / size
                 # Only the full ensemble writes a submission: every size scores

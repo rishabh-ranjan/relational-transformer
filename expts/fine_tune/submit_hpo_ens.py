@@ -73,7 +73,8 @@ def main() -> None:
                     for bw in (64, 128, 256)
                     for pl in (True, False)
                 ],
-                ensemble_size=4,
+                val_ensemble_size=1,
+                test_ensemble_size=4,
                 project="2026-08-10-fine_tune_hpo_ens",
                 entity="rtv2",
                 out_root="/dfs/user/ranjanr/ckpts",

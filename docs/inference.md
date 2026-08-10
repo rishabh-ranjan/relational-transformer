@@ -131,13 +131,13 @@ no averaging yet):
 main(load_ckpt_path="stanford-star/rt-j/regression",
      pre_dir="data/relbench-preprocessed",
      lcs_bw_pl_grid=[(256, 32, True), (512, 64, True)],
-     ensemble_size=1, ...)
+     val_ensemble_size=1, test_ensemble_size=1, ...)
 ```
 
 ## Context ensembling
 
 Context sampling is stochastic, so averaging predictions over several context
-**seeds** reduces variance. Set `ensemble_size=N` (> 1): the per-task
+**seeds** reduces variance. Set `test_ensemble_size=N` (> 1): the per-task
 tuned config runs with N independent context seeds on test and the per-row
 predictions are averaged before scoring:
 
@@ -145,11 +145,19 @@ predictions are averaged before scoring:
 main(load_ckpt_path="stanford-star/rt-j/regression",
      pre_dir="data/relbench-preprocessed",
      lcs_bw_pl_grid=[(256, 32, True), (512, 64, True)],
-     ensemble_size=4, ...)
+     val_ensemble_size=1, test_ensemble_size=4, ...)
 ```
 
+The average is scored after every seed, so the log carries the metric at every
+ensemble size from 1 to N; the submission CSVs are the full ensemble's.
+
+`val_ensemble_size` is the same knob on the tuning side: each config in the
+grid is ranked on its prediction averaged over that many seeds. Leave it at 1
+to tune cheaply, or match `test_ensemble_size` to rank each config at the
+quantity it will actually be used at.
+
 Tuning (on validation) and ensembling (on test) engage automatically whenever
-the grid has more than one entry or `ensemble_size` exceeds 1: pick the
+the grid has more than one entry or `test_ensemble_size` exceeds 1: pick the
 best context config per task, then average that config over the seeds.
 
 ## Tuning without touching test
@@ -163,14 +171,15 @@ main(load_ckpt_path="stanford-star/rt-j/regression",
      pre_dir="data/relbench-preprocessed",
      splits=["val"],
      lcs_bw_pl_grid=[(256, 32, True), (512, 64, True)],
-     ensemble_size=1, ...)
+     val_ensemble_size=1, test_ensemble_size=1, ...)
 ```
 
 A later run then evaluates that decision, passing the recorded winner as a
 one-entry grid with as many seeds as you want:
 
 ```python
-main(..., splits=["test"], lcs_bw_pl_grid=[(256, 32, True)], ensemble_size=4)
+main(..., splits=["test"], lcs_bw_pl_grid=[(256, 32, True)],
+     val_ensemble_size=1, test_ensemble_size=4)
 ```
 
 ## Optional: FAISS vector-DB sampler

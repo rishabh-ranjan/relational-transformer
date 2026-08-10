@@ -19,7 +19,7 @@ def plan(n: int) -> list[Resources]:
     `il-interactive` caps at 2 gpus of any type, `il` at 10 together with only
     2 b200, `il-lo` is preemptible and uncapped. Blackwell throughout while
     blackwell1 has the cards: a test pass per context seed is the whole wall
-    clock, and there are `ensemble_size` of them.
+    clock, and there are `test_ensemble_size` of them.
 
     Recount and rewrite this before every submission.
 
@@ -67,7 +67,8 @@ def main() -> None:
                 context_seed=0,
                 vector_db_path=None,
                 lcs_bw_pl_grid=[(2048, 128, True)],
-                ensemble_size=16,
+                val_ensemble_size=1,
+                test_ensemble_size=16,
                 project="2026-08-10-fine_tune_ens_only",
                 entity="rtv2",
                 out_root="/dfs/user/ranjanr/ckpts",
