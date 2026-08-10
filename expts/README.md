@@ -39,6 +39,18 @@ Git is what makes this safe: every submission is committed (the job clones that
 commit), so the file's history is the log of every variant that ran, and any of
 them can be recovered exactly. Rewrite it freely.
 
+**Scripts live here, not in `/tmp`.** A one-off probe -- "why is this run
+stuck?", "how slow is this loader?" -- is still an experiment: give it a
+directory under `expts/` and submit it the same way. Writing it to `/tmp`
+instead breaks two things at once. Roach jobs clone the commit you submit from,
+so a target that is not committed cannot be run at all; and `/tmp` is
+node-local, so a job's output written there lands on whichever node ran it and
+is unreadable from anywhere else (a `#SBATCH -o /tmp/...` log simply vanishes).
+`/tmp` is for a job's *own* scratch, on the node, named after the run --
+never for the code, and never for anything you intend to read afterwards.
+Delete the directory when the question is answered; see "Commit what a re-run
+needs" below.
+
 ## What every experiment owes
 
 **Enough to run the work again, and a README that says how.** Someone who was
