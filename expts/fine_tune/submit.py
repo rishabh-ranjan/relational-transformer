@@ -237,6 +237,7 @@ def submit_one(
     loss_fn: str | None = None,
     run_name: str | None = None,
     load_ckpt_path: str | None = PRETRAINED,
+    items_per_task: int = 8192,
 ):
     """One job. `run_id` names an existing run instead of minting a new one,
     which is how a job that was cancelled -- moved to another queue, say --
@@ -279,7 +280,7 @@ def submit_one(
             num_walks=0,
             walk_length=20,
             mask_prob_max=0.0,
-            items_per_task=1000_000_000,
+            items_per_task=items_per_task,
             # optimization: pretraining's, unchanged
             lr=5e-4,
             wd=0.1,
