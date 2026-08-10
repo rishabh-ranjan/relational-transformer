@@ -9,17 +9,26 @@ from roach.slurm import Resources, submit
 HERE = Path(__file__).parent
 
 TASKS = (
+    ("rel-amazon", "item-churn"),
+    ("rel-amazon", "item-ltv"),
+    ("rel-amazon", "user-churn"),
+    ("rel-amazon", "user-ltv"),
     ("rel-avito", "ad-ctr"),
-    # ("rel-avito", "user-clicks"),
-    # ("rel-avito", "user-visits"),
-    # ("rel-f1", "driver-dnf"),
-    # ("rel-f1", "driver-position"),
-    # ("rel-f1", "driver-top3"),
+    ("rel-avito", "user-clicks"),
+    ("rel-avito", "user-visits"),
     ("rel-event", "user-attendance"),
-    # ("rel-event", "user-ignore"),
+    ("rel-event", "user-ignore"),
     ("rel-event", "user-repeat"),
-    # ("rel-trial", "site-success"),
-    # ("rel-trial", "study-adverse"),
+    ("rel-f1", "driver-dnf"),
+    ("rel-f1", "driver-position"),
+    ("rel-f1", "driver-top3"),
+    ("rel-hm", "item-sales"),
+    ("rel-hm", "user-churn"),
+    ("rel-stack", "post-votes"),
+    ("rel-stack", "user-badge"),
+    ("rel-stack", "user-engagement"),
+    ("rel-trial", "site-success"),
+    ("rel-trial", "study-adverse"),
     ("rel-trial", "study-outcome"),
 )
 
@@ -191,7 +200,7 @@ def plan(n: int) -> list[Resources]:
 
 
 def main() -> None:
-    tasks = sorted(TASKS, key=lambda p: ntrain()[f"{p[0]}/{p[1]}"])
+    tasks = sorted(TASKS, key=lambda p: -ntrain()[f"{p[0]}/{p[1]}"])
     for (db, task), resources in zip(tasks, plan(len(tasks)), strict=True):
         name = f"{db}/{task}"
         print(f"  {name:28s} {resources.gpus} {resources.qos:15s} {resources.time}")
