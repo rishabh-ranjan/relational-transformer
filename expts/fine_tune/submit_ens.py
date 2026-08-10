@@ -13,9 +13,9 @@ from submit_hpo_only import b200, ckpt_for
 TUNING_ROOT = Path("/dfs/user/ranjanr/ckpts/rtv2/2026-08-10-fine_tune_hpo")
 
 
-def cfg_for(db: str, task: str) -> tuple[int, int, bool]:
-    """The `(local_ctx_size, bfs_width, prefer_latest)` this task's tuning run
-    chose on validation.
+def cfg_for(db: str, task: str) -> tuple[int, int, int, bool]:
+    """The `(ctx_size, local_ctx_size, bfs_width, prefer_latest)` this task's
+    tuning run chose on validation.
 
     Read from the `tuning.json` every tuning run writes beside its `eval_out`,
     over every run under `TUNING_ROOT`: which run covered which task is not in
@@ -30,8 +30,8 @@ def cfg_for(db: str, task: str) -> tuple[int, int, bool]:
     assert len(hits) == 1, (
         f"{len(hits)} tuning entries for {db}/{task} in {TUNING_ROOT}"
     )
-    lcs, bw, pl = hits[0]["best_cfg"]
-    return lcs, bw, pl
+    ctx, lcs, bw, pl = hits[0]["best_cfg"]
+    return ctx, lcs, bw, pl
 
 
 def plan(n: int) -> list[Resources]:
@@ -64,8 +64,8 @@ def main() -> None:
     cfgs = {t: cfg_for(*t) for t in tasks}
     for (db, task), resources in zip(tasks, plan(len(tasks)), strict=True):
         name = f"{db}/{task}"
-        lcs, bw, pl = cfgs[db, task]
-        print(f"  {name:28s} {(lcs, bw, pl)} {resources.qos:15s} {resources.time}")
+        ctx, lcs, bw, pl = cfgs[db, task]
+        print(f"  {name:28s} {(ctx, lcs, bw, pl)} {resources.qos:15s} {resources.time}")
         submit(
             "rt.eval:main",
             # Do not put comments inside this dict: it is a config block,
@@ -87,12 +87,11 @@ def main() -> None:
                 num_walks=10_000,
                 walk_length=20,
                 items_per_task=10_000_000,
-                ctx_size_list=[2048],
                 mmap_populate=True,
                 shuffle_seed=0,
                 context_seed=0,
                 vector_db_path=None,
-                lcs_bw_pl_grid=[(lcs, bw, pl)],
+                ctx_lcs_bw_pl_grid=[(ctx, lcs, bw, pl)],
                 val_ensemble_size=1,
                 test_ensemble_size=4,
                 run_name=None,

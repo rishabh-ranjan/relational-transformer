@@ -72,16 +72,17 @@ def main() -> None:
                 num_walks=10_000,
                 walk_length=20,
                 items_per_task=items_for(db, task),
-                ctx_size_list=[2048],
                 mmap_populate=True,
                 shuffle_seed=0,
                 context_seed=0,
                 vector_db_path=None,
-                lcs_bw_pl_grid=[
-                    (lcs, bw, pl)
+                ctx_lcs_bw_pl_grid=[
+                    (ctx, lcs, bw, pl)
+                    for ctx in (512, 1024, 2048)
                     for lcs in (512, 1024, 2048)
                     for bw in (64, 128, 256)
                     for pl in (True, False)
+                    if lcs <= ctx
                 ],
                 val_ensemble_size=1,
                 test_ensemble_size=4,

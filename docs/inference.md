@@ -33,7 +33,7 @@ with every argument spelled out (`load_ckpt_path="stanford-star/rt-j/classificat
 ## Inference with default context
 
 The example above runs **simple** inference: one default context config
-(`lcs_bw_pl_grid=[(256, 32, True)]`, total `ctx_size_list=[8192]`) on the
+(`ctx_lcs_bw_pl_grid=[(8192, 256, 32, True)]`) on the
 test split of every task in the default task list
 (`data/relbench-preprocessed/db-task-lists/forecast.json`, the 21-task RelBench
 benchmark). For each test row the sampler builds a context (a sampled
@@ -102,15 +102,15 @@ the main quality knob. All are arguments to `rt.eval.main`:
 
 | argument | meaning | released value |
 |---|---|---|
-| `ctx_size_list` | total context size (cells) the model attends over (one value for standalone eval) | `[8192]` |
-| `lcs_bw_pl_grid` | `(local_ctx_size, bfs_width, prefer_latest)` context configs; one entry = use it directly, several = tune per task on validation | `[(256, 32, True)]` |
+| `ctx_lcs_bw_pl_grid` | `(ctx_size, local_ctx_size, bfs_width, prefer_latest)` context configs; one entry = use it directly, several = tune per task on validation | `[(8192, 256, 32, True)]` |
 | `num_walks` | random walks used to rank same-table neighbors | 10000 |
 | `walk_length` | max length of each random walk | 20 |
 
 Within a grid entry, larger `local_ctx_size` (max cells per BFS expansion
 around the seed) and `bfs_width` (max DB nodes kept per BFS level) pull more
 relational neighborhood into each row's context (more signal, more tokens);
-`ctx_size_list` caps the total. `prefer_latest` controls *which* same-table
+`ctx_size` caps the total, and `local_ctx_size` may not exceed it.
+`prefer_latest` controls *which* same-table
 neighbors win that budget — the most recent rows (`True`, default) or the most
 frequent (`False`). The best setting is task-dependent — which motivates tuning
 and ensembling below.
@@ -123,14 +123,14 @@ like-for-like context grid search.
 ## Context tuning
 
 Rather than fix one config, **tune** the context per task: pass several
-`lcs_bw_pl_grid` entries and eval evaluates each on the **validation** split,
+`ctx_lcs_bw_pl_grid` entries and eval evaluates each on the **validation** split,
 keeping the best per task before scoring test (here with a single test seed, so
 no averaging yet):
 
 ```python
 main(load_ckpt_path="stanford-star/rt-j/regression",
      pre_dir="data/relbench-preprocessed",
-     lcs_bw_pl_grid=[(256, 32, True), (512, 64, True)],
+     ctx_lcs_bw_pl_grid=[(8192, 256, 32, True), (8192, 512, 64, True)],
      val_ensemble_size=1, test_ensemble_size=1, ...)
 ```
 
@@ -144,7 +144,7 @@ predictions are averaged before scoring:
 ```python
 main(load_ckpt_path="stanford-star/rt-j/regression",
      pre_dir="data/relbench-preprocessed",
-     lcs_bw_pl_grid=[(256, 32, True), (512, 64, True)],
+     ctx_lcs_bw_pl_grid=[(8192, 256, 32, True), (8192, 512, 64, True)],
      val_ensemble_size=1, test_ensemble_size=4, ...)
 ```
 
@@ -170,7 +170,7 @@ validation score, the winning config and its value. Drop `"test"` from
 main(load_ckpt_path="stanford-star/rt-j/regression",
      pre_dir="data/relbench-preprocessed",
      splits=["val"],
-     lcs_bw_pl_grid=[(256, 32, True), (512, 64, True)],
+     ctx_lcs_bw_pl_grid=[(8192, 256, 32, True), (8192, 512, 64, True)],
      val_ensemble_size=1, test_ensemble_size=1, ...)
 ```
 
@@ -178,7 +178,7 @@ A later run then evaluates that decision, passing the recorded winner as a
 one-entry grid with as many seeds as you want:
 
 ```python
-main(..., splits=["test"], lcs_bw_pl_grid=[(256, 32, True)],
+main(..., splits=["test"], ctx_lcs_bw_pl_grid=[(8192, 256, 32, True)],
      val_ensemble_size=1, test_ensemble_size=4)
 ```
 

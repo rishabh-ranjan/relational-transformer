@@ -33,12 +33,11 @@ def evaluate(pre_dir: str, out_root: str, checkpoint: str, run_id: str) -> None:
         num_walks=10_000,
         walk_length=20,
         items_per_task=10_000_000,
-        ctx_size_list=[8192],
         mmap_populate=True,
         shuffle_seed=0,
         context_seed=0,
         vector_db_path=None,
-        lcs_bw_pl_grid=[(256, 32, True)],
+        ctx_lcs_bw_pl_grid=[(8192, 256, 32, True)],
         val_ensemble_size=1,
         test_ensemble_size=1,
         # where the submission CSVs land

@@ -78,12 +78,11 @@ def main(
     num_walks: int,
     walk_length: int,
     items_per_task: int,
-    ctx_size_list: list[int],
     mmap_populate: bool,
     shuffle_seed: int,
     context_seed: int,
     vector_db_path: str | None,
-    lcs_bw_pl_grid: list[tuple[int, int, bool]],
+    ctx_lcs_bw_pl_grid: list[tuple[int, int, int, bool]],
     val_ensemble_size: int,
     test_ensemble_size: int,
     # where it lands
@@ -104,17 +103,17 @@ def main(
     logged as a constant at every ensemble size, so it draws as a horizontal
     line in the panel of the curve it bounds. Only the ensembled test pass
     logs to wandb -- it is the only thing here with a curve.
+
+    One entry of ``ctx_lcs_bw_pl_grid`` is a whole context configuration:
+    ``(ctx_size, local_ctx_size, bfs_width, prefer_latest)``. More than one
+    entry is a tuning run, which picks per task on validation; exactly one is a
+    fixed configuration, and nothing reads validation at all.
     """
     params = dict(locals())
     assert wandb_disabled or (test_ensemble_size > 1 and "test" in splits), (
         "the only wandb curve here is test metric vs ensemble size"
     )
     assert wandb_disabled or targets, "nothing to draw the curve against"
-    assert len(ctx_size_list) == 1, (
-        "standalone eval writes one submission per run and needs exactly one "
-        "ctx size; multi-size ctx_size_list is an in-loop training-eval feature"
-    )
-    ctx_size = ctx_size_list[0]
     # Submission CSVs land with the run's other outputs:
     # <out_root>/<entity>/<project>/<id>/eval_out (same layout as training).
     csv_out_dir = (
@@ -218,7 +217,10 @@ def main(
     )
     # A config is a dict key downstream (it groups the tasks that chose it),
     # and a caller that came through JSON hands these over as lists.
-    grid = [tuple(cfg) for cfg in lcs_bw_pl_grid]
+    grid = [tuple(cfg) for cfg in ctx_lcs_bw_pl_grid]
+    assert all(lcs <= ctx for ctx, lcs, _, _ in grid), (
+        "a local context larger than the whole context is not a configuration"
+    )
 
     assert val_ensemble_size >= 1 and test_ensemble_size >= 1, "sizes are seed counts"
     assert len(grid) > 1 or val_ensemble_size == 1, (
@@ -253,7 +255,6 @@ def main(
             grid=grid,
             val_ensemble_size=val_ensemble_size,
             test_ensemble_size=test_ensemble_size,
-            ctx_size=ctx_size,
             tune_only=tune_only,
             tuning_out_path=csv_out_dir.parent / "tuning.json",
             csv_out_dir=csv_out_dir,
@@ -269,7 +270,7 @@ def main(
     tasks = get_tasks(pre_dir, db_task_list, tuple(splits))
     if not tasks:
         raise SystemExit(f"no tasks found in {pre_dir}")
-    lcs, bw, pl = grid[0]
+    ctx_size, lcs, bw, pl = grid[0]
     ev = build_evaluator(
         tasks,
         pre_dir,
@@ -438,7 +439,6 @@ def run_ensemble(
     grid,
     val_ensemble_size,
     test_ensemble_size,
-    ctx_size,
     tune_only,
     tuning_out_path,
     csv_out_dir,
@@ -448,8 +448,9 @@ def run_ensemble(
 ):
     """Context-tuned + ensembled evaluation.
 
-    Tune: for each task, pick the (local_ctx_size, bfs_width, prefer_latest) in
-    ``grid`` with the best *validation* metric, each config scored on its
+    Tune: for each task, pick the (ctx_size, local_ctx_size, bfs_width,
+    prefer_latest) in ``grid`` with the best *validation* metric, each config
+    scored on its
     prediction averaged over ``val_ensemble_size`` context seeds. A one-entry
     ``grid`` is a fixed context config instead: no val split is touched and
     ``val_tasks`` must be ``None``. Ensemble: on test, run the chosen config
@@ -484,7 +485,7 @@ def run_ensemble(
         best = {}  # (db, table) -> {"cfg", "value", "task_type"}
         scores = defaultdict(dict)  # (db, table) -> str(cfg) -> value
         for cfg in grid:
-            lcs, bw, pl = cfg
+            ctx_size, lcs, bw, pl = cfg
             # Each config is scored on the average over its own seeds, so a cfg
             # is picked on the quantity it will be used at -- as long as
             # val_ensemble_size matches the test one, which is the caller's
@@ -536,7 +537,6 @@ def run_ensemble(
                             "best_cfg": list(best[db, table]["cfg"]),
                             "best_value": best[db, table]["value"],
                             "task_type": best[db, table]["task_type"],
-                            "ctx_size": ctx_size,
                             "val_ensemble_size": val_ensemble_size,
                             "val_scores": by_cfg,
                         }
@@ -566,14 +566,14 @@ def run_ensemble(
     curve: dict[int, dict[str, list[float]]] = defaultdict(lambda: defaultdict(list))
     results = {}
     if is_main:
-        log(eval_mode="ensembled", ctx_size=ctx_size)
+        log(eval_mode="ensembled", configs=len(groups))
     # Each group replays the same 1..N sizes, and wandb's step axis only ever
     # moves forward: two groups would log the second one's curve nowhere.
     assert not use_wandb or len(groups) == 1, (
         "wandb logging needs one context config across the run's tasks"
     )
     for cfg, tasks in groups.items():
-        lcs, bw, pl = cfg
+        ctx_size, lcs, bw, pl = cfg
         acc = {}  # key -> [labels, sum_preds, task, node_idxs]
         for seed in range(test_ensemble_size):
             ev = build_evaluator(
