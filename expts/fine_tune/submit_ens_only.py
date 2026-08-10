@@ -13,13 +13,15 @@ first, and the small ones fill the slots behind it.
 
 import functools
 import json
+import os
+import subprocess
 from pathlib import Path
 
 import wandb
 from roach.slurm import Resources, submit
 
 from ens_table import ENTITY, PROJECT, curves
-from submit import b200, ntrain, targets_for
+from submit import a100, ntrain, targets_for
 
 # The 21 RelBench forecast tasks, this experiment's own list rather than
 # `submit.TASKS`: that one is whatever the fine-tuning sweep last submitted,
@@ -104,6 +106,27 @@ def task_metric(db: str, task: str) -> tuple[str, bool]:
     return metric, metric == "auroc"
 
 
+def job_name(db: str, task: str) -> str:
+    """The slurm job name this experiment gives that task."""
+    return f"ens-only-{db}-{task}"
+
+
+def in_flight() -> set[str]:
+    """The job names this experiment already has queued or running.
+
+    Resubmitting is how this sweep picks up newly fine-tuned tasks, and a task
+    whose job has not finished has no curve yet: without this it would be
+    queued a second time on every rerun.
+    """
+    out = subprocess.run(
+        ["squeue", "-h", "-o", "%j", "-u", os.environ["USER"]],
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    return set(out.stdout.split())
+
+
 def ready() -> list[tuple[str, str]]:
     """The tasks that can be ensembled now, largest train set first.
 
@@ -123,28 +146,26 @@ def plan(n: int) -> list[Resources]:
     """One slot per task, in the order `main` hands out tasks: largest train
     set first.
 
-    An eval run does not checkpoint. A preemption or a wall limit restarts it
-    from ensemble size 1, so what a slot is worth here is how sure it is to
-    hold the whole run -- the opposite of `submit.plan`, where a short or
-    preemptible slot costs minutes. So the safest slots go to the longest runs
-    and the 12-hour ones to the shortest, rather than the best slots first.
+    Amperes, not blackwells: `b200` pins `nodelist="blackwell1"`, and that one
+    node's 8 cards are mostly other people's long jobs, so a sweep this wide
+    sits at `ReqNodeNotAvail` however many jobs it has. The a100s are 8 nodes
+    of 8 behind no nodelist at all, so a queued job takes the first card that
+    frees anywhere in the partition. A b200 is the faster card, but a queue
+    this deep is bound by how often a card frees, not by how fast one runs.
 
-    `il-lo` is preemptible and uncapped at 21 days, `il-interactive` is 2 gpus
-    of any type but only 12 hours, and `il` is not used at all: its cap is 10
-    gpus of any kind together, which `submit.py`'s amperes already hold, so an
-    `il` job here waits on those rather than on a card. Blackwell throughout
-    while blackwell1 has them -- a test pass per context seed is the whole wall
-    clock, and there are `test_ensemble_size` of them.
+    `il-lo` throughout: it is preemptible but uncapped, where `il`'s cap is 10
+    gpus of any kind together and `submit.py`'s fine-tuning sweep already holds
+    all ten, so an `il` job here would wait on my own jobs rather than on a
+    card. `il-interactive` is 2 gpus and the highest priority, worth having,
+    but the two are in use by the runs still going.
 
-    A whole 16-seed curve on a b200 is minutes, not hours, so 12 hours is no
-    constraint on the two `il-interactive` slots and preemption on the rest
-    costs one restart at worst.
+    A whole 16-seed curve is minutes to an hour, so preemption costs one
+    restart at worst -- an eval run does not checkpoint, and a preemption or a
+    wall limit restarts it from ensemble size 1.
 
     Recount and rewrite this before every submission.
     """
-    out = [b200("il-interactive", "12:00:00")] * min(n, 2)
-    out += [b200("il-lo", "21-00:00:00")] * (n - len(out))
-    return out
+    return [a100("il-lo", "21-00:00:00")] * n
 
 
 def main() -> None:
@@ -153,7 +174,7 @@ def main() -> None:
     # out to re-ensemble them anyway -- worth it once a run has finished
     # training and the checkpoint under its curve has moved.
     scored = {tuple(name.split("/")) for name in curves(ENTITY, PROJECT)}
-    tasks = [t for t in tasks if t not in scored]
+    tasks = [t for t in tasks if t not in scored and job_name(*t) not in in_flight()]
     ckpts = {t: ckpt_for(*t) for t in tasks}
     for (db, task), resources in zip(tasks, plan(len(tasks)), strict=True):
         name = f"{db}/{task}"
@@ -195,7 +216,7 @@ def main() -> None:
                 wandb_disabled=False,
             ),
             resources=resources,
-            name=f"ens-only-{db}-{task}",
+            name=job_name(db, task),
             repo_root="/lfs/hyperturing1/0/ranjanr/clones/rishabh-ranjan/relational-transformer",
             log_root="/dfs/user/ranjanr/slurm-logs/rishabh-ranjan/relational-transformer/expts/fine-tune-ens-only",
             clone_root="/lfs/local/0/roach_clones",
