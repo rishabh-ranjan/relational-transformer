@@ -53,6 +53,10 @@ PROJECT = "2026-08-07-fine_tune"
 METRICS = ("auroc", "nmae")
 SPLITS = ("val", "test")
 
+# Panels per row in every section -- an eighth of the width each, so a whole
+# split's tasks read as a single strip rather than a block to scan.
+COLS = 8
+
 # The app-managed telemetry section. Its charts are generated client-side, so
 # the saved spec carries the name and nothing else.
 SYSTEM = "System"
@@ -119,20 +123,20 @@ def step_vs_runtime() -> wr.LinePlot:
 
 
 def section(name: str, keys: list[str], all_keys: set[str], x: str) -> ws.Section:
-    """One section, sized so every panel in it is on the first page.
+    """One section, COLS panels wide and deep enough to hold all of them.
 
     wandb paginates a section at columns x rows and defaults to 3x2, which
-    hides most of a twelve-task sweep behind a pager; the grid here is the
-    squarest one that holds the whole section.
+    hides most of a twelve-task sweep behind a pager; the grid here never
+    pages, and its width is fixed so panels are the same size section to
+    section.
     """
-    cols = max(1, math.ceil(math.sqrt(len(keys))))
     return ws.Section(
         name=name,
         panels=[panel(k, all_keys, x) for k in keys],
         is_open=True,
         layout_settings=ws.SectionLayoutSettings(
-            columns=cols,
-            rows=math.ceil(len(keys) / cols),
+            columns=COLS,
+            rows=max(1, math.ceil(len(keys) / COLS)),
         ),
     )
 
@@ -208,8 +212,8 @@ def build(entity: str, project: str) -> ws.Workspace:
     for metric in METRICS:
         for split in SPLITS:
             # The per-task curves against their published bests: what the
-            # sweep is for. The `mean` keys are held back for their own
-            # sections, which put the two metrics side by side.
+            # sweep is for. The `mean` keys are left out -- they are not a
+            # task, and they fall through to the namespace grouping below.
             dashboard(
                 f"{metric}/{split}",
                 [
@@ -218,11 +222,8 @@ def build(entity: str, project: str) -> ws.Workspace:
                     if k.startswith(f"{metric}/{split}/") and not k.endswith("/mean")
                 ],
             )
-    for split in SPLITS:
-        dashboard(
-            f"mean/{split}",
-            [k for k in leaders if k in {f"{m}/{split}/mean" for m in METRICS}],
-        )
+    # The `mean` keys get no dashboard of their own: they fall through to the
+    # namespace grouping below with the rest of their metric.
 
     # The training curves, in reading order: how fast the run is moving first
     # (the two timings and the step-vs-runtime slope), then what it is doing
@@ -238,7 +239,7 @@ def build(entity: str, project: str) -> ws.Workspace:
             name="dashboard: train",
             panels=train,
             is_open=True,
-            layout_settings=ws.SectionLayoutSettings(columns=3, rows=2),
+            layout_settings=ws.SectionLayoutSettings(columns=COLS, rows=1),
         )
     )
     shown.update(k for k in TRAIN_ORDER if k)
