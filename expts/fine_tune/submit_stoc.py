@@ -214,11 +214,8 @@ def main() -> None:
                 d_ff=2048,
                 compile=True,
                 materialize_attn_masks=True,
-                # the arm: the dense attention over the whole context that each
-                # block runs after its three relational attentions
-                skip_full_attn=False,
+                skip_full_attn=True,
                 loss_fn="huber",
-                # the arm: None is random init, a checkpoint path is fine-tuning
                 load_ckpt_path=None,
                 # data: one task, from the benchmark data rather than the Join
                 db_task_list=[(db, task)],
