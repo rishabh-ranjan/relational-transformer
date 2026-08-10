@@ -1,48 +1,25 @@
-"""Score each task on test with the context `submit_hpo.py` picked on
-validation, ensembled over context seeds, one job per task. See
-[README.md](README.md)."""
+"""Ensembling on its own: score each task on test at the context the
+fine-tuning runs evaluated with, averaged over context seeds, one job per task.
+See [README.md](README.md).
 
-import json
-from pathlib import Path
+No tuning, so nothing reads validation and this does not wait on
+`submit_hpo.py`. `rt.eval` scores the running average after every seed, so one
+job yields the whole test-metric-vs-ensemble-size curve.
+"""
 
 from roach.slurm import Resources, submit
 
 from submit import TASKS, ntrain
 from submit_hpo import b200, ckpt_for
 
-TUNING_ROOT = Path("/dfs/user/ranjanr/ckpts/rtv2/2026-08-10-fine_tune_hpo")
-
-
-def cfg_for(db: str, task: str) -> tuple[int, int, bool]:
-    """The `(local_ctx_size, bfs_width, prefer_latest)` this task's tuning run
-    chose on validation.
-
-    Read from the `tuning.json` every tuning run writes beside its `eval_out`,
-    over every run under `TUNING_ROOT`: which run covered which task is not in
-    the path, and one entry per task must match or the decision is ambiguous.
-    """
-    hits = [
-        entry
-        for p in TUNING_ROOT.glob("*/tuning.json")
-        for key, entry in json.loads(p.read_text()).items()
-        if key == f"{db}/{task}"
-    ]
-    assert len(hits) == 1, (
-        f"{len(hits)} tuning entries for {db}/{task} in {TUNING_ROOT}"
-    )
-    lcs, bw, pl = hits[0]["best_cfg"]
-    return lcs, bw, pl
-
 
 def plan(n: int) -> list[Resources]:
     """The best n slots this cluster will give one-GPU jobs, best first.
 
-    Its own count, not `submit_hpo.plan`'s: this submission goes out after the
-    tuning one has finished, at whichever moment that is, and what was free
-    then says nothing about now. `il-interactive` caps at 2 gpus of any type,
-    `il` at 10 together with only 2 b200, `il-lo` is preemptible and
-    uncapped. Blackwell throughout while blackwell1 has the cards: a test pass
-    per context seed is the whole wall clock.
+    `il-interactive` caps at 2 gpus of any type, `il` at 10 together with only
+    2 b200, `il-lo` is preemptible and uncapped. Blackwell throughout while
+    blackwell1 has the cards: a test pass per context seed is the whole wall
+    clock, and there are `ensemble_size` of them.
 
     Recount and rewrite this before every submission.
 
@@ -58,8 +35,7 @@ def main() -> None:
     tasks = sorted(TASKS, key=lambda p: -ntrain()[f"{p[0]}/{p[1]}"])
     for (db, task), resources in zip(tasks, plan(len(tasks)), strict=True):
         name = f"{db}/{task}"
-        lcs, bw, pl = cfg_for(db, task)
-        print(f"  {name:28s} {(lcs, bw, pl)} {resources.qos:15s} {resources.time}")
+        print(f"  {name:28s} {resources.gpus} {resources.qos:15s} {resources.time}")
         submit(
             "rt.eval:main",
             # Do not put comments inside this dict: it is a config block,
@@ -86,17 +62,17 @@ def main() -> None:
                 shuffle_seed=0,
                 context_seed=0,
                 vector_db_path=None,
-                lcs_bw_pl_grid=[(lcs, bw, pl)],
-                ensemble_size=4,
-                project="2026-08-10-fine_tune_ens",
+                lcs_bw_pl_grid=[(2048, 128, True)],
+                ensemble_size=16,
+                project="2026-08-10-fine_tune_ens_only",
                 entity="rtv2",
                 out_root="/dfs/user/ranjanr/ckpts",
                 wandb_disabled=True,
             ),
             resources=resources,
-            name=f"ens-{db}-{task}",
+            name=f"ens-only-{db}-{task}",
             repo_root="/lfs/hyperturing1/0/ranjanr/clones/rishabh-ranjan/relational-transformer",
-            log_root="/dfs/user/ranjanr/slurm-logs/rishabh-ranjan/relational-transformer/expts/fine-tune-ens",
+            log_root="/dfs/user/ranjanr/slurm-logs/rishabh-ranjan/relational-transformer/expts/fine-tune-ens-only",
             clone_root="/lfs/local/0/roach_clones",
             secrets_dir="/dfs/user/ranjanr/.secrets",
             run_id=None,

@@ -2,6 +2,7 @@
 and the eval entry point (RT checkpoints)."""
 
 import fnmatch
+import json
 import os
 import socket
 from datetime import timedelta
@@ -172,13 +173,19 @@ def main(
             "eval.context_seed only applies to single-config runs"
         )
 
+        # `splits` without "test" stops after tuning: the val scores land in
+        # tuning.json and a later run evaluates test with the winner.
+        tune_only = "test" not in splits
+        assert not (tune_only and len(grid) == 1), (
+            "a one-entry grid has nothing to tune; ask for the test split"
+        )
         # A one-entry grid is a fixed context config: nothing to tune, so no
         # val split is read at all.
         val_tasks = (
             get_tasks(pre_dir, db_task_list, ("val",)) if len(grid) > 1 else None
         )
-        test_tasks = get_tasks(pre_dir, db_task_list, ("test",))
-        if not test_tasks:
+        test_tasks = [] if tune_only else get_tasks(pre_dir, db_task_list, ("test",))
+        if not test_tasks and not tune_only:
             raise SystemExit(f"no tasks found in {pre_dir}")
         run_ensemble(
             net,
@@ -188,6 +195,8 @@ def main(
             grid=grid,
             ensemble_size=ensemble_size,
             ctx_size=ctx_size,
+            tune_only=tune_only,
+            tuning_out_path=csv_out_dir.parent / "tuning.json",
             csv_out_dir=csv_out_dir,
             **eval_kwargs,
         )
@@ -366,6 +375,8 @@ def run_ensemble(
     grid,
     ensemble_size,
     ctx_size,
+    tune_only,
+    tuning_out_path,
     csv_out_dir,
     **eval_kwargs,
 ):
@@ -379,6 +390,10 @@ def run_ensemble(
     through relbench's evaluator after *every* seed -- so one run yields the
     whole metric-vs-ensemble-size curve, and the submission CSVs are those of
     the full ensemble.
+
+    Tuning writes every cfg's val score, and the winner per task, to
+    ``tuning_out_path``. With ``tune_only`` the run stops there and never reads
+    test: a later run evaluates the winner it recorded.
     """
 
     embedder = eval_kwargs["embedder"]
@@ -391,6 +406,7 @@ def run_ensemble(
     else:
         # ---- tune on val: best context config per task ----
         best = {}  # (db, table) -> {"cfg", "value", "task_type"}
+        scores = defaultdict(dict)  # (db, table) -> str(cfg) -> value
         for cfg in grid:
             lcs, bw, pl = cfg
             # Tuning always reads context seed 0; the seed sweep is a test-side
@@ -412,6 +428,7 @@ def run_ensemble(
                 key = (task.db_name, task.table_name)
                 if key not in best or _is_better(task.task_type, v, best[key]["value"]):
                     best[key] = {"cfg": cfg, "value": v, "task_type": task.task_type}
+                scores[key][str(cfg)] = v
                 log(
                     indent=1,
                     tune_task=f"{task.db_name}/{task.table_name}",
@@ -419,10 +436,31 @@ def run_ensemble(
                     value=f"{v:.4f}",
                 )
 
-        # Only rank 0 saw the tuning metrics, so only it knows the winning
-        # configs. Every rank must group the test tasks identically -- otherwise
-        # the ranks run different task/seed sequences and hang on mismatched
-        # collectives.
+        # Only rank 0 saw the tuning metrics, so only it writes them and only
+        # it knows the winning configs. Every rank must group the test tasks
+        # identically -- otherwise the ranks run different task/seed sequences
+        # and hang on mismatched collectives.
+        if is_main:
+            tuning_out_path = Path(tuning_out_path).expanduser()
+            tuning_out_path.parent.mkdir(parents=True, exist_ok=True)
+            tuning_out_path.write_text(
+                json.dumps(
+                    {
+                        f"{db}/{table}": {
+                            "best_cfg": list(best[db, table]["cfg"]),
+                            "best_value": best[db, table]["value"],
+                            "task_type": best[db, table]["task_type"],
+                            "ctx_size": ctx_size,
+                            "val_scores": by_cfg,
+                        }
+                        for (db, table), by_cfg in scores.items()
+                    },
+                    indent=2,
+                )
+            )
+            log(tuning_written=str(tuning_out_path), tasks=len(scores))
+        if tune_only:
+            return
         if ddp:
             payload = [best if is_main else None]
             dist.broadcast_object_list(payload, src=0)

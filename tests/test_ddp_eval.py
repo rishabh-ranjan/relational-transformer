@@ -19,6 +19,8 @@ from rt.eval.evaluator import Evaluator
 from rt.model.net import SEM_TYPE_BOOLEAN
 import socket
 import sys
+import tempfile
+from pathlib import Path
 import rt.eval._eval  # noqa: F401
 
 CTX = 4  # seq len of the fake batches
@@ -265,6 +267,8 @@ def _run_ensemble_worker(rank, port, ret):
         grid=grid,
         ensemble_size=1,
         ctx_size=CTX,
+        tune_only=False,
+        tuning_out_path=Path(tempfile.mkdtemp()) / "tuning.json",
         csv_out_dir=None,
         embedder="test-embed",
         global_rank=rank,

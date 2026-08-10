@@ -152,6 +152,27 @@ Tuning (on validation) and ensembling (on test) engage automatically whenever
 the grid has more than one entry or `ensemble_size` exceeds 1: pick the
 best context config per task, then average that config over the seeds.
 
+## Tuning without touching test
+
+Tuning writes `tuning.json` beside `eval_out` — per task, every config's
+validation score, the winning config and its value. Drop `"test"` from
+`splits` to stop there, reading no test data at all:
+
+```python
+main(load_ckpt_path="stanford-star/rt-j/regression",
+     pre_dir="data/relbench-preprocessed",
+     splits=["val"],
+     lcs_bw_pl_grid=[(256, 32, True), (512, 64, True)],
+     ensemble_size=1, ...)
+```
+
+A later run then evaluates that decision, passing the recorded winner as a
+one-entry grid with as many seeds as you want:
+
+```python
+main(..., splits=["test"], lcs_bw_pl_grid=[(256, 32, True)], ensemble_size=4)
+```
+
 ## Optional: FAISS vector-DB sampler
 
 The default sampler is FAISS-free. The opt-in FAISS vector-db sampler (for

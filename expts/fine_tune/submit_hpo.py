@@ -1,5 +1,6 @@
-"""Tune the eval context per task on the fine-tuned checkpoints, one job per
-task. See [README.md](README.md)."""
+"""Tune the eval context per task on the fine-tuned checkpoints, on validation
+only, one job per task. `submit_ens.py` scores the winners on test. See
+[README.md](README.md)."""
 
 import json
 from pathlib import Path
@@ -99,7 +100,7 @@ def main() -> None:
                 d_model=512,
                 num_heads=8,
                 d_ff=2048,
-                splits=["test"],
+                splits=["val"],
                 db_task_list=[(db, task)],
                 pre_dir="/dfs/user/ranjanr/share/stanford-star/relbench-preprocessed",
                 tokens_per_gpu=2**18,
@@ -119,7 +120,7 @@ def main() -> None:
                     for bw in (64, 128, 256)
                     for pl in (True, False)
                 ],
-                ensemble_size=4,
+                ensemble_size=1,
                 project="2026-08-10-fine_tune_hpo",
                 entity="rtv2",
                 out_root="/dfs/user/ranjanr/ckpts",
