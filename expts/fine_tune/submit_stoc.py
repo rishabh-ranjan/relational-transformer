@@ -152,10 +152,7 @@ def a100(qos: str, time: str) -> Resources:
         mem=None,
         mem_per_gpu=None,
         constraint="ampere",
-        # Every ampere but 9, whose node-local disk answers mkdir with "Input/
-        # output error": a job landing there dies in its first second, before
-        # the clone exists. Put it back once the disk is replaced.
-        nodelist="ampere1,ampere2,ampere3,ampere4,ampere5,ampere6,ampere7,ampere8",
+        nodelist=None,
     )
 
 
