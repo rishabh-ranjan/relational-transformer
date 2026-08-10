@@ -67,18 +67,12 @@ evaluated with, and sweeps 16 context seeds, largest train set first. Every
 ensembled run -- tuned or not -- scores the running average after each seed, so
 its log carries the test metric at every ensemble size, not just the last.
 
-That run is the one that logs to wandb: the test metric against `ens_size`,
-with the task's published target drawn beside it, in the same keys and units
-`rt.train` uses. Its workspace is the same script as the training project's,
-pointed at the other axis:
+Both ensembling scripts log to wandb: the test metric against `ens_size`, with
+the task's published target drawn beside it, in the same keys and units
+`rt.train` uses. [Workspaces](#workspaces) below builds the views.
 
-```
-pixi run python expts/fine_tune/workspace.py \
-    --project 2026-08-10-fine_tune_ens_only --x ens_size
-```
-
-and the curve reads as a table -- one row per task, one column per ensemble
-size, the published baseline first -- with
+The `submit_ens_only.py` curve also reads as a table -- one row per task, one
+column per ensemble size, the published baseline first -- with
 
 ```
 pixi run python expts/fine_tune/ens_table.py
@@ -91,6 +85,37 @@ All four load the fine-tuned weights `submit.py` produced: `ckpt_for` takes the
 best-on-val checkpoint of the most recent run of that task, `best_clf`/
 `best_reg` (the better of the live and the SWA net; `best_live_*` and
 `best_swa_*` sit beside it).
+
+## Workspaces
+
+One script builds all three, and it writes the view the project's bare URL
+opens on, so there is nothing to pick from the view menu. Rerun it whenever a
+task starts logging a key the view has no panel for; it rewrites the layout
+wholesale, so edit `workspace.py`, never the UI.
+
+Training, against `epoch`:
+
+```
+pixi run python expts/fine_tune/workspace.py --project 2026-08-08-fine_tune
+```
+
+Ensembling with the context fixed, against `ens_size`:
+
+```
+pixi run python expts/fine_tune/workspace.py \
+    --project 2026-08-10-fine_tune_ens_only --x ens_size
+```
+
+Tuned then ensembled, also against `ens_size` -- the tuning phase logs nothing,
+so the curve starts at the winner's first seed:
+
+```
+pixi run python expts/fine_tune/workspace.py \
+    --project 2026-08-10-fine_tune_hpo_ens --x ens_size
+```
+
+Each prints the URL it wrote:
+<https://wandb.ai/rtv2/2026-08-10-fine_tune_hpo_ens>.
 
 ## What is fixed and what is not
 
