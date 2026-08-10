@@ -44,7 +44,7 @@ import torch.distributed as dist
 from torch import optim
 from torch.utils.data import DataLoader
 
-from rt._env import _set_alloc_conf
+from rt._env import _setup_env
 from rt.data import TrainDataset, get_tasks
 from rt.model import (
     RelationalTransformer,
@@ -66,7 +66,7 @@ SEED_STRIDE = 1_000_003
 
 def setup_dist():
     """Return (device, rank, local_rank, world_size, ddp). Honors torchrun env."""
-    _set_alloc_conf()
+    _setup_env()
     world_size = int(os.environ.get("WORLD_SIZE", "1"))
     if world_size > 1:
         rank = int(os.environ["RANK"])
@@ -100,6 +100,9 @@ def run_subdir(entity: str | None, project: str, run_id: str) -> Path:
 
 
 def seed_everything(seed):
+    # Fixes str/bytes hash randomization, which otherwise varies per process and
+    # leaks into anything that iterates a set or dict keyed by them.
+    os.environ["PYTHONHASHSEED"] = str(seed)
     random.seed(seed)
     np.random.seed(seed % (2**32))
     torch.manual_seed(seed)
@@ -446,6 +449,10 @@ def main(
         num_workers=num_workers,
         prefetch_factor=prefetch_factor if num_workers else None,
         pin_memory=True,
+        # The stream is infinite and iterated once, but an eval pass that
+        # interrupts it would otherwise tear down and re-fork all `num_workers`
+        # processes, each of which re-mmaps the mixture.
+        persistent_workers=num_workers > 0,
     )
     # Per ctx size, train_bs = tokens_per_gpu // ctx and grad_accum makes the
     # global batch exactly total_bs. With multiple ctx sizes the dataloader

@@ -10,7 +10,7 @@ from pathlib import Path
 import torch
 import torch.distributed as dist
 
-from rt._env import _set_alloc_conf
+from rt._env import _setup_env
 from rt.data import get_tasks
 from rt.eval.evaluator import Evaluator
 from rt.eval.metrics import metric_for
@@ -25,7 +25,7 @@ def setup_dist():
     """Return (device, global_rank, local_rank, world_size, ddp). Honors torchrun
     env, exactly like ``rt.train._train.setup_dist``; without torchrun this is a
     plain single-process run."""
-    _set_alloc_conf()
+    _setup_env()
     world_size = int(os.environ.get("WORLD_SIZE", "1"))
     if world_size > 1:
         rank = int(os.environ["RANK"])
