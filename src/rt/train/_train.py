@@ -848,15 +848,28 @@ def main(
             mem_grads = mem_pre_zero - torch.cuda.memory_allocated()
             mem_opt = mem_pre_zero - mem_post_bwd
             mem_framework = mem_post_bwd - mem_params - mem_grads
+            # Reach eval's peak here, on top of a fully populated optimizer, so
+            # that a shape which cannot afford both fails on the first step
+            # rather than at the first eval an hour later. `ctx_size_list` is
+            # sampled per step, so training's own peak may take a few more
+            # steps to arrive; eval's does not vary, and is the larger of the
+            # two whenever `eval_tokens_per_gpu` exceeds `tokens_per_gpu`.
+            for _, evaluator in evaluators:
+                evaluator.probe(raw_net)
+            torch.cuda.synchronize()
+            peak_eval = torch.cuda.max_memory_allocated()
             if is_main:
                 log(
-                    gpu_mem_peak=fmt_bytes(peak_step),
+                    gpu_mem_peak=fmt_bytes(max(peak_step, peak_eval)),
                     reserved=fmt_bytes(torch.cuda.max_memory_reserved()),
                     params=fmt_bytes(mem_params),
                     framework=fmt_bytes(mem_framework),
                     grads=fmt_bytes(mem_grads),
                     optimizer=fmt_bytes(mem_opt),
+                    # Remainder of the *training* peak, so the eval probe is not
+                    # folded into it.
                     activations=fmt_bytes(peak_step - mem_params - mem_framework),
+                    eval_probe=fmt_bytes(peak_eval),
                 )
             # The breakdown is a one-off; the peak from here on is the run's.
             torch.cuda.reset_peak_memory_stats()
