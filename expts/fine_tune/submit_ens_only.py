@@ -106,6 +106,40 @@ def task_metric(db: str, task: str) -> tuple[str, bool]:
     return metric, metric == "auroc"
 
 
+@functools.cache
+def ntest() -> dict[str, float]:
+    """Test-set size per `{db}/{task}`, from RelBench's own task stats."""
+    import pandas as pd
+    from huggingface_hub import hf_hub_download
+
+    stats = pd.read_parquet(
+        hf_hub_download(
+            "stanford-star/relbench", "STATS/tasks.parquet", repo_type="dataset"
+        )
+    )
+    return {
+        f"{r.database}/{r.task}": float(r.num_rows_test) for r in stats.itertuples()
+    }
+
+
+def items_for(db: str, task: str) -> int:
+    """How many test items one context seed scores.
+
+    A seed is a whole pass over them and there are `test_ensemble_size` of
+    them, so the largest splits are hours of wall clock for one curve. Above
+    the largest rel-avito task the split is subsampled to 2**16; below it every
+    row is scored.
+
+    `shuffle_seed` fixes which rows a subsample takes, so the seeds being
+    averaged score the same items, and the metric comes back named `nmae~` /
+    `roc_auc~`: the same definition on part of the split, and no RelBench
+    submission (`_emit_and_score` refuses to write one that does not cover the
+    test set).
+    """
+    limit = max(ntest()[f"{d}/{t}"] for d, t in TASKS if d == "rel-avito")
+    return 2**16 if ntest()[f"{db}/{task}"] > limit else 10_000_000
+
+
 def job_name(db: str, task: str) -> str:
     """The slurm job name this experiment gives that task."""
     return f"ens-only-{db}-{task}"
@@ -199,7 +233,7 @@ def main() -> None:
                 prefetch_factor=2,
                 num_walks=10_000,
                 walk_length=20,
-                items_per_task=10_000_000,
+                items_per_task=items_for(db, task),
                 ctx_size_list=[2048],
                 mmap_populate=True,
                 shuffle_seed=0,
