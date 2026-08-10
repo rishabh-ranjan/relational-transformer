@@ -15,18 +15,22 @@ HERE = Path(__file__).parent
 # the list is what ran, and a database gaining a task should not silently
 # change a sweep.
 TASKS = (
-    ("rel-f1", "driver-dnf"),
-    ("rel-f1", "driver-position"),
-    ("rel-f1", "driver-top3"),
-    ("rel-event", "user-attendance"),
-    ("rel-event", "user-ignore"),
-    ("rel-event", "user-repeat"),
-    ("rel-trial", "site-success"),
-    ("rel-trial", "study-adverse"),
-    ("rel-trial", "study-outcome"),
+    # rel-avito is what the sampler fix was for: its p2f hubs (a `Category`
+    # node has ~10^6 children) are what made a run produce no step at all, so
+    # these three go first, to see the fix hold before the rest of the sweep
+    # is worth submitting.
     ("rel-avito", "ad-ctr"),
     ("rel-avito", "user-clicks"),
     ("rel-avito", "user-visits"),
+    # ("rel-f1", "driver-dnf"),
+    # ("rel-f1", "driver-position"),
+    # ("rel-f1", "driver-top3"),
+    # ("rel-event", "user-attendance"),
+    # ("rel-event", "user-ignore"),
+    # ("rel-event", "user-repeat"),
+    # ("rel-trial", "site-success"),
+    # ("rel-trial", "study-adverse"),
+    # ("rel-trial", "study-outcome"),
 )
 
 
@@ -194,11 +198,22 @@ def plan(n: int) -> list[Resources]:
 
 
 def main() -> None:
-    for (db, task), resources in zip(TASKS, plan(len(TASKS)), strict=True):
-        print(
-            f"  {db}/{task:16s} {resources.gpus} {resources.qos:15s} {resources.time}"
-        )
-        submit_one(db, task, resources)
+    # One arm per job. The two classification tasks are submitted under both
+    # losses: `bce` is what a binary target should be read by and is the
+    # default this file picks, `huber` is what every run before it used, and
+    # nothing has yet measured the difference on a task. ad-ctr is regression
+    # and has only the one loss to run.
+    arms = [
+        ("rel-avito", "ad-ctr", None),
+        ("rel-avito", "user-clicks", "bce"),
+        ("rel-avito", "user-clicks", "huber"),
+        ("rel-avito", "user-visits", "bce"),
+        ("rel-avito", "user-visits", "huber"),
+    ]
+    for (db, task, loss_fn), resources in zip(arms, plan(len(arms)), strict=True):
+        name = f"{db}/{task}" + (f"/{loss_fn}" if loss_fn else "")
+        print(f"  {name:28s} {resources.gpus} {resources.qos:15s} {resources.time}")
+        submit_one(db, task, resources, loss_fn=loss_fn, run_name=name)
 
 
 def submit_one(
