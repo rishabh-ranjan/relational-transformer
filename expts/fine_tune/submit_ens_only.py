@@ -93,7 +93,10 @@ def ckpt_for(db: str, task: str) -> str:
     for r in wandb.Api().runs(FINE_TUNE_PROJECT, {"config.run_name": f"{db}/{task}"}):
         for row in r.scan_history(keys=["step", key, f"swa/{key}"]):
             for k, name in ((key, "steps"), (f"swa/{key}", "swa_steps")):
-                v = row[k]
+                # A row carries a key only at the steps that logged it: evals
+                # are every `eval_freq` steps, the rest of the history is the
+                # per-step training curve.
+                v = row.get(k)
                 if v is None:
                     continue
                 cand = (v, f"{name}={row['step']}.safetensors")
