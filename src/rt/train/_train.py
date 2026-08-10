@@ -44,6 +44,7 @@ import torch.distributed as dist
 from torch import optim
 from torch.utils.data import DataLoader
 
+from rt._env import _set_alloc_conf
 from rt.data import TrainDataset, get_tasks
 from rt.model import (
     RelationalTransformer,
@@ -65,6 +66,7 @@ SEED_STRIDE = 1_000_003
 
 def setup_dist():
     """Return (device, rank, local_rank, world_size, ddp). Honors torchrun env."""
+    _set_alloc_conf()
     world_size = int(os.environ.get("WORLD_SIZE", "1"))
     if world_size > 1:
         rank = int(os.environ["RANK"])
