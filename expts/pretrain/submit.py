@@ -7,6 +7,14 @@ from pathlib import Path
 
 from roach.slurm import AMPERE_LO, Resources, submit
 
+# The checkout this script belongs to, whatever that is, rather than one named
+# clone. `submit` refuses a dirty or unpushed tree, and the usual clone is
+# shared with other sessions: one of them mid-edit used to take the run down,
+# because an autoscale pass cancels before it submits and the submit then
+# failed on someone else's uncommitted files. From a `git worktree` (or any
+# other clean checkout of the same commit) submitting still works.
+REPO_ROOT = Path(__file__).resolve().parents[2]
+
 # The in-loop validation tasks, listed here rather than by path: RelBench's
 # published `forecast.json` also carries recommendation tasks, which
 # rt.train cannot build a Task from. Read at submit
@@ -136,7 +144,7 @@ def main() -> None:
         resources=resources(args.nodes, args.qos, args.nodelist),
         name="pretrain",
         run_id=args.run_id,
-        repo_root="/lfs/hyperturing1/0/ranjanr/clones/rishabh-ranjan/relational-transformer",
+        repo_root=str(REPO_ROOT),
         log_root="/dfs/user/ranjanr/slurm-logs/rishabh-ranjan/relational-transformer/expts/pretrain",
         clone_root="/lfs/local/0/roach_clones",
         secrets_dir="/dfs/user/ranjanr/.secrets",
