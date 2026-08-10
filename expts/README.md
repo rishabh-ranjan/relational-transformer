@@ -19,10 +19,9 @@ freely, git holds the variants.
 
 Nothing in it is settled, and the resource plan least of all. **Work out which
 gpus and which qos this submission should ask for at the moment you submit** —
-from the priority order under [Submitting](#submitting), from what the cluster
-has free and the caps
-allow right now, and from whatever you have just been told — and write that
-answer into the file. What the plan said last time is a record of a different
+following [Allocating a sweep](#allocating-a-sweep) against what the cluster
+has free and what your own jobs already hold, plus whatever you have just been
+told — and write that answer into the file. What the plan said last time is a record of a different
 cluster and a different instruction, not a default to inherit: read it as one
 more variant git is holding for you. The same goes for the task list, the
 hyperparameters, and every other value in the call.
@@ -114,18 +113,57 @@ submit("expts.<name>.<module>:<function>", args={...}, resources=BLACKWELL,
   `#SBATCH -o /tmp/...` log vanishes).
 - **Take the best slots available, absent an explicit instruction otherwise** —
   where "best" is what gets the sweep finished soonest, not what has the
-  fastest card. See [Cards and caps](#cards-and-caps).
+  fastest card. See [Allocating a sweep](#allocating-a-sweep).
 
-## Cards and caps
+## Allocating a sweep
 
-Read the cluster at the moment you submit; the numbers below are the shape, not
-today's state:
+**The three qos tiers are a budget to spend, not a preference order over
+cards.** Each cap is per user, counted across every job you have. Spend the
+scarce, high-priority tiers on the fastest cards, then let the uncapped tier
+take the rest. Fill in this order and stop when the sweep is placed:
+
+| order | qos | budget | priority | wall | put it on |
+| --- | --- | --- | --- | --- | --- |
+| 1 | `il-interactive` | 2 gpus, any type | 1500 | 12h | **blackwell** — both of them |
+| 2 | `il` | 10 gpus, **at most 2 b200** | 1000 | 7d | **2 blackwell, then ampere** for the other 8 |
+| 3 | `il-lo` | uncapped (100) | 100 | 21d | ampere, and everything left over |
+
+So a sweep's high-priority ceiling is **4 blackwell + 8 ampere = 12 jobs**;
+job 13 onwards is `il-lo` and preemptible. `il`'s two b200 are a separate
+sub-cap, not a slice of the ten — spending them costs 2 of the 10 as well.
+
+Two things that are *not* reasons to skip a tier:
+
+- **A tier being full of other people's jobs.** A high-priority job that is
+  queued outranks an `il-lo` job that is queued: it takes the next card that
+  frees. Asking for `il-lo` because blackwell1 looks busy hands your place in
+  the queue to someone else.
+- **A node being busy right now.** What matters is priority per free card, not
+  how the cards happen to be allocated at the moment you look.
+
+Two things that *are*:
+
+- **Your own jobs holding the cap.** `il`'s ten count across all your sweeps,
+  so a fine-tuning sweep already holding six leaves four here. Subtract what
+  you hold before you spend.
+- **A job that cannot resume having to fit the wall clock.** `il-interactive`
+  is 12 hours and `il` is 7 days; a training run checkpoints and resumes
+  through both, an eval run restarts from the top. Do not put a 15-hour eval
+  in a 12-hour slot.
+
+### Work it out fresh, every submission
+
+**Never inherit the plan in the file.** `plan()` is a record of what the
+cluster looked like and what you were told the last time someone submitted —
+one more variant git is holding, not a default. Read the cluster, subtract what
+you already hold, apply the table above, and write today's answer into the
+file:
 
 ```
-sinfo -p il -N -o "%N %G %C %t"                  # what exists, and what is down
-squeue -p il -h -t RUNNING -o "%N %b" | sort | uniq -c   # what is actually busy
 sacctmgr -np show qos format=Name,Priority,MaxTRESPU,MaxWall,Preempt
-squeue -u $USER -h -o "%b %T" | sort | uniq -c   # what you are already holding
+squeue -u $USER -h -o "%q %b %T" | sort | uniq -c   # what you already hold
+sinfo -p il -N -o "%N %G %C %t"                     # what exists, what is down
+squeue -p il -h -t RUNNING -o "%N %b" | sort | uniq -c
 ```
 
 The `il` partition is one blackwell node and nine amperes, plus older cards:
@@ -138,32 +176,26 @@ The `il` partition is one blackwell node and nine amperes, plus older cards:
 | `turing1`-`turing3` | 10 x 2080ti |
 | `hyperion1`, `hyperion3` | 3-4 x titanxp |
 
-and three qos tiers, each cap **per user, across all of your jobs**:
+A `Resources` for a b200 pins `nodelist="blackwell1"`, so those jobs can only
+ever run on that one node — which is what the 2 + 2 budget above already
+accounts for. Nothing pins the amperes.
 
-| qos | priority | wall | cap | preemption |
-| --- | --- | --- | --- | --- |
-| `il-interactive` | 1500 | 12h | 2 gpus of any type | preempts `il-lo` |
-| `il` | 1000 | 7d | 10 gpus, of which at most 2 b200 | preempts `il-lo` |
-| `il-lo` | 100 | 21d | 100 gpus | preemptible |
+### Rebalance while it runs
 
-Choosing:
+**An allocation is right when it is made and wrong an hour later.** A tier
+frees as your own jobs finish, and a sweep left alone spends the rest of its
+life on `il-lo` behind everyone else. So every monitoring round (see
+[Watch every job](#watch-every-job-you-submit)) also asks: *is the budget
+full?*
 
-- **The fastest card is not the shortest queue.** `submit.b200` pins
-  `nodelist="blackwell1"`: one node, 8 cards, shared with everyone else's long
-  jobs. The a100s are eight nodes behind no nodelist, so a queued job takes the
-  first card that frees anywhere. A single long job wants the fast card; a wide
-  sweep of short jobs wants the big pool, and gets nothing from a card that is
-  twice as fast but never free.
-- **Your own jobs are what you queue behind.** A cap is per user, so a sweep
-  already holding `il`'s ten gpus makes every further `il` job wait on your
-  sweep rather than on the cluster. Check before choosing the tier.
-- **`il-lo` is the only uncapped tier**, and the right one for anything wider
-  than a cap. What preemption costs is whatever the job cannot resume from:
-  nothing for a training run that checkpoints, the whole run for an eval that
-  does not.
-- **A tier's wall clock has to hold the job**, and a job that cannot resume has
-  to fit inside it in one go: `il-interactive`'s 12 hours is a slot for a short
-  run, not a smaller share of a long one.
+- Recount `squeue -u $USER -h -o "%q %b" | sort | uniq -c` against the table.
+- If `il-interactive` or `il` has room and `il-lo` jobs are still pending,
+  **cancel the pending ones and resubmit them into the tier that freed** —
+  a pending job has lost nothing by being moved.
+- Move a *running* job only when what it loses is smaller than what it gains: a
+  run that checkpoints loses minutes, an eval that does not loses everything it
+  has done.
+- Leave the budget under-spent only deliberately, and say why.
 
 ## What every experiment owes
 
