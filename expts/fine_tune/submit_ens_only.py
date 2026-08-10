@@ -75,7 +75,7 @@ def main() -> None:
     # scored, so this does not queue a second curve for them. `plan` hands the
     # sliced list its first slots. Leave it commented to submit all that are
     # ready.
-    tasks = tasks[:2]
+    # tasks = tasks[:2]
     ckpts = {t: ckpt_for(*t) for t in tasks}
     for (db, task), resources in zip(tasks, plan(len(tasks)), strict=True):
         name = f"{db}/{task}"
