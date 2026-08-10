@@ -295,6 +295,9 @@ def build(entity: str, project: str) -> ws.Workspace:
         # panel by rerunning the script, which folds it into the section it
         # belongs to rather than into an auto-generated one.
         auto_generate_panels=False,
+        # Crashed runs out of the runset: a run that died mid-sweep leaves a
+        # truncated curve behind that reads as a real arm.
+        runset_settings=ws.RunsetSettings(filters=[ws.Metric("State") != "crashed"]),
     )
     workspace._internal_name, workspace._internal_id = name, id
     return workspace
