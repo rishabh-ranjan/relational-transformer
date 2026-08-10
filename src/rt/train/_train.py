@@ -43,6 +43,7 @@ from torch import optim
 from torch.utils.data import DataLoader
 
 from rt.data import TrainDataset, get_tasks
+from rt.dist import disable_gdr_on_ampere
 from rt.model import (
     RelationalTransformer,
     load_model,
@@ -68,10 +69,17 @@ def setup_dist():
         rank = int(os.environ["RANK"])
         local_rank = int(os.environ["LOCAL_RANK"])
         torch.cuda.set_device(local_rank)
+        disable_gdr_on_ampere()
         # Long timeout: the first eval/compile keeps non-participating ranks idle
         # at a collective for many minutes; the default 10-min NCCL watchdog would
         # otherwise abort the job. (Slow first-step compile + full validation pass.)
-        dist.init_process_group("nccl", timeout=timedelta(hours=2))
+        # `device_id` binds the rank's device up front so NCCL initializes the
+        # communicator eagerly and can abort cleanly instead of hanging.
+        dist.init_process_group(
+            "nccl",
+            timeout=timedelta(hours=1),
+            device_id=torch.device(f"cuda:{local_rank}"),
+        )
         return f"cuda:{local_rank}", rank, local_rank, world_size, True
     device = "cuda" if torch.cuda.is_available() else "cpu"
     return device, 0, 0, 1, False

@@ -9,6 +9,7 @@ import torch
 import torch.distributed as dist
 
 from rt.data import get_tasks
+from rt.dist import disable_gdr_on_ampere
 from rt.eval.evaluator import Evaluator
 from rt.eval.metrics import metric_for
 from rt.eval.relbench import _emit_and_score
@@ -27,9 +28,15 @@ def setup_dist():
         rank = int(os.environ["RANK"])
         local_rank = int(os.environ["LOCAL_RANK"])
         torch.cuda.set_device(local_rank)
-        # Same long timeout rationale as training: the first task's context build
-        # keeps other ranks parked at a collective for many minutes.
-        dist.init_process_group("nccl", timeout=timedelta(hours=2))
+        disable_gdr_on_ampere()
+        # Same long timeout and `device_id` rationale as training: the first
+        # task's context build keeps other ranks parked at a collective for many
+        # minutes.
+        dist.init_process_group(
+            "nccl",
+            timeout=timedelta(hours=1),
+            device_id=torch.device(f"cuda:{local_rank}"),
+        )
         return f"cuda:{local_rank}", rank, local_rank, world_size, True
     device = "cuda" if torch.cuda.is_available() else "cpu"
     return device, 0, 0, 1, False
