@@ -63,12 +63,6 @@ import wandb
 # Re-seed offset applied per resumed step so a resumed stream does not replay.
 SEED_STRIDE = 1_000_003
 
-# Upper bound on how long the forced first eval waits for every ctx size to be
-# drawn. Coverage normally arrives in a few tens of steps; this only matters
-# when the draw is unlucky, and an eval that has seen most shapes is still
-# worth far more than one deferred to the next eval_freq boundary.
-FIRST_EVAL_MAX_STEPS = 100
-
 
 def setup_dist(num_workers: int = 0):
     """Return (device, rank, local_rank, world_size, ddp). Honors torchrun env.
@@ -791,26 +785,24 @@ def main(
     # A resume starts at a step whose eval already ran (resume.pt is written at
     # every eval), so don't repeat it. A fresh run's step 0 is not that case.
     evaled_at = start_step if start_step > 0 else None
-    # Bring the first eval forward, but *after* training has run, not before it.
-    # What makes an eval expensive is not the eval alone: it runs on top of
-    # everything training leaves resident -- inductor workspaces for each
-    # compiled ctx shape, DDP reduction buckets, cuBLAS workspaces -- none of
-    # which exists before the first step. An eval on a fresh process is
-    # therefore strictly cheaper than every eval that follows it, and proves
-    # nothing about them. Waiting until every ctx size in `ctx_size_list` has
-    # been trained on means the eval runs against the full set of those
-    # buffers, and the step after it -- where the step-39000 OOM actually
-    # landed -- runs against the eval's own high-water mark.
-    uncovered_ctx = set(ctx_size_list)
-    force_eval = False
+    # Memory guard: one eval-shaped batch, run once, as soon as a step at the
+    # largest ctx size has completed its forward, backward and optimizer step.
+    # An eval is the largest allocation the job makes, and it lands on top of
+    # everything training leaves resident -- inductor workspaces per compiled
+    # ctx shape, DDP buckets, cuBLAS workspaces -- so it is only worth checking
+    # once the heaviest training shape has put its share of that in place.
+    # Waiting for the real eval at the next eval_freq boundary means finding
+    # out an hour later, which is how the step-39000 OOM happened.
+    mem_guard_ctx = max(ctx_size_list)
+    mem_guard_done = False
+    is_cuda = device.startswith("cuda")
     # Measured on this process's first step, not on global step 0: a resumed job
     # never sees step 0, and its memory is what matters when it is the job that
     # runs out. `ctx_size_list` varies the activation term step to step, so this
     # is one sample of it, not the maximum.
-    measure_mem = device.startswith("cuda")
+    measure_mem = is_cuda
     while step < total_steps:
-        if eval_freq and (force_eval or (step % eval_freq == 0 and step != evaled_at)):
-            force_eval = False
+        if eval_freq and step % eval_freq == 0 and step != evaled_at:
             run_eval(step)
             checkpoint(step)
             prune_ckpts()
@@ -841,10 +833,8 @@ def main(
                 raw_batch = next(it)
                 load_time += time.perf_counter() - t_load
             batch = move(raw_batch, device)
-            # Every microbatch of a step shares its ctx size; recording it is
-            # how the forced first eval knows every shape has been compiled.
-            if uncovered_ctx is not None:
-                uncovered_ctx.discard(next(iter(batch.values())).shape[1])
+            # Every microbatch of a step shares its ctx size.
+            step_ctx = next(iter(batch.values())).shape[1]
             # The forward belongs inside no_sync() as much as the backward:
             # DDP decides whether to reduce at forward time, so a forward
             # outside the context all-reduces this microbatch regardless.
@@ -905,17 +895,21 @@ def main(
         swa.update(raw_net.named_parameters())
         step += 1
 
-        # Every training shape has now been through a forward, a backward and
-        # an optimizer step, so their workspaces are allocated and will not be
-        # given back. Run the eval that has to fit alongside them. The cap
-        # bounds the wait: ctx sizes are drawn at random per step, so a rare
-        # one can take a while, and a late check beats none. `None` afterwards:
-        # this fires once per process, not once per step from here on.
-        if uncovered_ctx is not None and (
-            not uncovered_ctx or step - start_step >= FIRST_EVAL_MAX_STEPS
-        ):
-            force_eval = True
-            uncovered_ctx = None
+        if not mem_guard_done and evaluators and step_ctx == mem_guard_ctx:
+            mem_guard_done = True
+            # The first grid entry only: the others differ in context-building
+            # knobs, not in the shapes the net sees, so they cost time here
+            # without reaching any peak the first one misses.
+            evaluators[0][1].mem_guard([raw_net, swa_net])
+            if is_main:
+                if is_cuda:
+                    torch.cuda.synchronize()
+                log(
+                    mem_guard_passed_at_ctx=step_ctx,
+                    peak=fmt_bytes(torch.cuda.max_memory_allocated())
+                    if is_cuda
+                    else "-",
+                )
 
         total_loss, stop = reduce_step_stats(total_loss)
 

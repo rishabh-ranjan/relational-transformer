@@ -125,6 +125,43 @@ class Evaluator:
                 prefetch_time=fmt_duration(prefetch_time),
             )
 
+    def mem_guard(self, nets):
+        """Allocate what a real eval allocates, as cheaply as possible, so a run
+        that cannot afford its evals finds out now rather than at the next
+        ``eval_freq`` boundary. Nothing is scored and nothing is logged.
+
+        Cut to the minimum that still reaches the peak:
+
+        - **one batch, one task.** The footprint is set by shape, not data --
+          ``eval_bs`` rows at the largest ctx size -- so every task and every
+          batch reaches the same peak.
+        - **the largest ctx size only.** ``predict`` walks the whole list, and
+          the smaller entries cost time without ever being the high-water mark.
+        - **every net the real eval runs**, though: the live net and the SWA net
+          are separately compiled modules, so their workspaces are separate
+          allocations and only running both accounts for both.
+
+        The batch is already prefetched by the persistent workers, so the cost
+        is the forwards themselves.
+        """
+        if not self.eval_loader_iters:
+            return
+        eval_task = next(iter(self.eval_loader_iters))
+        modes = [net.training for net in nets]
+        with torch.inference_mode():
+            batch = next(self.eval_loader_iters[eval_task])
+            batch.pop("batch_mask")
+            for net in nets:
+                net.eval()
+                net.predict(batch, [max(self.ctx_size_list)], self.device, eval_task)
+        del batch
+        # Every rank drives a fixed batch count per task, so the batch consumed
+        # here has to be put back or the ranks desync at the first real eval.
+        # With persistent workers a fresh iterator forks nothing.
+        self.eval_loader_iters[eval_task] = iter(self.eval_loaders[eval_task])
+        for net, was_training in zip(nets, modes, strict=True):
+            net.train(was_training)
+
     def evaluate_raw(
         self, nets_with_prefix, eval_ctx_size_list_to_use, with_node_idxs=False
     ):
