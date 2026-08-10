@@ -53,14 +53,16 @@ PROJECT = "2026-08-07-fine_tune"
 METRICS = ("auroc", "nmae")
 SPLITS = ("val", "test")
 
-# Panels per row in every section -- an eighth of the width each, so a whole
-# split's tasks read as a single strip rather than a block to scan.
-COLS = 8
+# The panel box, in pixels, square. The spec has no aspect-ratio field, so a
+# panel is square only if both sides are absolute -- which means turning
+# `snapToColumns` off, and letting the app fit as many boxes per row as the
+# window holds rather than pinning a column count. Small enough that a wide
+# window takes a whole split's tasks in a row or two.
+BOX = 200
 
-# The panel box, in pixels, square. wandb's own default is 460x300 at three
-# columns, so a column is ~460px wide on the workspace the app sizes for;
-# an eighth of that same width is what BOX is, and the height matches.
-BOX = 3 * 460 // COLS
+# Pagination only, now that the row width is the window's to decide: the page
+# has to be big enough that no section is ever split across one.
+COLS = 8
 
 # The app-managed telemetry section. Its charts are generated client-side, so
 # the saved spec carries the name and nothing else.
@@ -341,13 +343,14 @@ def save(workspace: ws.Workspace) -> str:
     spec = json.loads(view.spec.model_dump_json(by_alias=True, exclude_none=True))
     strip_max_runs(spec)
     for s in spec["section"]["panelBankConfig"]["sections"]:
-        # Square panels. `SectionLayoutSettings` has no height field -- it
-        # writes only the column and row counts -- so the box is sized here.
-        # With `snapToColumns` on, the app takes the width from the column
-        # count and the height from `boxHeight` verbatim; BOX is the width a
-        # column comes out to at COLS across a full-width workspace, so
-        # setting both to it is what makes the panel as tall as it is wide.
-        s.setdefault("flowConfig", {}).update(boxWidth=BOX, boxHeight=BOX)
+        # Square panels. `SectionLayoutSettings` has no width or height field
+        # -- it writes only the column and row counts -- so the box is sized
+        # here. `snapToColumns` off is what makes `boxWidth` mean anything:
+        # with it on the app derives the width from the column count and only
+        # `boxHeight` is honored, which is square at exactly one window width.
+        s.setdefault("flowConfig", {}).update(
+            snapToColumns=False, boxWidth=BOX, boxHeight=BOX
+        )
         if s["name"] == SYSTEM:
             s["isPanelsAuto"] = True
             s["defaultName"] = SYSTEM
