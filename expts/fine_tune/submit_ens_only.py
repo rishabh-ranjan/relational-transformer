@@ -14,6 +14,7 @@ first, and the small ones fill the slots behind it.
 import functools
 import json
 import os
+import shutil
 import subprocess
 from pathlib import Path
 
@@ -54,6 +55,11 @@ TASKS = (
 # Where `submit.py`'s fine-tuning runs land, and the wandb project they log to.
 CKPT_ROOT = Path("/dfs/user/ranjanr/ckpts/rtv2/2026-08-08-fine_tune")
 FINE_TUNE_PROJECT = "rtv2/2026-08-08-fine_tune"
+
+# Where the weights a job is going to load are copied to, out of reach of the
+# training run that wrote them. 163M a task, and they are deleted with the rest
+# of this experiment's scratch.
+PINNED = Path("/dfs/user/ranjanr/ckpts/rtv2/2026-08-10-fine_tune_ens_only/pinned")
 
 
 @functools.cache
@@ -96,7 +102,21 @@ def ckpt_for(db: str, task: str) -> str:
     assert best is not None, f"no val curve for {db}/{task} in {FINE_TUNE_PROJECT}"
     path = run / best[1]
     assert path.exists(), f"{path} was pruned; the val curve says it is the best"
-    return str(path)
+    # Copied, not pointed at: the run that wrote it is still training, and its
+    # next eval prunes every checkpoint its new best does not point at. A job
+    # that starts after that finds nothing at the path -- and `load_rt_model`
+    # reads a path that does not exist as a Hub repo id, so it fails on a 404
+    # from the Hub rather than on the file that went missing.
+    # A directory of its own: `from_pretrained` reads the dims from the
+    # `config.json` sitting beside the weights file, under that exact name.
+    pinned = PINNED / f"{db}__{task}" / path.name
+    if not pinned.exists():
+        pinned.parent.mkdir(parents=True, exist_ok=True)
+        tmp = pinned.with_suffix(f".{os.getpid()}.tmp")
+        shutil.copyfile(path, tmp)
+        tmp.rename(pinned)
+        shutil.copyfile(run / "config.json", pinned.parent / "config.json")
+    return str(pinned)
 
 
 def task_metric(db: str, task: str) -> tuple[str, bool]:
