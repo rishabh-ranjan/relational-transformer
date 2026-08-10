@@ -71,6 +71,9 @@ class Evaluator:
 
         init_tic = time.time()
         prefetch_time = 0.0
+        # items the eval actually reads, summed over tasks: what a split's size
+        # became after items_per_task capped it.
+        total_items = 0
 
         for eval_task in self.tasks:
             rustler_dataset = RustlerDataset(
@@ -97,6 +100,7 @@ class Evaluator:
                 vector_db_path=vector_db_path,
                 train_only_fallback=train_only_fallback,
             )
+            total_items += rustler_dataset.num_items
             eval_dataset = EvalDataset(
                 rustler_dataset=rustler_dataset,
                 eval_bs=eval_bs,
@@ -121,6 +125,7 @@ class Evaluator:
         if local_rank == 0:
             log(
                 eval_tasks_loaded=len(self.tasks),
+                total_items=total_items,
                 elapsed=fmt_duration(time.time() - init_tic),
                 prefetch_time=fmt_duration(prefetch_time),
             )

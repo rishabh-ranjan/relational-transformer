@@ -22,6 +22,10 @@ rules in
   submission, and commit before submitting: the job clones that commit.
 - **Comment out to switch.** Leave the shape you are not using sitting there
   commented; coming back to it is uncommenting.
+- **No helper wrapping the submit call.** The `submit(...)` call sits in the
+  loop body, spelled out; a parameter threaded through a `submit_one(...)` puts
+  the value that changes in a different place from the value that does not, and
+  every knob has to be in one place to be edited in one place.
 - **What the code can prevent, it prevents** — a failure hit once is made
   impossible, not documented. Prose is for what code cannot fix: bad hardware, a
   preemptible queue, a rule a future change could break.

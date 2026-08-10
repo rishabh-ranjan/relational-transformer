@@ -190,6 +190,7 @@ def main(
     d_ff: int,
     compile: bool,
     materialize_attn_masks: bool,
+    skip_full_attn: bool,
     loss_fn: str,
     load_ckpt_path: str | None,
     # data + optimization
@@ -322,6 +323,7 @@ def main(
                 d_ff=d_ff,
                 compile=compile,
                 materialize_attn_masks=materialize_attn_masks,
+                skip_full_attn=skip_full_attn,
                 loss_fn=loss_fn,
             )
             .to(device)
@@ -612,6 +614,7 @@ def main(
                         "num_heads": num_heads,
                         "d_ff": d_ff,
                         "materialize_attn_masks": materialize_attn_masks,
+                        "skip_full_attn": skip_full_attn,
                         "loss_fn": loss_fn,
                     },
                 },

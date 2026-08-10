@@ -3,11 +3,11 @@
 What a Relational Transformer gets from training on one task, and how that
 compares with the task-specific baselines.
 
-The first arm is the control: **rel-f1 `driver-top3` from random init**. It is
-the smallest training set in the benchmark (1.4k rows, the leftmost column of
-`results.md`), so it is where a from-scratch model has the least to work with and
-where pretraining should be worth the most -- which makes it the number the
-fine-tuned arm has to beat.
+The current arm is **every forecast task from random init, with the full
+attention each block runs after its three relational attentions turned on**
+(`skip_full_attn=False`). Tasks are submitted smallest train set first, so the
+smallest (rel-f1 `driver-top3`, 1.4k rows, the leftmost column of `results.md`)
+answers first.
 
 ## Running it
 
@@ -36,7 +36,9 @@ pretraining only in what it is trained on:
 - `pre_dir` is the *benchmark* data, not the Join -- fine-tuning trains where it
   is evaluated, and train/eval differ only in split;
 - `load_ckpt_path` is the arm. `None` is random init; a checkpoint path is the
-  pretrained arm.
+  pretrained arm;
+- `skip_full_attn` is the other arm. `True` is the three relational attentions
+  per block; `False` adds a dense attention (pad mask only) after them.
 
 `total_steps` is the one number this experiment sets on its own: pretraining's
 100k steps is a mixture's worth of data, not one task's.

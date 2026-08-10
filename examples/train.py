@@ -27,6 +27,7 @@ def train(pre_dir: str, eval_pre_dir: str, out_root: str, run_id: str) -> None:
         d_ff=2048,
         compile=True,
         materialize_attn_masks=True,
+        skip_full_attn=True,
         loss_fn="huber",
         load_ckpt_path=None,
         # data + optimization

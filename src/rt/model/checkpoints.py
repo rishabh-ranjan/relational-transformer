@@ -19,7 +19,14 @@ _HF_UA = {"library_name": "relational-transformer", "library_version": _RT_VERSI
 
 CONFIG_FILE = "config.json"
 MODEL_FILE = "model.safetensors"
-MODEL_DIM_KEYS = ("num_blocks", "d_model", "d_text", "num_heads", "d_ff")
+MODEL_DIM_KEYS = (
+    "num_blocks",
+    "d_model",
+    "d_text",
+    "num_heads",
+    "d_ff",
+    "skip_full_attn",
+)
 
 
 def save_model(state_dict, path, metadata: dict | None = None) -> None:

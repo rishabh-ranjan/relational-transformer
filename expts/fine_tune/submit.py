@@ -15,21 +15,18 @@ HERE = Path(__file__).parent
 # the list is what ran, and a database gaining a task should not silently
 # change a sweep.
 TASKS = (
-    # rel-avito first: its p2f hubs (a `Category` node has ~10^6 children) are
-    # the sampler's worst case, so these three say whether the sweep is worth
-    # submitting at all.
     ("rel-avito", "ad-ctr"),
     ("rel-avito", "user-clicks"),
     ("rel-avito", "user-visits"),
-    # ("rel-f1", "driver-dnf"),
-    # ("rel-f1", "driver-position"),
-    # ("rel-f1", "driver-top3"),
-    # ("rel-event", "user-attendance"),
-    # ("rel-event", "user-ignore"),
-    # ("rel-event", "user-repeat"),
-    # ("rel-trial", "site-success"),
-    # ("rel-trial", "study-adverse"),
-    # ("rel-trial", "study-outcome"),
+    ("rel-f1", "driver-dnf"),
+    ("rel-f1", "driver-position"),
+    ("rel-f1", "driver-top3"),
+    ("rel-event", "user-attendance"),
+    ("rel-event", "user-ignore"),
+    ("rel-event", "user-repeat"),
+    ("rel-trial", "site-success"),
+    ("rel-trial", "study-adverse"),
+    ("rel-trial", "study-outcome"),
 )
 
 
@@ -197,132 +194,115 @@ def plan(n: int) -> list[Resources]:
 
 
 def main() -> None:
-    arms = [
-        ("rel-avito", "ad-ctr"),
-        ("rel-avito", "user-clicks"),
-        ("rel-avito", "user-visits"),
-    ]
-    for (db, task), resources in zip(arms, plan(len(arms)), strict=True):
+    # Smallest train set first: the fine-tuning question is sharpest where a
+    # task has the least to learn from, and a queue that starts there answers
+    # it before the long runs take the cluster.
+    tasks = sorted(TASKS, key=lambda p: ntrain()[f"{p[0]}/{p[1]}"])
+    for (db, task), resources in zip(tasks, plan(len(tasks)), strict=True):
         name = f"{db}/{task}"
         print(f"  {name:28s} {resources.gpus} {resources.qos:15s} {resources.time}")
-        # rel-avito trains on its whole stream rather than the 8192-item cap
-        # the other databases take.
-        submit_one(db, task, resources, run_name=name, items_per_task=1000_000_000)
-
-
-def submit_one(
-    db: str,
-    task: str,
-    resources: Resources,
-    run_id: str | None = None,
-    total_steps: int = 10_001,
-    loss_fn: str = "huber",
-    run_name: str | None = None,
-    items_per_task: int = 8192,
-):
-    """One job. `run_id` names an existing run instead of minting a new one,
-    which is how a job that was cancelled -- moved to another queue, say --
-    comes back and resumes from its own checkpoint rather than from step 0.
-
-    `run_name` overrides the wandb name, which is the task by default: two
-    arms of the same task want to be told apart in the workspace."""
-    return submit(
-        "rt.train:main",
-        args=dict(
-            # model: RT-J's dims, so a fine-tuned run and a pretrained
-            # checkpoint are the same architecture
-            embedder="all-MiniLM-L12-v2",
-            d_text=384,
-            num_blocks=12,
-            d_model=512,
-            num_heads=8,
-            d_ff=2048,
-            compile=True,
-            materialize_attn_masks=True,
-            loss_fn=loss_fn,
-            # the arm: None is random init, a checkpoint path is fine-tuning
-            load_ckpt_path=None,
-            # data: one task, from the benchmark data rather than the Join
-            db_task_list=[(db, task)],
-            pre_dir="/dfs/user/ranjanr/share/stanford-star/relbench-preprocessed",
-            tokens_per_gpu=2**17,
-            # Loader workers are processes, and the job only owns
-            # `cpus_per_task` cores: two are held back for the training process
-            # itself and the one eval worker below, so a b200 slot (36) keeps
-            # 16 while an a100 slot (14) asks for 12
-            # instead of oversubscribing its allocation.
-            num_workers=min(16, resources.cpus_per_task - 2),
-            prefetch_factor=2,
-            ctx_size_list=[1024],
-            local_ctx_size_list=[1024],
-            bfs_width_list=[32],
-            prefer_latest_list=[True],
-            num_walks=0,
-            walk_length=20,
-            mask_prob_max=0.0,
-            items_per_task=items_per_task,
-            # optimization: pretraining's, unchanged
-            lr=5e-4,
-            wd=0.1,
-            warmup_steps=100,
-            grad_norm_max=1.0,
-            total_bs=128,
-            # pretraining's 100k steps is a mixture's worth of data, not one
-            # task's: the one number this experiment sets on its own, and the
-            # one a shorter probe run overrides
-            total_steps=total_steps,
-            swa_momentum=0.999,
-            seed=0,
-            mmap_populate=True,
-            timeout_per_item=10.0,
-            eval_freq=100,
-            keep_all_ckpts=False,
-            vector_db_path=None,
-            resume_save_mins=20.0,
-            # in-loop validation: the task it is trained on, on the val split
-            eval_splits=["val", "test"],
-            eval_db_task_list=[(db, task)],
-            eval_pre_dir="/dfs/user/ranjanr/share/stanford-star/relbench-preprocessed",
-            eval_tokens_per_gpu=2**18,
-            eval_num_workers=1,
-            eval_prefetch_factor=2,
-            eval_num_walks=10_000,
-            eval_walk_length=20,
-            # The in-loop eval is a *trajectory* val, not a final score: it runs
-            # at every eval_freq and only has to say which way the curve is
-            # going, so it reads a fixed 1024-item prefix of each split. The
-            # whole split is hours per eval: rel-avito/user-clicks is 21_183 val
-            # + 47_996 test items, each assembled from eval_num_walks=10_000
-            # random walks by a single loader worker. A final number comes from
-            # scoring the selected checkpoint on the full split, not from this.
-            eval_items_per_task=1024,
-            eval_ctx_size_list=[1024],
-            eval_mmap_populate=True,
-            eval_shuffle_seed=0,
-            eval_context_seed=0,
-            eval_vector_db_path=None,
-            eval_lcs_bw_pl_grid=[(1024, 1024, True)],
-            # logging
-            targets=targets_for(db, task),
-            project="2026-08-07-fine_tune",
-            entity="rtv2",
-            run_name=run_name or f"{db}/{task}",
-            wandb_disabled=False,
-            out_root="/dfs/user/ranjanr/ckpts",
-        ),
-        # one GPU per job: the slot `plan` picked for it
-        resources=resources,
-        name=f"{db}-{task}",
-        repo_root="/lfs/hyperturing1/0/ranjanr/clones/rishabh-ranjan/relational-transformer",
-        log_root="/dfs/user/ranjanr/slurm-logs/rishabh-ranjan/relational-transformer/expts/fine-tune",
-        # the node's own big disk, not /tmp (the 280G root filesystem)
-        clone_root="/lfs/local/0/roach_clones",
-        secrets_dir="/dfs/user/ranjanr/.secrets",
-        run_id=run_id,
-        # No setup: `pixi install` already builds the rustler extension into
-        # src/rt/ -- the project is an editable dependency of its own
-        # environment.
-    )
+        submit(
+            "rt.train:main",
+            args=dict(
+                # model: RT-J's dims, so a fine-tuned run and a pretrained
+                # checkpoint are the same architecture
+                embedder="all-MiniLM-L12-v2",
+                d_text=384,
+                num_blocks=12,
+                d_model=512,
+                num_heads=8,
+                d_ff=2048,
+                compile=True,
+                materialize_attn_masks=True,
+                # the arm: the dense attention over the whole context that each
+                # block runs after its three relational attentions
+                skip_full_attn=False,
+                loss_fn="huber",
+                # the arm: None is random init, a checkpoint path is fine-tuning
+                load_ckpt_path=None,
+                # data: one task, from the benchmark data rather than the Join
+                db_task_list=[(db, task)],
+                pre_dir="/dfs/user/ranjanr/share/stanford-star/relbench-preprocessed",
+                tokens_per_gpu=2**17,
+                # Loader workers are processes, and the job only owns
+                # `cpus_per_task` cores: two are held back for the training process
+                # itself and the one eval worker below, so a b200 slot (36) keeps
+                # 16 while an a100 slot (14) asks for 12
+                # instead of oversubscribing its allocation.
+                num_workers=min(16, resources.cpus_per_task - 2),
+                prefetch_factor=2,
+                ctx_size_list=[1024],
+                local_ctx_size_list=[1024],
+                bfs_width_list=[32],
+                prefer_latest_list=[True],
+                num_walks=0,
+                walk_length=20,
+                mask_prob_max=0.0,
+                items_per_task=2**16,
+                # optimization: pretraining's, unchanged
+                lr=5e-4,
+                wd=0.1,
+                warmup_steps=100,
+                grad_norm_max=1.0,
+                total_bs=128,
+                # pretraining's 100k steps is a mixture's worth of data, not one
+                # task's: the one number this experiment sets on its own
+                total_steps=2_000,
+                swa_momentum=0.999,
+                seed=0,
+                mmap_populate=True,
+                timeout_per_item=10.0,
+                eval_freq=100,
+                keep_all_ckpts=False,
+                vector_db_path=None,
+                resume_save_mins=20.0,
+                # in-loop validation: the task it is trained on, on the val split
+                eval_splits=["val", "test"],
+                eval_db_task_list=[(db, task)],
+                eval_pre_dir="/dfs/user/ranjanr/share/stanford-star/relbench-preprocessed",
+                eval_tokens_per_gpu=2**18,
+                eval_num_workers=1,
+                eval_prefetch_factor=2,
+                eval_num_walks=10_000,
+                eval_walk_length=20,
+                # The in-loop eval is a *trajectory* val, not a final score: it runs
+                # at every eval_freq and only has to say which way the curve is
+                # going, so it reads a fixed 1024-item prefix of each split. The
+                # whole split is hours per eval: rel-avito/user-clicks is 21_183 val
+                # + 47_996 test items, each assembled from eval_num_walks=10_000
+                # random walks by a single loader worker. A final number comes from
+                # scoring the selected checkpoint on the full split, not from this.
+                eval_items_per_task=1024,
+                eval_ctx_size_list=[1024],
+                eval_mmap_populate=True,
+                eval_shuffle_seed=0,
+                eval_context_seed=0,
+                eval_vector_db_path=None,
+                eval_lcs_bw_pl_grid=[(1024, 1024, True)],
+                # logging
+                targets=targets_for(db, task),
+                project="2026-08-07-fine_tune",
+                entity="rtv2",
+                run_name=name,
+                wandb_disabled=False,
+                out_root="/dfs/user/ranjanr/ckpts",
+            ),
+            # one GPU per job: the slot `plan` picked for it
+            resources=resources,
+            name=f"{db}-{task}",
+            repo_root="/lfs/hyperturing1/0/ranjanr/clones/rishabh-ranjan/relational-transformer",
+            log_root="/dfs/user/ranjanr/slurm-logs/rishabh-ranjan/relational-transformer/expts/fine-tune",
+            # the node's own big disk, not /tmp (the 280G root filesystem)
+            clone_root="/lfs/local/0/roach_clones",
+            secrets_dir="/dfs/user/ranjanr/.secrets",
+            # a run_id here names an existing run instead of minting a new one:
+            # how a job that was cancelled comes back and resumes from its own
+            # checkpoint rather than from step 0
+            run_id=None,
+            # No setup: `pixi install` already builds the rustler extension into
+            # src/rt/ -- the project is an editable dependency of its own
+            # environment.
+        )
 
 
 if __name__ == "__main__":
