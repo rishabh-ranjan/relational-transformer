@@ -17,7 +17,6 @@ scripts/synthetic/*
 .claude/
 
 # internal-only files, not part of the public release
-CLAUDE.md
 internal/
 scripts/eval_scaling.py
 scripts/eval_scaling_sharded.py
