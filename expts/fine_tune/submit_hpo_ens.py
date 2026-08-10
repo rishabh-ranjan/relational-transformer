@@ -16,28 +16,31 @@ the same weights on the same rows.
 """
 
 from roach.slurm import Resources, submit
-from submit import a100, targets_for
-from submit_ens_only import ckpt_for, in_flight, items_for, ready
+from submit import a100, b200, targets_for
+from submit_ens_only import ckpt_for, in_flight, items_for, nval, ntest, ready
 
 
 def plan(n: int) -> list[Resources]:
-    """One slot per task, largest train set first, all the same.
+    """The qos budget spent top down, best slots first, per
+    [../README.md](../README.md#allocating-a-sweep).
 
-    Amperes: `submit.b200` pins `nodelist="blackwell1"`, whose 8 cards are
-    mostly other people's long jobs, so a sweep this wide would sit at
-    `ReqNodeNotAvail`. The a100s are 8 nodes behind no nodelist, and a queue
-    this deep is bound by how often a card frees rather than by how fast one
-    runs.
+    Today: `il-interactive`'s 2 gpus are free and go to blackwells;
+    `submit.py`'s fine-tuning sweep holds 6 of `il`'s 10, so 4 are left here,
+    and 2 of those may be b200. That is 4 blackwell and 2 ampere at high
+    priority; the rest is `il-lo`, which is preemptible and restarts an eval
+    from the first configuration.
 
-    `il-lo` throughout: `il`'s cap is 10 gpus of any kind together and
-    `submit.py`'s fine-tuning sweep holds all ten, and `il-interactive`'s 12
-    hours does not cover a job of this length. This one is `len(grid)` val
-    passes plus `test_ensemble_size` test passes, and an eval run does not
-    checkpoint -- a preemption restarts it at the first config.
+    12 hours covers a blackwell job here -- `len(grid)` val passes plus
+    `test_ensemble_size` test passes, measured at ~20 min a pass on an ampere
+    and a bit over twice that fast on a blackwell.
 
     Recount and rewrite this before every submission.
     """
-    return [a100("il-lo", "21-00:00:00")] * n
+    out = [b200("il-interactive", "12:00:00")] * min(n, 2)
+    out += [b200("il", "7-00:00:00")] * min(n - len(out), 2)
+    out += [a100("il", "7-00:00:00")] * min(n - len(out), 2)
+    out += [a100("il-lo", "21-00:00:00")] * (n - len(out))
+    return out
 
 
 def job_name(db: str, task: str) -> str:
@@ -45,8 +48,21 @@ def job_name(db: str, task: str) -> str:
     return f"hpo-ens-{db}-{task}"
 
 
+def cost(db: str, task: str) -> float:
+    """Roughly what this task's job costs: the rows one pass scores.
+
+    The slot order below is by this, not by train-set size: an eval job's wall
+    clock is the split it reads, and `items_for` caps the biggest ones, so the
+    two orders disagree.
+    """
+    cap = items_for(db, task)
+    return min(nval()[f"{db}/{task}"], cap) + min(ntest()[f"{db}/{task}"], cap)
+
+
 def main() -> None:
     tasks = [t for t in ready() if job_name(*t) not in in_flight()]
+    # Slowest first, so the best slots go where they buy the most.
+    tasks.sort(key=lambda t: -cost(*t))
     ckpts = {t: ckpt_for(*t) for t in tasks}
     for (db, task), resources in zip(tasks, plan(len(tasks)), strict=True):
         name = f"{db}/{task}"

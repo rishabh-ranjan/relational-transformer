@@ -130,8 +130,8 @@ def task_metric(db: str, task: str) -> tuple[str, bool]:
 
 
 @functools.cache
-def ntest() -> dict[str, float]:
-    """Test-set size per `{db}/{task}`, from RelBench's own task stats."""
+def split_sizes() -> dict[str, dict[str, float]]:
+    """`{db}/{task}` -> val and test row counts, from RelBench's task stats."""
     import pandas as pd
     from huggingface_hub import hf_hub_download
 
@@ -141,8 +141,22 @@ def ntest() -> dict[str, float]:
         )
     )
     return {
-        f"{r.database}/{r.task}": float(r.num_rows_test) for r in stats.itertuples()
+        f"{r.database}/{r.task}": {
+            "val": float(r.num_rows_val),
+            "test": float(r.num_rows_test),
+        }
+        for r in stats.itertuples()
     }
+
+
+def nval() -> dict[str, float]:
+    """Val-set size per `{db}/{task}`."""
+    return {k: v["val"] for k, v in split_sizes().items()}
+
+
+def ntest() -> dict[str, float]:
+    """Test-set size per `{db}/{task}`."""
+    return {k: v["test"] for k, v in split_sizes().items()}
 
 
 def items_for(db: str, task: str) -> int:
