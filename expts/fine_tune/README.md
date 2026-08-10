@@ -3,11 +3,16 @@
 What a Relational Transformer gets from training on one task, and how that
 compares with the task-specific baselines.
 
-The first arm is the control: **rel-f1 `driver-top3` from random init**. It is
-the smallest training set in the benchmark (1.4k rows, the leftmost column of
-`results.md`), so it is where a from-scratch model has the least to work with and
-where pretraining should be worth the most -- which makes it the number the
-fine-tuned arm has to beat.
+Runs start from the pretrained weights (`PRETRAINED` in `submit.py`, the SWA
+average of `expts/pretrain`'s run pinned at a step); passing
+`load_ckpt_path=None` gives the random-init control instead, which is what the
+earlier random-init runs in this project are.
+
+The control that arm was built around is **rel-f1 `driver-top3` from random
+init**. It is the smallest training set in the benchmark (1.4k rows, the
+leftmost column of `results.md`), so it is where a from-scratch model has the
+least to work with and where pretraining should be worth the most -- which makes
+it the number the fine-tuned arm has to beat.
 
 ## Running it
 
