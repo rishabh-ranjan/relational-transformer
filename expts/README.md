@@ -51,6 +51,19 @@ never for the code, and never for anything you intend to read afterwards.
 Delete the directory when the question is answered; see "Commit what a re-run
 needs" below.
 
+**Submit it, do not `srun` it.** The temptation with a two-minute probe is to
+skip `submit.py` and hand-roll `srun --gres=gpu:a100:1 ... python probe.py`.
+That does not work here and the failure is confusing rather than obvious. The
+submitting host keeps this repo on its own `/lfs`, which does not exist on the
+compute node, so `--chdir` fails and the job lands in `/` with no repo and no
+pixi environment; an `srun` issued from inside another allocation is a *step*
+of that job and inherits its memory and CPU limits; and the account, partition
+and constraint that `Resources` fills in are all yours to remember. Staging the
+script somewhere shared to work around the first of those buys a file on `/dfs`
+that outlives the question. `roach.slurm.submit` exists to handle all of it:
+give the probe a directory, commit it, submit it as its own target. Two minutes
+of writing a `submit.py` beats twenty of debugging an `srun` line.
+
 ## What every experiment owes
 
 **Enough to run the work again, and a README that says how.** Someone who was
