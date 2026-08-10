@@ -8,11 +8,6 @@ from roach.slurm import Resources, submit
 
 HERE = Path(__file__).parent
 
-# Where the runs land. `workspace.py` reads these too, so the jobs and the view
-# they show up in cannot drift apart.
-ENTITY = "rtv2"
-PROJECT = "2026-08-07-fine_tune"
-
 # The forecast tasks of these four databases whose type RT models: predict a
 # label at a timestamp from what is known before it. Nothing else is here --
 # recommendation tasks are not modeled and autocomplete tasks complete a
@@ -215,7 +210,6 @@ def main() -> None:
         ("rel-avito", "user-visits", "bce"),
         ("rel-avito", "user-visits", "huber"),
     ]
-    submitted: list[tuple[str, str]] = []
     for (db, task, loss_fn), resources in zip(arms, plan(len(arms)), strict=True):
         # `db/task (loss)`, as the loss arms already submitted to this project
         # are named -- the workspace sorts them together.
@@ -231,16 +225,6 @@ def main() -> None:
             run_name=name,
             items_per_task=1000_000_000,
         )
-        submitted.append((db, task))
-
-    # The view is written from the key space, so a task submitted here has no
-    # panel until the workspace is rebuilt -- and a run that starts logging
-    # into a view that predates it shows up nowhere but the run list. Rebuild
-    # now, seeded with what was just submitted, so the panels are waiting when
-    # the jobs start rather than after someone remembers to rerun the script.
-    import workspace
-
-    print(workspace.save(workspace.build(ENTITY, PROJECT, extra_tasks=submitted)))
 
 
 def submit_one(
@@ -341,8 +325,8 @@ def submit_one(
             eval_lcs_bw_pl_grid=[(1024, 1024, True)],
             # logging
             targets=targets_for(db, task),
-            project=PROJECT,
-            entity=ENTITY,
+            project="2026-08-07-fine_tune",
+            entity="rtv2",
             run_name=run_name or f"{db}/{task}",
             wandb_disabled=False,
             out_root="/dfs/user/ranjanr/ckpts",
