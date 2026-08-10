@@ -205,8 +205,12 @@ def main(argv: list[str] | None = None) -> None:
     else:
         # Nothing whole is free. Queue the smallest shape rather than wait for a
         # pass that finds one: queued costs nothing, and an upgrade can follow.
-        print("  no job and nothing free; queueing 1 node")
-        submit(args.run_id, 1, "il-lo", all_amperes(), args.dry_run)
+        # A queued single node still belongs on `il` when the cap allows -- it
+        # is not preemptible, and `plan` returns no qos to inherit here because
+        # it found no hosts, so apply the same rule directly.
+        queued_qos = "il" if held + NODE_GPUS <= IL_A100_CAP else "il-lo"
+        print(f"  no job and nothing free; queueing 1 node on {queued_qos}")
+        submit(args.run_id, 1, queued_qos, all_amperes(), args.dry_run)
 
 
 if __name__ == "__main__":
