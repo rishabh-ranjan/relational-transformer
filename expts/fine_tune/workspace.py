@@ -214,11 +214,9 @@ def build(entity: str, project: str) -> ws.Workspace:
         project=project,
         name=display_name,
         sections=sections,
-        # No `max_runs`: any value written there -- even one far above the
-        # sweep's size -- is a run limit as far as the app is concerned, and it
-        # captions every panel "Limited to N runs for each visualized metric".
-        # Left unset, the setting is absent from the spec and the app draws the
-        # runset without a cap or a caption.
+        # No `max_runs` here, and `strip_max_runs` takes out the default the
+        # SDK writes in its place -- see there for why any value is the wrong
+        # one.
         settings=ws.WorkspaceSettings(x_axis="step"),
         # The sections here are the whole view: the app is not to append panels
         # of its own for keys logged after this script ran. A new key gets its
@@ -228,6 +226,24 @@ def build(entity: str, project: str) -> ws.Workspace:
     )
     workspace._internal_name, workspace._internal_id = name, id
     return workspace
+
+
+def strip_max_runs(spec: object) -> None:
+    """Drop every `maxRuns` from the spec, wherever the SDK wrote one.
+
+    Leaving `WorkspaceSettings.max_runs` unset is not enough: the SDK fills it
+    with wandb's own default of 10, and *any* value there is a run limit as far
+    as the app is concerned -- it truncates the sweep and captions every panel
+    "Limited to N runs for each visualized metric". Absent from the spec, the
+    app draws the whole runset with no caption.
+    """
+    if isinstance(spec, dict):
+        spec.pop("maxRuns", None)
+        for v in spec.values():
+            strip_max_runs(v)
+    elif isinstance(spec, list):
+        for v in spec:
+            strip_max_runs(v)
 
 
 UPSERT = """
@@ -258,6 +274,7 @@ def save(workspace: ws.Workspace) -> str:
     view = workspace._to_model()
     view.spec.section.run_sets[0].run_feed.page_size = PAGE_SIZE
     spec = json.loads(view.spec.model_dump_json(by_alias=True, exclude_none=True))
+    strip_max_runs(spec)
     for s in spec["section"]["panelBankConfig"]["sections"]:
         if s["name"] == SYSTEM:
             s["isPanelsAuto"] = True
