@@ -175,18 +175,20 @@ def a100(qos: str, time: str) -> Resources:
 def plan(n: int) -> list[Resources]:
     """The best n slots this cluster will give one-GPU jobs, best first.
 
-    What the un-preemptible tiers have left for this user: `il-interactive`'s
-    2 gpus and `il`'s 10 a100s are already held by the stoc arm, and `il`'s
-    b200 ceiling of 2 is not -- and blackwell1 has exactly those two cards
-    free, so the head of this sweep starts on the faster gpu.
+    Everything sits on `il-lo`: preemptible, effectively uncapped, 21d wall.
+    The un-preemptible tiers have nothing left for this user -- `il`'s ceiling
+    is 10 gpus of *any* type, not 10 per type, so its b200 allowance of 2 is
+    unreachable while the stoc arm holds 10 amperes there, and
+    `il-interactive`'s 2 are held too.
 
-    The tail falls to `il-lo`: preemptible, effectively uncapped, 21d wall.
-    Amperes rather than b200s there -- 72 a100s turn over, blackwell1's eight
-    do not, and a card that frees up in hours beats a faster one behind a
-    queue. A run checkpoints and resumes, at a preemption and at its wall limit
-    alike, so a low-priority slot costs wall clock rather than work.
+    Blackwell before Ampere within that, and the b200 share stops at whatever
+    blackwell1 has idle: its eight cards are wanted cluster-wide, so a b200
+    `il-lo` job past that queues while amperes turn over. A whole card that
+    starts now beats a faster one that does not. A run checkpoints and resumes,
+    at a preemption and at its wall limit alike, so a low-priority slot costs
+    wall clock rather than work.
     """
-    out = [b200("il", "7-00:00:00")] * min(n, 2)
+    out = [b200("il-lo", "21-00:00:00")] * min(n, 2)
     out += [a100("il-lo", "21-00:00:00")] * (n - len(out))
     return out
 
