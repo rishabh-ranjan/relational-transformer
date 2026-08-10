@@ -173,7 +173,8 @@ def plan(n: int) -> list[Resources]:
     and b200 `il-lo` jobs queue behind other users' reservations while a100s sit
     free. A whole card that starts now beats a faster one that does not.
     """
-    out = [b200("il-lo", "21-00:00:00")] * min(n, 4)
+    # out = [b200("il-lo", "21-00:00:00")] * min(n, 4)
+    out = []
     out += [a100("il-lo", "21-00:00:00")] * (n - len(out))
     return out
 
