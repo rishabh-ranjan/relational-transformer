@@ -13,7 +13,7 @@ checkpoints), eval prints a note and still runs both.
 
 ## Prerequisite: preprocessed data
 
-Inference takes an `--eval.pre-dir` of preprocessed data: a **local directory**,
+Inference takes a `pre_dir` of preprocessed data: a **local directory**,
 either produced by you (see [preprocess.md](preprocess.md)) or downloaded up
 front (see [downloads.md](downloads.md)). Data is never fetched on demand;
 checkpoints still are. To reproduce the RelBench numbers:
@@ -23,14 +23,17 @@ pixi run hf download stanford-star/relbench-preprocessed --repo-type dataset \
   --local-dir data/relbench-preprocessed
 
 # the checkpoint still comes from the Hub, on demand
-pixi run eval --model.load-ckpt-path stanford-star/rt-j/classification \
-  --eval.pre-dir data/relbench-preprocessed
+pixi run python examples/eval.py
 ```
+
+There is no CLI: [`examples/eval.py`](../examples/eval.py) calls `rt.eval.main`
+with every argument spelled out (`load_ckpt_path="stanford-star/rt-j/classification"`,
+`pre_dir="data/relbench-preprocessed"`, ...). Copy it and edit the call.
 
 ## Inference with default context
 
-The command above runs **simple** inference: one default context config
-(`--eval.lcs-bw-pl-grid 256 32 True`, total `--eval.ctx-size-list 8192`) on the
+The example above runs **simple** inference: one default context config
+(`lcs_bw_pl_grid=[(256, 32, True)]`, total `ctx_size_list=[8192]`) on the
 test split of every task in the default task list
 (`data/relbench-preprocessed/db-task-lists/forecast.json`, the 21-task RelBench
 benchmark). For each test row the sampler builds a context (a sampled
@@ -58,16 +61,16 @@ score) on the released RT-J checkpoints.
 
 ## Inference on a subset of tasks
 
-The task set is `--eval.db-task-list`: `(db, task)` pairs given inline or as a
-JSON file of pairs. To run one task:
+The task set is `db_task_list`: `(db, task)` pairs given inline or as a path to
+a JSON file of pairs. To run one task:
 
-```bash
-pixi run eval --model.load-ckpt-path stanford-star/rt-j/classification \
-  --eval.pre-dir data/relbench-preprocessed \
-  --eval.db-task-list rel-f1 driver-top3
+```python
+main(load_ckpt_path="stanford-star/rt-j/classification",
+     pre_dir="data/relbench-preprocessed",
+     db_task_list=[("rel-f1", "driver-top3")], ...)
 ```
 
-That reads just that task's data out of `--eval.pre-dir`, so it's the quickest
+That reads just that task's data out of `pre_dir`, so it's the quickest
 way to try the model end-to-end — and you can fetch only that database:
 `hf download stanford-star/relbench-preprocessed --repo-type dataset --local-dir
 data/relbench-preprocessed --include "rel-f1/*" "db-task-lists/*"`. Curated
@@ -77,7 +80,7 @@ lists ship with the data:
 ## Evaluate with the RelBench evaluator
 
 Eval writes a valid RelBench **submission directory** to
-`<logger.out-root>/<entity>/<project>/<id>/eval_out`: one
+`<out_root>/<entity>/<project>/<run_id>/eval_out`: one
 `<dataset>__<task>.csv` prediction table per task, scored through **RelBench's own
 leaderboard evaluator** (`relbench.leaderboard`). Eval denormalizes regression
 predictions to the original target scale (`y = pred*std + mean`, train-split
@@ -95,60 +98,58 @@ pixi run python -m relbench.leaderboard eval_out
 ## Context engineering
 
 Because RT predicts from context alone, the **context sampled for each row** is
-the main quality knob. All are CLI flags on `eval`:
+the main quality knob. All are arguments to `rt.eval.main`:
 
-| flag | meaning | default |
+| argument | meaning | released value |
 |---|---|---|
-| `--eval.ctx-size-list` | total context size (cells) the model attends over (one value for standalone eval) | 8192 |
-| `--eval.lcs-bw-pl-grid` | `(local_ctx_size, bfs_width, prefer_latest)` context configs; one entry = use it directly, several = tune per task on validation | `256 32 True` |
-| `--eval.num-walks` | random walks used to rank same-table neighbors | 10000 |
-| `--eval.walk-length` | max length of each random walk | 20 |
+| `ctx_size_list` | total context size (cells) the model attends over (one value for standalone eval) | `[8192]` |
+| `lcs_bw_pl_grid` | `(local_ctx_size, bfs_width, prefer_latest)` context configs; one entry = use it directly, several = tune per task on validation | `[(256, 32, True)]` |
+| `num_walks` | random walks used to rank same-table neighbors | 10000 |
+| `walk_length` | max length of each random walk | 20 |
 
 Within a grid entry, larger `local_ctx_size` (max cells per BFS expansion
 around the seed) and `bfs_width` (max DB nodes kept per BFS level) pull more
 relational neighborhood into each row's context (more signal, more tokens);
-`--eval.ctx-size-list` caps the total. `prefer_latest` controls *which* same-table
+`ctx_size_list` caps the total. `prefer_latest` controls *which* same-table
 neighbors win that budget — the most recent rows (`True`, default) or the most
 frequent (`False`). The best setting is task-dependent — which motivates tuning
 and ensembling below.
 
-`--eval.shuffle-seed` (default 0) seeds the per-task subset selection and item
-shuffle. Fixing it while capping rows with `--eval.items-per-task N` evaluates
+`shuffle_seed` seeds the per-task subset selection and item
+shuffle. Fixing it while capping rows with `items_per_task=N` evaluates
 the *same* N validation rows across every config — the basis for a
 like-for-like context grid search.
 
 ## Context tuning
 
 Rather than fix one config, **tune** the context per task: pass several
-`--eval.lcs-bw-pl-grid` entries and eval evaluates each on the **validation**
-split, keeping the best per task before scoring test (here with a single test
-seed, so no averaging yet):
+`lcs_bw_pl_grid` entries and eval evaluates each on the **validation** split,
+keeping the best per task before scoring test (here with a single test seed, so
+no averaging yet):
 
-```bash
-pixi run eval \
-  --model.load-ckpt-path stanford-star/rt-j/regression \
-  --eval.pre-dir data/relbench-preprocessed \
-  --eval.lcs-bw-pl-grid 256 32 True 512 64 True \
-  --eval.ensemble-size 1
+```python
+main(load_ckpt_path="stanford-star/rt-j/regression",
+     pre_dir="data/relbench-preprocessed",
+     lcs_bw_pl_grid=[(256, 32, True), (512, 64, True)],
+     ensemble_size=1, ...)
 ```
 
 ## Context ensembling
 
 Context sampling is stochastic, so averaging predictions over several context
-**seeds** reduces variance. Set `--eval.ensemble-size N` (> 1): the per-task
+**seeds** reduces variance. Set `ensemble_size=N` (> 1): the per-task
 tuned config runs with N independent context seeds on test and the per-row
 predictions are averaged before scoring:
 
-```bash
-pixi run eval \
-  --model.load-ckpt-path stanford-star/rt-j/regression \
-  --eval.pre-dir data/relbench-preprocessed \
-  --eval.lcs-bw-pl-grid 256 32 True 512 64 True \
-  --eval.ensemble-size 4
+```python
+main(load_ckpt_path="stanford-star/rt-j/regression",
+     pre_dir="data/relbench-preprocessed",
+     lcs_bw_pl_grid=[(256, 32, True), (512, 64, True)],
+     ensemble_size=4, ...)
 ```
 
 Tuning (on validation) and ensembling (on test) engage automatically whenever
-the grid has more than one entry or `--eval.ensemble-size` exceeds 1: pick the
+the grid has more than one entry or `ensemble_size` exceeds 1: pick the
 best context config per task, then average that config over the seeds.
 
 ## Optional: FAISS vector-DB sampler

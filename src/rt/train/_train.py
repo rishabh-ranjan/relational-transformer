@@ -17,13 +17,10 @@ Robust to preemption (the default config matches the released RT-J runs):
   nodes can resume on, say, 4 GPUs. The training data stream is re-seeded by the
   resumed step so no items are replayed, and ops are seeded for determinism.
 
-Single-node multi-GPU and multi-node (preemptible queue) both run under
-``torchrun`` -- see the README for the exact launch commands.
-
-    torchrun --standalone --nproc-per-node=auto -m rt.cli.train \\
-        --train.pre-dir data/the-join-preprocessed \\
-        --eval.pre-dir data/relbench-preprocessed \\
-        --logger.out-root ~/ckpts
+There is no CLI: ``_train`` takes every knob as a required argument, and a run
+is a script that calls it (``examples/train.py`` passes the released values).
+Single-node multi-GPU and multi-node (preemptible queue) both run that script
+under ``torchrun`` or ``srun`` -- see docs/train.md for the launch commands.
 """
 
 import contextlib
@@ -59,7 +56,6 @@ from rt.eval import Evaluator
 from rt.progress import fmt_bytes, fmt_duration, log
 import wandb
 
-# Released model dims (RT-J). Override via CLI for a different size.
 # Re-seed offset applied per resumed step so a resumed stream does not replay.
 SEED_STRIDE = 1_000_003
 
@@ -268,16 +264,10 @@ def main(
     if use_wandb:
         # One wandb run per *attempt*, grouped under the run_id -- not one
         # resumed wandb run for the whole thing. A resumed run never rewrites
-        # its output.log (wandb#4727), so its Logs tab freezes at whatever the
-        # last cleanly-exited attempt left there, and every attempt of a
-        # preemptible run is killed rather than exiting cleanly: the tab was
-        # showing lines from days earlier. A fresh id streams its console live
-        # and the tab is correct. The group is what keeps this one experiment:
-        # attempts cover disjoint `step` ranges, so a group draws one curve.
-        # A requeued job keeps its job id, so the restart counter is part of
-        # what makes an attempt unique -- without it the second attempt of a
-        # requeued job would collide with the first and `resume="never"` would
-        # (correctly) refuse to start.
+        # its output.log (wandb#4727), so a fresh id per attempt is what keeps
+        # the Logs tab live. Attempts cover disjoint `step` ranges, so the group
+        # draws one curve. A requeued job keeps its job id, so the restart
+        # counter is part of what makes an attempt id unique.
         job = os.environ.get("SLURM_JOB_ID")
         attempt = (
             f"{job}.{os.environ.get('SLURM_RESTART_COUNT', '0')}"
@@ -301,9 +291,7 @@ def main(
         )
         # Log against our own step axis rather than wandb's internal counter,
         # which starts at 0 for every attempt: it is the only axis on which the
-        # attempts of a group line up into one curve. It also keeps the window
-        # between the last checkpoint and a preemption -- steps an attempt
-        # re-runs after the rewind -- from being read as a step 0 restart.
+        # attempts of a group line up into one curve.
         wandb.define_metric("step")
         wandb.define_metric("*", step_metric="step")
 
@@ -462,14 +450,12 @@ def main(
     if is_main:
         # total_bs items enter the model per optimizer step, so the whole run
         # consumes total_steps * total_bs items. Printed against the stream's
-        # size so it is obvious how many times the data is repeated.
+        # size, so it says how many times the data is repeated.
         #
-        # That size is the sampler's own count, which is why this comes after
-        # the dataset is built: items_per_task is a *cap*, and multiplying it by
-        # the task count says what the run would see if every task were at least
-        # that large. On a single small task it is not close -- rel-f1's
-        # driver-top3 has 1_353 training items against a cap of 100_000 -- and
-        # the epoch count printed from the cap was wrong by that factor.
+        # That size has to be the sampler's own count, which is why this comes
+        # after the dataset is built: items_per_task is a *cap*, and a task can
+        # hold far fewer items than it (rel-f1's driver-top3 has 1_353 training
+        # items against a cap of 100_000).
         total_items = total_steps * total_bs
         stream_items = train_ds.num_items
         log(
@@ -524,14 +510,12 @@ def main(
     # skips a per-step buffer sync (no buffers need it here);
     # find_unused_parameters stays False (all params are used).
     #
-    # static_graph is the one knob with a tradeoff. It buys comm/compute overlap
-    # on a fixed graph, but it cannot coexist with working gradient
-    # accumulation: DDP only skips a microbatch's all-reduce when the *forward*
-    # runs inside no_sync(), and that combination dies under static_graph
-    # (``expect_autograd_hooks_ INTERNAL ASSERT`` in the reducer). Accumulating
-    # runs therefore drop it and save grad_accum-1 all-reduces per step --
-    # strictly more comm saved than the overlap was worth. Runs that never
-    # accumulate skip nothing, so they keep static_graph.
+    # static_graph buys comm/compute overlap on a fixed graph, but it cannot
+    # coexist with gradient accumulation: DDP only skips a microbatch's
+    # all-reduce when the *forward* runs inside no_sync(), and that combination
+    # dies under static_graph (``expect_autograd_hooks_ INTERNAL ASSERT`` in the
+    # reducer). Accumulating runs drop it and save grad_accum-1 all-reduces per
+    # step instead; runs that never accumulate keep it.
     accumulates = multi_ctx or grad_accum > 1
     if ddp:
         net = torch.nn.parallel.DistributedDataParallel(
@@ -551,9 +535,8 @@ def main(
     # wandb keys and drive best-checkpoint tracking. Extra entries are evaluated
     # alongside it under a "lcs<l>-bw<b>-pl<p>_" tag. All evaluators share the
     # underlying mmap'd data (page cache), so extra entries cost eval compute
-    # only, nothing between eval points.
-    # Duplicates would map to the same metrics prefix, and the later entry
-    # would silently overwrite the earlier one in ``metrics``.
+    # only, nothing between eval points. Entries must be distinct: duplicates
+    # map to the same metrics prefix and overwrite each other.
     assert len(set(map(tuple, eval_lcs_bw_pl_grid))) == len(eval_lcs_bw_pl_grid), (
         f"duplicate entries in eval_lcs_bw_pl_grid: {eval_lcs_bw_pl_grid}"
     )
@@ -607,10 +590,8 @@ def main(
 
     def _on_signal(signum, frame):
         preempt["flag"] = True
-        # Log it: when a preempted run comes back at the last *periodic* save
-        # instead of the step it died at, the question is always whether the
-        # ranks ever saw the signal. Without this line that is unanswerable
-        # after the fact.
+        # Logged so that a run coming back at a periodic save rather than the
+        # step it died at can be told from a run that never saw the signal.
         log(rank=rank, caught_signal=signum, action="save_next_step")
 
     signal.signal(signal.SIGTERM, _on_signal)
@@ -646,8 +627,8 @@ def main(
             return
         # Write beside the target and rename: rename(2) is atomic, so a reader
         # (or the next attempt) sees either the previous checkpoint or the new
-        # one, never a half-written file -- being SIGKILLed mid-write only
-        # leaves a stale .tmp behind. The pid in the name keeps two writers from
+        # one, never a half-written file; being SIGKILLed mid-write only leaves
+        # a stale .tmp behind. The pid in the name keeps two writers from
         # interleaving into the same temporary if a run is ever double-started.
         # fsync before the rename so the bytes are on the server, not just in
         # the client's cache, when the directory entry flips.
@@ -663,11 +644,9 @@ def main(
                         "step": step,
                         "best": best,
                         # Whether an eval has already been logged *at* this
-                        # step. A resume-step eval is skipped only when the
-                        # previous attempt actually ran it (an eval-boundary
-                        # save); a preemption save that lands on an eval
-                        # multiple must re-run it, or that step's val point is
-                        # missing from wandb forever.
+                        # step, so a resume knows whether to re-run it. A
+                        # preemption save can land on an eval multiple without
+                        # the eval having run.
                         "evaled_at": evaled_at,
                     },
                     f,
@@ -743,11 +722,9 @@ def main(
         if not evaluators:
             return
         nets = [(raw_net, "")]
-        # Unconditionally, including at n == 0, where the average is still the
-        # weights it was initialized from and the swa metrics just duplicate the
-        # live ones. An eval that runs one net when a later eval runs two is an
-        # eval that proves nothing about what the later one costs, and every
-        # eval here is also the memory check for the evals after it.
+        # Unconditionally, including at n == 0, where the swa metrics just
+        # duplicate the live ones: every eval must run both nets, so that each
+        # one is also the memory check for the evals after it.
         swa.sync_to(swa_net.named_parameters())
         nets.append((swa_net, "swa/"))
         metrics = {}
@@ -756,8 +733,7 @@ def main(
             metrics.update(eval_avg_metrics(evaluator, tagged_nets, eval_ctx_size_list))
         # Best-checkpoint tracking follows the primary (untagged) grid entry.
         # Rank 0 only: ``evaluate_raw`` yields there and nowhere else, so the
-        # other ranks hold empty metrics and must not touch ``best`` (they
-        # would write None-free garbage the moment that changes).
+        # other ranks hold empty metrics and must not touch ``best``.
         if is_main:
             consider(metrics, step)
         if is_main:
@@ -817,10 +793,8 @@ def main(
     last_resume_t = time.perf_counter()
     # Skip the resume-step eval only if the checkpoint records that it ran.
     # resume.pt is written at every eval *and* on a timer / at preemption, so
-    # "resumed at an eval multiple" does not imply "already evaled there":
-    # assuming it did left holes at exactly the steps a preemption landed on.
-    # Older checkpoints have no `evaled_at`; fall back to the old assumption
-    # rather than re-running an eval that was almost certainly already logged.
+    # "resumed at an eval multiple" does not imply "already evaled there".
+    # Checkpoints without `evaled_at` (None) are assumed to have evaled.
     evaled_at = resume_evaled_at if start_step > 0 else None
     is_cuda = device.startswith("cuda")
 
@@ -828,17 +802,12 @@ def main(
     #
     # Order is the whole point. The caching allocator's pool grows and is never
     # handed back, so whichever workload allocates first gets the memory and the
-    # other has to fit in what is left. A fresh run evaluates at step 0, on an
-    # empty card, and its evals have never run out in 38k steps. A resumed run
-    # skips that eval (resume.pt was written at one) and trains for up to
-    # eval_freq steps first, so its first eval has to compile and allocate for
-    # two nets on top of a card training has already filled -- which is how both
-    # of the OOMs happened, at step 39000 and step 40000, each the first eval
-    # its process reached.
-    #
-    # Claiming eval's footprint up front puts a resumed run in the same order as
-    # a fresh one. It is also the check: if it cannot fit, the job says so in its
-    # first minute rather than an hour in.
+    # other has to fit in what is left. A fresh run evaluates at step 0 on an
+    # empty card; a resumed run skips that eval and would otherwise reach its
+    # first eval -- compiling and allocating two nets -- on a card training has
+    # already filled. Claiming eval's footprint up front puts both in the same
+    # order, and if it cannot fit the job says so in its first minute rather
+    # than an hour in.
     if evaluators:
         # First grid entry only: the others differ in context-building knobs,
         # not in the shapes the net sees.
@@ -851,10 +820,9 @@ def main(
                 ctx=max(eval_ctx_size_list),
                 peak=fmt_bytes(torch.cuda.max_memory_allocated()) if is_cuda else "-",
             )
-    # Measured on this process's first step, not on global step 0: a resumed job
-    # never sees step 0, and its memory is what matters when it is the job that
-    # runs out. `ctx_size_list` varies the activation term step to step, so this
-    # is one sample of it, not the maximum.
+    # Measured on this process's first step, not on global step 0, so a resumed
+    # job reports its own memory. `ctx_size_list` varies the activation term
+    # step to step, so this is one sample of it, not the maximum.
     measure_mem = is_cuda
     while step < total_steps:
         if eval_freq and step % eval_freq == 0 and step != evaled_at:
@@ -868,7 +836,7 @@ def main(
         total_loss = 0.0
         # load_time = wall-clock spent waiting on the dataloader (next(it)).
         # With prefetch hiding data loading it is ~0; if it dominates, the
-        # GPUs are data-starved (the failure mode this run is verifying).
+        # GPUs are data-starved.
         load_time = 0.0
         # Multi-ctx: one next(it) yields a list of grad_accum microbatches that
         # share a ctx size (so grad_accum can vary per step). Single-ctx: each

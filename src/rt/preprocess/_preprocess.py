@@ -11,17 +11,14 @@ The result is a self-contained ``<out_dir>/<name>/`` directory (see ``meta.json`
 that can be used directly for training or uploaded to a Hub ``*-preprocessed`` repo
 and consumed from there.
 
-Subcommands::
-
+There is no CLI: ``one``, ``many``, ``ls`` and ``upload`` are functions, called
+from a script (``examples/preprocess.py`` is the copy-and-edit starting point).
 
 Recommended sharing workflow for a large collection (e.g. the 650-dataset Join):
-preprocess everything locally with ``many`` (skipping uploads), then push the whole
-``out-dir`` in one resumable ``upload --bulk`` pass. ``--bulk`` uses
+preprocess everything locally with ``many`` (``upload_repo=None``), then push the
+whole ``out_dir`` in one resumable ``upload(..., bulk=True)`` pass. ``bulk`` uses
 ``upload_large_folder`` (batched commits, far fewer Hub API calls than per-dataset
 ``upload_folder``), which avoids the account rate limits that per-dataset uploads hit.
-
-Build the preprocessor binary first: ``pixi run build-pre`` (or it is built
-automatically by the ``preprocess`` pixi task).
 """
 
 import json
@@ -125,7 +122,7 @@ def embed_dataset(pre_dataset_dir: Path, embedder: str, batch_size: int) -> int:
 
 def _embeddings_done(pre_dataset_dir: Path) -> bool:
     """True once ``meta.json`` records its text-embedding files and they exist.
-    Used by ``--skip-existing`` so a dataset whose embedding step was interrupted
+    Used by ``skip_existing`` so a dataset whose embedding step was interrupted
     (meta.json present, but no ``.bin``) is reprocessed rather than skipped."""
     meta_path = pre_dataset_dir / "meta.json"
     if not meta_path.exists():

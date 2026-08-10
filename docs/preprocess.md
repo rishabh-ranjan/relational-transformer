@@ -11,33 +11,39 @@ multithreaded (rayon).
 
 ## Preprocess one database in RelBench format
 
+There is no CLI. Copy [`examples/preprocess.py`](../examples/preprocess.py),
+edit the call, run it:
+
 ```bash
-`examples/preprocess.py`
+pixi run python examples/preprocess.py
 ```
 
-This writes `~/scratch/pre/rel-f1/` containing rustler artifacts,
-which are used by RT dataloaders.
+As written it calls `one(dataset="stanford-star/relbench/rel-f1",
+out_dir="data/relbench-preprocessed", ...)` and writes
+`data/relbench-preprocessed/rel-f1/`, the rustler artifacts the RT dataloaders
+read.
 
-Any dataset in relbench format works by swapping the `--dataset` argument — the
+Any dataset in relbench format works by swapping the `dataset` argument — the
 manifest is the sole source of relational metadata; the parquet files carry only
-native dtypes. Useful flags: `--skip-tasks` (ingest db tables only), `--no-embed`,
-`--embedder`, `--batch-size`, and `--upload-repo <hub repo>` (preprocess
-and push in one step).
+native dtypes. Other arguments worth knowing: `skip_tasks=True` (ingest db
+tables only), `embed=False`, `embedder`, `batch_size`, and `upload_repo="<hub
+repo>"` (preprocess and push in one step).
 
 ## Preprocess many databases efficiently
 
-To preprocess a whole Hub collection (e.g. the 650-database [the Join](https://huggingface.co/datasets/stanford-star/the-join)):
+To preprocess a whole Hub collection (e.g. the 650-database [the Join](https://huggingface.co/datasets/stanford-star/the-join)),
+call `many` instead of `one` — `preprocess_a_collection()` in the same example:
 
-```bash
-pixi run python -c "from rt.preprocess import ls; ls(repo='stanford-star/the-join', revision=None)"
-`examples/preprocess.py`
-  --repo stanford-star/the-join --out-dir ~/scratch/the-join-pre \
-  --shard 0 --num-shards 1 --skip-existing
+```python
+ls(repo="stanford-star/the-join", revision=None)      # what is in the collection
+many(repo="stanford-star/the-join", out_dir="data/the-join-preprocessed",
+     shard=0, num_shards=1, skip_existing=True, ...)
 ```
 
-`--skip-existing` makes the pass resumable (datasets whose embeddings are already
-written are skipped). `--shard i --num-shards N` splits the collection across a
-job array (e.g. a preemptible Slurm array with `--array=0-63` mapping the task id to `--shard`).
+`skip_existing=True` makes the pass resumable (datasets whose embeddings are
+already written are skipped). `shard=i, num_shards=N` splits the collection
+across a job array (e.g. a preemptible slurm array with `--array=0-63` mapping
+the task id to `shard`).
 
 ## Using preprocessed data
 

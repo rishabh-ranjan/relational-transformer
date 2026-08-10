@@ -113,25 +113,6 @@ def ntrain() -> dict[str, float]:
     }
 
 
-def default_loss_fn(db: str, task: str) -> str:
-    """`bce` for a classification task, `huber` for a regression one.
-
-    The heads are the same regression heads either way -- the label rides in
-    the sign of the z-scored cell (see `RelationalTransformer.loss`) -- so the
-    choice is only which loss reads it, and a binary target read as a logit is
-    the one the metric (AUROC) is actually scoring. The task's type comes from
-    `results.csv`, the same column `make_results.py` splits the table by."""
-    import pandas as pd
-
-    raw = pd.read_csv(HERE / "results.csv")
-    types = set(raw[(raw.dataset == db) & (raw.task == task)].task_type)
-    if types == {"BINARY_CLASSIFICATION"}:
-        return "bce"
-    if types == {"REGRESSION"}:
-        return "huber"
-    raise ValueError(f"no single task_type for {db}/{task}: {types}")
-
-
 def targets_for(db: str, task: str) -> dict[str, float]:
     """The published bests this task's run should draw as reference lines.
 
@@ -220,33 +201,17 @@ def plan(n: int) -> list[Resources]:
 
 
 def main() -> None:
-    # One arm per job. The two classification tasks are submitted under both
-    # losses: `bce` is what a binary target should be read by and is the
-    # default this file picks, `huber` is what every run before it used, and
-    # nothing has yet measured the difference on a task. ad-ctr is regression
-    # and has only the one loss to run.
     arms = [
-        ("rel-avito", "ad-ctr", "huber"),
-        ("rel-avito", "user-clicks", "bce"),
-        ("rel-avito", "user-clicks", "huber"),
-        ("rel-avito", "user-visits", "bce"),
-        ("rel-avito", "user-visits", "huber"),
+        ("rel-avito", "ad-ctr"),
+        ("rel-avito", "user-clicks"),
+        ("rel-avito", "user-visits"),
     ]
-    for (db, task, loss_fn), resources in zip(arms, plan(len(arms)), strict=True):
-        # `db/task (loss)`, as the loss arms already submitted to this project
-        # are named -- the workspace sorts them together.
-        name = f"{db}/{task} ({loss_fn})"
+    for (db, task), resources in zip(arms, plan(len(arms)), strict=True):
+        name = f"{db}/{task}"
         print(f"  {name:28s} {resources.gpus} {resources.qos:15s} {resources.time}")
         # rel-avito trains on its whole stream rather than the 8192-item cap
         # the other databases take.
-        submit_one(
-            db,
-            task,
-            resources,
-            loss_fn=loss_fn,
-            run_name=name,
-            items_per_task=1000_000_000,
-        )
+        submit_one(db, task, resources, run_name=name, items_per_task=1000_000_000)
 
 
 def submit_one(
@@ -255,7 +220,7 @@ def submit_one(
     resources: Resources,
     run_id: str | None = None,
     total_steps: int = 10_001,
-    loss_fn: str | None = None,
+    loss_fn: str = "huber",
     run_name: str | None = None,
     items_per_task: int = 8192,
 ):
@@ -264,8 +229,7 @@ def submit_one(
     comes back and resumes from its own checkpoint rather than from step 0.
 
     `run_name` overrides the wandb name, which is the task by default: two
-    arms of the same task -- the two losses, say -- want to be told apart in
-    the workspace."""
+    arms of the same task want to be told apart in the workspace."""
     return submit(
         "rt.train:main",
         args=dict(
@@ -279,7 +243,7 @@ def submit_one(
             d_ff=2048,
             compile=True,
             materialize_attn_masks=True,
-            loss_fn=loss_fn or default_loss_fn(db, task),
+            loss_fn=loss_fn,
             # the arm: None is random init, a checkpoint path is fine-tuning
             load_ckpt_path=None,
             # data: one task, from the benchmark data rather than the Join

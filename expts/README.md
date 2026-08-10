@@ -43,8 +43,7 @@ for `submit()`, resource presets, and how a run survives preemption.
 from roach.slurm import BLACKWELL, submit
 
 submit("expts.<name>.<module>:<function>", args={...}, resources=BLACKWELL,
-       name=..., setup=("pixi run build-sampler",),
-       repo_root=..., log_root=..., clone_root=..., secrets_dir=...)
+       name=..., repo_root=..., log_root=..., clone_root=..., secrets_dir=...)
 ```
 
 - **Submit it, do not `srun` it**, a two-minute probe included. The repo lives
@@ -101,11 +100,18 @@ again.
   bugs, no rationale for a settled choice. Write what to run and what to check;
   git holds how it came about.
 - **Only what the reader cannot get from the code.** Prefer a link to a summary.
+- **Code comments are operational too.** A comment says what the code does or
+  what a reader must know to change it safely. No history, no "previously we
+  ...", no incident stories, no bug a past edit fixed, no note that a value was
+  tuned or a line reordered. If the comment only makes sense to someone who saw
+  the old version, delete it; git holds that.
 
 ## What is specific to this repo
 
-- **`setup=("pixi run build-sampler",)`** — the rustler sampler is a compiled
-  extension, so a job builds it inside its clone.
+- **Nothing to build past `pixi install`.** The rustler sampler is a compiled
+  extension, but the project is an editable dependency of its own environment,
+  so building the clone's environment builds it. Pass `setup=` only for work
+  that is not part of the environment (fetching a model, say).
 - **Data is a local directory.** Nothing is fetched from the Hub at run time
   (see [docs/downloads.md](../docs/downloads.md)); point `pre_dir` at a path
   every node can read, and expect a job's first minutes to go on populating it

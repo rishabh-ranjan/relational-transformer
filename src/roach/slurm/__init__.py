@@ -3,8 +3,7 @@
     from roach.slurm import AMPERE, submit
 
     submit("mypkg.train:main", args={...}, resources=AMPERE, name="run",
-           repo_root=..., log_root=..., clone_root=..., secrets_dir=...,
-           setup=("pixi run build-sampler",))
+           repo_root=..., log_root=..., clone_root=..., secrets_dir=...)
 
 The job clones the commit you submitted from, builds its environment on the
 node, and calls the target in every rank. Preemption is handled by the target

@@ -11,7 +11,7 @@ submit(
     args={"lr": 1e-3, "steps": 1000},
     resources=BLACKWELL,           # or Resources(...) for another shape
     name="lr-1e-3",
-    setup=("pixi run build-sampler",),   # built inside the clone, if you need it
+    setup=(),                      # extra build/fetch commands, run in the clone
     repo_root=..., log_root=..., clone_root=..., secrets_dir=...,
 )
 ```

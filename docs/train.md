@@ -51,8 +51,8 @@ mixture, forecast + autocomplete).
 There is no CLI. `rt.train._train` is a function that takes every knob as a
 required argument; a run is a script that calls it. Copy
 [`examples/train.py`](../examples/train.py) — it passes the released RT-J
-values — and edit what you want. Build the sampler once first
-(`pixi run build-sampler`).
+values — and edit what you want. `pixi install` builds the rustler sampler as
+part of the environment; nothing else to build.
 
 ```bash
 CUDA_VISIBLE_DEVICES=0 pixi run python examples/train.py    # one GPU
@@ -93,7 +93,7 @@ from roach.slurm import AMPERE, submit
 submit("examples.train:train",
        args={"pre_dir": ..., "eval_pre_dir": ..., "out_root": ...},
        resources=AMPERE,   # or Resources(...) for a shape roach does not ship
-       name="rt-j", setup=("pixi run build-sampler",),
+       name="rt-j",
        repo_root=..., log_root=..., clone_root=..., secrets_dir=...)
 ```
 
