@@ -209,16 +209,23 @@ def task_size(key: str) -> float:
     return sizes().get("/".join(key.split("/")[2:]), math.inf)
 
 
-def panel(key: str, keys: set[str], x: str) -> wr.LinePlot:
+def panel(key: str, keys: set[str], x: str, prefix: str = "") -> wr.LinePlot:
     """The metric, its SWA twin, and the target, on one y-axis.
 
     The keys are given exactly (not as a regex prefix) so `auroc/val/mean`
     does not swallow the per-task curves, and the target is listed last so it
     draws on top of the curve it bounds.
+
+    `prefix` comes off the title: what the section name already says does not
+    need repeating in every panel inside it.
     """
     y = [k for k in (key, swa_key(key), target_key(key)) if k in keys]
     return wr.LinePlot(
-        title=key, x=x, y=y, smoothing_show_original=True, log_y=key in LOG_Y or None
+        title=key.removeprefix(prefix),
+        x=x,
+        y=y,
+        smoothing_show_original=True,
+        log_y=key in LOG_Y or None,
     )
 
 
@@ -235,7 +242,12 @@ def step_vs_runtime() -> wr.LinePlot:
 
 
 def section(
-    name: str, keys: list[str], all_keys: set[str], x: str, is_open: bool = True
+    name: str,
+    keys: list[str],
+    all_keys: set[str],
+    x: str,
+    is_open: bool = True,
+    prefix: str = "",
 ) -> ws.Section:
     """One section, COLS panels wide and deep enough to hold all of them.
 
@@ -246,7 +258,7 @@ def section(
     """
     return ws.Section(
         name=name,
-        panels=[panel(k, all_keys, x) for k in keys],
+        panels=[panel(k, all_keys, x, prefix) for k in keys],
         is_open=is_open,
         layout_settings=ws.SectionLayoutSettings(
             columns=COLS,
@@ -372,7 +384,9 @@ def build(entity: str, project: str) -> ws.Workspace:
 
     def dashboard(name: str, picked: list[str], x: str = "epoch") -> None:
         if picked:
-            sections.append(section(f"dashboard: {name}", picked, keys, x))
+            sections.append(
+                section(f"dashboard: {name}", picked, keys, x, prefix=f"{name}/")
+            )
             shown.update(picked)
 
     for metric in METRICS:
@@ -398,7 +412,7 @@ def build(entity: str, project: str) -> ws.Workspace:
     # (loss, grad norm, lr). Hand-ordered because the namespace grouping below
     # sorts alphabetically, which interleaves the two halves.
     train = [
-        panel(k, keys, "epoch") if k else step_vs_runtime()
+        panel(k, keys, "epoch", "train/") if k else step_vs_runtime()
         for k in TRAIN_ORDER
         if k is None or k in leaders
     ]
