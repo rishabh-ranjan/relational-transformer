@@ -26,6 +26,14 @@ puts a single-node run on the non-preemptible `il` queue when that QOS's
 policy, what to watch, what is routine, and the failure modes that have
 actually happened. Read it before babysitting this run.
 
+Before trusting a multi-node shape -- after touching distributed setup, or on
+nodes a run has just hung on -- [`smoke.py`](smoke.py) runs the same launch
+path on rel-f1 for 20 steps, which takes about a minute:
+
+```
+pixi run python expts/pretrain/smoke.py --nodelist ampere3,ampere9
+```
+
 Neither preemption nor the wall clock needs you: both requeue and resume from
 the run's own checkpoint (see [`roach.slurm`](../../src/roach/slurm/README.md)),
 and resume is GPU-count flexible, which is what lets the shape change under a
