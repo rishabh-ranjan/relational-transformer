@@ -33,7 +33,8 @@ IGNORED = {
     # Both curves are cut to the shorter run's horizon below, so the horizon
     # itself is not a difference between what the two rows report.
     "total_steps",
-    # Only the `swa/` metrics see it, and the rows below read the live curve.
+    # It reaches only the `swa/` table, which is read knowing that; the live
+    # table cannot see it at all.
     "swa_momentum",
 }
 
@@ -128,7 +129,8 @@ def main() -> None:
         # The comparison run is the *comparable* one, not simply the newest:
         # the project also holds arms that vary the sampler or the init, and
         # the newest run of a task is as likely to be one of those. Fewest
-        # confounds first, newest among those.
+        # confounds first, then the longest horizon (the comparison is cut to
+        # it), newest to break a tie.
         candidates = base.get(task, [])
         if not candidates:
             print(f"{db}/{name}: no three-attention run to compare against\n")
@@ -136,7 +138,7 @@ def main() -> None:
         fewest = min(len(confounds_of(full[task], r, task)) for r in candidates)
         ref = max(
             (r for r in candidates if len(confounds_of(full[task], r, task)) == fewest),
-            key=lambda r: r.created_at,
+            key=lambda r: (r.config["total_steps"], r.created_at),
         )
 
         metric_and_dir = [
@@ -148,21 +150,25 @@ def main() -> None:
             print(f"{db}/{name}: the full-attention run has logged no val metric yet\n")
             continue
         metric, higher = metric_and_dir[0]
-        val_key, test_key = f"{metric}/val/{db}/{name}", f"{metric}/test/{db}/{name}"
         horizon = min(full[task].config["total_steps"], ref.config["total_steps"])
 
         print(f"{db}/{name}  ({metric}, best val step, first {horizon} steps)")
-        print(f"  {'arm':22s} {'step':>7s} {'val':>8s} {'test':>8s}")
-        for label, run in (
-            ("skip_full_attn=False", full[task]),
-            ("skip_full_attn=True", ref),
-        ):
-            got = best_by_val(run, val_key, test_key, higher, horizon)
-            if got is None:
-                print(f"  {label:22s} {'-- no history --':>25s}")
-                continue
-            step, v, t = got
-            print(f"  {label:22s} {step:7d} {v:8.2f} {t:8.2f}")
+        # The live curve and its SWA twin are separate selections: the SWA
+        # weights peak at a different step, so each table picks its own.
+        for kind, prefix in (("live", ""), ("swa", "swa/")):
+            val_key = f"{prefix}{metric}/val/{db}/{name}"
+            test_key = f"{prefix}{metric}/test/{db}/{name}"
+            print(f"  {kind:22s} {'step':>7s} {'val':>8s} {'test':>8s}")
+            for label, run in (
+                ("skip_full_attn=False", full[task]),
+                ("skip_full_attn=True", ref),
+            ):
+                got = best_by_val(run, val_key, test_key, higher, horizon)
+                if got is None:
+                    print(f"    {label:20s} {'-- no history --':>25s}")
+                    continue
+                step, v, t = got
+                print(f"    {label:20s} {step:7d} {v:8.2f} {t:8.2f}")
 
         print(f"  compared against: {ref.name}  ({ref.created_at})")
         confounds = sorted(confounds_of(full[task], ref, task))
