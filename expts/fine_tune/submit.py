@@ -208,10 +208,15 @@ def submit_one(
     run_id: str | None = None,
     total_steps: int = 10_001,
     loss_fn: str | None = None,
+    run_name: str | None = None,
 ):
     """One job. `run_id` names an existing run instead of minting a new one,
     which is how a job that was cancelled -- moved to another queue, say --
-    comes back and resumes from its own checkpoint rather than from step 0."""
+    comes back and resumes from its own checkpoint rather than from step 0.
+
+    `run_name` overrides the wandb name, which is the task by default: two
+    arms of the same task -- the two losses, say -- want to be told apart in
+    the workspace."""
     return submit(
         "rt.train:main",
         args=dict(
@@ -285,7 +290,7 @@ def submit_one(
             targets=targets_for(db, task),
             project="2026-08-07-fine_tune",
             entity="rtv2",
-            run_name=f"{db}/{task}",
+            run_name=run_name or f"{db}/{task}",
             wandb_disabled=False,
             out_root="/dfs/user/ranjanr/ckpts",
         ),
