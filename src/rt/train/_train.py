@@ -382,8 +382,6 @@ def main(
         return (step + 1) / warmup_steps
 
     scheds = [optim.lr_scheduler.LambdaLR(o, lr_lambda) for o in opts]
-    swa = SwaState(raw_net.named_parameters(), momentum=swa_momentum)
-    swa_net = build_net()
 
     # best (kind, step, value) trackers, persisted across resumes
     best = {"clf": None, "reg": None}
@@ -399,6 +397,13 @@ def main(
         raw_net.load_state_dict(load_model(ckpt_path))
         if is_main:
             log(warm_started_from=load_ckpt_path)
+
+    # After the warm start, before the resume load that overwrites it: the
+    # n == 0 average is whatever `raw_net` holds at step 0, so seeding it from
+    # weights the warm start is about to replace would make the step-0 swa
+    # metrics those of a net that never trains.
+    swa = SwaState(raw_net.named_parameters(), momentum=swa_momentum)
+    swa_net = build_net()
 
     # ---- resume from preemption (GPU-count flexible: full model+opt per rank) ----
     if resume_path.exists():

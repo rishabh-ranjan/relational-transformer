@@ -24,8 +24,10 @@ class SwaState:
     def __init__(self, named_tensors, momentum):
         """``named_tensors``: iterable of ``(name, tensor)`` pairs. The
         fp32 storage is allocated as clones on the source tensors'
-        devices. Initial values are arbitrary — the first ``update``
-        sets them exactly (``alpha=1.0``)."""
+        devices. The first ``update`` sets them exactly (``alpha=1.0``),
+        so the clones are only ever read at ``n == 0`` — construct from
+        the tensors the average is meant to start at, not from whatever
+        a later load will put there."""
         self.momentum = momentum
         self.params = {name: t.detach().float().clone() for name, t in named_tensors}
         self.n = 0
