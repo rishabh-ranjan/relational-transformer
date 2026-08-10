@@ -86,6 +86,13 @@ The policy it implements:
 - **One node goes to `il` when it fits.** `il` is not preemptible but caps a100
   at 10 per user, so it holds one node's eight and nothing wider. If this
   user's other `il` jobs already hold more than 2, it falls back to `il-lo`.
+  This applies to a **queued** single node as much as a running one: `il-lo` is
+  preemptible, so a job waiting there is strictly worse than the same job
+  waiting on `il`, and waiting costs nothing either way. Whenever the run is
+  `PENDING`, check its qos with `squeue -j <id> -o "%q"` -- if it says `il-lo`
+  while `il` has room (`squeue -u $USER -o "%q|%b"` shows what is held), cancel
+  and resubmit with `--qos il`. `autoscale.py` gets this right now; it did not
+  always.
 - **Everything wider is `il-lo`**: preemptible, effectively uncapped, 21d wall.
 
 ## Watching it

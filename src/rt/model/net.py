@@ -419,19 +419,12 @@ class RelationalTransformer(nn.Module):
             # Materialize (B, S, S) pairwise masks, then convert to block masks.
             pad = (~is_padding[:, :, None]) & (~is_padding[:, None, :])
             same_node = node_idxs[:, :, None] == node_idxs[:, None, :]
-            # kv_in_f2p[b, q, kv] = any_k node_idxs[b, kv] == f2p_nbr_idxs[b, q, k].
-            # Reduced over k in place rather than as `.any(-1)` over a
-            # (B, S, S, MAX_F2P_NBRS) comparison: that intermediate is
-            # MAX_F2P_NBRS *times* a (B, S, S) bool, which at B=16, S=8192 is
-            # 5 GiB against 1 GiB, and it was built twice.
-            kv_in_f2p = node_idxs[:, None, :] == f2p_nbr_idxs[:, :, 0, None]
-            for k in range(1, f2p_nbr_idxs.shape[-1]):
-                kv_in_f2p |= node_idxs[:, None, :] == f2p_nbr_idxs[:, :, k, None]
-            # q_in_f2p[b, q, kv] = any_k node_idxs[b, q] == f2p_nbr_idxs[b, kv, k],
-            # which is kv_in_f2p with q and kv exchanged -- the same tensor read
-            # the other way round, not a second reduction. `.contiguous()` below
-            # materializes the transpose for the masks that need it.
-            q_in_f2p = kv_in_f2p.transpose(1, 2)
+            kv_in_f2p = (
+                node_idxs[:, None, :, None] == f2p_nbr_idxs[:, :, None, :]
+            ).any(-1)
+            q_in_f2p = (node_idxs[:, :, None, None] == f2p_nbr_idxs[:, None, :, :]).any(
+                -1
+            )
             same_col_table = (
                 col_name_idxs[:, :, None] == col_name_idxs[:, None, :]
             ) & (table_name_idxs[:, :, None] == table_name_idxs[:, None, :])

@@ -11,9 +11,13 @@ pixi run python expts/pretrain/submit.py            # new run; prints its run_id
 pixi run python expts/pretrain/submit.py <run_id>   # resume that run
 ```
 
-8xA100 per node, `--exclusive`, on the preemptible `il-lo` queue (21d wall).
-How many nodes, and which queue, is not a constant -- it is whatever the
-cluster will hand over right now:
+8xA100 per node, `--exclusive`. A single node goes on `il` -- not preemptible,
+7d wall, but capped at 10 a100 per user, so it fits one node and nothing wider;
+everything wider goes on the preemptible `il-lo` (21d wall). Prefer `il`
+whenever the cap allows, *including for a job that will sit in the queue*: a
+pending `il-lo` job is preemptible the moment it starts, and queueing on `il`
+costs no more. How many nodes, and which queue, is not a constant -- it is
+whatever the cluster will hand over right now:
 
 ```
 pixi run python expts/pretrain/autoscale.py <run_id>   # take the widest free shape
