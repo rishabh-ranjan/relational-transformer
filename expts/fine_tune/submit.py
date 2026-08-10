@@ -87,6 +87,25 @@ def published_best() -> dict[str, float]:
     return out
 
 
+def default_loss_fn(db: str, task: str) -> str:
+    """`bce` for a classification task, `huber` for a regression one.
+
+    The heads are the same regression heads either way -- the label rides in
+    the sign of the z-scored cell (see `RelationalTransformer.loss`) -- so the
+    choice is only which loss reads it, and a binary target read as a logit is
+    the one the metric (AUROC) is actually scoring. The task's type comes from
+    `results.csv`, the same column `make_results.py` splits the table by."""
+    import pandas as pd
+
+    raw = pd.read_csv(HERE / "results.csv")
+    types = set(raw[(raw.dataset == db) & (raw.task == task)].task_type)
+    if types == {"BINARY_CLASSIFICATION"}:
+        return "bce"
+    if types == {"REGRESSION"}:
+        return "huber"
+    raise ValueError(f"no single task_type for {db}/{task}: {types}")
+
+
 def targets_for(db: str, task: str) -> dict[str, float]:
     """The published bests this task's run should draw as reference lines.
 
@@ -188,6 +207,7 @@ def submit_one(
     resources: Resources,
     run_id: str | None = None,
     total_steps: int = 10_001,
+    loss_fn: str | None = None,
 ):
     """One job. `run_id` names an existing run instead of minting a new one,
     which is how a job that was cancelled -- moved to another queue, say --
@@ -205,7 +225,7 @@ def submit_one(
             d_ff=2048,
             compile=True,
             materialize_attn_masks=True,
-            loss_fn="huber",
+            loss_fn=loss_fn or default_loss_fn(db, task),
             # the arm: None is random init, a checkpoint path is fine-tuning
             load_ckpt_path=None,
             # data: one task, from the benchmark data rather than the Join
