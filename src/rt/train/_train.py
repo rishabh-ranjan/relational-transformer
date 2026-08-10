@@ -63,6 +63,12 @@ import wandb
 # Re-seed offset applied per resumed step so a resumed stream does not replay.
 SEED_STRIDE = 1_000_003
 
+# Upper bound on how long the forced first eval waits for every ctx size to be
+# drawn. Coverage normally arrives in a few tens of steps; this only matters
+# when the draw is unlucky, and an eval that has seen most shapes is still
+# worth far more than one deferred to the next eval_freq boundary.
+FIRST_EVAL_MAX_STEPS = 100
+
 
 def setup_dist(num_workers: int = 0):
     """Return (device, rank, local_rank, world_size, ddp). Honors torchrun env.
@@ -782,20 +788,21 @@ def main(
     # loses at most that much progress. The save is atomic (tmp+rename) and rank
     # 0 only; we don't count it in sec/step (step_t0 is reset after).
     last_resume_t = time.perf_counter()
-    # Eval at the resume step, even though resume.pt was written at an eval and
-    # its metrics are therefore already known. The point is not the metrics: an
-    # eval batch is the largest allocation the job makes, and skipping this one
-    # meant the first one landed up to `eval_freq` steps -- an hour -- after the
-    # job started, on a process that had looked healthy the whole time. Paying
-    # it up front means a shape that cannot afford its evals dies in the first
-    # minutes, next to the resume that chose the shape. Optimizer state is
-    # already loaded above, so this eval sees the run's true peak.
-    evaled_at = None
-    # ...and force it, rather than leaving it to the `eval_freq` test: resume.pt
-    # is written on a wall-clock timer as well as at every eval, so a resume
-    # step is usually *not* a multiple of eval_freq (37852, 38012, 38120 are
-    # real ones from this run) and the test alone would skip it after all.
-    force_eval = True
+    # A resume starts at a step whose eval already ran (resume.pt is written at
+    # every eval), so don't repeat it. A fresh run's step 0 is not that case.
+    evaled_at = start_step if start_step > 0 else None
+    # Bring the first eval forward, but *after* training has run, not before it.
+    # What makes an eval expensive is not the eval alone: it runs on top of
+    # everything training leaves resident -- inductor workspaces for each
+    # compiled ctx shape, DDP reduction buckets, cuBLAS workspaces -- none of
+    # which exists before the first step. An eval on a fresh process is
+    # therefore strictly cheaper than every eval that follows it, and proves
+    # nothing about them. Waiting until every ctx size in `ctx_size_list` has
+    # been trained on means the eval runs against the full set of those
+    # buffers, and the step after it -- where the step-39000 OOM actually
+    # landed -- runs against the eval's own high-water mark.
+    uncovered_ctx = set(ctx_size_list)
+    force_eval = False
     # Measured on this process's first step, not on global step 0: a resumed job
     # never sees step 0, and its memory is what matters when it is the job that
     # runs out. `ctx_size_list` varies the activation term step to step, so this
@@ -834,6 +841,10 @@ def main(
                 raw_batch = next(it)
                 load_time += time.perf_counter() - t_load
             batch = move(raw_batch, device)
+            # Every microbatch of a step shares its ctx size; recording it is
+            # how the forced first eval knows every shape has been compiled.
+            if uncovered_ctx is not None:
+                uncovered_ctx.discard(next(iter(batch.values())).shape[1])
             # The forward belongs inside no_sync() as much as the backward:
             # DDP decides whether to reduce at forward time, so a forward
             # outside the context all-reduces this microbatch regardless.
@@ -893,6 +904,18 @@ def main(
             s.step()
         swa.update(raw_net.named_parameters())
         step += 1
+
+        # Every training shape has now been through a forward, a backward and
+        # an optimizer step, so their workspaces are allocated and will not be
+        # given back. Run the eval that has to fit alongside them. The cap
+        # bounds the wait: ctx sizes are drawn at random per step, so a rare
+        # one can take a while, and a late check beats none. `None` afterwards:
+        # this fires once per process, not once per step from here on.
+        if uncovered_ctx is not None and (
+            not uncovered_ctx or step - start_step >= FIRST_EVAL_MAX_STEPS
+        ):
+            force_eval = True
+            uncovered_ctx = None
 
         total_loss, stop = reduce_step_stats(total_loss)
 
