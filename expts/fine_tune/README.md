@@ -19,6 +19,10 @@ One job per task, one GPU each. `plan()` hands out the best slots this cluster
 will give a one-GPU job, best first; its docstring is the reasoning for the
 order.
 
+That also rewrites the project's wandb workspace ([`workspace.py`](workspace.py))
+with the arms it just queued, so a newly submitted task has its dashboard panels
+before it logs its first step -- there is nothing to rerun by hand.
+
 Logs and `args.json` land in `/dfs/user/ranjanr/slurm-logs/fine-tune`,
 checkpoints and `params.json` under `/dfs/user/ranjanr/ckpts/rtv2/fine-tune/<run_id>`.
 

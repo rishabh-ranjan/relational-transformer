@@ -28,25 +28,27 @@ New runs show up in the view on their own: every run in the project is in its
 runset (no filters), no run limit is written (a panel draws the whole sweep,
 and without the "Limited to N runs" caption any `max_runs` value earns), and
 the run feed's page size is lifted off 10 so the run list is not stuck on
-1-10. Panels are not
-automatic --
-`auto_generate_panels` is off, so a key this script has not seen gets its panel
-by rerunning the script.
+1-10.
+
+Panels are not automatic -- `auto_generate_panels` is off, so a key this script
+has not seen gets its panel by rerunning the script. That rerun is not yours to
+remember: `submit.py` calls `save(build(...))` at the end of every submission,
+passing the arms it just queued, so the panels for a newly submitted task are
+in the view before its first step. Run this script by hand only for a key that
+appeared without a submission behind it.
 """
 
 import argparse
 import json
 import math
+from collections.abc import Sequence
 
 import wandb
 import wandb_workspaces.reports.v2.interface as wr
 import wandb_workspaces.workspaces as ws
 from wandb_workspaces.workspaces.internal import execute_graphql
 
-from submit import TASKS, targets_for
-
-ENTITY = "rtv2"
-PROJECT = "2026-08-07-fine_tune"
+from submit import ENTITY, PROJECT, TASKS, targets_for
 
 # The metric families that get a hand-arranged `dashboard:` section, in the
 # order they should appear.
@@ -150,7 +152,9 @@ def section(
     )
 
 
-def project_keys(entity: str, project: str) -> set[str]:
+def project_keys(
+    entity: str, project: str, extra_tasks: Sequence[tuple[str, str]] = ()
+) -> set[str]:
     """Every key logged by any run in the project, system stream included.
 
     A run's summary carries one entry per metric key it ever logged, so the
@@ -166,7 +170,10 @@ def project_keys(entity: str, project: str) -> set[str]:
     # that far: a task still queueing at the first eval should have its panel
     # waiting for it, not appear halfway through the sweep. Both halves are
     # seeded -- the target alone would land in a panel of its own.
-    for db, task in TASKS:
+    # `extra_tasks` is what a caller is submitting right now -- `submit.py`
+    # passes its arms so the panels exist before the runs do, even for a pair
+    # that is commented out of `TASKS`.
+    for db, task in {*TASKS, *extra_tasks}:
         for k in targets_for(db, task):
             keys |= {k, target_key(k)}
     return keys - INTERNAL
@@ -204,8 +211,10 @@ def personal_view(entity: str, project: str) -> tuple[str, str, str]:
     return slug, "", f"{username.capitalize()}'s workspace"
 
 
-def build(entity: str, project: str) -> ws.Workspace:
-    keys = project_keys(entity, project)
+def build(
+    entity: str, project: str, extra_tasks: Sequence[tuple[str, str]] = ()
+) -> ws.Workspace:
+    keys = project_keys(entity, project, extra_tasks)
     # A key that is some other key's twin or target gets no panel of its own:
     # it already rides along in that key's panel.
     folded = {swa_key(k) for k in keys} | {target_key(k) for k in keys}
