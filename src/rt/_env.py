@@ -48,7 +48,16 @@ _TORCH_LOGS = [
 _DYNAMO_CACHE_SIZE_LIMIT = 16
 
 
-def _setup_env() -> None:
+def _omp_threads(num_workers: int) -> int:
+    """Intra-op threads per loader worker: this task's cores, split between the
+    workers that will contend for them. ``sched_getaffinity`` is the cpuset
+    slurm actually gave the rank (``cpus_per_task``), not the node's core
+    count, so a rank never budgets for cores it does not own."""
+    cpus = len(os.sched_getaffinity(0))
+    return max(1, cpus // max(1, num_workers))
+
+
+def _setup_env(num_workers: int = 0) -> None:
     """Allocator, NCCL diagnostics, compile limits and thread counts. Must run
     before the first CUDA allocation and before ``init_process_group``."""
     os.environ.setdefault("PYTORCH_CUDA_ALLOC_CONF", _ALLOC_CONF)
@@ -65,7 +74,10 @@ def _setup_env() -> None:
 
     # One rank per GPU, `num_workers` loader processes behind each, and only
     # `cpus_per_task` cores to share: intra-op thread pools at their default
-    # width oversubscribe the node several times over. One thread per process
-    # is the right shape when the parallelism is already in the processes.
-    os.environ.setdefault("OMP_NUM_THREADS", "1")
+    # width oversubscribe the node several times over. Divide the rank's cores
+    # among its workers instead -- the workers inherit this at fork, so it has
+    # to be set before the first DataLoader is built. The training process
+    # itself keeps one thread: its work is on the GPU, and the cores are the
+    # loader's.
+    os.environ.setdefault("OMP_NUM_THREADS", str(_omp_threads(num_workers)))
     torch.set_num_threads(1)

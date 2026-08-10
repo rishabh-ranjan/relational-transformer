@@ -64,9 +64,12 @@ import wandb
 SEED_STRIDE = 1_000_003
 
 
-def setup_dist():
-    """Return (device, rank, local_rank, world_size, ddp). Honors torchrun env."""
-    _setup_env()
+def setup_dist(num_workers: int = 0):
+    """Return (device, rank, local_rank, world_size, ddp). Honors torchrun env.
+
+    ``num_workers`` is the loader width this rank will run, which is what the
+    per-worker thread budget is divided by."""
+    _setup_env(num_workers)
     world_size = int(os.environ.get("WORLD_SIZE", "1"))
     if world_size > 1:
         rank = int(os.environ["RANK"])
@@ -258,7 +261,7 @@ def main(
     # startup cost, and it is what a run that "hangs" is usually stuck in.
     start_tic = time.time()
 
-    device, rank, local_rank, world_size, ddp = setup_dist()
+    device, rank, local_rank, world_size, ddp = setup_dist(num_workers)
     is_main = rank == 0
 
     use_wandb = (not wandb_disabled) and is_main

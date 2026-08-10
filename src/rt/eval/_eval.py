@@ -21,11 +21,11 @@ from collections import defaultdict
 import numpy as np
 
 
-def setup_dist():
+def setup_dist(num_workers: int = 0):
     """Return (device, global_rank, local_rank, world_size, ddp). Honors torchrun
     env, exactly like ``rt.train._train.setup_dist``; without torchrun this is a
     plain single-process run."""
-    _setup_env()
+    _setup_env(num_workers)
     world_size = int(os.environ.get("WORLD_SIZE", "1"))
     if world_size > 1:
         rank = int(os.environ["RANK"])
@@ -102,7 +102,7 @@ def main(
         / run_id
         / "eval_out"
     )
-    device, global_rank, local_rank, world_size, ddp = setup_dist()
+    device, global_rank, local_rank, world_size, ddp = setup_dist(num_workers)
 
     checkpoint = load_ckpt_path
     assert checkpoint is not None, "model.load_ckpt_path is required"
