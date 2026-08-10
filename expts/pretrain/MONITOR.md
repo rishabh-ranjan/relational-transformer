@@ -78,7 +78,8 @@ The policy it implements:
   starts it *now*, so the job names exactly the nodes already idle. A queued
   4-node job that waits is strictly worse than a 2-node job that runs.
 - **Upgrade only on a strictly higher node count.** Cancelling a running job
-  costs ~45 minutes of page-cache population; a lateral move is pure loss. The
+  costs a fresh startup -- ~25-45 minutes on a cold node, a few minutes on one
+  the run has used recently (see below); a lateral move is pure loss. The
   job's own nodes count as available when weighing an upgrade -- they return to
   the pool when it is cancelled, so 2 -> 4 needs two *more* free nodes.
 - **A pending job is not progress.** If the run is queued and anything whole is
@@ -142,8 +143,14 @@ Routine, do not escalate:
   the job's requested `USR1` at the start of the *preemption* grace window too,
   so the log says "wall clock is near" for a preemption -- the action taken is
   right either way.
-- **`time_to_first_step: ~45m`.** Page-cache population (`mmap_populate=True`)
-  plus ~1m compile. It is why short slots make no progress at all, and why
+- **`time_to_first_step`: ~25-45m on a cold node, ~4m on a warm one.** Almost
+  all of it is page-cache population (`mmap_populate=True`); the ~1m compile is
+  the rest. The mixture stays in the node's page cache after a job ends, so an
+  attempt landing on a node this run used recently starts in minutes, not tens
+  of them -- measured across this run's attempts: 24-44m on nodes it had not
+  touched, 3m43s resuming onto a node it had left 40 minutes earlier. Whether a
+  node is warm is what the number depends on; do not quote ~45m for a warm one.
+  This is why short slots on cold nodes make no progress at all, and why
   upgrades are only worth a strictly wider shape.
 - **`tasks_skipped` / `ignored` lines at startup.** Tasks the build cannot
   predict. Zero is expected now; a non-zero count means the published task
@@ -166,8 +173,9 @@ Escalate to a human:
   node-local HOME, pixi and the clone. `roach.slurm.bootstrap` does this with
   one srun task per node. A node that has never been used pays ~7 minutes the
   first time.
-- **A silent multi-node run is hung, not slow.** No log line for well over the
-  ~45m first step, GPUs at 100% util holding only ~2 GB on every rank: the
+- **A silent multi-node run is hung, not slow.** No log line for well over that
+  node's expected first step, GPUs at 100% util holding only ~2 GB on every
+  rank: the
   ranks are stuck in a collective and the job will sit there until its NCCL
   watchdog times out. [`smoke.py`](smoke.py) says in a minute whether a pair of
   nodes can train at all -- run it before putting a real run back on them.

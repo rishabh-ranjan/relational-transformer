@@ -19,8 +19,9 @@ which is not preemptible -- so a 1-node run goes there when the cap allows, and
 only falls back to il-lo when it does not.
 
 What it will not do is trade a running job for a marginal gain: an upgrade
-cancels a job that is making progress and pays ~45 minutes of page-cache
-population again, so it happens only when the node count actually goes up.
+cancels a job that is making progress and pays for page-cache population again
+-- ~25-45 minutes on a node the run has not used recently, a few minutes on one
+still holding the mixture -- so it happens only when the node count goes up.
 Downgrades are free by comparison -- the job is already stopped when they
 happen (preempted, or never started) -- so they are taken eagerly.
 """

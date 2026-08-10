@@ -20,7 +20,8 @@ A pass is `time_to_first_step` in the log within a minute or so of the ranks
 starting, then `saved: best_clf` and a clean exit. A hang is silence, and means
 the fix is not working on those nodes -- do not start a real multi-node run.
 Data is small and page-cache population is off, so a slow start is a real
-signal here rather than the usual ~45m the full mixture costs.
+signal here rather than the tens of minutes the full mixture costs on a node
+whose page cache is cold.
 
 Checkpoints are throwaway and go to `/tmp`; nothing is logged to wandb.
 """
