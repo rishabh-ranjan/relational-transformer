@@ -193,6 +193,26 @@ def build(entity: str, project: str) -> ws.Workspace:
             [k for k in leaders if k in {f"{m}/{split}/mean" for m in METRICS}],
         )
 
+    # How fast a run is actually moving: step against wall-clock seconds, so a
+    # run that has stalled or is crawling reads off the slope. `_step` and
+    # `_runtime` are wandb's own bookkeeping series (hence excluded from the
+    # key space above), which is exactly why this panel is written by hand.
+    sections.append(
+        ws.Section(
+            name="dashboard: train/step_vs_runtime",
+            panels=[
+                wr.LinePlot(
+                    title="step vs runtime",
+                    x="_runtime",
+                    y=["_step"],
+                    smoothing_show_original=True,
+                )
+            ],
+            is_open=True,
+            layout_settings=ws.SectionLayoutSettings(columns=1, rows=1),
+        )
+    )
+
     # Everything else, so nothing a run logs goes missing from the view,
     # grouped by top-level namespace.
     rest = [k for k in leaders if k not in shown and not k.startswith("system.")]
