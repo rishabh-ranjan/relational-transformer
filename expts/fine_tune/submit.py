@@ -183,18 +183,19 @@ def a100(qos: str, time: str) -> Resources:
 def plan(n: int) -> list[Resources]:
     """The best n slots this cluster will give one-GPU jobs, best first.
 
-    `il-lo` is preemptible, effectively uncapped and 21d; `il` and
-    `il-interactive` are not preemptible but capped per user -- `il` at 10 gpus
-    of *any* type together, `il-interactive` at 2 -- so a sweep wider than the
-    cap queues behind its own head. A run checkpoints and resumes, at a
-    preemption and at its wall limit alike, so a low-priority slot costs wall
-    clock rather than work; switch the tier here when the caps are free.
+    Blackwell before Ampere, and the higher qos before the lower, per
+    [../README.md](../README.md). The per-user caps are what bound each tier
+    and they come straight from `sacctmgr show qos`: `il-interactive` is 2 gpus
+    of any type at 12h, `il` is 10 gpus together but only 2 of them b200 at 7d,
+    `il-lo` is preemptible, effectively uncapped and 21d. So the b200 share
+    stops at 4 whatever blackwell1 has idle.
 
-    Blackwell before Ampere, and the b200 share stops at 2: blackwell1 is one
-    node whose eight cards the whole cluster wants, and a b200 job past what it
-    has idle queues while amperes turn over.
+    A run checkpoints and resumes, at a preemption and at its wall limit alike,
+    so a short or low-priority slot costs wall clock rather than work.
     """
-    out = [b200("il-lo", "21-00:00:00")] * min(n, 2)
+    out = [b200("il-interactive", "12:00:00")] * min(n, 2)
+    out += [b200("il", "7-00:00:00")] * min(n - len(out), 2)
+    out += [a100("il", "7-00:00:00")] * min(n - len(out), 8)
     out += [a100("il-lo", "21-00:00:00")] * (n - len(out))
     return out
 
