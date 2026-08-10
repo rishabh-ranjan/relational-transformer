@@ -39,6 +39,11 @@ IGNORED = {
 }
 
 
+# A key a run predates is not a run that chose differently: it ran whatever the
+# code did before the key existed. Absence is read as that value.
+BEFORE_THE_KEY = {"loss_fn": "huber"}
+
+
 @functools.cache
 def split_rows() -> dict[str, tuple[int, int]]:
     """`(num_rows_val, num_rows_test)` per `{db}/{task}`, from RelBench's stats.
@@ -65,16 +70,21 @@ def confounds_of(run, ref, task) -> set[str]:
     """Config keys that differ between two runs and could move the numbers.
 
     `skip_full_attn` is the difference under test. `IGNORED` is the set that
-    cannot reach these numbers at all. `eval_items_per_task` is the one key
+    cannot reach these numbers at all, and `BEFORE_THE_KEY` fills in what a run
+    older than a key actually ran. `eval_items_per_task` is the one key
     that depends on the task: it caps how much of a split is evaluated, so two
     different caps that both sit above the split are the same eval.
     """
+
+    def value(cfg, k):
+        return cfg.get(k, BEFORE_THE_KEY.get(k))
+
     diff = {
         k
         for k in set(run.config) | set(ref.config)
         if k not in IGNORED
         and k != "skip_full_attn"
-        and run.config.get(k) != ref.config.get(k)
+        and value(run.config, k) != value(ref.config, k)
     }
     if "eval_items_per_task" in diff:
         caps = (run.config["eval_items_per_task"], ref.config["eval_items_per_task"])
