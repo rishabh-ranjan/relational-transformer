@@ -89,20 +89,6 @@ fn check_deadline(deadline: Instant) {
 /// is comfortably below realistic timeouts (≥ 1 ms).
 const DEADLINE_CHECK_EVERY: usize = 1024;
 
-/// p2f degree up to which BFS expansion filters a node's edges exactly instead
-/// of sampling from the index range (see `bfs_collect_nodes`). A scan this
-/// short is a few microseconds and bounds the whole expansion at O(1) in the
-/// degree; the arm above it exists only for the hub nodes, whose degree runs to
-/// 10^5-10^6 and where a scan is the difference between a run and a hang.
-///
-/// 4096 is chosen against the measured worst case for the thing the exact arm
-/// protects: across all seven relbench datasets a node carries at most 366 task
-/// edges (rel-f1 `drivers`, summed over every task and split), so above this
-/// threshold they are under 9% of the range and the width lost to them is
-/// negligible -- while every node where they could be a large share is below
-/// it, and filtered exactly.
-const EXACT_FILTER_MAX_DEGREE: usize = 4096;
-
 struct Vecs {
     node_idxs: Vec<i32>,
     f2p_nbr_idxs: Vec<i32>,
@@ -1756,63 +1742,70 @@ impl Sampler {
             // task edges the exemption did.
             //
             // Edges to *another* task's table are dropped rather than expanded,
-            // so a sample that draws them comes up short of bfs_width. Which
-            // arm handles that is a question of degree, and the two cases do
-            // not overlap: a node can only carry a bounded number of task
-            // edges, so a node where they are a large enough share of the
-            // valid range to matter is a node small enough to filter exactly.
-            let filtered;
-            let (pool, pool_len) = if p2f_edges.len() <= EXACT_FILTER_MAX_DEGREE {
-                // Small degree: read every valid edge, keep the eligible ones,
-                // and sample bfs_width of those -- exactly the width asked for,
-                // for at most EXACT_FILTER_MAX_DEGREE reads.
-                filtered = p2f_edges
+            // so drawing one wastes a slot. Rejection sampling recovers the
+            // full width without a scan and without a threshold to tune: draw
+            // a position, keep it if eligible, and stop at bfs_width. What
+            // makes it terminate is the budget -- never spend more draws than
+            // reading every valid edge would have cost. Past that, reading
+            // them is the cheaper way to get an exact answer, so that is what
+            // the fallback below does.
+            //
+            // The two arms cannot both be expensive. A low acceptance rate
+            // means the eligible edges are outnumbered by other-task ones, and
+            // those are bounded per node (366 at the measured worst case), so
+            // a node that exhausts the budget is a node with a few hundred
+            // edges, where the scan is microseconds. A hub, conversely, is
+            // nearly all db edges: it accepts almost every draw and never
+            // reaches the fallback.
+            let eligible = |edge: &ArchivedEdge| {
+                edge.table_type == ArchivedTableType::Db
+                    || edge.table_name_idx == start_node.table_name_idx
+            };
+
+            let mut chosen: Vec<i32> = Vec::with_capacity(bfs_width);
+            let mut drawn: HashSet<usize> = HashSet::with_capacity(2 * bfs_width);
+            let mut draws = 0;
+            while chosen.len() < bfs_width && draws < p2f_edges.len() {
+                if draws & (DEADLINE_CHECK_EVERY - 1) == 0 {
+                    check_deadline(deadline);
+                }
+                draws += 1;
+                // Sampling is without replacement, as taking bfs_width of the
+                // eligible edges has always been: a position drawn twice would
+                // otherwise spend two slots on one node.
+                let i = rng.random_range(0..p2f_edges.len());
+                if !drawn.insert(i) {
+                    continue;
+                }
+                if eligible(&p2f_edges[i]) {
+                    chosen.push(p2f_edges[i].node_idx.into());
+                }
+            }
+            if chosen.len() < bfs_width && draws == p2f_edges.len() {
+                // Budget spent without filling the width: read the edges and
+                // take the answer the draws were approximating.
+                let pool: Vec<i32> = p2f_edges
                     .iter()
-                    .filter(|e| {
-                        e.table_type == ArchivedTableType::Db
-                            || e.table_name_idx == start_node.table_name_idx
-                    })
-                    .collect::<Vec<_>>();
-                (Some(&filtered), filtered.len())
-            } else {
-                // Large degree: sample from the index range and look only at
-                // what is drawn. The width lost to other-task edges is at most
-                // their share of the range, which past this threshold is a few
-                // percent (366 over EXACT_FILTER_MAX_DEGREE at the measured
-                // worst case, and ~0 for the hub tables that make this arm
-                // matter at all).
-                (None, p2f_edges.len())
-            };
-
-            let idxs = if pool_len > bfs_width {
-                index::sample(rng, pool_len, bfs_width).into_vec()
-            } else {
-                (0..pool_len).collect::<Vec<_>>()
-            };
-
-            for &i in idxs.iter() {
-                check_deadline(deadline);
-                let edge = match pool {
-                    Some(f) => f[i],
-                    None => {
-                        let edge = &p2f_edges[i];
-                        // include edges to task table only if seed node belongs
-                        // to the task table
-                        if edge.table_name_idx != start_node.table_name_idx
-                            && edge.table_type != ArchivedTableType::Db
-                        {
-                            continue;
-                        }
-                        edge
-                    }
+                    .filter(|e| eligible(e))
+                    .map(|e| e.node_idx.into())
+                    .collect();
+                chosen = if pool.len() > bfs_width {
+                    index::sample(rng, pool.len(), bfs_width)
+                        .into_iter()
+                        .map(|i| pool[i])
+                        .collect()
+                } else {
+                    pool
                 };
+            }
 
+            for &node_idx in chosen.iter() {
                 if depth + 1 >= p2f_ftr.len() {
                     for _i in p2f_ftr.len()..=depth + 1 {
                         p2f_ftr.push(vec![]);
                     }
                 }
-                p2f_ftr[depth + 1].push(edge.node_idx.into());
+                p2f_ftr[depth + 1].push(node_idx);
             }
         }
     }
