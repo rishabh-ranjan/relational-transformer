@@ -8,12 +8,6 @@ from roach.slurm import Resources, submit
 
 HERE = Path(__file__).parent
 
-# The forecast tasks of these four databases whose type RT models: predict a
-# label at a timestamp from what is known before it. Nothing else is here --
-# recommendation tasks are not modeled and autocomplete tasks complete a
-# column rather than forecast one. Written out rather than discovered at submit time --
-# the list is what ran, and a database gaining a task should not silently
-# change a sweep.
 TASKS = (
     ("rel-avito", "ad-ctr"),
     # ("rel-avito", "user-clicks"),
@@ -59,9 +53,6 @@ def published_best() -> dict[str, float]:
 
     raw = pd.read_csv(HERE / "results.csv")
     raw["pair"] = raw.dataset + "/" + raw.task
-    # Both arms of every model, exactly as make_results.py splits them: the
-    # default config, and the trial the search selected. A row can be both
-    # (the default won the search), in which case it stands in both arms.
     dflt = raw[raw.config_tag == "default"].assign(arm="D")
     hpo = raw[raw.selected].assign(arm="H")
     d = pd.concat([dflt, hpo])
@@ -80,8 +71,6 @@ def published_best() -> dict[str, float]:
                 v = v / sub.pair.map(stds)
             for pair, x in v.groupby(sub.pair):
                 out[f"{metric}/{split}/{pair}"] = float(best(x))
-            # A model's mean is over that table's whole task set, so the means
-            # are taken per model+arm and the best of those is the target.
             out[f"{metric}/{split}/mean"] = float(best(v.groupby(sub.row).mean()))
     return out
 
@@ -188,15 +177,11 @@ def plan(n: int) -> list[Resources]:
     free. A whole card that starts now beats a faster one that does not.
     """
     out = [b200("il-lo", "21-00:00:00")] * min(n, 4)
-    # whatever is left goes to the ampere queue, which has no cap of its own
     out += [a100("il-lo", "21-00:00:00")] * (n - len(out))
     return out
 
 
 def main() -> None:
-    # Smallest train set first: the fine-tuning question is sharpest where a
-    # task has the least to learn from, and a queue that starts there answers
-    # it before the long runs take the cluster.
     tasks = sorted(TASKS, key=lambda p: ntrain()[f"{p[0]}/{p[1]}"])
     for (db, task), resources in zip(tasks, plan(len(tasks)), strict=True):
         name = f"{db}/{task}"
@@ -266,21 +251,13 @@ def main() -> None:
                 wandb_disabled=False,
                 out_root="/dfs/user/ranjanr/ckpts",
             ),
-            # one GPU per job: the slot `plan` picked for it
             resources=resources,
             name=f"{db}-{task}",
             repo_root="/lfs/hyperturing1/0/ranjanr/clones/rishabh-ranjan/relational-transformer",
             log_root="/dfs/user/ranjanr/slurm-logs/rishabh-ranjan/relational-transformer/expts/fine-tune",
-            # the node's own big disk, not /tmp (the 280G root filesystem)
             clone_root="/lfs/local/0/roach_clones",
             secrets_dir="/dfs/user/ranjanr/.secrets",
-            # a run_id here names an existing run instead of minting a new one:
-            # how a job that was cancelled comes back and resumes from its own
-            # checkpoint rather than from step 0
             run_id=None,
-            # No setup: `pixi install` already builds the rustler extension into
-            # src/rt/ -- the project is an editable dependency of its own
-            # environment.
         )
 
 
