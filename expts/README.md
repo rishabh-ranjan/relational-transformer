@@ -64,6 +64,22 @@ that outlives the question. `roach.slurm.submit` exists to handle all of it:
 give the probe a directory, commit it, submit it as its own target. Two minutes
 of writing a `submit.py` beats twenty of debugging an `srun` line.
 
+## Watch every job you submit
+
+**A job is not finished when `sbatch` returns.** Check each one shortly after it
+starts and keep checking: that it reached a step at all, that the loss is
+moving, and that its log is the size a working run's log is. A broken run does
+not stop -- it burns a GPU for its whole wall clock, and it can take the shared
+filesystem down with it. Measured: six runs whose sampler panicked on every item
+printed a `skipping item` line per panic and wrote 60--130 GB of log each, ~600 GB
+in two hours, with no step ever saved. Nothing alerts you; `squeue` said RUNNING
+throughout.
+
+So, on a fresh submission: read the log, confirm the first steps, and `ls -laS`
+the log directory. Then cancel what is broken, delete what it wrote, and fix the
+cause before resubmitting. A sweep left unwatched overnight is the expensive
+kind of mistake.
+
 ## What every experiment owes
 
 **Enough to run the work again, and a README that says how.** Someone who was
