@@ -44,6 +44,13 @@ pixi run python expts/fine_tune/submit_hpo_only.py
 pixi run python expts/fine_tune/submit_ens.py
 ```
 
+`submit_hpo_ens.py` tunes an 18-entry grid -- `local_ctx_size` in
+{512, 1024, 2048} x `bfs_width` in {64, 128, 256} x `prefer_latest` in
+{True, False} -- on validation, then ensembles the winner over 4 context seeds
+on test. It logs the test curve to wandb like `submit_ens_only.py`, and takes
+its task list, its checkpoints and its `items_per_task` from that script, so
+the tuned and untuned numbers are the same weights on the same rows.
+
 `submit_hpo_only.py` scores the `lcs_bw_pl_grid` on **validation** only and
 writes `tuning.json` (every config's score, and the winner) beside each run's
 `eval_out`. Nothing reads test. `submit_ens.py` then evaluates each task's

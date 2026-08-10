@@ -57,9 +57,9 @@ CKPT_ROOT = Path("/dfs/user/ranjanr/ckpts/rtv2/2026-08-08-fine_tune")
 FINE_TUNE_PROJECT = "rtv2/2026-08-08-fine_tune"
 
 # Where the weights a job is going to load are copied to, out of reach of the
-# training run that wrote them. 163M a task, and they are deleted with the rest
-# of this experiment's scratch.
-PINNED = Path("/dfs/user/ranjanr/ckpts/rtv2/2026-08-10-fine_tune_ens_only/pinned")
+# training run that wrote them. 163M a task, shared by every experiment that
+# evaluates these checkpoints, and deleted with the rest of the scratch.
+PINNED = Path("/dfs/user/ranjanr/ckpts/rtv2/fine-tune-pinned")
 
 
 @functools.cache
