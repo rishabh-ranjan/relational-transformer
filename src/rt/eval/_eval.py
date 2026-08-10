@@ -5,11 +5,13 @@ import fnmatch
 import json
 import os
 import socket
+import time
 from datetime import timedelta
 from pathlib import Path
 
 import torch
 import torch.distributed as dist
+import wandb
 
 from rt._env import _setup_env
 from rt.data import get_tasks
@@ -20,6 +22,12 @@ from rt.model import load_rt_model
 from rt.progress import log
 from collections import defaultdict
 import numpy as np
+
+
+# What each task type's metric is called on the wandb axis it shares with the
+# published targets, exactly as ``rt.train.eval_avg_metrics`` names them: the
+# curve and the target it is drawn against have to be one key family.
+METRIC_NAMES = {"clf": "auroc", "reg": "nmae"}
 
 
 def setup_dist(num_workers: int = 0):
@@ -80,6 +88,8 @@ def main(
     test_ensemble_size: int,
     # where it lands
     run_id: str,
+    run_name: str | None,
+    targets: dict[str, float],
     project: str,
     entity: str | None,
     out_root: str,
@@ -88,8 +98,18 @@ def main(
     """Evaluate a checkpoint and write a RelBench submission.
 
     Every argument is required; the arguments are the record of the evaluation.
+
+    ``targets`` are published baselines keyed by the same
+    ``{metric}/{split}/{db}/{task}`` names the curve is logged under; each is
+    logged as a constant at every ensemble size, so it draws as a horizontal
+    line in the panel of the curve it bounds. Only the ensembled test pass
+    logs to wandb -- it is the only thing here with a curve.
     """
-    assert wandb_disabled, "standalone eval does not log to wandb"
+    params = dict(locals())
+    assert wandb_disabled or (test_ensemble_size > 1 and "test" in splits), (
+        "the only wandb curve here is test metric vs ensemble size"
+    )
+    assert wandb_disabled or targets, "nothing to draw the curve against"
     assert len(ctx_size_list) == 1, (
         "standalone eval writes one submission per run and needs exactly one "
         "ctx size; multi-size ctx_size_list is an in-loop training-eval feature"
@@ -105,6 +125,36 @@ def main(
         / "eval_out"
     )
     device, global_rank, local_rank, world_size, ddp = setup_dist(num_workers)
+
+    use_wandb = (not wandb_disabled) and global_rank == 0
+    if use_wandb:
+        # One wandb run per *attempt*, grouped under the run_id, as in
+        # ``rt.train``. An eval run does not checkpoint, so an attempt that is
+        # preempted replays the whole curve from ensemble size 1; a fresh
+        # wandb id per attempt is what keeps those from colliding on a step
+        # axis that only ever increases.
+        job = os.environ.get("SLURM_JOB_ID")
+        attempt = (
+            f"{job}.{os.environ.get('SLURM_RESTART_COUNT', '0')}"
+            if job
+            else f"{int(time.time())}"
+        )
+        wandb.init(
+            project=project,
+            entity=entity,
+            name=f"{run_name}-{attempt}" if run_name else attempt,
+            id=f"{run_id}-{attempt}",
+            group=run_id,
+            resume="never",
+            config=params,
+            settings=wandb.Settings(
+                console_multipart=True,
+                console_chunk_max_seconds=60,
+            ),
+        )
+        # The ensemble size is the x-axis of everything logged here.
+        wandb.define_metric("ens_size")
+        wandb.define_metric("*", step_metric="ens_size")
 
     checkpoint = load_ckpt_path
     assert checkpoint is not None, "model.load_ckpt_path is required"
@@ -205,8 +255,12 @@ def main(
             tune_only=tune_only,
             tuning_out_path=csv_out_dir.parent / "tuning.json",
             csv_out_dir=csv_out_dir,
+            targets=targets,
+            use_wandb=use_wandb,
             **eval_kwargs,
         )
+        if use_wandb:
+            wandb.finish()
         _teardown_dist(ddp)
         return
 
@@ -386,6 +440,8 @@ def run_ensemble(
     tune_only,
     tuning_out_path,
     csv_out_dir,
+    targets,
+    use_wandb,
     **eval_kwargs,
 ):
     """Context-tuned + ensembled evaluation.
@@ -407,6 +463,11 @@ def run_ensemble(
     Tuning writes every cfg's val score, and the winner per task, to
     ``tuning_out_path``. With ``tune_only`` the run stops there and never reads
     test: a later run evaluates the winner it recorded.
+
+    With ``use_wandb`` the test curve is logged as it is produced -- one
+    ``wandb.log`` per ensemble size, so the panel fills in while the run is
+    still going -- under ``rt.train``'s key names and units (percent), with
+    each of ``targets`` repeated at every size as the flat line it bounds.
     """
 
     embedder = eval_kwargs["embedder"]
@@ -504,6 +565,11 @@ def run_ensemble(
     results = {}
     if is_main:
         log(eval_mode="ensembled", ctx_size=ctx_size)
+    # Each group replays the same 1..N sizes, and wandb's step axis only ever
+    # moves forward: two groups would log the second one's curve nowhere.
+    assert not use_wandb or len(groups) == 1, (
+        "wandb logging needs one context config across the run's tasks"
+    )
     for cfg, tasks in groups.items():
         lcs, bw, pl = cfg
         acc = {}  # key -> [labels, sum_preds, task, node_idxs]
@@ -528,6 +594,8 @@ def run_ensemble(
                 acc[key][1] += p
             size = seed + 1
             full = size == test_ensemble_size
+            # metric name -> per-task wandb key -> value, this size's curve.
+            point: dict[str, dict[str, float]] = defaultdict(dict)
             for key, (labels, sp, task, node_idxs) in acc.items():
                 preds = sp / size
                 # Only the full ensemble writes a submission: every size scores
@@ -543,6 +611,14 @@ def run_ensemble(
                     node_idxs,
                 )
                 curve[size][mname].append(mval)
+                if use_wandb:
+                    # The wandb curve is on the normalized scale and in percent
+                    # -- `rt.train`'s units, and so the published targets' --
+                    # not the relbench submission metric logged beside it.
+                    _, nv = metric_for(task.task_type, labels, preds)
+                    point[METRIC_NAMES[task.task_type]][
+                        f"{task.split}/{task.db_name}/{task.table_name}"
+                    ] = nv * 100.0
                 if full:
                     results[f"{task.db_name}/{task.table_name}"] = {
                         "metric": mname,
@@ -560,6 +636,21 @@ def run_ensemble(
                     n=n,
                     align=align,
                 )
+            if use_wandb:
+                logged = {"ens_size": size}
+                for metric, per_task in point.items():
+                    logged.update({f"{metric}/{k}": v for k, v in per_task.items()})
+                    # One mean per split, over that split's tasks: the same
+                    # `{metric}/{split}/mean` key `rt.train` logs.
+                    by_split = defaultdict(list)
+                    for k, v in per_task.items():
+                        by_split[k.split("/")[0]].append(v)
+                    for split, vs in by_split.items():
+                        logged[f"{metric}/{split}/mean"] = sum(vs) / len(vs)
+                # A constant at every size, so it draws as the horizontal line
+                # the curve is measured against.
+                logged.update({f"target/{k}": v for k, v in targets.items()})
+                wandb.log(logged, step=size)
     if not is_main:
         return results
     for size in sorted(curve):

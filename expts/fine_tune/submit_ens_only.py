@@ -4,12 +4,16 @@ See [README.md](README.md).
 
 No tuning, so nothing reads validation and this does not wait on
 `submit_hpo_only.py`. `rt.eval` scores the running average after every seed, so one
-job yields the whole test-metric-vs-ensemble-size curve.
+job yields the whole test-metric-vs-ensemble-size curve, logged to wandb
+against `ens_size` with each task's published target beside it.
+
+Tasks go out largest train set first: the curve that takes longest starts
+first, and the small ones fill the slots behind it.
 """
 
 from roach.slurm import Resources, submit
 
-from submit import TASKS, ntrain
+from submit import TASKS, ntrain, targets_for
 from submit_hpo_only import b200, ckpt_for
 
 
@@ -69,10 +73,12 @@ def main() -> None:
                 lcs_bw_pl_grid=[(2048, 128, True)],
                 val_ensemble_size=1,
                 test_ensemble_size=16,
+                run_name=name,
+                targets=targets_for(db, task),
                 project="2026-08-10-fine_tune_ens_only",
                 entity="rtv2",
                 out_root="/dfs/user/ranjanr/ckpts",
-                wandb_disabled=True,
+                wandb_disabled=False,
             ),
             resources=resources,
             name=f"ens-only-{db}-{task}",

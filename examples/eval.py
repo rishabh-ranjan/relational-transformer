@@ -43,6 +43,8 @@ def evaluate(pre_dir: str, out_root: str, checkpoint: str, run_id: str) -> None:
         test_ensemble_size=1,
         # where the submission CSVs land
         run_id=run_id,
+        run_name=None,
+        targets={},
         project="rt-eval",
         entity=None,
         out_root=out_root,

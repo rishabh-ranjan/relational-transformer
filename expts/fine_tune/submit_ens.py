@@ -95,6 +95,8 @@ def main() -> None:
                 lcs_bw_pl_grid=[(lcs, bw, pl)],
                 val_ensemble_size=1,
                 test_ensemble_size=4,
+                run_name=None,
+                targets={},
                 project="2026-08-10-fine_tune_ens",
                 entity="rtv2",
                 out_root="/dfs/user/ranjanr/ckpts",

@@ -3,6 +3,8 @@ project logs -- metrics and machine telemetry alike -- with each metric's SWA
 twin and published target folded into the panel of the curve they belong to.
 
     pixi run python expts/fine_tune/workspace.py [--project 2026-08-07-fine_tune]
+    pixi run python expts/fine_tune/workspace.py \
+        --project 2026-08-10-fine_tune_ens_only --x ens_size
 
 wandb has no horizontal-reference-line primitive, so `rt.train` logs each
 target from `submit.targets_for` as a constant at every step -- a flat series.
@@ -10,9 +12,12 @@ That series is a metric key of its own (`target/{key}`), and wandb's default
 auto-panels would put it in a panel by itself; this script is what pairs it
 with the curve it bounds. The same goes for the `swa/` twins.
 
-Every panel is drawn against `epoch`, the fractional pass over the train stream
-`rt.train` logs each step: tasks differ by orders of magnitude in size, so a
-step means something different in each run and an epoch does not.
+Every panel is drawn against `--x`, `epoch` by default: the fractional pass
+over the train stream `rt.train` logs each step, since tasks differ by orders
+of magnitude in size, so a step means something different in each run and an
+epoch does not. A project of `rt.eval` ensemble runs has no epoch -- its x is
+`ens_size`, and the same script builds its workspace: the metric keys and the
+targets are the same family, only the axis differs.
 
 The leading `dashboard:` sections are the hand-arranged ones -- one per metric
 and split, sized so the whole set is on one page -- and every remaining key
@@ -79,7 +84,7 @@ SYSTEM = "System"
 
 # wandb's own bookkeeping series, plus the two axes every panel is drawn
 # against. Panels for these say nothing about a run.
-INTERNAL = {"_runtime", "_step", "_timestamp", "_wandb", "step", "epoch"}
+INTERNAL = {"_runtime", "_step", "_timestamp", "_wandb", "step", "epoch", "ens_size"}
 
 # Keys whose panel gets a log y-axis: timings whose interesting structure is
 # the occasional order-of-magnitude spike, which a linear axis flattens the
@@ -286,7 +291,7 @@ def personal_view(entity: str, project: str) -> tuple[str, str, str]:
     return slug, "", f"{username.capitalize()}'s workspace"
 
 
-def build(entity: str, project: str) -> ws.Workspace:
+def build(entity: str, project: str, x: str) -> ws.Workspace:
     keys = project_keys(entity, project)
     # A key that is some other key's twin or target gets no panel of its own:
     # it already rides along in that key's panel.
@@ -295,7 +300,7 @@ def build(entity: str, project: str) -> ws.Workspace:
 
     sections, shown = [], set()
 
-    def dashboard(name: str, picked: list[str], x: str = "epoch") -> None:
+    def dashboard(name: str, picked: list[str]) -> None:
         if picked:
             sections.append(
                 section(f"dashboard: {name}", picked, keys, x, prefix=f"{name}/")
@@ -325,19 +330,22 @@ def build(entity: str, project: str) -> ws.Workspace:
     # (loss, grad norm, lr). Hand-ordered because the namespace grouping below
     # sorts alphabetically, which interleaves the two halves.
     train = [
-        panel(k, keys, "epoch", "train/") if k else step_vs_runtime()
+        panel(k, keys, x, "train/") if k else step_vs_runtime()
         for k in TRAIN_ORDER
         if k is None or k in leaders
     ]
-    sections.append(
-        ws.Section(
-            name="dashboard: train",
-            panels=train,
-            is_open=True,
-            layout_settings=ws.SectionLayoutSettings(columns=COLS, rows=1),
+    # A project of eval runs logs none of these: no section rather than an
+    # empty one at the top of the view.
+    if any(k in leaders for k in TRAIN_ORDER if k):
+        sections.append(
+            ws.Section(
+                name="dashboard: train",
+                panels=train,
+                is_open=True,
+                layout_settings=ws.SectionLayoutSettings(columns=COLS, rows=1),
+            )
         )
-    )
-    shown.update(k for k in TRAIN_ORDER if k)
+        shown.update(k for k in TRAIN_ORDER if k)
 
     # Everything else, so nothing a run logs goes missing from the view,
     # grouped by top-level namespace and collapsed: these are the catch-all,
@@ -349,7 +357,7 @@ def build(entity: str, project: str) -> ws.Workspace:
                 ns,
                 [k for k in rest if k.split("/")[0] == ns],
                 keys,
-                "epoch",
+                x,
                 is_open=False,
             )
         )
@@ -370,7 +378,7 @@ def build(entity: str, project: str) -> ws.Workspace:
         # No `max_runs` here, and `strip_max_runs` takes out the default the
         # SDK writes in its place -- see there for why any value is the wrong
         # one.
-        settings=ws.WorkspaceSettings(x_axis="epoch"),
+        settings=ws.WorkspaceSettings(x_axis=x),
         # The sections here are the whole view: the app is not to append panels
         # of its own for keys logged after this script ran. A new key gets its
         # panel by rerunning the script, which folds it into the section it
@@ -476,9 +484,10 @@ def main() -> None:
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument("--entity", default=ENTITY)
     p.add_argument("--project", default=PROJECT)
+    p.add_argument("--x", default="epoch")
     a = p.parse_args()
 
-    print(save(build(a.entity, a.project)))
+    print(save(build(a.entity, a.project, a.x)))
 
 
 if __name__ == "__main__":

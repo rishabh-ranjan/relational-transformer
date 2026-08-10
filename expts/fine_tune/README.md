@@ -53,9 +53,29 @@ have to have finished.
 
 `submit_ens_only.py` is ensembling with the tuning taken out: it waits on
 nothing, fixes the context at the `(2048, 128, True)` the fine-tuning runs
-evaluated with, and sweeps 16 context seeds. Every ensembled run -- tuned or
-not -- scores the running average after each seed, so its log carries the test
-metric at every ensemble size, not just the last.
+evaluated with, and sweeps 16 context seeds, largest train set first. Every
+ensembled run -- tuned or not -- scores the running average after each seed, so
+its log carries the test metric at every ensemble size, not just the last.
+
+That run is the one that logs to wandb: the test metric against `ens_size`,
+with the task's published target drawn beside it, in the same keys and units
+`rt.train` uses. Its workspace is the same script as the training project's,
+pointed at the other axis:
+
+```
+pixi run python expts/fine_tune/workspace.py \
+    --project 2026-08-10-fine_tune_ens_only --x ens_size
+```
+
+and the curve reads as a table -- one row per task, one column per ensemble
+size, the published baseline first -- with
+
+```
+pixi run python expts/fine_tune/ens_table.py
+```
+
+which shows whatever has been scored so far, so it is worth running while the
+jobs are still going.
 
 All four load the fine-tuned weights `submit.py` produced: `ckpt_for` takes the
 best-on-val checkpoint of the most recent run of that task, `best_clf`/

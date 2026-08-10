@@ -271,6 +271,8 @@ def _run_ensemble_worker(rank, port, ret):
         tune_only=False,
         tuning_out_path=Path(tempfile.mkdtemp()) / "tuning.json",
         csv_out_dir=None,
+        targets={},
+        use_wandb=False,
         embedder="test-embed",
         global_rank=rank,
         local_rank=rank,
