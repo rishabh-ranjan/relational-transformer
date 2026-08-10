@@ -26,6 +26,10 @@ def fmt_duration(secs):
     return f"{m}m{s:02d}s"
 
 
+def fmt_bytes(n):
+    return f"{n / (1024**3):.2f}GiB"
+
+
 _widths: dict[str, dict[str, int]] = {}
 
 

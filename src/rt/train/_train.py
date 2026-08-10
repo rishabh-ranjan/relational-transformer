@@ -56,7 +56,7 @@ from rt.train.muon import Muon
 from rt.train.swa import SwaState
 from rt.eval import metric_for
 from rt.eval import Evaluator
-from rt.progress import fmt_duration, log
+from rt.progress import fmt_bytes, fmt_duration, log
 import wandb
 
 # Released model dims (RT-J). Override via CLI for a different size.
@@ -361,6 +361,13 @@ def main(
         if step >= warmup_steps:
             return 1.0
         return (step + 1) / warmup_steps
+
+    # Baseline for the step-1 memory breakdown below: the optimizers hold no
+    # state until their first `step()`, so everything resident now is weights.
+    if device.startswith("cuda"):
+        torch.cuda.synchronize()
+        mem_params = torch.cuda.memory_allocated()
+        torch.cuda.reset_peak_memory_stats()
 
     scheds = [optim.lr_scheduler.LambdaLR(o, lr_lambda) for o in opts]
     swa = SwaState(raw_net.named_parameters(), momentum=swa_momentum)
@@ -766,6 +773,11 @@ def main(
     # A resume starts at a step whose eval already ran (resume.pt is written at
     # every eval), so don't repeat it. A fresh run's step 0 is not that case.
     evaled_at = start_step if start_step > 0 else None
+    # Measured on this process's first step, not on global step 0: a resumed job
+    # never sees step 0, and its memory is what matters when it is the job that
+    # runs out. `ctx_size_list` varies the activation term step to step, so this
+    # is one sample of it, not the maximum.
+    measure_mem = device.startswith("cuda")
     while step < total_steps:
         if eval_freq and step % eval_freq == 0 and step != evaled_at:
             run_eval(step)
@@ -808,14 +820,47 @@ def main(
                 loss.backward()
             total_loss += loss.item()
 
+        # Snapshot after backward: framework overhead (cuBLAS/cuDNN workspaces,
+        # DDP reduction buckets, compile buffers) is fully allocated, grads
+        # exist, activations are freed, optimizer state is not yet allocated.
+        if measure_mem:
+            torch.cuda.synchronize()
+            mem_post_bwd = torch.cuda.memory_allocated()
+
         norm = torch.nn.utils.get_total_norm(
             [p.grad for p in raw_net.parameters() if p.grad is not None]
         )
         torch.nn.utils.clip_grads_with_norm_(raw_net.parameters(), grad_norm_max, norm)
         for o in opts:
             o.step()
+        if measure_mem:
+            torch.cuda.synchronize()
+            peak_step = torch.cuda.max_memory_allocated()
+            mem_pre_zero = torch.cuda.memory_allocated()
         for o in opts:
             o.zero_grad(set_to_none=True)
+        if measure_mem:
+            # Grads and optimizer state are measured exactly, by what freeing
+            # or allocating them moved. Activations are the remainder of the
+            # peak and so an estimate: the peak falls during backward, where
+            # grads are still accumulating, so the term absorbs some of them.
+            torch.cuda.synchronize()
+            mem_grads = mem_pre_zero - torch.cuda.memory_allocated()
+            mem_opt = mem_pre_zero - mem_post_bwd
+            mem_framework = mem_post_bwd - mem_params - mem_grads
+            if is_main:
+                log(
+                    gpu_mem_peak=fmt_bytes(peak_step),
+                    reserved=fmt_bytes(torch.cuda.max_memory_reserved()),
+                    params=fmt_bytes(mem_params),
+                    framework=fmt_bytes(mem_framework),
+                    grads=fmt_bytes(mem_grads),
+                    optimizer=fmt_bytes(mem_opt),
+                    activations=fmt_bytes(peak_step - mem_params - mem_framework),
+                )
+            # The breakdown is a one-off; the peak from here on is the run's.
+            torch.cuda.reset_peak_memory_stats()
+            measure_mem = False
         for s in scheds:
             s.step()
         swa.update(raw_net.named_parameters())
