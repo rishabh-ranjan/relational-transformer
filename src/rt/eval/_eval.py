@@ -271,7 +271,7 @@ def build_evaluator(
         items_per_task=items_per_task,
         num_workers=num_workers,
         prefetch_factor=prefetch_factor,
-        persistent_workers=False,
+        persistent_workers=num_workers > 0,
         local_ctx_size=local_ctx_size,
         bfs_width=bfs_width,
         num_walks=num_walks,

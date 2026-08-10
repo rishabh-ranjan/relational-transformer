@@ -539,7 +539,12 @@ def main(
                     items_per_task=eval_items_per_task,
                     num_workers=eval_num_workers,
                     prefetch_factor=eval_prefetch_factor,
-                    persistent_workers=False,
+                    # The workers stay alive between eval passes, so the
+                    # iterator each pass re-creates is already prefetching
+                    # while training runs: an eval starts on data that is
+                    # ready, instead of re-forking every worker and re-mmapping
+                    # the split first.
+                    persistent_workers=eval_num_workers > 0,
                     local_ctx_size=lcs,
                     bfs_width=bw,
                     num_walks=eval_num_walks,
