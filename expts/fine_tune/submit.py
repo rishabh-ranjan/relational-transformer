@@ -9,27 +9,11 @@ from roach.slurm import Resources, submit
 HERE = Path(__file__).parent
 
 TASKS = (
-    ("rel-amazon", "item-churn"),
-    ("rel-amazon", "item-ltv"),
-    ("rel-amazon", "user-churn"),
-    ("rel-amazon", "user-ltv"),
-    ("rel-avito", "ad-ctr"),
-    ("rel-avito", "user-clicks"),
-    ("rel-avito", "user-visits"),
+    ("rel-trial", "study-adverse"),
     ("rel-event", "user-attendance"),
     ("rel-event", "user-ignore"),
-    ("rel-event", "user-repeat"),
-    ("rel-f1", "driver-dnf"),
-    ("rel-f1", "driver-position"),
-    ("rel-f1", "driver-top3"),
-    ("rel-hm", "item-sales"),
-    ("rel-hm", "user-churn"),
-    ("rel-stack", "post-votes"),
-    ("rel-stack", "user-badge"),
-    ("rel-stack", "user-engagement"),
-    ("rel-trial", "site-success"),
-    ("rel-trial", "study-adverse"),
     ("rel-trial", "study-outcome"),
+    ("rel-f1", "driver-dnf"),
 )
 
 
@@ -199,8 +183,7 @@ def plan(n: int) -> list[Resources]:
     so a short or low-priority slot costs wall clock rather than work.
     """
     out = [b200("il-interactive", "12:00:00")] * min(n, 2)
-    out += [a100("il", "7-00:00:00")] * min(n - len(out), 10)
-    out += [a100("il-lo", "21-00:00:00")] * (n - len(out))
+    out += [b200("il-lo", "21-00:00:00")] * (n - len(out))
     return out
 
 
