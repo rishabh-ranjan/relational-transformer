@@ -1,7 +1,9 @@
 """Standalone evaluation drivers: simple runs, context-tuned + ensembled runs,
 and the eval CLI entry (RT checkpoints)."""
 
+import fnmatch
 import os
+import socket
 from datetime import timedelta
 from pathlib import Path
 
@@ -9,7 +11,6 @@ import torch
 import torch.distributed as dist
 
 from rt.data import get_tasks
-from rt.dist import disable_gdr_on_ampere
 from rt.eval.evaluator import Evaluator
 from rt.eval.metrics import metric_for
 from rt.eval.relbench import _emit_and_score
@@ -28,13 +29,17 @@ def setup_dist():
         rank = int(os.environ["RANK"])
         local_rank = int(os.environ["LOCAL_RANK"])
         torch.cuda.set_device(local_rank)
-        disable_gdr_on_ampere()
+        # GPUDirect RDMA hangs on the ampere nodes: a multi-node job wedges in
+        # the init-time model broadcast, every rank enqueueing it and none ever
+        # starting it. Must be set before init_process_group.
+        if fnmatch.fnmatch(socket.getfqdn(), "ampere*.stanford.edu"):
+            os.environ["NCCL_NET_GDR_LEVEL"] = "0"
         # Same long timeout and `device_id` rationale as training: the first
         # task's context build keeps other ranks parked at a collective for many
         # minutes.
         dist.init_process_group(
             "nccl",
-            timeout=timedelta(hours=1),
+            timeout=timedelta(minutes=20),
             device_id=torch.device(f"cuda:{local_rank}"),
         )
         return f"cuda:{local_rank}", rank, local_rank, world_size, True

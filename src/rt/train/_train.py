@@ -27,11 +27,13 @@ Single-node multi-GPU and multi-node (preemptible queue) both run under
 """
 
 import contextlib
+import fnmatch
 import json
 import os
 import random
 import shutil
 import signal
+import socket
 import time
 from datetime import timedelta
 from pathlib import Path
@@ -43,7 +45,6 @@ from torch import optim
 from torch.utils.data import DataLoader
 
 from rt.data import TrainDataset, get_tasks
-from rt.dist import disable_gdr_on_ampere
 from rt.model import (
     RelationalTransformer,
     load_model,
@@ -69,7 +70,11 @@ def setup_dist():
         rank = int(os.environ["RANK"])
         local_rank = int(os.environ["LOCAL_RANK"])
         torch.cuda.set_device(local_rank)
-        disable_gdr_on_ampere()
+        # GPUDirect RDMA hangs on the ampere nodes: a multi-node job wedges in
+        # the init-time model broadcast, every rank enqueueing it and none ever
+        # starting it. Must be set before init_process_group.
+        if fnmatch.fnmatch(socket.getfqdn(), "ampere*.stanford.edu"):
+            os.environ["NCCL_NET_GDR_LEVEL"] = "0"
         # Long timeout: the first eval/compile keeps non-participating ranks idle
         # at a collective for many minutes; the default 10-min NCCL watchdog would
         # otherwise abort the job. (Slow first-step compile + full validation pass.)

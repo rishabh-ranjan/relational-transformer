@@ -101,34 +101,6 @@ See [`expts/README.md`](../expts/README.md) for how experiments in this repo are
 laid out, and [`expts/fine_tune/submit.py`](../expts/fine_tune/submit.py) for a
 worked one -- it passes `rt.train:main` straight to `submit`, which is the least
 boilerplate a run on this cluster can be.
-Hard-won notes if you write your own launcher instead:
-
-- **Name a run you may want to resume.** `run_id` names the output
-  directory `<out_root>/<entity>/<project>/<run_id>/`; pass the same value again
-  to pick the run's `resume.pt` back up (`roach.slurm.submit` mints one and reuses
-  it across requeues). Resuming *requires* an explicit id:
-  unset, it defaults to a per-rank timestamp, which names a fresh directory
-  with nothing to resume from. Rank 0 is the only rank that writes there.
-- **Static rendezvous.** Pass a fixed `--master-addr`/`--master-port` (derive a
-  unique per-job port) rather than torchrun's dynamic c10d rendezvous — the
-  dynamic store has wedged large jobs under load.
-- **Full-node CPUs.** Give the training step every core on the node. Data
-  loading (the rustler sampler's parallel mmap-populate and per-item context
-  building) runs on rayon; a small cgroup CPU slice (e.g. Slurm's default
-  `--cpus-per-task`) starves it and bottlenecks the GPUs.
-- **Full-node RAM.** The preprocessed mixture is populated into the page cache;
-  request the whole node's memory (`--exclusive`, `--mem-per-gpu`, or
-  equivalent).
-- **Preemption is safe.** SIGTERM saves `$OUT_DIR/resume.pt` and exits;
-  relaunching with the same `OUT_DIR` resumes (Slurm: `--requeue` on a
-  preemptible queue).
-- **Shared storage for the clone.** Run from a repo checkout all nodes can
-  read; the pixi env itself builds node-locally.
-- **One copy of the data.** `pre_dir` is a plain path, so fetch the preprocessed
-  mixture once to storage every node can read rather than per node. Startup
-  populates it into the page cache, after which reads are RAM-speed.
-- **Flaky InfiniBand?** `NCCL_IB_DISABLE=1` forces NCCL over TCP — slower but
-  robust.
 
 **Resume** is automatic from `$OUT_DIR/resume.pt` and **GPU-count flexible**: a
 run preempted on 4×8 GPUs can resume on a single 4-GPU node with the same
