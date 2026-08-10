@@ -36,6 +36,7 @@ benchmark above is what keeps that from being every new task.
 """
 
 import argparse
+import functools
 import json
 import math
 
@@ -93,6 +94,13 @@ TRAIN_ORDER = (
 # what opens the list on "1-10"; 100 is what the app allows (it clamps anything
 # larger down to this).
 PAGE_SIZE = 100
+
+
+@functools.cache
+def api() -> wandb.Api:
+    """One `Api` for the whole script: each one re-reads the settings files and
+    re-opens a client, and nothing here needs more than a single session."""
+    return wandb.Api()
 
 
 def swa_key(key: str) -> str:
@@ -157,12 +165,26 @@ def project_keys(entity: str, project: str) -> set[str]:
     A run's summary carries one entry per metric key it ever logged, so the
     union over runs is the project's key space; `systemMetrics` is the same
     thing for the telemetry stream, which the summary does not cover.
+
+    Asked for by hand rather than through `Api.runs`, which is what makes this
+    fast: the SDK's run node pulls config, sweep, files and the rest for every
+    run and then builds a `Run` object around each, tens of seconds for a sweep
+    of any size, where the two JSON blobs this actually reads come back in a
+    fraction of a second.
     """
-    api = wandb.Api()
     keys: set[str] = set()
-    for run in api.runs(f"{entity}/{project}"):
-        keys |= set(run.summary.keys())
-        keys |= set(run.systemMetrics.keys())
+    cursor = None
+    while True:
+        page = execute_graphql(
+            api(), KEYS_QUERY, {"entityName": entity, "name": project, "cursor": cursor}
+        )["project"]["runs"]
+        for edge in page["edges"]:
+            for field in ("summaryMetrics", "systemMetrics"):
+                if blob := edge["node"][field]:
+                    keys |= set(json.loads(blob))
+        if not page["pageInfo"]["hasNextPage"]:
+            break
+        cursor = page["pageInfo"]["endCursor"]
     # Every task the benchmark has, whether or not a run has ever logged it --
     # not just the ones this sweep has submitted so far. `published_best` is
     # keyed by the same `{metric}/{split}/{db}/{task}` names `rt.train` logs,
@@ -175,6 +197,18 @@ def project_keys(entity: str, project: str) -> set[str]:
     for k in published_best():
         keys |= {k, target_key(k)}
     return keys - INTERNAL
+
+
+KEYS_QUERY = """
+query Keys($entityName: String!, $name: String!, $cursor: String) {
+    project(name: $name, entityName: $entityName) {
+        runs(first: 500, after: $cursor) {
+            pageInfo { hasNextPage endCursor }
+            edges { node { summaryMetrics systemMetrics } }
+        }
+    }
+}
+"""
 
 
 VIEWS_QUERY = """
@@ -198,10 +232,9 @@ def personal_view(entity: str, project: str) -> tuple[str, str, str]:
     is what lets us address it before it exists (a project never visited in the
     UI has no such view yet, and upserting the slug creates it).
     """
-    api = wandb.Api()
-    username = api.viewer.username
+    username = api().viewer.username
     slug = "nw-nwuser" + "".join(c for c in username if c.isalnum()) + "-w"
-    resp = execute_graphql(api, VIEWS_QUERY, {"entityName": entity, "name": project})
+    resp = execute_graphql(api(), VIEWS_QUERY, {"entityName": entity, "name": project})
     nodes = [e["node"] for e in resp["project"]["allViews"]["edges"]]
     mine = [n for n in nodes if n["name"] == slug]
     if mine:
@@ -364,7 +397,7 @@ def save(workspace: ws.Workspace) -> str:
             s["defaultName"] = SYSTEM
 
     resp = execute_graphql(
-        wandb.Api(),
+        api(),
         UPSERT,
         {
             "id": view.id or None,
