@@ -785,17 +785,35 @@ def main(
     # A resume starts at a step whose eval already ran (resume.pt is written at
     # every eval), so don't repeat it. A fresh run's step 0 is not that case.
     evaled_at = start_step if start_step > 0 else None
-    # Memory guard: one eval-shaped batch, run once, as soon as a step at the
-    # largest ctx size has completed its forward, backward and optimizer step.
-    # An eval is the largest allocation the job makes, and it lands on top of
-    # everything training leaves resident -- inductor workspaces per compiled
-    # ctx shape, DDP buckets, cuBLAS workspaces -- so it is only worth checking
-    # once the heaviest training shape has put its share of that in place.
-    # Waiting for the real eval at the next eval_freq boundary means finding
-    # out an hour later, which is how the step-39000 OOM happened.
-    mem_guard_ctx = max(ctx_size_list)
-    mem_guard_done = False
     is_cuda = device.startswith("cuda")
+
+    # Memory guard: run one eval-shaped batch *before* the first training step.
+    #
+    # Order is the whole point. The caching allocator's pool grows and is never
+    # handed back, so whichever workload allocates first gets the memory and the
+    # other has to fit in what is left. A fresh run evaluates at step 0, on an
+    # empty card, and its evals have never run out in 38k steps. A resumed run
+    # skips that eval (resume.pt was written at one) and trains for up to
+    # eval_freq steps first, so its first eval has to compile and allocate for
+    # two nets on top of a card training has already filled -- which is how both
+    # of the OOMs happened, at step 39000 and step 40000, each the first eval
+    # its process reached.
+    #
+    # Claiming eval's footprint up front puts a resumed run in the same order as
+    # a fresh one. It is also the check: if it cannot fit, the job says so in its
+    # first minute rather than an hour in.
+    if evaluators:
+        # First grid entry only: the others differ in context-building knobs,
+        # not in the shapes the net sees.
+        evaluators[0][1].mem_guard([raw_net, swa_net])
+        if is_main:
+            if is_cuda:
+                torch.cuda.synchronize()
+            log(
+                mem_guard_passed=step,
+                ctx=max(eval_ctx_size_list),
+                peak=fmt_bytes(torch.cuda.max_memory_allocated()) if is_cuda else "-",
+            )
     # Measured on this process's first step, not on global step 0: a resumed job
     # never sees step 0, and its memory is what matters when it is the job that
     # runs out. `ctx_size_list` varies the activation term step to step, so this
@@ -833,8 +851,6 @@ def main(
                 raw_batch = next(it)
                 load_time += time.perf_counter() - t_load
             batch = move(raw_batch, device)
-            # Every microbatch of a step shares its ctx size.
-            step_ctx = next(iter(batch.values())).shape[1]
             # The forward belongs inside no_sync() as much as the backward:
             # DDP decides whether to reduce at forward time, so a forward
             # outside the context all-reduces this microbatch regardless.
@@ -894,23 +910,6 @@ def main(
             s.step()
         swa.update(raw_net.named_parameters())
         step += 1
-
-        if not mem_guard_done and evaluators and step_ctx == mem_guard_ctx:
-            mem_guard_done = True
-            # The first grid entry only: the others differ in context-building
-            # knobs, not in the shapes the net sees, so they cost time here
-            # without reaching any peak the first one misses.
-            evaluators[0][1].mem_guard([raw_net, swa_net])
-            if is_main:
-                if is_cuda:
-                    torch.cuda.synchronize()
-                log(
-                    mem_guard_passed=step,
-                    ctx=step_ctx,
-                    peak=fmt_bytes(torch.cuda.max_memory_allocated())
-                    if is_cuda
-                    else "-",
-                )
 
         total_loss, stop = reduce_step_stats(total_loss)
 
