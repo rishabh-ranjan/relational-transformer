@@ -57,6 +57,11 @@ SPLITS = ("val", "test")
 # split's tasks read as a single strip rather than a block to scan.
 COLS = 8
 
+# The panel box, in pixels, square. wandb's own default is 460x300 at three
+# columns, so a column is ~460px wide on the workspace the app sizes for;
+# an eighth of that same width is what BOX is, and the height matches.
+BOX = 3 * 460 // COLS
+
 # The app-managed telemetry section. Its charts are generated client-side, so
 # the saved spec carries the name and nothing else.
 SYSTEM = "System"
@@ -327,6 +332,13 @@ def save(workspace: ws.Workspace) -> str:
     spec = json.loads(view.spec.model_dump_json(by_alias=True, exclude_none=True))
     strip_max_runs(spec)
     for s in spec["section"]["panelBankConfig"]["sections"]:
+        # Square panels. `SectionLayoutSettings` has no height field -- it
+        # writes only the column and row counts -- so the box is sized here.
+        # With `snapToColumns` on, the app takes the width from the column
+        # count and the height from `boxHeight` verbatim; BOX is the width a
+        # column comes out to at COLS across a full-width workspace, so
+        # setting both to it is what makes the panel as tall as it is wide.
+        s.setdefault("flowConfig", {}).update(boxWidth=BOX, boxHeight=BOX)
         if s["name"] == SYSTEM:
             s["isPanelsAuto"] = True
             s["defaultName"] = SYSTEM
