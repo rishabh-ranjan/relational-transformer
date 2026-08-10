@@ -46,7 +46,7 @@ def main() -> None:
     tasks = sorted(TASKS, key=lambda p: -ntrain()[f"{p[0]}/{p[1]}"])
     # Resubmitting part of a sweep: slice, and `plan` hands the sliced list its
     # first slots. Leave it commented when submitting the whole thing.
-    tasks = tasks[:2]
+    # tasks = tasks[:2]
     # Every checkpoint before any job: `ckpt_for` asserts, and a task whose
     # fine-tuning run has not reached its first eval must abort the submission
     # rather than leave the tasks ahead of it queued and the rest not.
