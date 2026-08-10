@@ -25,9 +25,10 @@ the layout is there without picking anything from the view menu -- and writes
 it wholesale: edit this script, not the UI, or the next run drops your changes.
 
 New runs show up in the view on their own: every run in the project is in its
-runset (no filters), and both ten-run defaults are lifted -- `max_runs`, so a
-panel draws the whole sweep rather than the ten runs that sort first, and the
-run feed's page size, so the run list is not stuck on 1-10. Panels are not
+runset (no filters), no run limit is written (a panel draws the whole sweep,
+and without the "Limited to N runs" caption any `max_runs` value earns), and
+the run feed's page size is lifted off 10 so the run list is not stuck on
+1-10. Panels are not
 automatic --
 `auto_generate_panels` is off, so a key this script has not seen gets its panel
 by rerunning the script.
@@ -58,11 +59,6 @@ SYSTEM = "System"
 
 # wandb's own bookkeeping series. Panels for these say nothing about a run.
 INTERNAL = {"_runtime", "_step", "_timestamp", "_wandb", "step"}
-
-# How many runs a panel draws. Defaults to 10, which truncates a sweep to
-# whichever ten runs sort first -- the view then looks frozen as later runs
-# arrive. High enough here that every run of a sweep is drawn.
-MAX_RUNS = 1000
 
 # How many runs the run list shows before paging. Also 10 by default, which is
 # what opens the list on "1-10"; 100 is what the app allows (it clamps anything
@@ -218,7 +214,12 @@ def build(entity: str, project: str) -> ws.Workspace:
         project=project,
         name=display_name,
         sections=sections,
-        settings=ws.WorkspaceSettings(x_axis="step", max_runs=MAX_RUNS),
+        # No `max_runs`: any value written there -- even one far above the
+        # sweep's size -- is a run limit as far as the app is concerned, and it
+        # captions every panel "Limited to N runs for each visualized metric".
+        # Left unset, the setting is absent from the spec and the app draws the
+        # runset without a cap or a caption.
+        settings=ws.WorkspaceSettings(x_axis="step"),
         # The sections here are the whole view: the app is not to append panels
         # of its own for keys logged after this script ran. A new key gets its
         # panel by rerunning the script, which folds it into the section it
