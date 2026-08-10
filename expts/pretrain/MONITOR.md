@@ -117,6 +117,22 @@ job id, same run_id.
 `restarts=N` in the log banner is the requeue counter. A bump, followed by the
 run resuming from its checkpoint, is normal and needs no action.
 
+## Finding the run on wandb
+
+Each *attempt* is its own wandb run, id `<run_id>-<jobid>.<restart>`, all of
+them grouped under the `run_id`. So the project shows one row per preemption:
+group by `Group` in the workspace and the attempts draw a single curve on our
+`step` axis. The live attempt is the one whose id ends in the current job id.
+
+It is done this way because a *resumed* wandb run never rewrites its
+`output.log` (wandb#4727) and every attempt here is killed rather than exiting
+cleanly, so the Logs tab of a long-lived resumed run froze at whatever the last
+cleanly-exited attempt left behind -- days stale. A never-resumed run streams
+its console live and the tab is right.
+
+Checkpoints are unaffected: they key on `run_id`, which the wandb id no longer
+has to equal. Resume is still `submit.py <run_id>`.
+
 ## What is normal and what is not
 
 Routine, do not escalate:
