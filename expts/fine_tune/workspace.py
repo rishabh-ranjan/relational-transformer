@@ -127,7 +127,9 @@ def step_vs_runtime() -> wr.LinePlot:
     )
 
 
-def section(name: str, keys: list[str], all_keys: set[str], x: str) -> ws.Section:
+def section(
+    name: str, keys: list[str], all_keys: set[str], x: str, is_open: bool = True
+) -> ws.Section:
     """One section, COLS panels wide and deep enough to hold all of them.
 
     wandb paginates a section at columns x rows and defaults to 3x2, which
@@ -138,7 +140,7 @@ def section(name: str, keys: list[str], all_keys: set[str], x: str) -> ws.Sectio
     return ws.Section(
         name=name,
         panels=[panel(k, all_keys, x) for k in keys],
-        is_open=True,
+        is_open=is_open,
         layout_settings=ws.SectionLayoutSettings(
             columns=COLS,
             rows=max(1, math.ceil(len(keys) / COLS)),
@@ -250,11 +252,18 @@ def build(entity: str, project: str) -> ws.Workspace:
     shown.update(k for k in TRAIN_ORDER if k)
 
     # Everything else, so nothing a run logs goes missing from the view,
-    # grouped by top-level namespace.
+    # grouped by top-level namespace and collapsed: these are the catch-all,
+    # not what the view is for, and open they push the dashboards off screen.
     rest = [k for k in leaders if k not in shown and not k.startswith("system.")]
     for ns in sorted({k.split("/")[0] for k in rest}):
         sections.append(
-            section(ns, [k for k in rest if k.split("/")[0] == ns], keys, "step")
+            section(
+                ns,
+                [k for k in rest if k.split("/")[0] == ns],
+                keys,
+                "step",
+                is_open=False,
+            )
         )
     # Telemetry is the app's own: the default workspace holds a *panel-less*
     # section named "System" that the app fills at render time. `save` is what
