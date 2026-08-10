@@ -105,6 +105,14 @@ pixi run pytest                        # the test suite
 pixi run python examples/train.py      # or eval.py, preprocess.py, ...
 ```
 
+**Comments and docs are operational, everywhere in this repo.** A comment says
+what the code does, or what someone changing it has to know. Not how it came to
+be: no history, no "previously we ...", no incident stories, no bug a past edit
+fixed, no note that a value was tuned or a line reordered. A comment that only
+makes sense to someone who saw the previous version does not belong in the file
+— git holds that. [`expts/README.md`](expts/README.md#say-it-once) states the
+rule in full.
+
 
 ## Documentation
 
