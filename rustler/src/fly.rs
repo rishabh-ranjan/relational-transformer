@@ -89,6 +89,19 @@ fn check_deadline(deadline: Instant) {
 /// is comfortably below realistic timeouts (≥ 1 ms).
 const DEADLINE_CHECK_EVERY: usize = 1024;
 
+/// Draws BFS expansion may spend per `bfs_width` slots it is trying to fill
+/// (see `bfs_collect_nodes`). It bounds the expansion at O(bfs_width) whatever
+/// the node's p2f degree, which is the point: the degree reaches 44.5M in
+/// relbench, and work proportional to it is a hang rather than a slow run.
+///
+/// 2 fills the width whenever half the valid edges are eligible, which is
+/// every node that is not dominated by rows of *other* tasks. Below that the
+/// expansion is narrower than asked, and a node's other-task rows are bounded
+/// (a few hundred at the relbench worst case) while its db edges are not, so
+/// the nodes that could be affected are small ones the budget covers many
+/// times over.
+const DRAW_BUDGET: usize = 2;
+
 struct Vecs {
     node_idxs: Vec<i32>,
     f2p_nbr_idxs: Vec<i32>,
@@ -1745,27 +1758,19 @@ impl Sampler {
             // so drawing one wastes a slot. Rejection sampling recovers the
             // full width without a scan and without a threshold to tune: draw
             // a position, keep it if eligible, and stop at bfs_width. What
-            // makes it terminate is the budget -- never spend more draws than
-            // reading every valid edge would have cost. Past that, reading
-            // them is the cheaper way to get an exact answer, so that is what
-            // the fallback below does.
-            //
-            // The two arms cannot both be expensive. A low acceptance rate
-            // means the eligible edges are outnumbered by other-task ones, and
-            // those are bounded per node (366 at the measured worst case), so
-            // a node that exhausts the budget is a node with a few hundred
-            // edges, where the scan is microseconds. A hub, conversely, is
-            // nearly all db edges: it accepts almost every draw and never
-            // reaches the fallback.
+            // makes it terminate is the budget: DRAW_BUDGET x bfs_width edge
+            // reads, whatever the degree, so the expansion is O(bfs_width) with
+            // no path through it that is not.
             let eligible = |edge: &ArchivedEdge| {
                 edge.table_type == ArchivedTableType::Db
                     || edge.table_name_idx == start_node.table_name_idx
             };
+            let budget = DRAW_BUDGET * bfs_width;
 
             let mut chosen: Vec<i32> = Vec::with_capacity(bfs_width);
-            let mut drawn: HashSet<usize> = HashSet::with_capacity(2 * bfs_width);
+            let mut drawn: HashSet<usize> = HashSet::with_capacity(budget);
             let mut draws = 0;
-            while chosen.len() < bfs_width && draws < p2f_edges.len() {
+            while chosen.len() < bfs_width && draws < budget {
                 if draws & (DEADLINE_CHECK_EVERY - 1) == 0 {
                     check_deadline(deadline);
                 }
@@ -1781,23 +1786,13 @@ impl Sampler {
                     chosen.push(p2f_edges[i].node_idx.into());
                 }
             }
-            if chosen.len() < bfs_width && draws == p2f_edges.len() {
-                // Budget spent without filling the width: read the edges and
-                // take the answer the draws were approximating.
-                let pool: Vec<i32> = p2f_edges
-                    .iter()
-                    .filter(|e| eligible(e))
-                    .map(|e| e.node_idx.into())
-                    .collect();
-                chosen = if pool.len() > bfs_width {
-                    index::sample(rng, pool.len(), bfs_width)
-                        .into_iter()
-                        .map(|i| pool[i])
-                        .collect()
-                } else {
-                    pool
-                };
-            }
+            // Coming up short is allowed, and is what buys the bound. It takes
+            // a node whose valid edges are mostly *other* tasks' rows, and
+            // those are bounded per node by the task tables loaded times the
+            // prediction timestamps per entity -- a few hundred at the relbench
+            // worst case, against db degrees five orders of magnitude larger.
+            // A node small enough for that to bite is also a node the budget
+            // covers many times over, so the draws see nearly all of it.
 
             for &node_idx in chosen.iter() {
                 if depth + 1 >= p2f_ftr.len() {
