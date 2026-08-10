@@ -24,14 +24,16 @@ def main() -> None:
                 # would only hide a stall inside a worker.
                 num_workers=0,
             ),
-            # No GPU: the probe never builds the model, and blackwell1 is where
-            # the job under investigation runs, so this times the same disk.
+            # blackwell1 is where the job under investigation runs, so this
+            # times the same disk. The card is held only because the site caps
+            # a zero-GPU job at 8 cpus and 32G, which is not the shape the
+            # sampler runs in; the probe never builds a model.
             resources=Resources(
                 partition="il",
                 account="infolab",
                 qos="il-lo",
                 time="02:00:00",
-                gpus="0",
+                gpus="b200:1",
                 cpus_per_task=16,
                 ntasks=1,
                 exclusive=False,
