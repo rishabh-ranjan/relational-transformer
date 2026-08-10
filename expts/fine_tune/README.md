@@ -3,16 +3,21 @@
 What a Relational Transformer gets from training on one task, and how that
 compares with the task-specific baselines.
 
-The current arm is **every forecast task from random init, with the full
-attention each block runs after its three relational attentions turned on**
-(`skip_full_attn=False`). Tasks are submitted smallest train set first, so the
-smallest (rel-f1 `driver-top3`, 1.4k rows, the leftmost column of `results.md`)
-answers first.
+One submit script per arm, each a copy of the last with the arm's knobs turned:
+
+- `submit_full.py` -- random init, dense attention after each block's three
+  relational attentions (`skip_full_attn=False`), deterministic context;
+- `submit_stoc.py` -- random init, no dense attention, stochastic context;
+- `submit_rtp.py` -- `submit_stoc.py` warm-started from the published RT-P
+  checkpoint.
+
+Tasks are submitted smallest train set first, so the smallest (the leftmost
+column of `results.md`) answers first.
 
 ## Running it
 
 ```
-pixi run python expts/fine_tune/submit.py
+pixi run python expts/fine_tune/submit_rtp.py
 ```
 
 One job per task, one GPU each. `plan()` hands out the best slots this cluster
@@ -28,7 +33,7 @@ which matters most on `il-interactive`'s 12 hours.
 
 ## What is fixed and what is not
 
-`submit.py` passes `rt.train:main` directly, with pretraining's hyperparameters
+Each script passes `rt.train:main` directly, with pretraining's hyperparameters
 verbatim (the released RT-J recipe, `examples/train.py`), so an arm differs from
 pretraining only in what it is trained on:
 
@@ -36,7 +41,10 @@ pretraining only in what it is trained on:
 - `pre_dir` is the *benchmark* data, not the Join -- fine-tuning trains where it
   is evaluated, and train/eval differ only in split;
 - `load_ckpt_path` is the arm. `None` is random init; a checkpoint path is the
-  pretrained arm;
+  pretrained arm. RT-P is mirrored at
+  `/dfs/user/ranjanr/share/stanford-star/rt-p` (compute nodes have no Hub
+  access), one subdirectory per task type; refresh it with
+  `huggingface_hub.snapshot_download("stanford-star/rt-p", local_dir=...)`;
 - `skip_full_attn` is the other arm. `True` is the three relational attentions
   per block; `False` adds a dense attention (pad mask only) after them.
 
