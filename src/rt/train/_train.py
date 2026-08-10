@@ -332,6 +332,12 @@ def main(
             return False
         return not name.startswith(("enc_dict.", "dec_dict."))
 
+    # Baseline for the memory breakdown logged on the first step. Taken before
+    # the optimizers exist, so it is weights and nothing else -- `swa_net` is
+    # built later and lands in the framework term with the rest of the fixed
+    # overhead.
+    mem_params = torch.cuda.memory_allocated() if device.startswith("cuda") else 0
+
     named = list(net.named_parameters())
     muon_params = [p for n, p in named if _is_muon(n, p)]
     other_params = [p for n, p in named if not _is_muon(n, p)]
@@ -361,13 +367,6 @@ def main(
         if step >= warmup_steps:
             return 1.0
         return (step + 1) / warmup_steps
-
-    # Baseline for the step-1 memory breakdown below: the optimizers hold no
-    # state until their first `step()`, so everything resident now is weights.
-    if device.startswith("cuda"):
-        torch.cuda.synchronize()
-        mem_params = torch.cuda.memory_allocated()
-        torch.cuda.reset_peak_memory_stats()
 
     scheds = [optim.lr_scheduler.LambdaLR(o, lr_lambda) for o in opts]
     swa = SwaState(raw_net.named_parameters(), momentum=swa_momentum)
@@ -763,6 +762,15 @@ def main(
 
     # ---- training loop ----
     it = iter(loader)
+    # Everything fixed that is resident before a single step runs: the SWA
+    # average and its net, and -- on a resumed run -- the optimizer state loaded
+    # from resume.pt. A fresh run allocates that state inside the first
+    # `step()` instead, which is why the two are reported apart below.
+    if device.startswith("cuda"):
+        torch.cuda.synchronize()
+        mem_resident = torch.cuda.memory_allocated() - mem_params
+        torch.cuda.reset_peak_memory_stats()
+
     step = start_step
     step_t0 = time.perf_counter()
     # Time-based resume dump: in addition to the eval_freq save (~hours apart),
@@ -770,9 +778,15 @@ def main(
     # loses at most that much progress. The save is atomic (tmp+rename) and rank
     # 0 only; we don't count it in sec/step (step_t0 is reset after).
     last_resume_t = time.perf_counter()
-    # A resume starts at a step whose eval already ran (resume.pt is written at
-    # every eval), so don't repeat it. A fresh run's step 0 is not that case.
-    evaled_at = start_step if start_step > 0 else None
+    # Eval at the resume step, even though resume.pt was written at an eval and
+    # its metrics are therefore already known. The point is not the metrics: an
+    # eval batch is the largest allocation the job makes, and skipping this one
+    # meant the first one landed up to `eval_freq` steps -- an hour -- after the
+    # job started, on a process that had looked healthy the whole time. Paying
+    # it up front means a shape that cannot afford its evals dies in the first
+    # minutes, next to the resume that chose the shape. Optimizer state is
+    # already loaded above, so this eval sees the run's true peak.
+    evaled_at = None
     # Measured on this process's first step, not on global step 0: a resumed job
     # never sees step 0, and its memory is what matters when it is the job that
     # runs out. `ctx_size_list` varies the activation term step to step, so this
@@ -847,29 +861,20 @@ def main(
             torch.cuda.synchronize()
             mem_grads = mem_pre_zero - torch.cuda.memory_allocated()
             mem_opt = mem_pre_zero - mem_post_bwd
-            mem_framework = mem_post_bwd - mem_params - mem_grads
-            # Reach eval's peak here, on top of a fully populated optimizer, so
-            # that a shape which cannot afford both fails on the first step
-            # rather than at the first eval an hour later. `ctx_size_list` is
-            # sampled per step, so training's own peak may take a few more
-            # steps to arrive; eval's does not vary, and is the larger of the
-            # two whenever `eval_tokens_per_gpu` exceeds `tokens_per_gpu`.
-            for _, evaluator in evaluators:
-                evaluator.probe(raw_net)
-            torch.cuda.synchronize()
-            peak_eval = torch.cuda.max_memory_allocated()
+            mem_fixed = mem_params + mem_resident
+            mem_framework = mem_post_bwd - mem_fixed - mem_grads
             if is_main:
                 log(
-                    gpu_mem_peak=fmt_bytes(max(peak_step, peak_eval)),
+                    gpu_mem_peak=fmt_bytes(peak_step),
                     reserved=fmt_bytes(torch.cuda.max_memory_reserved()),
                     params=fmt_bytes(mem_params),
+                    # SWA + whatever optimizer state a resume brought back.
+                    resident=fmt_bytes(mem_resident),
                     framework=fmt_bytes(mem_framework),
                     grads=fmt_bytes(mem_grads),
+                    # Zero on a resume: the state was already in `resident`.
                     optimizer=fmt_bytes(mem_opt),
-                    # Remainder of the *training* peak, so the eval probe is not
-                    # folded into it.
-                    activations=fmt_bytes(peak_step - mem_params - mem_framework),
-                    eval_probe=fmt_bytes(peak_eval),
+                    activations=fmt_bytes(peak_step - mem_fixed - mem_framework),
                 )
             # The breakdown is a one-off; the peak from here on is the run's.
             torch.cuda.reset_peak_memory_stats()

@@ -125,37 +125,6 @@ class Evaluator:
                 prefetch_time=fmt_duration(prefetch_time),
             )
 
-    def probe(self, net):
-        """Touch eval's peak memory once, so a run that cannot afford its evals
-        fails now instead of an hour into training.
-
-        Eval's footprint is fixed by shape, not by data: ``eval_bs`` rows at
-        ``max(ctx_size_list)`` sets the size of the attention masks, which are
-        the largest transient the net allocates. So one batch of one task
-        reaches the same peak every task would, and the caller can pay for it
-        at a moment of its choosing -- after the first training step, when
-        params, grads and optimizer state are all resident and the total is the
-        real worst case.
-
-        The allocator keeps the segments afterwards, so the eval this stands in
-        for reuses them rather than growing the pool again.
-        """
-        if not self.eval_loader_iters:
-            return
-        eval_task = next(iter(self.eval_loader_iters))
-        was_training = net.training
-        net.eval()
-        with torch.inference_mode():
-            batch = next(self.eval_loader_iters[eval_task])
-            batch.pop("batch_mask")
-            net.predict(batch, self.ctx_size_list, self.device, eval_task)
-        del batch
-        # Every rank drives a fixed batch count per task, so a batch consumed
-        # here has to be put back or the ranks desync at the first real eval.
-        # With persistent workers the new iterator costs a fork of nothing.
-        self.eval_loader_iters[eval_task] = iter(self.eval_loaders[eval_task])
-        net.train(was_training)
-
     def evaluate_raw(
         self, nets_with_prefix, eval_ctx_size_list_to_use, with_node_idxs=False
     ):
