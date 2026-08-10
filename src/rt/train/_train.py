@@ -290,9 +290,10 @@ def main(
                 console_chunk_max_seconds=60,
             ),
         )
-        # Log against our own step axis rather than wandb's internal counter,
-        # which starts at 0 for every attempt: it is the only axis on which the
-        # attempts of a group line up into one curve.
+        # Log against our own step axis, which every attempt of a group shares
+        # -- the only axis on which they line up into one curve. Every
+        # ``wandb.log`` also passes ``step=`` so wandb's internal counter
+        # tracks it instead of counting log calls.
         wandb.define_metric("step")
         wandb.define_metric("*", step_metric="step")
 
@@ -760,7 +761,8 @@ def main(
                             for task_key, v in per_task.items()
                             if v is not None
                         },
-                    }
+                    },
+                    step=step,
                 )
         for n, _ in nets:
             n.train()
@@ -959,7 +961,8 @@ def main(
                         # of the panel its metric lives in -- wandb has no
                         # reference-line primitive, a flat series is the line.
                         **{f"target/{k}": v for k, v in targets.items()},
-                    }
+                    },
+                    step=step,
                 )
 
         # Time-based resume checkpoint (preemption resilience), independent of
