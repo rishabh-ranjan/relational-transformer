@@ -45,7 +45,7 @@ import wandb_workspaces.reports.v2.interface as wr
 import wandb_workspaces.workspaces as ws
 from wandb_workspaces.workspaces.internal import execute_graphql
 
-from submit import published_best
+from submit import ntrain, published_best
 
 ENTITY = "rtv2"
 PROJECT = "2026-08-07-fine_tune"
@@ -111,6 +111,16 @@ def swa_key(key: str) -> str:
 def target_key(key: str) -> str:
     """Where `rt.train` logs the published target for `key`."""
     return f"target/{key}"
+
+
+def task_size(key: str) -> float:
+    """The train-set size behind a `{metric}/{split}/{db}/{task}` key.
+
+    Sorting a dashboard section by this is what puts its panels in results.md's
+    column order. A key naming no task -- or a task RelBench's stats do not
+    cover -- sorts last, where it does not disturb the tasks' order.
+    """
+    return ntrain().get("/".join(key.split("/")[2:]), math.inf)
 
 
 def panel(key: str, keys: set[str], x: str) -> wr.LinePlot:
@@ -261,14 +271,16 @@ def build(entity: str, project: str) -> ws.Workspace:
             # The per-task curves against their published bests: what the
             # sweep is for. The `mean` keys are left out -- they are not a
             # task, and they fall through to the namespace grouping below.
-            dashboard(
-                f"{metric}/{split}",
-                [
-                    k
-                    for k in leaders
-                    if k.startswith(f"{metric}/{split}/") and not k.endswith("/mean")
-                ],
-            )
+            picked = [
+                k
+                for k in leaders
+                if k.startswith(f"{metric}/{split}/") and not k.endswith("/mean")
+            ]
+            # Smallest train set first, the order results.md gives its columns:
+            # the two read side by side, and it puts the tasks where fine-tuning
+            # has the most to prove at the front of the section.
+            picked.sort(key=task_size)
+            dashboard(f"{metric}/{split}", picked)
     # The `mean` keys get no dashboard of their own: they fall through to the
     # namespace grouping below with the rest of their metric.
 

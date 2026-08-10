@@ -91,6 +91,28 @@ def published_best() -> dict[str, float]:
     return out
 
 
+@functools.cache
+def ntrain() -> dict[str, float]:
+    """Train-set size per `{db}/{task}`, from RelBench's own task stats.
+
+    The same `num_rows_train` column `make_results.py` orders its table columns
+    by, so anything ordered by this reads in the order results.md does. A pair
+    the stats do not cover sorts last rather than raising -- this only decides
+    a display order, and `mean` is such a pair.
+    """
+    import pandas as pd
+    from huggingface_hub import hf_hub_download
+
+    stats = pd.read_parquet(
+        hf_hub_download(
+            "stanford-star/relbench", "STATS/tasks.parquet", repo_type="dataset"
+        )
+    )
+    return {
+        f"{r.database}/{r.task}": float(r.num_rows_train) for r in stats.itertuples()
+    }
+
+
 def default_loss_fn(db: str, task: str) -> str:
     """`bce` for a classification task, `huber` for a regression one.
 
