@@ -66,19 +66,13 @@ of writing a `submit.py` beats twenty of debugging an `srun` line.
 
 ## Watch every job you submit
 
-**A job is not finished when `sbatch` returns.** Check each one shortly after it
-starts and keep checking: that it reached a step at all, that the loss is
-moving, and that its log is the size a working run's log is. A broken run does
-not stop -- it burns a GPU for its whole wall clock, and it can take the shared
-filesystem down with it. Measured: six runs whose sampler panicked on every item
-printed a `skipping item` line per panic and wrote 60--130 GB of log each, ~600 GB
-in two hours, with no step ever saved. Nothing alerts you; `squeue` said RUNNING
-throughout.
+**A job is not finished when `sbatch` returns.** Nothing alerts you, and a
+broken run holds its GPU for the full wall clock while filling the shared
+filesystem. Shortly after a submission, and again as it runs:
 
-So, on a fresh submission: read the log, confirm the first steps, and `ls -laS`
-the log directory. Then cancel what is broken, delete what it wrote, and fix the
-cause before resubmitting. A sweep left unwatched overnight is the expensive
-kind of mistake.
+- read the log and confirm the run reaches steps and the loss moves;
+- `ls -laS` the log directory and `df -h` the output filesystem;
+- cancel what is broken, delete what it wrote, fix the cause, resubmit.
 
 ## What every experiment owes
 
@@ -144,6 +138,11 @@ module docstrings.
 
 Concise, and only what the reader cannot get from the code. Prefer a link to a
 summary.
+
+**Operational instructions only.** No history, no incident stories, no bugs that
+are already fixed, no rationale for a choice that has been made. Write what to
+run and what to check; a reader wants the current instruction, not how it came
+about. That record lives in git.
 
 ## Submitting
 
