@@ -148,9 +148,10 @@ Escalate to a human:
   ranks are stuck in a collective and the job will sit there until its NCCL
   watchdog times out. [`smoke.py`](smoke.py) says in a minute whether a pair of
   nodes can train at all -- run it before putting a real run back on them.
-- **Cancelling a hung job can drain its nodes.** The ranks do not die on
-  SIGKILL either, and slurm marks the node `Kill task failed`. Undraining needs
-  an admin, so a hang can cost the nodes as well as the time.
+- **Cancelling a hung job drains its nodes for a few minutes.** The ranks do
+  not die on SIGKILL either, so slurm marks the node `Kill task failed` and a
+  resubmit sits at `ReqNodeNotAvail`. It clears on its own -- wait rather than
+  resubmitting somewhere worse.
 - **Nodes go bad and come back.** ampere9 once failed every job in its first
   second (`mkdir`: Input/output error) and was excluded for a while; it is fine
   now. Treat an exclusion as a hypothesis with a date on it -- check with
