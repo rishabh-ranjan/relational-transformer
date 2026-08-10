@@ -8,16 +8,6 @@ from roach.slurm import Resources, submit
 
 HERE = Path(__file__).parent
 
-# The weights fine-tuning starts from: the SWA average of the pretraining run
-# in `expts/pretrain`, pinned at a step rather than left as a directory,
-# because that run is still training and a directory would mean two arms
-# starting from different weights depending on when they were submitted. Set
-# `load_ckpt_path=None` on a call to get the random-init control instead.
-PRETRAINED = (
-    "/dfs/user/ranjanr/ckpts/rtv2/2026-08-07-pretrain"
-    "/26-08-07_14-39-21_931913633/swa_steps=39000.safetensors"
-)
-
 # The forecast tasks of these four databases whose type RT models: predict a
 # label at a timestamp from what is known before it. Nothing else is here --
 # recommendation tasks are not modeled and autocomplete tasks complete a
@@ -236,7 +226,6 @@ def submit_one(
     total_steps: int = 10_001,
     loss_fn: str | None = None,
     run_name: str | None = None,
-    load_ckpt_path: str | None = PRETRAINED,
     items_per_task: int = 8192,
 ):
     """One job. `run_id` names an existing run instead of minting a new one,
@@ -261,7 +250,7 @@ def submit_one(
             materialize_attn_masks=True,
             loss_fn=loss_fn or default_loss_fn(db, task),
             # the arm: None is random init, a checkpoint path is fine-tuning
-            load_ckpt_path=load_ckpt_path,
+            load_ckpt_path=None,
             # data: one task, from the benchmark data rather than the Join
             db_task_list=[(db, task)],
             pre_dir="/dfs/user/ranjanr/share/stanford-star/relbench-preprocessed",
