@@ -51,7 +51,6 @@ def test_from_pretrained_model_kwargs(tmp_path, tiny_dims):
 
 
 def test_compile_true_builds(tiny_dims):
-    # Regression: __init__ must still torch.compile forward when compile=True
-    # (an earlier refactor accidentally orphaned that line).
+    # __init__ must torch.compile forward when compile=True.
     m = RelationalTransformer(**tiny_dims, compile=True, materialize_attn_masks=True)
     assert callable(m.forward)

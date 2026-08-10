@@ -1742,17 +1742,15 @@ impl Sampler {
             // hub tables every walk passes through (rel-avito `Category`
             // averages 140k children over 68 rows, `Location` peaks at 1.3M),
             // and a scan of that per visited node -- to bucket edges that were
-            // then subsampled to 32 -- is what made a rel-avito run produce no
-            // step at all.
+            // then subsampled to 32 -- is enough to stall a run entirely.
             //
-            // The cap covers db and task edges alike. It used to exempt task
-            // edges, taking every one and capping only db edges, which cannot
-            // be done without reading every edge to find out which is which.
-            // Measured across all seven relbench datasets, a node's task edges
+            // The cap covers db and task edges alike: exempting task edges
+            // cannot be done without reading every edge to find out which is
+            // which. Measured across all seven relbench datasets, a node's task edges
             // number at most 366 (rel-f1 `drivers`, summed over every task and
             // split) and typically 1-15, against db degrees five orders of
-            // magnitude larger, so a uniform draw takes essentially the same
-            // task edges the exemption did.
+            // magnitude larger, so a uniform draw takes essentially every task
+            // edge anyway.
             //
             // Edges to *another* task's table are dropped rather than expanded,
             // so drawing one wastes a slot. Rejection sampling recovers the

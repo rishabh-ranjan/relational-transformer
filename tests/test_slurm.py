@@ -1,8 +1,7 @@
-"""roach.slurm: the parts that are pure functions, and so are the parts that bit us.
+"""roach.slurm: the parts that are pure functions.
 
-Every check here corresponds to a failure that cost real time on the cluster:
-arguments that do not match the target, a resource shape that slurm rejects, and
-a batch script that has lost a placeholder.
+What is checked: arguments that do not match the target, a resource shape slurm
+rejects, and a batch script that has lost a placeholder.
 """
 
 import inspect

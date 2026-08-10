@@ -101,7 +101,8 @@ environment (Python, PyTorch + CUDA, Rust, and all dependencies), built on first
 ```bash
 git clone https://github.com/stanford-star/relational-transformer.git
 cd relational-transformer
-pixi run test        # or train, eval, preprocess, ...
+pixi run pytest                        # the test suite
+pixi run python examples/train.py      # or eval.py, preprocess.py, ...
 ```
 
 

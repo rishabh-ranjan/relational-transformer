@@ -17,7 +17,6 @@ from pathlib import Path
 import pytest
 
 TOOLS = {
-    # `pixi install` is the slow step a second job must not repeat.
     # `install` is the slow step a second job must not repeat, and it keeps a
     # lock it already has -- which is what makes the seeded lock observable.
     "pixi": """#!/bin/bash
@@ -143,8 +142,7 @@ def rig(tmp_path: Path):
 
 
 def test_concurrent_jobs_at_one_commit_build_the_clone_once(rig):
-    """Twelve jobs landing together used to be twelve clones, twelve solves and
-    twelve builds of the same commit."""
+    """Twelve jobs landing together share one clone, one solve and one build."""
     sha = rig.commit()
     scripts = [(rig.job(f"r{i}", sha), 1000 + i) for i in range(12)]
     with ThreadPoolExecutor(max_workers=12) as pool:
@@ -162,11 +160,11 @@ def test_concurrent_jobs_at_one_commit_build_the_clone_once(rig):
 
 
 def test_a_new_commit_inherits_the_previous_solve(rig):
-    """Iterating is a commit per attempt, and a clone is per commit, so a fresh
-    solve per commit is a fresh solve per attempt -- minutes each, for commits
-    that never touched a dependency. The lock is gitignored, so the new clone
-    seeds it from a ready clone with a byte-identical manifest and pixi finds
-    nothing to solve."""
+    """Iterating is a commit per attempt, and a clone is per commit, so a solve
+    per commit would be a solve per attempt -- minutes each, for commits that
+    never touched a dependency. The lock is gitignored, so a new clone seeds it
+    from a ready clone with a byte-identical manifest and pixi finds nothing to
+    solve."""
     first = rig.commit()
     rig.run(rig.job("first", first), 1001)
     lock = (rig.clones / f"repo-{first}" / "pixi.lock").read_text()
@@ -177,9 +175,9 @@ def test_a_new_commit_inherits_the_previous_solve(rig):
 
 
 def test_a_finished_job_leaves_the_clone_for_the_next_one(rig):
-    """The old script deleted its clone on exit, which is what made every job
-    pay for the environment again -- and would now delete it under a job that is
-    still running."""
+    """A job must not delete its clone on exit: the next job would pay for the
+    environment again, and a job still running out of that clone would lose its
+    code underneath it."""
     sha = rig.commit()
     rig.run(rig.job("first", sha), 1001)
     clone = rig.clones / f"repo-{sha}"

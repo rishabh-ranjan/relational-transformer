@@ -71,8 +71,7 @@ struct DatasetManifest {
     // Manifest keys rt has no use for. They are listed only so
     // `deny_unknown_fields` can reject a key that is in neither group: a new
     // manifest field then stops preprocessing loudly instead of vanishing on
-    // its way into meta.json, which is how `remove_columns` went missing.
-    // meta.json carries the used fields and nothing else.
+    // its way into meta.json, which carries the used fields and nothing else.
     #[serde(default)]
     #[allow(dead_code)]
     manifest_version: Option<serde_yaml::Value>,
@@ -123,8 +122,7 @@ struct TaskManifest {
     // Manifest keys rt has no use for. They are listed only so
     // `deny_unknown_fields` can reject a key that is in neither group: a new
     // manifest field then stops preprocessing loudly instead of vanishing on
-    // its way into meta.json, which is how `remove_columns` went missing.
-    // meta.json carries the used fields and nothing else.
+    // its way into meta.json, which carries the used fields and nothing else.
     #[serde(default)]
     #[allow(dead_code)]
     name: Option<serde_yaml::Value>,

@@ -15,10 +15,9 @@ HERE = Path(__file__).parent
 # the list is what ran, and a database gaining a task should not silently
 # change a sweep.
 TASKS = (
-    # rel-avito is what the sampler fix was for: its p2f hubs (a `Category`
-    # node has ~10^6 children) are what made a run produce no step at all, so
-    # these three go first, to see the fix hold before the rest of the sweep
-    # is worth submitting.
+    # rel-avito first: its p2f hubs (a `Category` node has ~10^6 children) are
+    # the sampler's worst case, so these three say whether the sweep is worth
+    # submitting at all.
     ("rel-avito", "ad-ctr"),
     ("rel-avito", "user-clicks"),
     ("rel-avito", "user-visits"),
@@ -42,9 +41,8 @@ def published_best() -> dict[str, float]:
     default and the HPO arm of every model, AUROC as a percent and MAE
     normalized by the train-target std and taken as a percent -- so a target
     is literally the bolded number in that table, and lands on the same axis
-    as the curve `rt.train` logs beside it. Derived rather than pasted: the
-    pasted list had raw MAE where the run logs nMAE (`rel-trial/study-adverse`
-    read 40.4 against a curve that lives near 12).
+    as the curve `rt.train` logs beside it. Derive it, never paste it: the
+    published tables carry raw MAE where the run logs nMAE.
 
     `{metric}/{split}/mean` comes along too: the best mean over that table's
     whole task set. A single-task run's own "mean" is that one task, so this
@@ -169,9 +167,8 @@ def a100(qos: str, time: str) -> Resources:
         mem_per_gpu=None,
         constraint="ampere",
         # Every ampere but 9, whose node-local disk answers mkdir with "Input/
-        # output error" -- three jobs landed there and all three died in the
-        # first second, before the clone existed. Put it back once the disk is
-        # replaced.
+        # output error": a job landing there dies in its first second, before
+        # the clone exists. Put it back once the disk is replaced.
         nodelist="ampere1,ampere2,ampere3,ampere4,ampere5,ampere6,ampere7,ampere8",
     )
 
@@ -188,11 +185,10 @@ def plan(n: int) -> list[Resources]:
     and resumes, at a preemption and at its time limit alike, so the
     low-priority queue costs wall clock, not work.
 
-    Blackwell before Ampere within that, and the b200 share stops at 4 --
+    Blackwell before Ampere within that, and the b200 share stops at 4:
     blackwell1 is one node whose eight cards the rest of the cluster wants too,
-    and measured, three b200 `il-lo` jobs sat pending behind another user's
-    reservation while a100s were free. A whole card that starts now beats a
-    faster one that does not.
+    and b200 `il-lo` jobs queue behind other users' reservations while a100s sit
+    free. A whole card that starts now beats a faster one that does not.
     """
     out = [b200("il-lo", "21-00:00:00")] * min(n, 4)
     # whatever is left goes to the ampere queue, which has no cap of its own
@@ -253,7 +249,7 @@ def submit_one(
             # Loader workers are processes, and the job only owns
             # `cpus_per_task` cores: two are held back for the training process
             # itself and the one eval worker below, so a b200 slot (36) keeps
-            # the 16 this has always used while an a100 slot (14) asks for 12
+            # 16 while an a100 slot (14) asks for 12
             # instead of oversubscribing its allocation.
             num_workers=min(16, resources.cpus_per_task - 2),
             prefetch_factor=2,
@@ -294,14 +290,11 @@ def submit_one(
             eval_walk_length=20,
             # The in-loop eval is a *trajectory* val, not a final score: it runs
             # at every eval_freq and only has to say which way the curve is
-            # going, so it reads a fixed 1024-item prefix of each split, which
-            # is what the rt repo's fine-tuning recipe evaluates on too. The
-            # whole split is what made this hang: rel-avito/user-clicks is
-            # 21_183 val + 47_996 test items, each assembled from
-            # eval_num_walks=10_000 random walks by a single loader worker, so
-            # the step-0 eval alone was hours and the run logged nothing.
-            # A final number comes from scoring the selected checkpoint on the
-            # full split, not from this.
+            # going, so it reads a fixed 1024-item prefix of each split. The
+            # whole split is hours per eval: rel-avito/user-clicks is 21_183 val
+            # + 47_996 test items, each assembled from eval_num_walks=10_000
+            # random walks by a single loader worker. A final number comes from
+            # scoring the selected checkpoint on the full split, not from this.
             eval_items_per_task=1024,
             eval_ctx_size_list=[1024],
             eval_mmap_populate=True,
@@ -326,12 +319,9 @@ def submit_one(
         clone_root="/lfs/local/0/roach_clones",
         secrets_dir="/dfs/user/ranjanr/.secrets",
         run_id=run_id,
-        # No setup: `pixi install` already builds the rustler extension and puts
-        # it in src/rt/ -- the project is an editable dependency of its own
-        # environment. Running `pixi run build-sampler` here as well rebuilt the
-        # whole pyo3 stack a second time (maturin develop drops
-        # pyo3/extension-module, which is a different fingerprint), for ~10s and
-        # no different result.
+        # No setup: `pixi install` already builds the rustler extension into
+        # src/rt/ -- the project is an editable dependency of its own
+        # environment.
     )
 
 

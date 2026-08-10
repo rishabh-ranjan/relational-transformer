@@ -72,17 +72,14 @@ output directory, same checkpoint.
 ## Clones
 
 `clone_root` holds **one clone per commit per node**, shared by every job at
-that commit. It used to be one per job, thrown away at exit, and that cost far
-more than the disk: pixi keys an environment on the project path (a detached
-environment is literally `NAME-HASH_OF_PATH`), uv keys built wheels on the mtime
-of `pyproject.toml`, and cargo's artifacts live under the manifest. A clone at a
-fresh `mktemp` path therefore missed every one of those caches by construction,
-so each job re-solved the environment and recompiled the extensions — minutes of
-a full allocation, per job, to reproduce what the last job had already built.
+that commit. The path is what makes that worth doing: pixi keys an environment
+on the project path (a detached environment is literally `NAME-HASH_OF_PATH`),
+uv keys built wheels on the mtime of `pyproject.toml`, and cargo's artifacts live
+under the manifest — so a per-job clone at a fresh path misses every one of those
+caches and re-solves and recompiles what the last job already built.
 
-Reproducibility is unchanged: a clone is still exactly the submitted commit, and
-a different commit is a different directory, so a queued job cannot change under
-you. What changes:
+A clone is exactly the submitted commit, and a different commit is a different
+directory, so a queued job cannot change under you. What sharing implies:
 
 * **The first job at a commit builds it; the rest take a lock.** `.roach-ready`,
   written last, is what publishes the clone; a builder that is preempted drops
@@ -96,17 +93,17 @@ you. What changes:
   every commit that never touched a dependency. A new clone copies the lock from
   a ready clone whose `pyproject.toml` is byte-identical; pixi validates it
   against the manifest anyway and re-solves if it disagrees, so a stale one
-  costs nothing. Measured: ~9 minutes of preparation became ~60s. A copy lands
-  next to the run's logs as a record of what the run used. Ranks start under
+  costs nothing (measured: ~60s of preparation, against ~9 minutes without it).
+  A copy lands next to the run's logs as a record of what the run used. Ranks start under
   `pixi run --frozen`: in a shared clone, a rank that re-solved would rewrite
   the lock underneath every other job at that commit.
 * **What is left is `pixi install`, ~50s per new commit**, materializing an
   8.5 GiB environment. Pixi keys an environment on the project path, so a
   per-commit clone means a per-commit environment; when the environment already
   exists at that path the same command takes 0.05s. Hardlinking one from a
-  matching clone was tried and does not work — pixi rebuilds a prefix it did not
-  create. Avoiding it needs the manifest to sit at a path that does not change
-  per commit, which is a bigger change than it sounds.
+  matching clone does not work — pixi rebuilds a prefix it did not
+  create. Avoiding it would need the manifest to sit at a path that does not
+  change per commit.
 * **Nothing is ever deleted.** No job removes a clone, at exit or otherwise,
   and there is no TTL. A clone that nobody wants sits there costing very little
   (see below), and a job that deleted directories on a timer would eventually
@@ -131,8 +128,8 @@ environment.
 
 They are cheaper than `du` suggests. Each environment reports ~8 GiB but is
 reflinked from the package cache, so its own cost is ~230 MiB (measured with
-`btrfs filesystem du -s`: 8.17 GiB total, 222 MiB exclusive). Thirty-odd
-environments on a node were ~7 GiB of real disk. Treat a full disk as a real
+`btrfs filesystem du -s`: 8.17 GiB total, 222 MiB exclusive) -- thirty-odd
+environments on a node measured ~7 GiB of real disk. Treat a full disk as a real
 event to act on, not something to pre-empt with a policy.
 
 ### The clone is read-only
@@ -141,11 +138,9 @@ event to act on, not something to pre-empt with a policy.
 shared clone asks of an experiment, and roach cannot enforce it — a job that
 breaks the rule fails as corrupted output or a race, not as an error.
 
-It used to be safe: each job had a private clone that was deleted at exit, so an
-experiment could scribble in its working directory and nobody noticed. Now every
-job at that commit on that node is in the same directory at the same time. Two
-runs writing `outputs/`, a checkpoint saved next to the code, a scratch file
-named after the dataset rather than the run — all of these are now two processes
+Every job at that commit on that node is in the same directory at the same time.
+Two runs writing `outputs/`, a checkpoint saved next to the code, a scratch file
+named after the dataset rather than the run — each of these is two processes
 writing one path.
 
 The rule in practice:
@@ -179,21 +174,17 @@ is an argument.
 
 ## Tests
 
-`pixi run test`. They cover the pure functions -- target resolution, the
+`pixi run pytest`. They cover the pure functions -- target resolution, the
 argument check, resource shapes, the placeholders the script and `submit()` must
 agree on, and the two environment flags that mean opposite things at their two
 layers (`--export=NONE` keeps the submitting shell out of the job;
-`srun --export=ALL` lets the job's own environment reach its tasks). Each one is
-a mistake that cost real time on a cluster.
+`srun --export=ALL` lets the job's own environment reach its tasks).
 
 ## Where it lives
 
-In this repo, under `src/roach/`, installed with it. It used to be a separate
-package that a job cloned at the commit which submitted it, so that upgrading
-roach could not change a queued run. Vendoring it gets the same guarantee for
-free and one fewer moving part: the job already clones this repo at the
-submitted commit, and roach is inside it.
+In this repo, under `src/roach/`, installed with it. A queued run therefore
+cannot be changed by a roach upgrade: the job clones this repo at the submitted
+commit, and roach is inside it.
 
-Upstream (https://github.com/rishabh-ranjan/roach) still carries the older
-frameworks -- `roach.paper`, `roach.store`, `roach.worker` -- which this repo
-does not use and did not bring.
+Upstream (https://github.com/rishabh-ranjan/roach) carries older frameworks --
+`roach.paper`, `roach.store`, `roach.worker` -- which this repo does not use.

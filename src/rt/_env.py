@@ -25,17 +25,16 @@ import torch
 _ALLOC_CONF = "expandable_segments:True"
 
 # NCCL flight recorder: a ring buffer of recent collective metadata, dumped when
-# a collective times out. This is the missing evidence for the failure mode the
-# run actually hits -- a multi-node job that goes silent with every rank parked
-# in a collective -- which is otherwise diagnosable only by inference. The
-# buffer costs a few MB per rank and the dump fires only on failure.
+# a collective times out. It is the only evidence available for a multi-node job
+# that goes silent with every rank parked in a collective. The buffer costs a
+# few MB per rank and the dump fires only on failure.
 _FR_BUFFER_SIZE = "20000"
 _FR_DUMP_TEMP_FILE = "/tmp/nccl_trace_rank_"
 
 # Inductor cache visibility: hit/miss/bypass lines say whether a restart is
 # reusing the on-disk compile cache or paying full compile cost. Worth having
-# permanently -- time_to_first_step has ranged from 3m43s to 25m54s across
-# restarts of the same run, and this is what distinguishes the causes.
+# permanently: it is what explains a time_to_first_step of 25m against 4m for
+# restarts of the same run.
 _TORCH_LOGS = [
     "+torch._inductor.codecache",
     "+torch._functorch._aot_autograd.autograd_cache",
