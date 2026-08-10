@@ -65,6 +65,18 @@ INTERNAL = {"_runtime", "_step", "_timestamp", "_wandb", "step"}
 # rest of the curve to draw.
 LOG_Y = {"train/load_time", "train/sec_per_step"}
 
+# The `dashboard: train` section, in the order the panels should read. `None`
+# is the step-vs-runtime panel, which is drawn from wandb's own bookkeeping
+# series rather than from a logged key.
+TRAIN_ORDER = (
+    "train/load_time",
+    "train/sec_per_step",
+    None,
+    "train/loss",
+    "train/grad_norm",
+    "train/lr",
+)
+
 # How many runs the run list shows before paging. Also 10 by default, which is
 # what opens the list on "1-10"; 100 is what the app allows (it clamps anything
 # larger down to this).
@@ -91,6 +103,18 @@ def panel(key: str, keys: set[str], x: str) -> wr.LinePlot:
     y = [k for k in (key, swa_key(key), target_key(key)) if k in keys]
     return wr.LinePlot(
         title=key, x=x, y=y, smoothing_show_original=True, log_y=key in LOG_Y or None
+    )
+
+
+def step_vs_runtime() -> wr.LinePlot:
+    """How fast a run is actually moving: step against wall-clock seconds, so
+    a run that has stalled or is crawling reads off the slope.
+
+    `_step` and `_runtime` are wandb's own bookkeeping series -- excluded from
+    the key space, which is why this panel is written by hand.
+    """
+    return wr.LinePlot(
+        title="step vs runtime", x="_runtime", y=["_step"], smoothing_show_original=True
     )
 
 
@@ -200,25 +224,24 @@ def build(entity: str, project: str) -> ws.Workspace:
             [k for k in leaders if k in {f"{m}/{split}/mean" for m in METRICS}],
         )
 
-    # How fast a run is actually moving: step against wall-clock seconds, so a
-    # run that has stalled or is crawling reads off the slope. `_step` and
-    # `_runtime` are wandb's own bookkeeping series (hence excluded from the
-    # key space above), which is exactly why this panel is written by hand.
+    # The training curves, in reading order: how fast the run is moving first
+    # (the two timings and the step-vs-runtime slope), then what it is doing
+    # (loss, grad norm, lr). Hand-ordered because the namespace grouping below
+    # sorts alphabetically, which interleaves the two halves.
+    train = [
+        panel(k, keys, "step") if k else step_vs_runtime()
+        for k in TRAIN_ORDER
+        if k is None or k in leaders
+    ]
     sections.append(
         ws.Section(
-            name="dashboard: train/step_vs_runtime",
-            panels=[
-                wr.LinePlot(
-                    title="step vs runtime",
-                    x="_runtime",
-                    y=["_step"],
-                    smoothing_show_original=True,
-                )
-            ],
+            name="dashboard: train",
+            panels=train,
             is_open=True,
-            layout_settings=ws.SectionLayoutSettings(columns=1, rows=1),
+            layout_settings=ws.SectionLayoutSettings(columns=3, rows=2),
         )
     )
+    shown.update(k for k in TRAIN_ORDER if k)
 
     # Everything else, so nothing a run logs goes missing from the view,
     # grouped by top-level namespace.
