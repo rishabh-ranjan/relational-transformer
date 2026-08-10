@@ -4,7 +4,7 @@ pretraining shape. See [README.md](README.md)."""
 import time
 
 import torch
-from torch.nn.attention.flex_attention import create_block_mask
+from torch.nn.attention.flex_attention import create_block_mask, flex_attention
 
 from rt.model.net import _kv_sizes
 from rt.progress import log
@@ -153,6 +153,96 @@ def mask_mod(node_idxs, f2p_nbr_idxs, col_name_idxs, table_name_idxs, is_padding
     return block_masks, kv_sizes
 
 
+def pad_inlined(node_idxs, f2p_nbr_idxs, col_name_idxs, table_name_idxs, is_padding):
+    """`all_at_once`, minus the materialized `pad`. Three masks consume it, so it
+    is the one intermediate inductor has to keep a whole (B, S, S) buffer for;
+    written as two broadcasts inside each mask it fuses into the mask's own
+    kernel instead."""
+    batch_size, seq_len = node_idxs.shape
+    device = node_idxs.device
+    not_q = ~is_padding[:, :, None]
+    not_kv = ~is_padding[:, None, :]
+    same_node = node_idxs[:, :, None] == node_idxs[:, None, :]
+    kv_in_f2p = (node_idxs[:, None, :, None] == f2p_nbr_idxs[:, :, None, :]).any(-1)
+    q_in_f2p = (node_idxs[:, :, None, None] == f2p_nbr_idxs[:, None, :, :]).any(-1)
+    same_col_table = (col_name_idxs[:, :, None] == col_name_idxs[:, None, :]) & (
+        table_name_idxs[:, :, None] == table_name_idxs[:, None, :]
+    )
+    attn_masks = {
+        "feat": (same_node | kv_in_f2p) & not_q & not_kv,
+        "nbr": q_in_f2p & not_q & not_kv,
+        "col": same_col_table & not_q & not_kv,
+    }
+    kv_sizes = {
+        k: v.sum(dim=-1, keepdim=True).bfloat16() for k, v in attn_masks.items()
+    }
+    block_masks = {
+        k: _block_mask(v.contiguous(), batch_size, seq_len, device)
+        for k, v in attn_masks.items()
+    }
+    return block_masks, kv_sizes
+
+
+def _packed_block_mask(mask, batch_size, seq_len, device):
+    """Pack the kv axis 8-to-a-byte and index the bits from the mask_mod. Still a
+    lookup per partial-block element -- the property the dense path exists for --
+    but the tensor flex_attention reads is an eighth the size."""
+    packed = torch.zeros(
+        batch_size, seq_len, seq_len // 8, dtype=torch.uint8, device=device
+    )
+    for bit in range(8):
+        packed |= mask[:, :, bit::8].to(torch.uint8) << bit
+    return (
+        create_block_mask(
+            mask_mod=lambda b, h, q, kv: (
+                (packed[b, q, kv // 8] >> (kv % 8)) & 1
+            ).bool(),
+            B=batch_size,
+            H=None,
+            Q_LEN=seq_len,
+            KV_LEN=seq_len,
+            device=device,
+            _compile=True,
+        ),
+        packed,
+    )
+
+
+def packed_bits(node_idxs, f2p_nbr_idxs, col_name_idxs, table_name_idxs, is_padding):
+    """`all_at_once`, but each dense mask is packed to bits and the bool dropped,
+    so only one (B, S, S) bool is ever live and what survives per mask is an
+    eighth of one."""
+    batch_size, seq_len = node_idxs.shape
+    device = node_idxs.device
+    not_q = ~is_padding[:, :, None]
+    not_kv = ~is_padding[:, None, :]
+
+    def feat():
+        same_node = node_idxs[:, :, None] == node_idxs[:, None, :]
+        kv_in_f2p = (node_idxs[:, None, :, None] == f2p_nbr_idxs[:, :, None, :]).any(-1)
+        return (same_node | kv_in_f2p) & not_q & not_kv
+
+    def nbr():
+        q_in_f2p = (node_idxs[:, :, None, None] == f2p_nbr_idxs[:, None, :, :]).any(-1)
+        return q_in_f2p & not_q & not_kv
+
+    def col():
+        same = (col_name_idxs[:, :, None] == col_name_idxs[:, None, :]) & (
+            table_name_idxs[:, :, None] == table_name_idxs[:, None, :]
+        )
+        return same & not_q & not_kv
+
+    block_masks, kv_sizes, keep = {}, {}, []
+    for attn_type, build in (("feat", feat), ("nbr", nbr), ("col", col)):
+        mask = build()
+        kv_sizes[attn_type] = mask.sum(dim=-1, keepdim=True).bfloat16()
+        bm, packed = _packed_block_mask(mask, batch_size, seq_len, device)
+        block_masks[attn_type] = bm
+        keep.append(packed)  # flex_attention reads it, so it has to outlive this
+        del mask
+    return block_masks, (kv_sizes, keep)
+
+
 def main(
     *,
     batch_size: int,
@@ -167,10 +257,27 @@ def main(
     """
     device = "cuda"
     inputs = _inputs(batch_size, seq_len, max_f2p_nbrs, num_nodes, device)
+    # Attention is what the masks are for, and what the dense path is buying:
+    # flex_attention evaluates the mask_mod for every partial block, so a mask
+    # that is a lookup and a mask that recomputes a predicate cost differently
+    # *here*, not where they are built.
+    num_heads, head_dim = 8, 64
+    qkv = [
+        torch.randn(
+            batch_size,
+            num_heads,
+            seq_len,
+            head_dim,
+            device=device,
+            dtype=torch.bfloat16,
+        )
+        for _ in range(3)
+    ]
+    flex = torch.compile(flex_attention, dynamic=False)
     torch.cuda.synchronize()
     resident = torch.cuda.memory_allocated()
 
-    for variant in (all_at_once, one_at_a_time, mask_mod):
+    for variant in (all_at_once, pad_inlined, packed_bits, mask_mod):
         fn = torch.compile(variant, dynamic=False)
         # Warm up: the first call compiles, and compilation allocates.
         out = fn(**inputs)
@@ -185,9 +292,28 @@ def main(
         torch.cuda.synchronize()
         elapsed = (time.perf_counter() - t0) / repeats
 
+        build_peak = torch.cuda.max_memory_allocated() - resident
+
+        # Attention with the block masks this variant produced.
+        block_masks, _held = fn(**inputs)
+        torch.cuda.synchronize()
+        torch.cuda.reset_peak_memory_stats()
+        for _ in range(2):
+            for bm in block_masks.values():
+                flex(*qkv, block_mask=bm, scale=1.0 / head_dim)
+        torch.cuda.synchronize()
+        t0 = time.perf_counter()
+        for _ in range(repeats):
+            for bm in block_masks.values():
+                flex(*qkv, block_mask=bm, scale=1.0 / head_dim)
+        torch.cuda.synchronize()
+        attn_ms = (time.perf_counter() - t0) / repeats * 1000
+
         log(
             variant=variant.__name__,
-            peak_gib=f"{(torch.cuda.max_memory_allocated() - resident) / 1024**3:.2f}",
-            ms=f"{elapsed * 1000:.1f}",
+            build_gib=f"{build_peak / 1024**3:.2f}",
+            build_ms=f"{elapsed * 1000:.1f}",
+            attn_ms=f"{attn_ms:.1f}",
         )
+        del block_masks, _held
         torch.cuda.empty_cache()
