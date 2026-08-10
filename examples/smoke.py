@@ -33,6 +33,7 @@ def smoke(
         d_ff=128,
         compile=compile,
         materialize_attn_masks=True,
+        loss_fn="huber",
         load_ckpt_path=None,
         # data + optimization
         db_task_list=[("rel-f1", "driver-dnf")],

@@ -63,6 +63,7 @@ def main() -> None:
             d_ff=2048,
             compile=False,
             materialize_attn_masks=True,
+            loss_fn="huber",
             load_ckpt_path=None,
             # data: one small database, no page-cache population
             db_task_list=TASKS,

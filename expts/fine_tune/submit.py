@@ -182,7 +182,13 @@ def main() -> None:
         submit_one(db, task, resources)
 
 
-def submit_one(db: str, task: str, resources: Resources, run_id: str | None = None):
+def submit_one(
+    db: str,
+    task: str,
+    resources: Resources,
+    run_id: str | None = None,
+    total_steps: int = 10_001,
+):
     """One job. `run_id` names an existing run instead of minting a new one,
     which is how a job that was cancelled -- moved to another queue, say --
     comes back and resumes from its own checkpoint rather than from step 0."""
@@ -199,6 +205,7 @@ def submit_one(db: str, task: str, resources: Resources, run_id: str | None = No
             d_ff=2048,
             compile=True,
             materialize_attn_masks=True,
+            loss_fn="huber",
             # the arm: None is random init, a checkpoint path is fine-tuning
             load_ckpt_path=None,
             # data: one task, from the benchmark data rather than the Join
@@ -227,8 +234,9 @@ def submit_one(db: str, task: str, resources: Resources, run_id: str | None = No
             grad_norm_max=1.0,
             total_bs=128,
             # pretraining's 100k steps is a mixture's worth of data, not one
-            # task's: the one number this experiment sets on its own
-            total_steps=10_001,
+            # task's: the one number this experiment sets on its own, and the
+            # one a shorter probe run overrides
+            total_steps=total_steps,
             swa_momentum=1.0,
             seed=0,
             mmap_populate=True,

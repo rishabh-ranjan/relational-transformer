@@ -185,6 +185,7 @@ def main(
     d_ff: int,
     compile: bool,
     materialize_attn_masks: bool,
+    loss_fn: str,
     load_ckpt_path: str | None,
     # data + optimization
     db_task_list: list[tuple[str, str]] | str,
@@ -300,6 +301,7 @@ def main(
                 d_ff=d_ff,
                 compile=compile,
                 materialize_attn_masks=materialize_attn_masks,
+                loss_fn=loss_fn,
             )
             .to(device)
             .to(torch.bfloat16)
@@ -579,6 +581,7 @@ def main(
                         "num_heads": num_heads,
                         "d_ff": d_ff,
                         "materialize_attn_masks": materialize_attn_masks,
+                        "loss_fn": loss_fn,
                     },
                 },
                 indent=2,

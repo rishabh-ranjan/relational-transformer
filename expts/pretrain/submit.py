@@ -17,6 +17,7 @@ EVAL_TASKS = [
     for db, task in json.loads(Path(__file__).with_name("eval-tasks.json").read_text())
 ]
 
+
 # The pretraining shape, as a function of what the cluster will give right now.
 # `nodes` x 8xA100, exclusive: the mixture is populated into each node's page
 # cache, which wants the node's whole memory, and cpus_per_task is 128/8 with
@@ -71,6 +72,7 @@ def main() -> None:
             d_ff=2048,
             compile=True,
             materialize_attn_masks=True,
+            loss_fn="huber",
             load_ckpt_path=None,
             # data: the Join's mixture
             db_task_list="/dfs/user/ranjanr/share/stanford-star/the-join-preprocessed/db-task-lists/rt-j.json",

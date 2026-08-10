@@ -251,9 +251,13 @@ class RelationalTransformer(nn.Module):
         d_ff,
         compile,
         materialize_attn_masks,
+        loss_fn="huber",
     ):
         super().__init__()
+        if loss_fn not in ("huber", "bce"):
+            raise ValueError(f"unknown loss_fn {loss_fn!r}; expected 'huber' or 'bce'")
         self.materialize_attn_masks = materialize_attn_masks
+        self.loss_fn = loss_fn
         self.enc_dict = nn.ModuleDict(
             {
                 "number": nn.Linear(1, d_model, bias=True),
@@ -356,6 +360,7 @@ class RelationalTransformer(nn.Module):
                 if os.environ.get("RT_MATERIALIZE_ATTN_MASKS", "") == "0"
                 else m.get("materialize_attn_masks", True)
             ),
+            loss_fn=m.get("loss_fn", "huber"),
         )
         model.load_state_dict(state_dict)
         model.config = config
@@ -543,7 +548,19 @@ class RelationalTransformer(nn.Module):
             sem_type_mask = (sem_types == i) & masks  # (B,S) mask for this type
 
             if t in ("number", "text", "datetime"):
-                loss_t = F.huber_loss(yhat, y, reduction="none").mean(-1)  # (B, S)
+                if self.loss_fn == "huber":
+                    loss_t = F.huber_loss(yhat, y, reduction="none").mean(-1)  # (B, S)
+                else:
+                    # `bce`: the head's output is a logit and the stored value
+                    # carries the label in its sign -- z-scored 0/1 targets come
+                    # out strictly positive/negative, and an exact 0 (no signed
+                    # label) is dropped from the mean rather than guessed at.
+                    lab = (y > 0).to(yhat.dtype)
+                    w = (y != 0).to(yhat.dtype)
+                    bce = F.binary_cross_entropy_with_logits(
+                        yhat, lab, reduction="none"
+                    )
+                    loss_t = (bce * w).sum(-1) / w.sum(-1).clamp(min=1)  # (B, S)
             elif t == "boolean":
                 loss_t = F.binary_cross_entropy_with_logits(
                     yhat, (y > 0).float(), reduction="none"
