@@ -216,7 +216,9 @@ def main(
         world_size=world_size,
         ddp=ddp,
     )
-    grid = lcs_bw_pl_grid
+    # A config is a dict key downstream (it groups the tasks that chose it),
+    # and a caller that came through JSON hands these over as lists.
+    grid = [tuple(cfg) for cfg in lcs_bw_pl_grid]
 
     assert val_ensemble_size >= 1 and test_ensemble_size >= 1, "sizes are seed counts"
     assert len(grid) > 1 or val_ensemble_size == 1, (
