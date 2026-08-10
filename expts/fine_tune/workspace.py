@@ -64,7 +64,7 @@ from wandb_workspaces.workspaces.internal import execute_graphql
 from submit import HERE, ntrain, published_best
 
 ENTITY = "rtv2"
-PROJECT = "2026-08-07-fine_tune"
+PROJECT = "2026-08-08-fine_tune"
 
 # The metric families that get a hand-arranged `dashboard:` section, in the
 # order they should appear.
