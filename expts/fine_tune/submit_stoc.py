@@ -159,23 +159,17 @@ def a100(qos: str, time: str) -> Resources:
 def plan(n: int) -> list[Resources]:
     """The best n slots this cluster will give one-GPU jobs, best first.
 
-    Everything sits on `il-lo`: preemptible, effectively uncapped, 21d wall.
-    The capped tiers (`il-interactive` at 2 GPUs, `il` at 2 b200 and 10 a100)
-    are what a sweep reaches for when it wants to be un-preemptible, and the
-    price of that is a per-user ceiling that leaves the tail of the sweep
-    queued behind its own head. This sweep would rather hold every card it can
-    and give them back when someone with priority asks: each run checkpoints
-    and resumes, at a preemption and at its time limit alike, so the
-    low-priority queue costs wall clock, not work.
+    Amperes on the capped, un-preemptible tiers: `il-interactive` first (top
+    priority, 2 gpus, 12h wall), then `il` (10 a100s, 7d). Both are per-user
+    ceilings, so a sweep wider than 12 queues behind its own head. The
+    b200s are not here -- blackwell1's cards are reserved for other users, and
+    an `il-lo` job asking for one sits at ReqNodeNotAvail while amperes idle.
 
-    Blackwell before Ampere within that, and the b200 share stops at 4:
-    blackwell1 is one node whose eight cards the rest of the cluster wants too,
-    and b200 `il-lo` jobs queue behind other users' reservations while a100s sit
-    free. A whole card that starts now beats a faster one that does not.
+    A run checkpoints and resumes, at a preemption and at its wall limit
+    alike, so a short qos costs a requeue rather than work.
     """
-    # out = [b200("il-lo", "21-00:00:00")] * min(n, 4)
-    out = []
-    out += [a100("il-lo", "21-00:00:00")] * (n - len(out))
+    out = [a100("il-interactive", "12:00:00")] * min(n, 2)
+    out += [a100("il", "7-00:00:00")] * (n - len(out))
     return out
 
 
