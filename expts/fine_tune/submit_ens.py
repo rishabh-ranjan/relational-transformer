@@ -1,4 +1,4 @@
-"""Score each task on test with the context `submit_hpo.py` picked on
+"""Score each task on test with the context `submit_hpo_only.py` picked on
 validation, ensembled over context seeds, one job per task. See
 [README.md](README.md)."""
 
@@ -8,7 +8,7 @@ from pathlib import Path
 from roach.slurm import Resources, submit
 
 from submit import TASKS, ntrain
-from submit_hpo import b200, ckpt_for
+from submit_hpo_only import b200, ckpt_for
 
 TUNING_ROOT = Path("/dfs/user/ranjanr/ckpts/rtv2/2026-08-10-fine_tune_hpo")
 
@@ -37,7 +37,7 @@ def cfg_for(db: str, task: str) -> tuple[int, int, bool]:
 def plan(n: int) -> list[Resources]:
     """The best n slots this cluster will give one-GPU jobs, best first.
 
-    Its own count, not `submit_hpo.plan`'s: this submission goes out after the
+    Its own count, not `submit_hpo_only.plan`'s: this submission goes out after the
     tuning one has finished, at whichever moment that is, and what was free
     then says nothing about now. `il-interactive` caps at 2 gpus of any type,
     `il` at 10 together with only 2 b200, `il-lo` is preemptible and

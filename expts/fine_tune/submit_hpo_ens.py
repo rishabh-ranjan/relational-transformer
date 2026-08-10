@@ -1,10 +1,11 @@
-"""Ensembling on its own: score each task on test at the context the
-fine-tuning runs evaluated with, averaged over context seeds, one job per task.
-See [README.md](README.md).
+"""Tune the eval context per task on validation and score the winner on test,
+both in one job per task, on the fine-tuned checkpoints. See
+[README.md](README.md).
 
-No tuning, so nothing reads validation and this does not wait on
-`submit_hpo_only.py`. `rt.eval` scores the running average after every seed, so one
-job yields the whole test-metric-vs-ensemble-size curve.
+The undivided version of `submit_hpo_only.py` + `submit_ens.py`: nothing to
+wait for and nothing to read back, at the cost of one `items_per_task` for
+both phases -- the whole split, so the test number is the real one and every
+grid entry pays a full validation pass.
 """
 
 from roach.slurm import Resources, submit
@@ -18,8 +19,8 @@ def plan(n: int) -> list[Resources]:
 
     `il-interactive` caps at 2 gpus of any type, `il` at 10 together with only
     2 b200, `il-lo` is preemptible and uncapped. Blackwell throughout while
-    blackwell1 has the cards: a test pass per context seed is the whole wall
-    clock, and there are `ensemble_size` of them.
+    blackwell1 has the cards: one val pass per grid entry and one test pass
+    per context seed is the whole wall clock, and this script pays both.
 
     Recount and rewrite this before every submission.
 
@@ -62,17 +63,22 @@ def main() -> None:
                 shuffle_seed=0,
                 context_seed=0,
                 vector_db_path=None,
-                lcs_bw_pl_grid=[(2048, 128, True)],
-                ensemble_size=16,
-                project="2026-08-10-fine_tune_ens_only",
+                lcs_bw_pl_grid=[
+                    (lcs, bw, pl)
+                    for lcs in (512, 1024, 2048)
+                    for bw in (64, 128, 256)
+                    for pl in (True, False)
+                ],
+                ensemble_size=4,
+                project="2026-08-10-fine_tune_hpo_ens",
                 entity="rtv2",
                 out_root="/dfs/user/ranjanr/ckpts",
                 wandb_disabled=True,
             ),
             resources=resources,
-            name=f"ens-only-{db}-{task}",
+            name=f"hpo-ens-{db}-{task}",
             repo_root="/lfs/hyperturing1/0/ranjanr/clones/rishabh-ranjan/relational-transformer",
-            log_root="/dfs/user/ranjanr/slurm-logs/rishabh-ranjan/relational-transformer/expts/fine-tune-ens-only",
+            log_root="/dfs/user/ranjanr/slurm-logs/rishabh-ranjan/relational-transformer/expts/fine-tune-hpo-ens",
             clone_root="/lfs/local/0/roach_clones",
             secrets_dir="/dfs/user/ranjanr/.secrets",
             run_id=None,

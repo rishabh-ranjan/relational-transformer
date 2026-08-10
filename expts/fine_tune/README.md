@@ -30,15 +30,22 @@ which matters most on `il-interactive`'s 12 hours.
 
 ## Context tuning on the fine-tuned checkpoints
 
-Two submissions, in order, one job per task each:
+Tuning and ensembling in one submission, one job per task:
 
 ```
-pixi run python expts/fine_tune/submit_hpo.py
+pixi run python expts/fine_tune/submit_hpo_ens.py
+```
+
+Or as two, in order, which keeps the tuning off test entirely and lets each
+phase have its own subset size and its own resource plan:
+
+```
+pixi run python expts/fine_tune/submit_hpo_only.py
 pixi run python expts/fine_tune/submit_ens.py
 ```
 
-`submit_hpo.py` scores the `lcs_bw_pl_grid` on **validation** only and writes
-`tuning.json` (every config's score, and the winner) beside each run's
+`submit_hpo_only.py` scores the `lcs_bw_pl_grid` on **validation** only and
+writes `tuning.json` (every config's score, and the winner) beside each run's
 `eval_out`. Nothing reads test. `submit_ens.py` then evaluates each task's
 winner on test, averaged over context seeds, and writes the RelBench
 submission dir; it reads the winner out of `tuning.json`, so the tuning runs
@@ -50,7 +57,7 @@ evaluated with, and sweeps 16 context seeds. Every ensembled run -- tuned or
 not -- scores the running average after each seed, so its log carries the test
 metric at every ensemble size, not just the last.
 
-All three load the fine-tuned weights `submit.py` produced: `ckpt_for` takes the
+All four load the fine-tuned weights `submit.py` produced: `ckpt_for` takes the
 best-on-val checkpoint of the most recent run of that task, `best_clf`/
 `best_reg` (the better of the live and the SWA net; `best_live_*` and
 `best_swa_*` sit beside it).
