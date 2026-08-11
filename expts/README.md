@@ -41,13 +41,12 @@ arrives as one notification long after it could have been acted on. Monitoring
 is a *repeated* check while the jobs are still running, and every round of it
 ends in an answer to "is each job further along than last time?".
 
-**Arm the next check before you finish the current one.** A watch that depends
-on someone remembering to start the next round is a watch that ends at the first
-round nobody starts, and a sweep left unwatched for hours looks exactly like a
-sweep that is fine. Put a mechanism behind it — a persistent monitor over a poll
-loop that emits a line per round, or a scheduled loop that re-fires the check —
-and only then say when the next check is. A stated interval with nothing
-scheduled behind it is not a watch.
+**Start one persistent monitor, not a chain of one-shot waits.** Arm a single
+poll loop over the queue that runs for the life of the sweep and emits a line
+per round; re-arming a timer at the end of every round is a fresh chance to
+forget, and the first round nobody starts is the round the watch ends — which
+looks exactly like a sweep that is fine. A stated interval with no live monitor
+behind it is not a watch.
 
 The loop has to end by itself, too: make it emit on the queue going empty, and
 on the pending reasons below that mean a job will never start, not only on
@@ -236,9 +235,30 @@ queue over many times inside a twenty-minute check.
 
 What to do about it:
 
-- **Recount your holdings against the budget table**, and if a tier has room
-  while anything of yours is pending, **cancel the pending one and resubmit it
-  into the tier that freed** — a pending job has lost nothing by being moved.
+- **Recount every tier top down, as a fresh run of
+  [Allocating a sweep](#allocating-a-sweep)** — not a patch to the placement you
+  already have. Write the three rows out each round before deciding anything:
+
+  | tier | cap | you hold | free |
+  | --- | --- | --- | --- |
+  | `il-interactive` | 2 gpus | ? | ? |
+  | `il` | 10 gpus, ≤2 b200 | ? | ? |
+  | `il-lo` | uncapped | — | — |
+
+  Filling that in is what catches the tier you are not looking at. **The top
+  tier is the one most often missed**: it is only 2 gpus, so it empties the
+  moment its two jobs finish, and it empties silently. A round that moved a job
+  up one tier while the tier above it sat unspent did the arithmetic on the
+  wrong row.
+- **Spend a freed tier on the jobs with the most left to do**, not on whatever
+  is nearest to hand — the long pole finishes the sweep. A short job promoted
+  onto a b200 buys minutes; the largest still-training run buys hours.
+- **A freed slot is worth a card check, not an assumption.** `il-interactive`
+  having room does not mean blackwell1 has a b200 free; read `AllocTRES` before
+  spending it, and if there is none, re-ask the blackwell question below.
+- **If a tier has room while anything of yours is pending**, cancel the pending
+  one and resubmit it into the tier that freed — a pending job has lost nothing
+  by being moved.
 - **Re-ask the blackwell question, both ways.** A high-tier job still pending on
   blackwell is a job you are paying priority for and getting nothing from: move
   it to an ampere. A high-tier job on an ampere when b200 cards have since freed
