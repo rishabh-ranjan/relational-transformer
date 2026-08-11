@@ -150,11 +150,13 @@ def in_flight() -> set[str]:
 
 
 def ready(arm: str) -> list[tuple[str, str]]:
-    """The tasks that arm can score now, largest test set first.
+    """The tasks that arm can score now, smallest test set first.
 
     An eval job's wall clock is the rows it reads, and nothing is subsampled:
-    both arms score the whole test split, once per context seed. So the
-    slowest job starts first and the small ones fill the slots behind it.
+    both arms score the whole test split, once per context seed. Shortest
+    first, so the quick ones clear the queue instead of sitting behind a job
+    that holds a card for hours -- the long ones are the jobs to give a
+    non-preemptible slot to, which is `RESOURCES`'s business, not this order's.
 
     A task whose fine-tuning run has not written a checkpoint yet -- it has not
     reached its first eval -- is skipped rather than aborting the submission:
@@ -165,7 +167,7 @@ def ready(arm: str) -> list[tuple[str, str]]:
         for t in TASKS
         if best_ckpt(*t).exists() and f"{arm}-{t[0]}-{t[1]}" not in in_flight()
     ]
-    return sorted(started, key=lambda t: -ntest()[f"{t[0]}/{t[1]}"])
+    return sorted(started, key=lambda t: ntest()[f"{t[0]}/{t[1]}"])
 
 
 # Which slot each job goes in, laid out by hand -- one line per job, keyed by
