@@ -20,17 +20,26 @@ that makes them comparable -- the panels, the targets, the axis -- is
 import math
 
 import wandb_workspaces.workspaces as ws
+from wandb_workspaces.workspaces.internal import (
+    _internal_name_to_url_query_str,
+    _url_query_str_to_internal_name,
+)
 
 import workspace
 
 TITLE = "rel-stack: bce vs huber"
 
-# The view's internal name, which is what a `?nw=` link carries. `nw-...-w` is
-# the shape the app gives a workspace view -- the same shape as the personal
-# one `workspace.personal_view` derives -- and a view named anything else is
-# saved but never listed in the view menu. Fixed, so rerunning this overwrites
-# the view rather than adding another: the upsert keys on the name.
-SLUG = "nw-rel-stack-bce-vs-huber-w"
+# The view's slug: `nw-{SLUG}-v` is its internal name, and `?nw={SLUG}` the
+# link that opens it. `-v` is the shape of a *saved* view, which is what the
+# view menu lists; `-w` is the personal workspace's shape instead, and a view
+# saved under it is stored but never listed and never loads. Fixed rather than
+# the random one `Workspace.save_as_new_view` generates, so rerunning this
+# overwrites the view rather than adding another: the upsert keys on the name.
+#
+# Both wrappers are stripped by substring, not as affixes, so a slug containing
+# `nw-` or `-v` anywhere comes back mangled and addresses a view that does not
+# exist -- the app spins on it. The assert in `main` is what holds that.
+SLUG = "rel-stack-bce-huber"
 
 # The four runs of the comparison, by the `run_name` config `submit` and
 # `submit_stack` set: `{db}/{task}-{arm}`, with a `-bce` suffix on the bce arm.
@@ -78,17 +87,14 @@ def main() -> None:
     # A saved view of its own rather than the personal workspace, which is
     # `workspace.py`'s to write. No id: the upsert in `workspace.save` keys on
     # the name, creating the view the first time and rewriting it after.
+    name = _url_query_str_to_internal_name(SLUG)
+    assert _internal_name_to_url_query_str(name) == SLUG, SLUG
     w.name = TITLE
-    w._internal_name = SLUG
+    w._internal_name = name
     w._internal_id = ""
 
     workspace.save(w)
-    # `?nw=` carries the view name without the wrapper the app puts around a
-    # workspace view: `nw-<slug>-w` on disk is `?nw=<slug>` in the link, and the
-    # full name in the link is a view the app never finds -- it spins instead of
-    # loading.
-    slug = SLUG.removeprefix("nw-").removesuffix("-w")
-    print(f"https://wandb.ai/{w.entity}/{w.project}?nw={slug}")
+    print(f"https://wandb.ai/{w.entity}/{w.project}?nw={SLUG}")
 
 
 if __name__ == "__main__":
