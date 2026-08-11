@@ -254,8 +254,10 @@ class RelationalTransformer(nn.Module):
         loss_fn="huber",
     ):
         super().__init__()
-        if loss_fn not in ("huber", "bce"):
-            raise ValueError(f"unknown loss_fn {loss_fn!r}; expected 'huber' or 'bce'")
+        if loss_fn not in ("huber", "l1", "bce"):
+            raise ValueError(
+                f"unknown loss_fn {loss_fn!r}; expected 'huber', 'l1' or 'bce'"
+            )
         self.materialize_attn_masks = materialize_attn_masks
         self.loss_fn = loss_fn
         self.enc_dict = nn.ModuleDict(
@@ -550,6 +552,11 @@ class RelationalTransformer(nn.Module):
             if t in ("number", "text", "datetime"):
                 if self.loss_fn == "huber":
                     loss_t = F.huber_loss(yhat, y, reduction="none").mean(-1)  # (B, S)
+                elif self.loss_fn == "l1":
+                    # No quadratic region: the gradient does not shrink as the
+                    # error does, and a target far from the prediction pulls in
+                    # proportion to how far it is rather than to its square.
+                    loss_t = F.l1_loss(yhat, y, reduction="none").mean(-1)  # (B, S)
                 else:
                     # `bce`: the head's output is a logit and the stored value
                     # carries the label in its sign -- z-scored 0/1 targets come
