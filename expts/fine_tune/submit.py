@@ -10,35 +10,28 @@ from roach.slurm import Resources, submit
 HERE = Path(__file__).parent
 
 TASKS = (
-    # ("rel-event", "user-repeat"),
-    # ("rel-f1", "driver-dnf"),
-    # ("rel-f1", "driver-top3"),
-    # ("rel-f1", "driver-position"),
-    # ("rel-trial", "study-outcome"),
-    # ("rel-avito", "ad-ctr"),
-    # ("rel-event", "user-attendance"),
-    # ("rel-event", "user-ignore"),
-    # ("rel-trial", "study-adverse"),
-    # ("rel-trial", "site-success"),
-    # ("rel-avito", "user-visits"),
-    # ("rel-avito", "user-clicks"),
-    # ("rel-hm", "user-churn"),
+    ("rel-event", "user-repeat"),
+    ("rel-f1", "driver-dnf"),
+    ("rel-f1", "driver-top3"),
+    ("rel-f1", "driver-position"),
+    ("rel-trial", "study-outcome"),
+    ("rel-avito", "ad-ctr"),
+    ("rel-event", "user-attendance"),
+    ("rel-event", "user-ignore"),
+    ("rel-trial", "study-adverse"),
+    ("rel-trial", "site-success"),
+    ("rel-avito", "user-visits"),
+    ("rel-avito", "user-clicks"),
+    ("rel-hm", "user-churn"),
     ("rel-stack", "user-engagement"),
-    # ("rel-hm", "item-sales"),
-    # ("rel-stack", "post-votes"),
-    # ("rel-amazon", "item-churn"),
-    # ("rel-amazon", "item-ltv"),
-    # ("rel-stack", "user-badge"),
-    # ("rel-amazon", "user-churn"),
-    # ("rel-amazon", "user-ltv"),
+    ("rel-hm", "item-sales"),
+    ("rel-stack", "post-votes"),
+    ("rel-amazon", "item-churn"),
+    ("rel-amazon", "item-ltv"),
+    ("rel-stack", "user-badge"),
+    ("rel-amazon", "user-churn"),
+    ("rel-amazon", "user-ltv"),
 )
-
-# The one thing this sweep varies: does fine-tuning on train+val beat train
-# alone. Every other value is shared by both arms.
-ARMS = {
-    # "train": ["train"],
-    "trainval": ["train", "val"],
-}
 
 # Random init instead of RT-P, as the control for a task whose fine-tuned
 # numbers are far better than every published method's: if a model that never
@@ -288,7 +281,8 @@ RESOURCES: dict[tuple[str, str, str], Resources] = {
 
 def main() -> None:
     tasks = sorted(TASKS, key=lambda p: ntest()[f"{p[0]}/{p[1]}"])
-    for (db, task), (arm, train_splits) in itertools.product(tasks, ARMS.items()):
+    arms = [("train", ["train"]), ("trainval", ["train", "val"])]
+    for (db, task), (arm, train_splits) in itertools.product(tasks, arms):
         resources = RESOURCES[arm, db, task]
         name = f"{db}/{task}-{arm}" + ("-rand" if RANDOM_INIT else "")
         print(f"  {name:38s} {resources.gpus} {resources.qos:15s} {resources.time}")
