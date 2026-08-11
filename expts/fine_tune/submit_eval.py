@@ -291,7 +291,7 @@ RESOURCES: dict[tuple[str, str, str], Resources] = {
     # longest pending hpo_ens job takes it; amperes are full, so it starts by
     # preempting an `il-lo` job -- which resumes, mine or anyone's.
     ("hpo_ens", "rel-avito", "user-clicks"): a100("il", "1-00:00:00"),
-    ("hpo_ens", "rel-avito", "user-visits"): a100("il-lo", "2-00:00:00"),
+    ("hpo_ens", "rel-avito", "user-visits"): a100("il", "1-00:00:00"),
     ("hpo_ens", "rel-trial", "site-success"): a100("il-lo", "2-00:00:00"),
     ("hpo_ens", "rel-trial", "study-adverse"): a100("il-lo", "2-00:00:00"),
     ("hpo_ens", "rel-event", "user-attendance"): a100("il-lo", "2-00:00:00"),
