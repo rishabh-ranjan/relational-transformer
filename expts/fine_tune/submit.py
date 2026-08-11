@@ -153,17 +153,25 @@ def nsplit() -> dict[str, dict[str, float]]:
     }
 
 
-def total_steps_for(db: str, task: str, splits: list[str], total_bs: int) -> int:
-    """100 epochs of this task, or 50k steps, whichever comes first.
+def total_steps_for(
+    db: str, task: str, splits: list[str], total_bs: int, eval_freq: int
+) -> int:
+    """100 epochs of this task, or 50k steps, whichever comes first, rounded up
+    to a multiple of `eval_freq` plus one.
 
     The two ends of the task-size range want different things: rel-f1 is a few
     thousand rows, where 100 epochs is under a thousand steps, and rel-amazon
     is millions, where 100 epochs is more compute than the answer is worth.
     Training on train+val is a bigger epoch and so a longer run -- which is why
     this reads `splits` rather than assuming the train split.
+
+    The rounding puts the last multiple of `eval_freq` one step before the end,
+    so the fully decayed weights are evaluated on the cadence rather than only
+    by the final eval `rt.train` runs on its way out.
     """
     rows = sum(nsplit()[f"{db}/{task}"][s] for s in splits)
-    return min(math.ceil(100 * rows / total_bs), 50_000)
+    steps = min(math.ceil(100 * rows / total_bs), 50_000)
+    return math.ceil(steps / eval_freq) * eval_freq + 1
 
 
 def targets_for(db: str, task: str) -> dict[str, float]:
@@ -329,9 +337,10 @@ def main() -> None:
         # The three values the rest of the schedule is derived from. Editing
         # `train_splits` here moves `total_steps` with it: the val rows are
         # part of the epoch when they are trained on.
-        train_splits = ["train"]
+        train_splits = ["train", "val"]
         total_bs = 256
-        total_steps = total_steps_for(db, task, train_splits, total_bs)
+        eval_freq = 100
+        total_steps = total_steps_for(db, task, train_splits, total_bs, eval_freq)
         # Long enough to matter, short enough to leave a decay on the shortest
         # runs -- 100 epochs of rel-f1/driver-top3 is a few hundred steps.
         lr_warmup_steps = min(1_000, total_steps // 5)
@@ -357,10 +366,10 @@ def main() -> None:
                 tokens_per_gpu=2**18 if resources.gpus.startswith("b200") else 2**17,
                 num_workers=resources.cpus_per_task,
                 prefetch_factor=2,
-                ctx_size_list=[256, 512, 1024],
-                local_ctx_size_list=[128, 256, 512, 1024],
-                bfs_width_list=[16, 64, 256],
-                prefer_latest_list=[False, True],
+                ctx_size_list=[1024],
+                local_ctx_size_list=[1024],
+                bfs_width_list=[128],
+                prefer_latest_list=[False],
                 num_walks=10_000,
                 walk_length=20,
                 mask_prob_max=0.0,
@@ -372,12 +381,12 @@ def main() -> None:
                 grad_norm_max=1.0,
                 total_bs=total_bs,
                 total_steps=total_steps,
-                early_stop_after_steps=10_000,
-                swa_momentum=0.9999,
+                early_stop_after_steps=None,
+                swa_momentum=None,
                 seed=0,
                 mmap_populate=True,
                 timeout_per_item=10.0,
-                eval_freq=100,
+                eval_freq=eval_freq,
                 keep_all_ckpts=False,
                 vector_db_path=None,
                 db_upto_test_timestamp=True,
