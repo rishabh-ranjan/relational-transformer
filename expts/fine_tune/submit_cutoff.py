@@ -60,9 +60,9 @@ RESOURCES = {
     # ("rel-f1", "driver-dnf", False): a100("il", "1-00:00:00"),  # done
     # ("rel-f1", "driver-dnf", True): a100("il", "1-00:00:00"),  # done
     # ("rel-f1", "driver-position", False): a100("il", "1-00:00:00"),  # done
-    ("rel-f1", "driver-position", True): b200("il", "1-00:00:00"),
-    ("rel-f1", "driver-top3", False): b200("il", "1-00:00:00"),
-    # ("rel-f1", "driver-top3", True): a100("il-lo", "1-00:00:00"),  # already queued
+    # ("rel-f1", "driver-position", True): b200("il", "1-00:00:00"),  # done
+    # ("rel-f1", "driver-top3", False): b200("il", "1-00:00:00"),  # done
+    ("rel-f1", "driver-top3", True): b200("il", "1-00:00:00"),
 }
 
 
