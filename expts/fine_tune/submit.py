@@ -290,7 +290,7 @@ RESOURCES: dict[tuple[str, str, str], Resources] = {
 
 def main() -> None:
     tasks = sorted(TASKS, key=lambda p: ntest()[f"{p[0]}/{p[1]}"])
-    arms = [("train", ["train"])]
+    arms = [("trainval", ["train", "val"])]
     for (db, task), (arm, train_splits) in itertools.product(tasks, arms):
         resources = RESOURCES[arm, db, task]
         name = f"{db}/{task}-{arm}" + ("-rand" if RANDOM_INIT else "")
@@ -367,7 +367,7 @@ def main() -> None:
             log_root="/dfs/user/ranjanr/slurm-logs/rishabh-ranjan/relational-transformer/expts/fine-tune",
             clone_root="/lfs/local/0/roach_clones",
             secrets_dir="/dfs/user/ranjanr/.secrets",
-            run_id="26-08-10_22-54-53_395872249",
+            run_id="26-08-10_22-54-54_178414381",
         )
 
 
