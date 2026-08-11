@@ -248,13 +248,13 @@ RESOURCES: dict[tuple[str, str, str], Resources] = {}
 # config is the single block in `main()`. Insertion order is submission order,
 # so ens comes first and gets the better slots.
 #
-# `val_items` is None on an arm that reads no validation: a one-configuration
-# grid tunes nothing, so `items_per_task` carries no val entry either.
+# `val_items` is empty on an arm that reads no validation: a one-configuration
+# grid tunes nothing, so `items_per_task` gets no val entry either.
 ARMS: dict[str, dict] = {
     "ens": dict(
         ctx_size_list=[1024],
         lcs_bw_pl_grid=[(1024, 256, False)],
-        val_items=None,
+        val_items={},
         test_ensemble_size=16,
     ),
     "hpo-ens": dict(
@@ -265,7 +265,7 @@ ARMS: dict[str, dict] = {
             for bw in (64, 128, 256)
             for pl in (True, False)
         ],
-        val_items=2**14,
+        val_items={"val": 2**14},
         test_ensemble_size=4,
     ),
 }
@@ -279,9 +279,6 @@ def main() -> None:
         for db, task in ready(arm):
             resources = RESOURCES[arm, db, task]
             name = f"{db}/{task}"
-            items = {"test": items_for(db, task)}
-            if arm_args["val_items"] is not None:
-                items["val"] = arm_args["val_items"]
             print(
                 f"  {arm:8s} {name:28s} "
                 f"{resources.gpus} {resources.qos:15s} {resources.time}"
@@ -306,7 +303,8 @@ def main() -> None:
                     prefetch_factor=2,
                     num_walks=10_000,
                     walk_length=20,
-                    items_per_task=items,
+                    items_per_task={"test": items_for(db, task)}
+                    | arm_args["val_items"],
                     mmap_populate=True,
                     shuffle_seed=0,
                     context_seed=0,
