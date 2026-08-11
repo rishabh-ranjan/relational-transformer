@@ -50,6 +50,12 @@ entry left over from an older build — is reported and ignored, not fatal. The 
 table, train-split only), `all.json` (both), and `rt-j.json` (the curated RT-J
 mixture, forecast + autocomplete).
 
+`train_splits` picks which splits of those tasks the training stream draws
+from. `["train"]` is the usual choice; `["train", "val"]` fine-tunes on the
+validation labels too, which means `eval_splits` must drop `"val"` — a split
+that is trained on cannot select the checkpoint, and with no val metric the
+final step is what the run keeps.
+
 ## Running a training script
 
 There is no CLI. `rt.train._train` is a function that takes every knob as a

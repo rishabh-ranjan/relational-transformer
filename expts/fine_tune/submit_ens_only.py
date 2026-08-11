@@ -262,6 +262,7 @@ def main() -> None:
                 d_ff=2048,
                 splits=["test"],
                 db_task_list=[(db, task)],
+                train_splits=["train"],
                 pre_dir="/dfs/user/ranjanr/share/stanford-star/relbench-preprocessed",
                 tokens_per_gpu=2**18,
                 num_workers=resources.cpus_per_task,

@@ -21,7 +21,7 @@ TASKS = (
 # numbers are far better than every published method's: if a model that never
 # saw pretraining lands in the same place, what it knows came from the context
 # it is given, not from what it was pretrained on.
-RANDOM_INIT = True
+RANDOM_INIT = False
 
 
 @functools.cache
@@ -210,12 +210,16 @@ def main() -> None:
                 loss_fn="huber",
                 load_ckpt_path=None if RANDOM_INIT else ckpt_for(db, task),
                 db_task_list=[(db, task)],
+                train_splits=["train"],
+                # Fine-tune on train+val instead; needs eval_splits=["test"]
+                # below, and then the final step is the checkpoint.
+                # train_splits=["train", "val"],
                 pre_dir="/dfs/user/ranjanr/share/stanford-star/relbench-preprocessed",
                 tokens_per_gpu=2**17 if resources.gpus.startswith("b200") else 2**16,
                 num_workers=resources.cpus_per_task,
                 prefetch_factor=2,
-                ctx_size_list=[512, 1024, 2048],
-                local_ctx_size_list=[256, 512, 1024, 2048],
+                ctx_size_list=[1024],
+                local_ctx_size_list=[1024],
                 bfs_width_list=[32, 64, 128, 256],
                 prefer_latest_list=[False, True],
                 num_walks=10_000,
@@ -238,6 +242,7 @@ def main() -> None:
                 db_upto_test_timestamp=True,
                 resume_save_mins=20.0,
                 eval_splits=["val", "test"],
+                # eval_splits=["test"],
                 eval_db_task_list=[(db, task)],
                 eval_pre_dir="/dfs/user/ranjanr/share/stanford-star/relbench-preprocessed",
                 eval_tokens_per_gpu=2**18,

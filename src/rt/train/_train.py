@@ -197,6 +197,12 @@ def main(
     load_ckpt_path: str | None,
     # data + optimization
     db_task_list: list[tuple[str, str]] | str,
+    # Splits the training stream is drawn from. ``["train"]`` is the only
+    # choice that keeps the val split clean; adding ``"val"`` trains on it, so
+    # a val metric can no longer select a checkpoint and `eval_splits` must not
+    # carry ``"val"``. Each split of a task enters the mixture as its own task,
+    # with its own `items_per_task` cap.
+    train_splits: list[str],
     pre_dir: str,
     tokens_per_gpu: int,
     num_workers: int,
@@ -260,6 +266,13 @@ def main(
     ``params.json`` beside the checkpoints and logged to wandb).
     """
     params = dict(locals())
+
+    # A split that is trained on cannot also select the checkpoint, and
+    # `consider` selects on val alone.
+    assert not (set(train_splits) & set(eval_splits)), (
+        f"train_splits={train_splits} overlaps eval_splits={eval_splits}: an "
+        f"evaluated split must not be trained on"
+    )
 
     # Reference point for time-to-first-step: everything before the first
     # optimizer step (dist setup, model build, data, the step-0 eval) is
@@ -444,7 +457,7 @@ def main(
     # ---- data: re-seed by resumed step so the stream does not replay ----
     data_seed = seed + SEED_STRIDE * start_step
     train_init_tic = time.time()
-    train_tasks = get_tasks(pre_dir, db_task_list, ("train",))
+    train_tasks = get_tasks(pre_dir, db_task_list, tuple(train_splits))
     train_ds = TrainDataset(
         tasks=train_tasks,
         pre_dir=pre_dir,
@@ -701,7 +714,7 @@ def main(
                 metadata={"step": step, "swa_n": swa.n},
             )
 
-    def prune_ckpts():
+    def prune_ckpts(step):
         """Delete every periodic checkpoint no longer worth keeping.
 
         With ``keep_all_ckpts=False`` the only checkpoints that must survive
@@ -710,6 +723,11 @@ def main(
         to live until then, for the live and the swa winner alike. The latest step needs no file of its own:
         resume.pt is rewritten at every eval and once more at the end, and it
         carries the same weights.
+
+        Nothing is selected when no val split is evaluated (`train_splits`
+        holding ``"val"`` is the case that makes that a configuration, not a
+        mistake), and then the latest step is all there is to keep -- pruning
+        to an empty set would leave the run without a single ``.safetensors``.
         """
         if keep_all_ckpts or not is_main:
             return
@@ -718,7 +736,7 @@ def main(
             for by_kind in best.values()
             for b in by_kind.values()
             if b is not None
-        }
+        } or {f"steps={step}.safetensors", f"swa_steps={step}.safetensors"}
         for f in out_dir.glob("*steps=*.safetensors"):
             if f.name not in keep:
                 f.unlink(missing_ok=True)
@@ -856,7 +874,7 @@ def main(
             run_eval(step)
             evaled_at = step  # before save_resume, which persists it
             checkpoint(step)
-            prune_ckpts()
+            prune_ckpts(step)
             save_resume(step)
             step_t0 = time.perf_counter()  # don't count eval/ckpt in step time
 
@@ -1005,7 +1023,7 @@ def main(
     # ---- final eval + best selection ----
     run_eval(step)
     checkpoint(step)
-    prune_ckpts()
+    prune_ckpts(step)
     save_resume(step)
     if is_main:
         # best_live_{tt} and best_swa_{tt} are each net's own val winner;

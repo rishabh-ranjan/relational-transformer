@@ -90,6 +90,7 @@ def main() -> None:
             load_ckpt_path=None,
             # data: the Join's mixture
             db_task_list="/dfs/user/ranjanr/share/stanford-star/the-join-preprocessed/db-task-lists/rt-j.json",
+            train_splits=["train"],
             pre_dir="/dfs/user/ranjanr/share/stanford-star/the-join-preprocessed",
             tokens_per_gpu=2**17,
             # loader workers are processes, and the job only owns
