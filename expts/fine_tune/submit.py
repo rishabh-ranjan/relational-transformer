@@ -222,10 +222,9 @@ def a100(qos: str, time: str) -> Resources:
 # A task with no line here stops the submission rather than taking a slot
 # nobody chose for it.
 #
-# 13:33: three more tasks finished. `il-interactive` is full (2 b200 of mine)
-# but `il`'s 2-b200 sub-cap is untouched and blackwell1 has one card free, so
-# rel-amazon/item-ltv -- 9h in, the longest-running of the three left on an
-# ampere -- takes it on `il`, resuming from `RUN_IDS`.
+# 13:48: rel-amazon/item-ltv goes back on an ampere. blackwell1 reads 7 of 8
+# allocated, but the eighth is reserved, so a b200 job pins itself to a node
+# that will not take it and sits on ReqNodeNotAvail however long it is left.
 #
 # 2026-08-11: blackwell1 has 6 of 8 b200 allocated, so exactly 2 are free and
 # the rest sit under 7-day walls -- `il-interactive`'s 2 gpus take those two and
@@ -238,7 +237,7 @@ RESOURCES: dict[tuple[str, str], Resources] = {
     ("rel-amazon", "user-churn"): b200("il-interactive", "12:00:00"),
     ("rel-amazon", "user-ltv"): b200("il-interactive", "12:00:00"),
     ("rel-stack", "user-badge"): b200("il-interactive", "12:00:00"),
-    ("rel-amazon", "item-ltv"): b200("il", "1-00:00:00"),
+    ("rel-amazon", "item-ltv"): a100("il", "1-00:00:00"),
     ("rel-amazon", "item-churn"): a100("il", "1-00:00:00"),
     ("rel-stack", "post-votes"): a100("il", "1-00:00:00"),
     ("rel-hm", "item-sales"): b200("il-interactive", "12:00:00"),
