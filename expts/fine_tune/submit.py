@@ -9,27 +9,27 @@ from roach.slurm import Resources, submit
 HERE = Path(__file__).parent
 
 TASKS = (
-    ("rel-event", "user-repeat"),
-    ("rel-f1", "driver-dnf"),
-    ("rel-f1", "driver-top3"),
-    ("rel-f1", "driver-position"),
-    ("rel-trial", "study-outcome"),
+    # ("rel-event", "user-repeat"),
+    # ("rel-f1", "driver-dnf"),
+    # ("rel-f1", "driver-top3"),
+    # ("rel-f1", "driver-position"),
+    # ("rel-trial", "study-outcome"),
     ("rel-avito", "ad-ctr"),
     ("rel-event", "user-attendance"),
     ("rel-event", "user-ignore"),
     ("rel-trial", "study-adverse"),
-    ("rel-trial", "site-success"),
-    ("rel-avito", "user-visits"),
-    ("rel-avito", "user-clicks"),
-    ("rel-hm", "user-churn"),
-    ("rel-stack", "user-engagement"),
-    ("rel-hm", "item-sales"),
-    ("rel-stack", "post-votes"),
-    ("rel-amazon", "item-churn"),
-    ("rel-amazon", "item-ltv"),
-    ("rel-stack", "user-badge"),
-    ("rel-amazon", "user-churn"),
-    ("rel-amazon", "user-ltv"),
+    # ("rel-trial", "site-success"),
+    # ("rel-avito", "user-visits"),
+    # ("rel-avito", "user-clicks"),
+    # ("rel-hm", "user-churn"),
+    # ("rel-stack", "user-engagement"),
+    # ("rel-hm", "item-sales"),
+    # ("rel-stack", "post-votes"),
+    # ("rel-amazon", "item-churn"),
+    # ("rel-amazon", "item-ltv"),
+    # ("rel-stack", "user-badge"),
+    # ("rel-amazon", "user-churn"),
+    # ("rel-amazon", "user-ltv"),
 )
 
 
@@ -222,6 +222,10 @@ def a100(qos: str, time: str) -> Resources:
 # A task with no line here stops the submission rather than taking a slot
 # nobody chose for it.
 #
+# 12:30: the 12 tasks that finished handed back 5 of the 10 `il` slots, so the
+# four still on `il-lo` -- preempted two and three times each -- move up. They
+# resume from `RUN_IDS` rather than starting over.
+#
 # 2026-08-11: blackwell1 has 6 of 8 b200 allocated, so exactly 2 are free and
 # the rest sit under 7-day walls -- `il-interactive`'s 2 gpus take those two and
 # nothing else goes to blackwell. Amperes are full on paper (only ampere4 has 4
@@ -242,15 +246,25 @@ RESOURCES: dict[tuple[str, str], Resources] = {
     ("rel-avito", "user-clicks"): a100("il", "1-00:00:00"),
     ("rel-avito", "user-visits"): a100("il", "1-00:00:00"),
     ("rel-trial", "site-success"): a100("il", "1-00:00:00"),
-    ("rel-trial", "study-adverse"): a100("il-lo", "1-00:00:00"),
-    ("rel-event", "user-attendance"): a100("il-lo", "1-00:00:00"),
-    ("rel-event", "user-ignore"): a100("il-lo", "1-00:00:00"),
-    ("rel-avito", "ad-ctr"): a100("il-lo", "1-00:00:00"),
+    ("rel-trial", "study-adverse"): a100("il", "1-00:00:00"),
+    ("rel-event", "user-attendance"): a100("il", "1-00:00:00"),
+    ("rel-event", "user-ignore"): a100("il", "1-00:00:00"),
+    ("rel-avito", "ad-ctr"): a100("il", "1-00:00:00"),
     ("rel-trial", "study-outcome"): a100("il-lo", "1-00:00:00"),
     ("rel-f1", "driver-position"): a100("il-lo", "1-00:00:00"),
     ("rel-f1", "driver-top3"): a100("il-lo", "1-00:00:00"),
     ("rel-f1", "driver-dnf"): a100("il-lo", "1-00:00:00"),
     ("rel-event", "user-repeat"): a100("il-lo", "1-00:00:00"),
+}
+
+
+# Resume an existing run instead of starting a new one: the run whose
+# `out_dir` this is picks its `resume.pt` back up. Empty when nothing resumes.
+RUN_IDS: dict[tuple[str, str], str] = {
+    ("rel-avito", "ad-ctr"): "26-08-11_04-08-23_757632361",
+    ("rel-event", "user-attendance"): "26-08-11_04-08-24_553959895",
+    ("rel-event", "user-ignore"): "26-08-11_04-08-25_397201156",
+    ("rel-trial", "study-adverse"): "26-08-11_04-08-26_194112533",
 }
 
 
@@ -332,7 +346,7 @@ def main() -> None:
             log_root="/dfs/user/ranjanr/slurm-logs/rishabh-ranjan/relational-transformer/expts/fine-tune",
             clone_root="/lfs/local/0/roach_clones",
             secrets_dir="/dfs/user/ranjanr/.secrets",
-            run_id=None,
+            run_id=RUN_IDS.get((db, task)),
         )
 
 
