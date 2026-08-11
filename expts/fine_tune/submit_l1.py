@@ -14,11 +14,32 @@ from submit import ckpt_for, ntest, targets_for
 HERE = Path(__file__).parent
 
 TASKS = (
-    ("rel-stack", "post-votes"),
+    # already running from this file's previous submission
+    # ("rel-stack", "post-votes"),
     ("rel-amazon", "item-ltv"),
     ("rel-amazon", "user-ltv"),
-    ("rel-event", "user-attendance"),
+    # ("rel-event", "user-attendance"),
 )
+
+
+def b200(qos: str, time: str) -> Resources:
+    """One B200. 36 cpus is blackwell1's 288 cores split eight ways, and the
+    memory is that share of the node -- under the site's MaxMemPerCPU of 10700M
+    times 36, which is what an explicit --mem is capped at."""
+    return Resources(
+        partition="il",
+        account="infolab",
+        qos=qos,
+        time=time,
+        gpus="b200:1",
+        cpus_per_task=36,
+        ntasks=None,
+        exclusive=False,
+        mem="375000M",
+        mem_per_gpu=None,
+        constraint=None,
+        nodelist="blackwell1",
+    )
 
 
 def a100(qos: str, time: str) -> Resources:
@@ -47,17 +68,21 @@ def a100(qos: str, time: str) -> Resources:
 # NOT A DEFAULT TO INHERIT: work the assignment out again every time, following
 # [Allocating a sweep](../README.md#allocating-a-sweep).
 #
-# Read at submission time: cancelling the four rel-stack huber jobs hands back
-# exactly four of my ten `il` a100, which these four take. `il-interactive` is
-# 2/2 held by the huber sweep on blackwell1, which is 7 of 8 allocated, so the
-# b200 question does not arise.
+# Read at submission time: the huber sweep's two `il-interactive` jobs are
+# finishing, handing that whole tier (2 gpus, the highest priority there is)
+# back, and blackwell1 is 5 of 8 allocated with no reservation holding the rest
+# -- so the two ltv jobs move off their amperes and onto b200. The other two
+# were submitted an hour earlier and stay where they are: `il` a100.
+#
+# 12 hours is the tier's wall and these runs checkpoint every 20 minutes, so a
+# job that outlives it resumes rather than starting over.
 #
 # A job with no line here stops the submission rather than taking a slot
 # nobody chose for it.
 RESOURCES: dict[tuple[str, str], Resources] = {
     ("rel-stack", "post-votes"): a100("il", "1-00:00:00"),
-    ("rel-amazon", "item-ltv"): a100("il", "1-00:00:00"),
-    ("rel-amazon", "user-ltv"): a100("il", "1-00:00:00"),
+    ("rel-amazon", "item-ltv"): b200("il-interactive", "12:00:00"),
+    ("rel-amazon", "user-ltv"): b200("il-interactive", "12:00:00"),
     ("rel-event", "user-attendance"): a100("il", "1-00:00:00"),
 }
 
@@ -86,7 +111,7 @@ def main() -> None:
                 db_task_list=[(db, task)],
                 train_splits=["train"],
                 pre_dir="/dfs/user/ranjanr/share/stanford-star/relbench-preprocessed",
-                tokens_per_gpu=2**16,
+                tokens_per_gpu=2**17 if resources.gpus.startswith("b200") else 2**16,
                 num_workers=resources.cpus_per_task,
                 prefetch_factor=2,
                 ctx_size_list=[1024],

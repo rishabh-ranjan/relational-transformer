@@ -31,7 +31,16 @@ from wandb_workspaces.workspaces.internal import (
 )
 
 import workspace
-from submit_l1 import TASKS
+
+# The comparison's task set, which is not `submit_l1.TASKS`: that one is
+# whatever the next submission is, tasks already running commented out of it,
+# and the view has to hold all four however they were submitted.
+TASKS = (
+    ("rel-stack", "post-votes"),
+    ("rel-amazon", "item-ltv"),
+    ("rel-amazon", "user-ltv"),
+    ("rel-event", "user-attendance"),
+)
 
 TITLE = "regression: l1 vs huber"
 
