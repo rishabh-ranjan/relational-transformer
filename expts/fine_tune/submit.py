@@ -331,13 +331,13 @@ def main() -> None:
         train_splits = ["train", "val"]
         total_bs = 256
         steps = steps_for(db, task, train_splits, total_bs)
-        # Eleven points of curve on every run, rounded to a round number of
-        # steps, and never more than one eval per thousand: an eval here reads `eval_items_per_task` rows of the
-        # test split, which on the big tasks is minutes, so a fixed cadence
-        # either costs more than the training or leaves the short runs with two
+        # Eleven points of curve on every run, whatever its length, at a round
+        # number of steps: an eval reads `eval_items_per_task` rows of the test
+        # split, which on the big tasks is minutes, so a fixed cadence either
+        # costs more than the training or leaves the short runs with two
         # points. `total_steps` is rounded up to it, which keeps the last step
         # on the cadence -- it is evaluated either way.
-        eval_freq = min(1_000, math.ceil(steps / 1_000) * 100)
+        eval_freq = math.ceil(steps / 1_000) * 100
         total_steps = math.ceil(steps / eval_freq) * eval_freq
         # Long enough to matter, short enough to leave a decay on the shortest
         # runs -- 100 epochs of rel-f1/driver-top3 is a few hundred steps.
