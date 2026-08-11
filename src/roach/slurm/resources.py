@@ -54,6 +54,10 @@ class Resources:
     and lifts it."""
     constraint: str | None
     nodelist: str | None
+    reservation: str | None
+    """A reservation to run inside, by name (`scontrol show res`). A reserved
+    node is taken out of general scheduling, so its cards are reachable only
+    with this set -- and a job that sets it is confined to them."""
     nodes: int = 1
     """How many nodes to hold. `gpus`, `cpus_per_task` and `ntasks` are all
     per-node, so this multiplies the job: 4 nodes of "a100:8" is 32 ranks. DDP
@@ -111,6 +115,8 @@ class Resources:
             flags.append(f"--constraint={self.constraint}")
         if self.nodelist:
             flags.append(f"--nodelist={self.nodelist}")
+        if self.reservation:
+            flags.append(f"--reservation={self.reservation}")
         return flags
 
 
@@ -132,6 +138,7 @@ AMPERE = Resources(
     mem_per_gpu=None,
     constraint="ampere",
     nodelist=None,
+    reservation=None,
 )
 """8xA100 on the fast queue. `il` caps a100 at 10 per user, so one of these at a time."""
 
@@ -148,6 +155,7 @@ AMPERE_LO = Resources(
     mem_per_gpu=None,
     constraint="ampere",
     nodelist=None,
+    reservation=None,
 )
 """The same hardware on the low-priority queue: preemptible, but outside the
 10-a100 cap, so it runs alongside an AMPERE job."""
@@ -165,5 +173,6 @@ BLACKWELL = Resources(
     mem_per_gpu=None,
     constraint=None,
     nodelist="blackwell1",
+    reservation=None,
 )
 """4xB200. Roughly 3x an 8xA100 job's throughput in the runs measured so far."""

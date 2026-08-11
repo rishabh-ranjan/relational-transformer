@@ -187,13 +187,21 @@ def b200(qos: str, time: str) -> Resources:
         mem_per_gpu=None,
         constraint=None,
         nodelist="blackwell1",
+        reservation=None,
     )
 
 
-def a100(qos: str, time: str) -> Resources:
+def a100(qos: str, time: str, reservation: str | None = None) -> Resources:
     """One A100. 14 cpus is what the site allows per gpu on a job that is not
     --exclusive; no --mem, so the partition's DefMemPerGPU (240000M) applies,
-    which is more than an explicit request would be given."""
+    which is more than an explicit request would be given.
+
+    `reservation` is how a job reaches a node held for us -- see
+    [the reservation rule](../README.md#a-reservation-is-il-lo-only)."""
+    assert reservation is None or qos == "il-lo", (
+        "a reserved node is ours whatever the qos, so a high tier spent there "
+        "buys nothing; see ../README.md#a-reservation-is-il-lo-only"
+    )
     return Resources(
         partition="il",
         account="infolab",
@@ -207,6 +215,7 @@ def a100(qos: str, time: str) -> Resources:
         mem_per_gpu=None,
         constraint="ampere",
         nodelist=None,
+        reservation=reservation,
     )
 
 

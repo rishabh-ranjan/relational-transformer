@@ -174,6 +174,26 @@ Two other things that *are* reasons to place a job somewhere else:
   through both, an eval run restarts from the top. Do not put a 15-hour eval
   in a 12-hour slot.
 
+### A reservation is il-lo only
+
+A node reserved for you is yours whatever tier the job asks for: nobody else
+can take its cards, and nothing preempts you there. So a `il` or
+`il-interactive` job on a reserved node **spends a capped, scarce slot on a
+card it would have got for free** -- put `il-lo` jobs there and keep the high
+tiers for the contended pool.
+
+A reserved node is also out of general scheduling, so a job reaches it only
+with `--reservation=<name>` (`Resources.reservation`), and a job that sets it
+is confined to that reservation.
+
+```
+scontrol show res                     # name, nodes, end time
+```
+
+**Now**: `ranjanr_deadline` holds `ampere8` until 2026-08-13T00:00. `il-lo`
+jobs only, and this line is worth rereading against `scontrol show res` -- a
+reservation that has ended is a `--reservation` flag that fails the submission.
+
 ### Work it out fresh, every submission
 
 **Never inherit the plan in the file.** `plan()` is a record of what the
