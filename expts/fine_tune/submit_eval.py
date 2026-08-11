@@ -282,9 +282,11 @@ RESOURCES: dict[tuple[str, str, str], Resources] = {
     ),
     # The rest of hpo_ens waits on the contended pool. Preemption costs one
     # pass now, and these are 1-3h jobs.
-    # 15:20: an ens_only job finished and handed back an `il` slot; the longest
-    # pending hpo_ens job takes it.
-    ("hpo_ens", "rel-hm", "user-churn"): a100("il", "1-00:00:00"),
+    # 15:25: blackwell1 has a b200 free and it is schedulable this time (the
+    # node is no longer flagged RESERVED). `il-interactive` is spent on the two
+    # ens_only jobs, so this goes on `il`'s untouched 2-b200 sub-cap: the
+    # longest pending hpo_ens job, which was queued on `il` behind full amperes.
+    ("hpo_ens", "rel-hm", "user-churn"): b200("il", "1-00:00:00"),
     ("hpo_ens", "rel-avito", "user-clicks"): a100("il-lo", "2-00:00:00"),
     ("hpo_ens", "rel-avito", "user-visits"): a100("il-lo", "2-00:00:00"),
     ("hpo_ens", "rel-trial", "site-success"): a100("il-lo", "2-00:00:00"),
