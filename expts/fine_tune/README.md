@@ -21,16 +21,6 @@ One job per task, one GPU each. `plan()` hands out the best slots this cluster
 will give a one-GPU job, best first; its docstring is the reasoning for the
 order.
 
-Ampere or newer, always: on the `il` partition's older cards inductor refuses
-to compile `flex_attention` (measured: "Quadro RTX 8000 does not support
-bfloat16 compilation natively, skipping"), so attention falls back to the eager
-math kernel, which materializes the full `bs x heads x 2048 x 2048` score
-matrix. Measured on `rt.eval` at ctx 2048: rtx8000 and 2080ti score ~3.1-3.4
-items/s against an a100's ~106, and only at eval_bs 64 and 16 respectively --
-eval_bs 128 is an OOM on both. hyperion's titanxp (sm 61) has no kernels in
-this torch build at all (`no kernel image is available for execution on the
-device`). Neither float16 nor float32 changes that.
-
 Logs and `args.json` land in `/dfs/user/ranjanr/slurm-logs/fine-tune`,
 checkpoints and `params.json` under `/dfs/user/ranjanr/ckpts/rtv2/fine-tune/<run_id>`.
 
