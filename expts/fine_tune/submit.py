@@ -392,7 +392,7 @@ def main() -> None:
                 vector_db_path=None,
                 db_upto_test_timestamp=True,
                 resume_save_mins=20.0,
-                eval_splits=["val"],
+                eval_splits=["test"],
                 eval_db_task_list=[(db, task)],
                 eval_pre_dir="/dfs/user/ranjanr/share/stanford-star/relbench-preprocessed",
                 eval_tokens_per_gpu=2**18,
