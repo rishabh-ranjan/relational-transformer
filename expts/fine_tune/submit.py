@@ -10,27 +10,27 @@ from roach.slurm import Resources, submit
 HERE = Path(__file__).parent
 
 TASKS = (
-    ("rel-event", "user-repeat"),
-    ("rel-f1", "driver-dnf"),
-    ("rel-f1", "driver-top3"),
-    ("rel-f1", "driver-position"),
-    ("rel-trial", "study-outcome"),
-    ("rel-avito", "ad-ctr"),
-    ("rel-event", "user-attendance"),
-    ("rel-event", "user-ignore"),
+    # ("rel-event", "user-repeat"),
+    # ("rel-f1", "driver-dnf"),
+    # ("rel-f1", "driver-top3"),
+    # ("rel-f1", "driver-position"),
+    # ("rel-trial", "study-outcome"),
+    # ("rel-avito", "ad-ctr"),
+    # ("rel-event", "user-attendance"),
+    # ("rel-event", "user-ignore"),
     ("rel-trial", "study-adverse"),
-    ("rel-trial", "site-success"),
-    ("rel-avito", "user-visits"),
-    ("rel-avito", "user-clicks"),
-    ("rel-hm", "user-churn"),
-    ("rel-stack", "user-engagement"),
-    ("rel-hm", "item-sales"),
-    ("rel-stack", "post-votes"),
-    ("rel-amazon", "item-churn"),
-    ("rel-amazon", "item-ltv"),
-    ("rel-stack", "user-badge"),
-    ("rel-amazon", "user-churn"),
-    ("rel-amazon", "user-ltv"),
+    # ("rel-trial", "site-success"),
+    # ("rel-avito", "user-visits"),
+    # ("rel-avito", "user-clicks"),
+    # ("rel-hm", "user-churn"),
+    # ("rel-stack", "user-engagement"),
+    # ("rel-hm", "item-sales"),
+    # ("rel-stack", "post-votes"),
+    # ("rel-amazon", "item-churn"),
+    # ("rel-amazon", "item-ltv"),
+    # ("rel-stack", "user-badge"),
+    # ("rel-amazon", "user-churn"),
+    # ("rel-amazon", "user-ltv"),
 )
 
 # Random init instead of RT-P, as the control for a task whose fine-tuned
@@ -225,7 +225,8 @@ def a100(qos: str, time: str) -> Resources:
 # preempts, so the `il` amperes start and the `il-lo` tail queues behind. That
 # gives:
 #
-#   il-interactive  2 b200            the two smallest-test jobs
+#   il-interactive  2 b200            the smallest-test pair, and when that
+#                                     pair finishes the next pair still pending
 #   il              8 a100            two slots of the ten are left free for
 #                                     another experiment; the eight go to the
 #                                     two largest-test tasks (rel-stack
@@ -258,8 +259,8 @@ RESOURCES: dict[tuple[str, str, str], Resources] = {
     ("trainval", "rel-event", "user-attendance"): a100("il-lo", "1-00:00:00"),
     ("train", "rel-event", "user-ignore"): a100("il-lo", "1-00:00:00"),
     ("trainval", "rel-event", "user-ignore"): a100("il-lo", "1-00:00:00"),
-    ("train", "rel-trial", "study-adverse"): a100("il-lo", "1-00:00:00"),
-    ("trainval", "rel-trial", "study-adverse"): a100("il-lo", "1-00:00:00"),
+    ("train", "rel-trial", "study-adverse"): b200("il-interactive", "12:00:00"),
+    ("trainval", "rel-trial", "study-adverse"): b200("il-interactive", "12:00:00"),
     ("train", "rel-trial", "site-success"): a100("il-lo", "1-00:00:00"),
     ("trainval", "rel-trial", "site-success"): a100("il-lo", "1-00:00:00"),
     ("train", "rel-avito", "user-visits"): a100("il-lo", "1-00:00:00"),
