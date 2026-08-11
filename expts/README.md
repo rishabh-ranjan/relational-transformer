@@ -80,12 +80,17 @@ flagged `RESERVED` — a spare b200 under someone else's reservation pins the jo
 on `ReqNodeNotAvail` for good, so the monitor should read that flag rather than
 `CfgTRES - AllocTRES` alone.
 
+**Count a tier as claimed, not as running.** A pending job of yours on `il`
+already owns one of the ten and starts the moment a card frees, so counting
+only `RUNNING` reports the tier free while your own queue is what it is waiting
+behind — and every promotion you make on that reading overshoots the cap.
+
 ```bash
 # The shape: a round line, and a PROMOTE line the moment a slot or card frees.
 q=$(squeue -u $USER -h -o "%i %j %q %T %b %R" | grep -v dev-node)
-il=$(echo "$q" | awk '$4=="RUNNING" && $3=="il"' | wc -l)
-int=$(echo "$q" | awk '$4=="RUNNING" && $3=="il-interactive"' | wc -l)
-ilb=$(echo "$q" | awk '$4=="RUNNING" && $3=="il" && $5 ~ /b200/' | wc -l)
+il=$(echo "$q" | awk '$3=="il"' | wc -l)               # running + pending
+int=$(echo "$q" | awk '$3=="il-interactive"' | wc -l)
+ilb=$(echo "$q" | awk '$3=="il" && $5 ~ /b200/' | wc -l)
 pend=$(echo "$q" | grep -c PENDING)
 bw=$(scontrol show node blackwell1)
 bwfree=$(( 8 - $(echo "$bw" | grep -oE "b200=[0-9]+$" | cut -d= -f2) ))
