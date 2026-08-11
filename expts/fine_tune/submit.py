@@ -15,18 +15,18 @@ TASKS = (
     # ("rel-f1", "driver-position"),
     # ("rel-trial", "study-outcome"),
     # ("rel-avito", "ad-ctr"),
-    ("rel-event", "user-attendance"),
+    # ("rel-event", "user-attendance"),
     # ("rel-event", "user-ignore"),
     # ("rel-trial", "study-adverse"),
     # ("rel-trial", "site-success"),
     # ("rel-avito", "user-visits"),
     # ("rel-avito", "user-clicks"),
-    ("rel-hm", "user-churn"),
+    # ("rel-hm", "user-churn"),
     # ("rel-stack", "user-engagement"),
     # ("rel-hm", "item-sales"),
     # ("rel-stack", "post-votes"),
     # ("rel-amazon", "item-churn"),
-    ("rel-amazon", "item-ltv"),
+    # ("rel-amazon", "item-ltv"),
     ("rel-stack", "user-badge"),
     # ("rel-amazon", "user-churn"),
     # ("rel-amazon", "user-ltv"),
@@ -246,7 +246,10 @@ def a100(qos: str, time: str, reservation: str | None = None) -> Resources:
 RESOURCES: dict[tuple[str, str], Resources] = {
     ("rel-amazon", "user-churn"): b200("il-interactive", "12:00:00"),
     ("rel-amazon", "user-ltv"): b200("il-interactive", "12:00:00"),
-    ("rel-stack", "user-badge"): a100("il-lo", "2-00:00:00"),
+    # 15:50: no eval job is pending any more, so the `il` slot that freed goes
+    # back to fine-tuning rather than sitting empty. The eval sweep still comes
+    # first if one of its jobs is preempted back into the queue.
+    ("rel-stack", "user-badge"): a100("il", "1-00:00:00"),
     ("rel-amazon", "item-ltv"): a100("il-lo", "2-00:00:00"),
     ("rel-amazon", "item-churn"): a100("il", "1-00:00:00"),
     ("rel-stack", "post-votes"): a100("il", "1-00:00:00"),
