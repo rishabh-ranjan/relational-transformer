@@ -32,18 +32,19 @@ def plan(n: int) -> list[Resources]:
     about 3 hours, longer than a job here takes on an ampere, so the high
     tiers buy a place in a queue that does not move rather than a faster card.
 
-    Both `il-interactive` gpus are free and 5 of `il`'s 10 are, this sweep's
-    running jobs holding the other 5. That is 7 to place at high priority; the
-    rest stays on `il-lo`, which is preemptible and restarts an eval from the
-    first configuration.
+    Both `il-interactive` gpus and 8 of `il`'s 10 are already held by this
+    sweep, so there are 2 `il` slots left and this submission spends them.
+    A job pending on `il` is not running any sooner than one pending on
+    `il-lo`, but it outranks it for the next card that frees, and the slot
+    costs nothing to hold. The rest stays on `il-lo`, which is preemptible and
+    restarts an eval from the first configuration.
 
     Ask for the time the job needs, not the time the tier allows: a 12-hour
     request backfills into gaps that a 7-day one cannot.
 
     Recount and rewrite this before every submission.
     """
-    out = [a100("il-interactive", "12:00:00")] * min(n, 2)
-    out += [a100("il", "12:00:00")] * min(n - len(out), 5)
+    out = [a100("il", "12:00:00")] * min(n, 2)
     out += [a100("il-lo", "21-00:00:00")] * (n - len(out))
     return out
 
