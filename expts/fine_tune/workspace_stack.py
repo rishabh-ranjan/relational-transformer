@@ -36,10 +36,13 @@ TITLE = "rel-stack: bce vs huber"
 # the random one `Workspace.save_as_new_view` generates, so rerunning this
 # overwrites the view rather than adding another: the upsert keys on the name.
 #
-# Both wrappers are stripped by substring, not as affixes, so a slug containing
-# `nw-` or `-v` anywhere comes back mangled and addresses a view that does not
-# exist -- the app spins on it. The assert in `main` is what holds that.
-SLUG = "rel-stack-bce-huber"
+# Alphanumeric, like the random id `save_as_new_view` would have made: a slug
+# with a `-` in it saves and can be fetched by name, but the project's view
+# list -- which is what the view menu is -- drops it, and a view the app cannot
+# list is one it will not open either. `-v` and `nw-` inside a slug are the
+# same trap twice over, since both wrappers come off by substring rather than
+# as affixes; the assert in `main` is what holds all of it.
+SLUG = "relstackbcevshuber"
 
 # The four runs of the comparison, by the `run_name` config `submit` and
 # `submit_stack` set: `{db}/{task}-{arm}`, with a `-bce` suffix on the bce arm.
@@ -88,7 +91,7 @@ def main() -> None:
     # `workspace.py`'s to write. No id: the upsert in `workspace.save` keys on
     # the name, creating the view the first time and rewriting it after.
     name = _url_query_str_to_internal_name(SLUG)
-    assert _internal_name_to_url_query_str(name) == SLUG, SLUG
+    assert SLUG.isalnum() and _internal_name_to_url_query_str(name) == SLUG, SLUG
     w.name = TITLE
     w._internal_name = name
     w._internal_id = ""
