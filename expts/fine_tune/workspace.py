@@ -362,22 +362,25 @@ def build(entity: str, project: str, x: str) -> ws.Workspace:
             picked.sort(key=task_size)
             dashboard(f"{metric}/{split}", picked)
     # The context search, per task: the score of each configuration in the
-    # order they were tried, with the best so far riding along in the same
-    # panel. `tune/` is where `rt.eval` logs its tuning phase, and only the
-    # tuning experiments have it.
-    picked = [
-        k
-        for k in leaders
-        if k.startswith("tune/") and not k.endswith("/mean") and "/val/" in k
-    ]
-    picked.sort(key=lambda k: task_size(k.removeprefix("tune/")))
-    dashboard("tune", picked)
-    # The knobs themselves, so a point on those curves can be read back to the
+    # order it was tried, the best so far and the published target riding
+    # along in the same panel. `tune/` is where `rt.eval` logs its tuning
+    # phase, and only the tuning experiments have it. Split by metric and
+    # split, and named, like the sections above: the section carries what the
+    # panels have in common and the panel titles carry only the task.
+    tuned = set()
+    for metric in METRICS:
+        for split in SPLITS:
+            picked = [
+                k
+                for k in leaders
+                if k.startswith(f"tune/{metric}/{split}/") and not k.endswith("/mean")
+            ]
+            picked.sort(key=lambda k: task_size(k.removeprefix("tune/")))
+            dashboard(f"tune/{metric}/{split}", picked)
+            tuned.update(picked)
+    # The knobs themselves, so a point on those curves reads back to the
     # configuration that produced it.
-    dashboard(
-        "tune: config",
-        [k for k in leaders if k.startswith("tune/") and k not in picked],
-    )
+    dashboard("tune", [k for k in leaders if k.startswith("tune/") and k not in tuned])
 
     # The `mean` keys get no dashboard of their own: they fall through to the
     # namespace grouping below with the rest of their metric.
