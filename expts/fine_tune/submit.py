@@ -10,27 +10,27 @@ from roach.slurm import Resources, submit
 HERE = Path(__file__).parent
 
 TASKS = (
-    ("rel-event", "user-repeat"),
+    # ("rel-event", "user-repeat"),
     ("rel-f1", "driver-dnf"),
-    ("rel-f1", "driver-top3"),
-    ("rel-f1", "driver-position"),
-    ("rel-trial", "study-outcome"),
-    ("rel-avito", "ad-ctr"),
-    ("rel-event", "user-attendance"),
-    ("rel-event", "user-ignore"),
-    ("rel-trial", "study-adverse"),
-    ("rel-trial", "site-success"),
-    ("rel-avito", "user-visits"),
-    ("rel-avito", "user-clicks"),
-    ("rel-hm", "user-churn"),
-    ("rel-stack", "user-engagement"),
-    ("rel-hm", "item-sales"),
-    ("rel-stack", "post-votes"),
-    ("rel-amazon", "item-churn"),
-    ("rel-amazon", "item-ltv"),
-    ("rel-stack", "user-badge"),
-    ("rel-amazon", "user-churn"),
-    ("rel-amazon", "user-ltv"),
+    # ("rel-f1", "driver-top3"),
+    # ("rel-f1", "driver-position"),
+    # ("rel-trial", "study-outcome"),
+    # ("rel-avito", "ad-ctr"),
+    # ("rel-event", "user-attendance"),
+    # ("rel-event", "user-ignore"),
+    # ("rel-trial", "study-adverse"),
+    # ("rel-trial", "site-success"),
+    # ("rel-avito", "user-visits"),
+    # ("rel-avito", "user-clicks"),
+    # ("rel-hm", "user-churn"),
+    # ("rel-stack", "user-engagement"),
+    # ("rel-hm", "item-sales"),
+    # ("rel-stack", "post-votes"),
+    # ("rel-amazon", "item-churn"),
+    # ("rel-amazon", "item-ltv"),
+    # ("rel-stack", "user-badge"),
+    # ("rel-amazon", "user-churn"),
+    # ("rel-amazon", "user-ltv"),
 )
 
 # Random init instead of RT-P, as the control for a task whose fine-tuned
@@ -218,13 +218,14 @@ def a100(qos: str, time: str) -> Resources:
 # top down.
 #
 # Read at submission time: I hold no gpu jobs. blackwell1 has 3 of 8 b200 free,
-# and the soonest of the 5 running frees in ~9h -- so 3 b200 is the whole
-# blackwell spend, not 4. All 64 usable a100 are allocated (ampere7 is down) but
+# and the soonest of the 5 running frees in ~9h. Of those 3, only the two
+# `il-interactive` jobs actually start: a reservation holds the third
+# (`ReqNodeNotAvail`), so the `il` tier is all ampere. All 64 usable a100 are allocated (ampere7 is down) but
 # ~50 of them are one user's `il-lo`, which `il` preempts, so the `il` amperes
 # start and the `il-lo` tail queues behind. That gives:
 #
 #   il-interactive  2 b200            the two smallest-test jobs
-#   il              1 b200 + 9 a100   the next ten, 10 gpus with 1 of the 2 b200
+#   il              10 a100           the next ten
 #   il-lo           30 a100           everything from rel-event/user-attendance on
 #
 # Both arms of a task sit in the same tier: the pair is the comparison, and a
@@ -234,54 +235,54 @@ def a100(qos: str, time: str) -> Resources:
 # A job with no line here stops the submission rather than taking a slot
 # nobody chose for it.
 RESOURCES: dict[tuple[str, str, str], Resources] = {
-    ("train", "rel-event", "user-repeat"): b200("il-interactive", "12:00:00"),
-    ("trainval", "rel-event", "user-repeat"): b200("il-interactive", "12:00:00"),
-    ("train", "rel-f1", "driver-dnf"): b200("il", "1-00:00:00"),
-    ("trainval", "rel-f1", "driver-dnf"): a100("il", "1-00:00:00"),
-    ("train", "rel-f1", "driver-top3"): a100("il", "1-00:00:00"),
-    ("trainval", "rel-f1", "driver-top3"): a100("il", "1-00:00:00"),
-    ("train", "rel-f1", "driver-position"): a100("il", "1-00:00:00"),
-    ("trainval", "rel-f1", "driver-position"): a100("il", "1-00:00:00"),
-    ("train", "rel-trial", "study-outcome"): a100("il", "1-00:00:00"),
-    ("trainval", "rel-trial", "study-outcome"): a100("il", "1-00:00:00"),
-    ("train", "rel-avito", "ad-ctr"): a100("il", "1-00:00:00"),
-    ("trainval", "rel-avito", "ad-ctr"): a100("il", "1-00:00:00"),
-    ("train", "rel-event", "user-attendance"): a100("il-lo", "1-00:00:00"),
-    ("trainval", "rel-event", "user-attendance"): a100("il-lo", "1-00:00:00"),
-    ("train", "rel-event", "user-ignore"): a100("il-lo", "1-00:00:00"),
-    ("trainval", "rel-event", "user-ignore"): a100("il-lo", "1-00:00:00"),
-    ("train", "rel-trial", "study-adverse"): a100("il-lo", "1-00:00:00"),
-    ("trainval", "rel-trial", "study-adverse"): a100("il-lo", "1-00:00:00"),
-    ("train", "rel-trial", "site-success"): a100("il-lo", "1-00:00:00"),
-    ("trainval", "rel-trial", "site-success"): a100("il-lo", "1-00:00:00"),
-    ("train", "rel-avito", "user-visits"): a100("il-lo", "1-00:00:00"),
-    ("trainval", "rel-avito", "user-visits"): a100("il-lo", "1-00:00:00"),
-    ("train", "rel-avito", "user-clicks"): a100("il-lo", "1-00:00:00"),
-    ("trainval", "rel-avito", "user-clicks"): a100("il-lo", "1-00:00:00"),
-    ("train", "rel-hm", "user-churn"): a100("il-lo", "1-00:00:00"),
-    ("trainval", "rel-hm", "user-churn"): a100("il-lo", "1-00:00:00"),
-    ("train", "rel-stack", "user-engagement"): a100("il-lo", "1-00:00:00"),
-    ("trainval", "rel-stack", "user-engagement"): a100("il-lo", "1-00:00:00"),
-    ("train", "rel-hm", "item-sales"): a100("il-lo", "1-00:00:00"),
-    ("trainval", "rel-hm", "item-sales"): a100("il-lo", "1-00:00:00"),
-    ("train", "rel-stack", "post-votes"): a100("il-lo", "1-00:00:00"),
-    ("trainval", "rel-stack", "post-votes"): a100("il-lo", "1-00:00:00"),
-    ("train", "rel-amazon", "item-churn"): a100("il-lo", "1-00:00:00"),
-    ("trainval", "rel-amazon", "item-churn"): a100("il-lo", "1-00:00:00"),
-    ("train", "rel-amazon", "item-ltv"): a100("il-lo", "1-00:00:00"),
-    ("trainval", "rel-amazon", "item-ltv"): a100("il-lo", "1-00:00:00"),
-    ("train", "rel-stack", "user-badge"): a100("il-lo", "1-00:00:00"),
-    ("trainval", "rel-stack", "user-badge"): a100("il-lo", "1-00:00:00"),
-    ("train", "rel-amazon", "user-churn"): a100("il-lo", "1-00:00:00"),
-    ("trainval", "rel-amazon", "user-churn"): a100("il-lo", "1-00:00:00"),
-    ("train", "rel-amazon", "user-ltv"): a100("il-lo", "1-00:00:00"),
-    ("trainval", "rel-amazon", "user-ltv"): a100("il-lo", "1-00:00:00"),
+    # ("train", "rel-event", "user-repeat"): b200("il-interactive", "12:00:00"),
+    # ("trainval", "rel-event", "user-repeat"): b200("il-interactive", "12:00:00"),
+    # ("train", "rel-f1", "driver-dnf"): a100("il", "1-00:00:00"),
+    # ("trainval", "rel-f1", "driver-dnf"): a100("il", "1-00:00:00"),
+    # ("train", "rel-f1", "driver-top3"): a100("il", "1-00:00:00"),
+    # ("trainval", "rel-f1", "driver-top3"): a100("il", "1-00:00:00"),
+    # ("train", "rel-f1", "driver-position"): a100("il", "1-00:00:00"),
+    # ("trainval", "rel-f1", "driver-position"): a100("il", "1-00:00:00"),
+    # ("train", "rel-trial", "study-outcome"): a100("il", "1-00:00:00"),
+    # ("trainval", "rel-trial", "study-outcome"): a100("il", "1-00:00:00"),
+    # ("train", "rel-avito", "ad-ctr"): a100("il", "1-00:00:00"),
+    # ("trainval", "rel-avito", "ad-ctr"): a100("il", "1-00:00:00"),
+    # ("train", "rel-event", "user-attendance"): a100("il-lo", "1-00:00:00"),
+    # ("trainval", "rel-event", "user-attendance"): a100("il-lo", "1-00:00:00"),
+    # ("train", "rel-event", "user-ignore"): a100("il-lo", "1-00:00:00"),
+    # ("trainval", "rel-event", "user-ignore"): a100("il-lo", "1-00:00:00"),
+    # ("train", "rel-trial", "study-adverse"): a100("il-lo", "1-00:00:00"),
+    # ("trainval", "rel-trial", "study-adverse"): a100("il-lo", "1-00:00:00"),
+    # ("train", "rel-trial", "site-success"): a100("il-lo", "1-00:00:00"),
+    # ("trainval", "rel-trial", "site-success"): a100("il-lo", "1-00:00:00"),
+    # ("train", "rel-avito", "user-visits"): a100("il-lo", "1-00:00:00"),
+    # ("trainval", "rel-avito", "user-visits"): a100("il-lo", "1-00:00:00"),
+    # ("train", "rel-avito", "user-clicks"): a100("il-lo", "1-00:00:00"),
+    # ("trainval", "rel-avito", "user-clicks"): a100("il-lo", "1-00:00:00"),
+    # ("train", "rel-hm", "user-churn"): a100("il-lo", "1-00:00:00"),
+    # ("trainval", "rel-hm", "user-churn"): a100("il-lo", "1-00:00:00"),
+    # ("train", "rel-stack", "user-engagement"): a100("il-lo", "1-00:00:00"),
+    # ("trainval", "rel-stack", "user-engagement"): a100("il-lo", "1-00:00:00"),
+    # ("train", "rel-hm", "item-sales"): a100("il-lo", "1-00:00:00"),
+    # ("trainval", "rel-hm", "item-sales"): a100("il-lo", "1-00:00:00"),
+    # ("train", "rel-stack", "post-votes"): a100("il-lo", "1-00:00:00"),
+    # ("trainval", "rel-stack", "post-votes"): a100("il-lo", "1-00:00:00"),
+    # ("train", "rel-amazon", "item-churn"): a100("il-lo", "1-00:00:00"),
+    # ("trainval", "rel-amazon", "item-churn"): a100("il-lo", "1-00:00:00"),
+    # ("train", "rel-amazon", "item-ltv"): a100("il-lo", "1-00:00:00"),
+    # ("trainval", "rel-amazon", "item-ltv"): a100("il-lo", "1-00:00:00"),
+    # ("train", "rel-stack", "user-badge"): a100("il-lo", "1-00:00:00"),
+    # ("trainval", "rel-stack", "user-badge"): a100("il-lo", "1-00:00:00"),
+    # ("train", "rel-amazon", "user-churn"): a100("il-lo", "1-00:00:00"),
+    # ("trainval", "rel-amazon", "user-churn"): a100("il-lo", "1-00:00:00"),
+    # ("train", "rel-amazon", "user-ltv"): a100("il-lo", "1-00:00:00"),
+    # ("trainval", "rel-amazon", "user-ltv"): a100("il-lo", "1-00:00:00"),
 }
 
 
 def main() -> None:
     tasks = sorted(TASKS, key=lambda p: ntest()[f"{p[0]}/{p[1]}"])
-    arms = [("train", ["train"]), ("trainval", ["train", "val"])]
+    arms = [("train", ["train"])]
     for (db, task), (arm, train_splits) in itertools.product(tasks, arms):
         resources = RESOURCES[arm, db, task]
         name = f"{db}/{task}-{arm}" + ("-rand" if RANDOM_INIT else "")
