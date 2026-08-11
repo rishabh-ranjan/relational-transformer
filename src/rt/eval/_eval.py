@@ -591,6 +591,17 @@ def run_ensemble(
                             "tune/local_ctx_size": lcs,
                             "tune/bfs_width": bw,
                             "tune/prefer_latest": int(pl),
+                            # The published bests on the axis the search is
+                            # drawn against, so the tuning panels carry the
+                            # same flat line the ensemble ones do. Val only:
+                            # that is the split being tuned on, and a target
+                            # for a curve this phase never draws would sit in
+                            # a panel of its own.
+                            **{
+                                f"target/tune/{k}": tv
+                                for k, tv in targets.items()
+                                if "/val/" in k and not k.endswith("/mean")
+                            },
                         }
                     )
 

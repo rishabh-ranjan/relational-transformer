@@ -272,6 +272,13 @@ def project_keys(entity: str, project: str) -> set[str]:
     # seeded -- the target alone would land in a panel of its own.
     for k in targets():
         keys |= {k, target_key(k)}
+    # The same seeding for the tuning phase, in a project that has one: a task
+    # whose job has not started tuning yet gets the panel its curve will land
+    # in. Only the val targets, which is the split the tuning reads.
+    if any(k.startswith("tune/") for k in keys):
+        for k in targets():
+            if "/val/" in k and not k.endswith("/mean"):
+                keys |= {f"tune/{k}", f"tune/best/{k}", target_key(f"tune/{k}")}
     return keys - INTERNAL
 
 
