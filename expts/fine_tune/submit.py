@@ -1,6 +1,7 @@
 """Submit one fine-tuning job per task. See [README.md](README.md)."""
 
 import functools
+import itertools
 import json
 from pathlib import Path
 
@@ -119,6 +120,26 @@ def ntrain() -> dict[str, float]:
     }
 
 
+@functools.cache
+def ntest() -> dict[str, float]:
+    """Test-set size per `{db}/{task}`, from the same RelBench task stats.
+
+    What this sweep's submission order is keyed on: the test split is what an
+    eval pass walks, so smallest-first is fastest-to-an-answer-first.
+    """
+    import pandas as pd
+    from huggingface_hub import hf_hub_download
+
+    stats = pd.read_parquet(
+        hf_hub_download(
+            "stanford-star/relbench", "STATS/tasks.parquet", repo_type="dataset"
+        )
+    )
+    return {
+        f"{r.database}/{r.task}": float(r.num_rows_test) for r in stats.itertuples()
+    }
+
+
 def targets_for(db: str, task: str) -> dict[str, float]:
     """The published bests this task's run should draw as reference lines.
 
@@ -194,28 +215,83 @@ def a100(qos: str, time: str) -> Resources:
 
 
 # Which slot each job goes in, laid out by hand -- one line per job, keyed by
-# `(db, task)`. Commenting a line out is how a job is left out of a submission.
+# `(arm, db, task)`. Commenting a line out is how a job is left out of a
+# submission.
 #
-# NOT A DEFAULT TO INHERIT, and blank on purpose: whatever the last submission
-# put here is a record of a different cluster and a different instruction. Work
-# the assignment out again every time, following
-# [Allocating a sweep](../README.md#allocating-a-sweep) -- read the cluster,
-# subtract what your own jobs already hold, spend the tiers top down -- and
-# write today's answer here, one line per job this submission sends:
+# NOT A DEFAULT TO INHERIT: whatever the last submission put here is a record of
+# a different cluster and a different instruction. Work the assignment out again
+# every time, following [Allocating a sweep](../README.md#allocating-a-sweep) --
+# read the cluster, subtract what your own jobs already hold, spend the tiers
+# top down.
 #
-#     ("rel-f1", "driver-dnf"): a100("il", "12:00:00"),
+# Read at submission time: I hold no gpu jobs. blackwell1 has 3 of 8 b200 free,
+# and the soonest of the 5 running frees in ~9h -- so 3 b200 is the whole
+# blackwell spend, not 4. All 64 usable a100 are allocated (ampere7 is down) but
+# ~50 of them are one user's `il-lo`, which `il` preempts, so the `il` amperes
+# start and the `il-lo` tail queues behind. That gives:
+#
+#   il-interactive  2 b200            the two smallest-test jobs
+#   il              1 b200 + 9 a100   the next ten, 10 gpus with 1 of the 2 b200
+#   il-lo           30 a100           everything from rel-event/user-attendance on
+#
+# Both arms of a task sit in the same tier: the pair is the comparison, and a
+# half-finished pair answers nothing. Order is ascending test-set size
+# (`ntest()`), so the fastest answers land first.
 #
 # A job with no line here stops the submission rather than taking a slot
 # nobody chose for it.
-RESOURCES: dict[tuple[str, str], Resources] = {}
+RESOURCES: dict[tuple[str, str, str], Resources] = {
+    ("train", "rel-event", "user-repeat"): b200("il-interactive", "12:00:00"),
+    ("trainval", "rel-event", "user-repeat"): b200("il-interactive", "12:00:00"),
+    ("train", "rel-f1", "driver-dnf"): b200("il", "1-00:00:00"),
+    ("trainval", "rel-f1", "driver-dnf"): a100("il", "1-00:00:00"),
+    ("train", "rel-f1", "driver-top3"): a100("il", "1-00:00:00"),
+    ("trainval", "rel-f1", "driver-top3"): a100("il", "1-00:00:00"),
+    ("train", "rel-f1", "driver-position"): a100("il", "1-00:00:00"),
+    ("trainval", "rel-f1", "driver-position"): a100("il", "1-00:00:00"),
+    ("train", "rel-trial", "study-outcome"): a100("il", "1-00:00:00"),
+    ("trainval", "rel-trial", "study-outcome"): a100("il", "1-00:00:00"),
+    ("train", "rel-avito", "ad-ctr"): a100("il", "1-00:00:00"),
+    ("trainval", "rel-avito", "ad-ctr"): a100("il", "1-00:00:00"),
+    ("train", "rel-event", "user-attendance"): a100("il-lo", "1-00:00:00"),
+    ("trainval", "rel-event", "user-attendance"): a100("il-lo", "1-00:00:00"),
+    ("train", "rel-event", "user-ignore"): a100("il-lo", "1-00:00:00"),
+    ("trainval", "rel-event", "user-ignore"): a100("il-lo", "1-00:00:00"),
+    ("train", "rel-trial", "study-adverse"): a100("il-lo", "1-00:00:00"),
+    ("trainval", "rel-trial", "study-adverse"): a100("il-lo", "1-00:00:00"),
+    ("train", "rel-trial", "site-success"): a100("il-lo", "1-00:00:00"),
+    ("trainval", "rel-trial", "site-success"): a100("il-lo", "1-00:00:00"),
+    ("train", "rel-avito", "user-visits"): a100("il-lo", "1-00:00:00"),
+    ("trainval", "rel-avito", "user-visits"): a100("il-lo", "1-00:00:00"),
+    ("train", "rel-avito", "user-clicks"): a100("il-lo", "1-00:00:00"),
+    ("trainval", "rel-avito", "user-clicks"): a100("il-lo", "1-00:00:00"),
+    ("train", "rel-hm", "user-churn"): a100("il-lo", "1-00:00:00"),
+    ("trainval", "rel-hm", "user-churn"): a100("il-lo", "1-00:00:00"),
+    ("train", "rel-stack", "user-engagement"): a100("il-lo", "1-00:00:00"),
+    ("trainval", "rel-stack", "user-engagement"): a100("il-lo", "1-00:00:00"),
+    ("train", "rel-hm", "item-sales"): a100("il-lo", "1-00:00:00"),
+    ("trainval", "rel-hm", "item-sales"): a100("il-lo", "1-00:00:00"),
+    ("train", "rel-stack", "post-votes"): a100("il-lo", "1-00:00:00"),
+    ("trainval", "rel-stack", "post-votes"): a100("il-lo", "1-00:00:00"),
+    ("train", "rel-amazon", "item-churn"): a100("il-lo", "1-00:00:00"),
+    ("trainval", "rel-amazon", "item-churn"): a100("il-lo", "1-00:00:00"),
+    ("train", "rel-amazon", "item-ltv"): a100("il-lo", "1-00:00:00"),
+    ("trainval", "rel-amazon", "item-ltv"): a100("il-lo", "1-00:00:00"),
+    ("train", "rel-stack", "user-badge"): a100("il-lo", "1-00:00:00"),
+    ("trainval", "rel-stack", "user-badge"): a100("il-lo", "1-00:00:00"),
+    ("train", "rel-amazon", "user-churn"): a100("il-lo", "1-00:00:00"),
+    ("trainval", "rel-amazon", "user-churn"): a100("il-lo", "1-00:00:00"),
+    ("train", "rel-amazon", "user-ltv"): a100("il-lo", "1-00:00:00"),
+    ("trainval", "rel-amazon", "user-ltv"): a100("il-lo", "1-00:00:00"),
+}
 
 
 def main() -> None:
-    tasks = sorted(TASKS, key=lambda p: -ntrain()[f"{p[0]}/{p[1]}"])
-    for db, task in tasks:
-        resources = RESOURCES[db, task]
-        name = f"{db}/{task}" + ("-rand" if RANDOM_INIT else "")
-        print(f"  {name:28s} {resources.gpus} {resources.qos:15s} {resources.time}")
+    tasks = sorted(TASKS, key=lambda p: ntest()[f"{p[0]}/{p[1]}"])
+    for (db, task), (arm, train_splits) in itertools.product(tasks, ARMS.items()):
+        resources = RESOURCES[arm, db, task]
+        name = f"{db}/{task}-{arm}" + ("-rand" if RANDOM_INIT else "")
+        print(f"  {name:38s} {resources.gpus} {resources.qos:15s} {resources.time}")
         submit(
             "rt.train:main",
             # Do not put comments inside this dict: it is a config block,
@@ -232,7 +308,7 @@ def main() -> None:
                 loss_fn="huber",
                 load_ckpt_path=None if RANDOM_INIT else ckpt_for(db, task),
                 db_task_list=[(db, task)],
-                train_splits=["train", "val"],
+                train_splits=train_splits,
                 pre_dir="/dfs/user/ranjanr/share/stanford-star/relbench-preprocessed",
                 tokens_per_gpu=2**17 if resources.gpus.startswith("b200") else 2**16,
                 num_workers=resources.cpus_per_task,
@@ -283,7 +359,7 @@ def main() -> None:
                 out_root="/dfs/user/ranjanr/ckpts",
             ),
             resources=resources,
-            name=f"{db}-{task}" + ("-rand" if RANDOM_INIT else ""),
+            name=f"{db}-{task}-{arm}" + ("-rand" if RANDOM_INIT else ""),
             repo_root="/lfs/hyperturing1/0/ranjanr/clones/rishabh-ranjan/relational-transformer",
             log_root="/dfs/user/ranjanr/slurm-logs/rishabh-ranjan/relational-transformer/expts/fine-tune",
             clone_root="/lfs/local/0/roach_clones",
