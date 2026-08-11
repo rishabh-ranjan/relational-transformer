@@ -18,9 +18,10 @@ only whether the test phase runs at all. `["test"]` is therefore both phases.
 **ens goes out first and takes the better slots**: its curve is the one the
 paper needs, and hpo-ens only says how much tuning would add on top.
 
-One config block for both: everything the arms share is the single `args` dict
-in `main()`, and `ARMS` above it holds the four values they disagree on. An
-arm's wandb project, job name and log directory follow from its name.
+One config block for both: `main()` loops the two arm names over a single
+`args` dict, and the four values the arms disagree on -- the context grid, the
+val cap and the ensemble size -- sit inline at the arguments that take them.
+An arm's wandb project, job name and log directory follow from its name.
 """
 
 import functools
@@ -244,38 +245,11 @@ def ready(arm: str) -> list[tuple[str, str]]:
 RESOURCES: dict[tuple[str, str, str], Resources] = {}
 
 
-# Everything the two arms disagree on, and nothing else -- the rest of the
-# config is the single block in `main()`. Insertion order is submission order,
-# so ens comes first and gets the better slots.
-#
-# `val_items` is empty on an arm that reads no validation: a one-configuration
-# grid tunes nothing, so `items_per_task` gets no val entry either.
-ARMS: dict[str, dict] = {
-    "ens": dict(
-        ctx_size_list=[1024],
-        lcs_bw_pl_grid=[(1024, 256, False)],
-        val_items={},
-        test_ensemble_size=16,
-    ),
-    "hpo-ens": dict(
-        ctx_size_list=[512, 1024, 2048],
-        lcs_bw_pl_grid=[
-            (lcs, bw, pl)
-            for lcs in (512, 1024, 2048)
-            for bw in (64, 128, 256)
-            for pl in (True, False)
-        ],
-        val_items={"val": 2**14},
-        test_ensemble_size=4,
-    ),
-}
-
-
 def main() -> None:
     # ens first: it takes the slots while the budget is still unspent, and a
     # hpo-ens job that finds no line in RESOURCES stops a submission that has
     # already placed every ens job it was going to.
-    for arm, arm_args in ARMS.items():
+    for arm in ("ens", "hpo-ens"):
         for db, task in ready(arm):
             resources = RESOURCES[arm, db, task]
             name = f"{db}/{task}"
@@ -304,16 +278,23 @@ def main() -> None:
                     num_walks=10_000,
                     walk_length=20,
                     items_per_task={"test": items_for(db, task)}
-                    | arm_args["val_items"],
+                    | ({} if arm == "ens" else {"val": 2**14}),
                     mmap_populate=True,
                     shuffle_seed=0,
                     context_seed=0,
                     vector_db_path=None,
                     db_upto_test_timestamp=True,
-                    ctx_size_list=arm_args["ctx_size_list"],
-                    lcs_bw_pl_grid=arm_args["lcs_bw_pl_grid"],
+                    ctx_size_list=[1024] if arm == "ens" else [512, 1024, 2048],
+                    lcs_bw_pl_grid=[(1024, 256, False)]
+                    if arm == "ens"
+                    else [
+                        (lcs, bw, pl)
+                        for lcs in (512, 1024, 2048)
+                        for bw in (64, 128, 256)
+                        for pl in (True, False)
+                    ],
                     val_ensemble_size=1,
-                    test_ensemble_size=arm_args["test_ensemble_size"],
+                    test_ensemble_size=16 if arm == "ens" else 4,
                     run_name=name,
                     targets=targets_for(db, task),
                     project=f"2026-08-11-fine_tune_{arm.replace('-', '_')}",
