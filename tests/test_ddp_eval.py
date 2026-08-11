@@ -266,6 +266,8 @@ def _run_ensemble_worker(rank, port, ret):
         test_tasks,
         grid=grid,
         ctx_sizes=[CTX],
+        val_items=None,
+        test_items=None,
         val_ensemble_size=1,
         test_ensemble_size=1,
         tune_only=False,

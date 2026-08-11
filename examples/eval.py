@@ -32,7 +32,7 @@ def evaluate(pre_dir: str, out_root: str, checkpoint: str, run_id: str) -> None:
         prefetch_factor=2,
         num_walks=10_000,
         walk_length=20,
-        items_per_task=10_000_000,
+        items_per_task={"test": 10_000_000},
         mmap_populate=True,
         shuffle_seed=0,
         context_seed=0,

@@ -132,16 +132,24 @@ So a sweep's high-priority ceiling is **4 blackwell + 8 ampere = 12 jobs**;
 job 13 onwards is `il-lo` and preemptible. `il`'s two b200 are a separate
 sub-cap, not a slice of the ten — spending them costs 2 of the 10 as well.
 
-Two things that are *not* reasons to skip a tier:
+**Priority buys the next card that frees, not a card.** A high-priority job
+outranks every `il-lo` job in the queue, but it cannot take a card from a
+running non-preemptible one — and `il` and `il-interactive` jobs are exactly
+that. So before spending a tier on blackwell, check when a b200 will actually
+free:
 
-- **A tier being full of other people's jobs.** A high-priority job that is
-  queued outranks an `il-lo` job that is queued: it takes the next card that
-  frees. Asking for `il-lo` because blackwell1 looks busy hands your place in
-  the queue to someone else.
-- **A node being busy right now.** What matters is priority per free card, not
-  how the cards happen to be allocated at the moment you look.
+```
+squeue -p il -h -t RUNNING -o "%u %b %M %l %q" | grep b200   # elapsed vs limit
+```
 
-Two things that *are*:
+Subtract elapsed from the limit for each of the 8 cards. If the soonest is
+further out than the job itself would take on an ampere, **put the high tiers
+on amperes instead** — a slower card now beats a faster card in four hours.
+blackwell1 is one node of 8 shared with everyone, so this is the common case,
+not the exception. Note it in `plan()`'s docstring when you do, with the
+numbers you read.
+
+Two other things that *are* reasons to place a job somewhere else:
 
 - **Your own jobs holding the cap.** `il`'s ten count across all your sweeps,
   so a fine-tuning sweep already holding six leaves four here. Subtract what
@@ -192,6 +200,11 @@ full?*
 - If `il-interactive` or `il` has room and `il-lo` jobs are still pending,
   **cancel the pending ones and resubmit them into the tier that freed** —
   a pending job has lost nothing by being moved.
+- **Re-ask the blackwell question, both ways.** A high-tier job still pending
+  on blackwell is a job you are paying priority for and getting nothing from:
+  move it to an ampere. A high-tier job on an ampere when b200 cards have since
+  freed is the same mistake mirrored: move it back. Read the remaining wall
+  clocks, do not guess.
 - Move a *running* job only when what it loses is smaller than what it gains: a
   run that checkpoints loses minutes, an eval that does not loses everything it
   has done.

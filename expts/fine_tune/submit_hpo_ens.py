@@ -3,8 +3,11 @@ both in one job per task, on the fine-tuned checkpoints. See
 [README.md](README.md).
 
 The undivided version of `submit_hpo_only.py` + `submit_ens.py`: nothing to
-wait for and nothing to read back, at the cost of one `items_per_task` for both
-phases.
+wait for and nothing to read back.
+
+Tuning reads fewer rows than the test pass it feeds: ranking 36 configurations
+against each other needs less of the split than the number being reported
+does, and the tuning is 18 passes to the test phase's 4.
 
 `splits` does not gate the tuning: with a grid of more than one entry
 `rt.eval.main` reads the val split whatever `splits` says, and `splits` decides
@@ -16,7 +19,7 @@ the same weights on the same rows.
 """
 
 from roach.slurm import Resources, submit
-from submit import a100, b200, targets_for
+from submit import a100, targets_for
 from submit_ens_only import ckpt_for, in_flight, items_for, nval, ntest, ready
 
 
@@ -24,24 +27,24 @@ def plan(n: int) -> list[Resources]:
     """The qos budget spent top down, best slots first, per
     [../README.md](../README.md#allocating-a-sweep).
 
-    Today: `il-interactive`'s 2 gpus are free and go to blackwells;
-    `submit.py`'s fine-tuning sweep holds 6 of `il`'s 10, so 4 are left here,
-    and 2 of those may be b200. That is 4 blackwell and 2 ampere at high
-    priority; the rest is `il-lo`, which is preemptible and restarts an eval
-    from the first configuration.
+    Today: amperes throughout, high tiers included. blackwell1's 8 cards are
+    all held by other people's non-preemptible jobs, two of them 7-day jobs
+    less than two days in, so the high-priority tiers buy a place in a queue
+    that does not move rather than a faster card. An ampere now beats a b200 in
+    four hours.
 
-    Ask for the time the job needs, not the time the tier allows: a b200 job
-    here is ~2.5 hours (`len(grid)` val passes plus `test_ensemble_size` test
-    passes, ~20 min a pass on an ampere and 2.3x that on a blackwell), and a
-    7-day request on a full blackwell1 cannot be backfilled into the gap before
-    the next planned start -- it sits at `ReqNodeNotAvail` while a 12-hour one
-    slots in.
+    `il-interactive`'s 2 gpus are free; `submit.py`'s fine-tuning sweep holds 7
+    of `il`'s 10, leaving 3. That is 5 jobs at high priority and the rest on
+    `il-lo`, which is preemptible and restarts an eval from the first
+    configuration.
+
+    Ask for the time the job needs, not the time the tier allows: a 12-hour
+    request backfills into gaps that a 7-day one cannot.
 
     Recount and rewrite this before every submission.
     """
-    out = [b200("il-interactive", "12:00:00")] * min(n, 2)
-    out += [b200("il", "12:00:00")] * min(n - len(out), 2)
-    out += [a100("il", "7-00:00:00")] * min(n - len(out), 2)
+    out = [a100("il-interactive", "12:00:00")] * min(n, 2)
+    out += [a100("il", "12:00:00")] * min(n - len(out), 3)
     out += [a100("il-lo", "21-00:00:00")] * (n - len(out))
     return out
 
@@ -90,7 +93,7 @@ def main() -> None:
                 prefetch_factor=2,
                 num_walks=10_000,
                 walk_length=20,
-                items_per_task=items_for(db, task),
+                items_per_task={"val": 2**15, "test": items_for(db, task)},
                 mmap_populate=True,
                 shuffle_seed=0,
                 context_seed=0,

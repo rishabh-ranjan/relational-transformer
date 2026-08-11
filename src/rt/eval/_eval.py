@@ -77,7 +77,7 @@ def main(
     prefetch_factor: int,
     num_walks: int,
     walk_length: int,
-    items_per_task: int,
+    items_per_task: dict[str, int],
     ctx_size_list: list[int],
     mmap_populate: bool,
     shuffle_seed: int,
@@ -110,6 +110,12 @@ def main(
     from ``local_ctx_size == ctx_size``. More than one surviving combination is
     a tuning run, which picks one per task on validation; exactly one is a
     fixed configuration, and nothing reads validation at all.
+
+    ``items_per_task`` caps the rows scored per task, per split: the tuning
+    phase reads ``["val"]`` and the test phase ``["test"]``. They are separate
+    because they buy different things -- the val cap only has to rank the
+    configurations against each other, while the test cap is the number being
+    reported.
 
     The ctx sizes cost almost nothing to add: ``Evaluator`` builds each item's
     context once at ``max(ctx_size_list)`` and scores every requested size off
@@ -215,7 +221,6 @@ def main(
         num_walks=num_walks,
         walk_length=walk_length,
         tokens_per_gpu=tokens_per_gpu,
-        items_per_task=items_per_task,
         num_workers=num_workers,
         shuffle_seed=shuffle_seed,
         prefetch_factor=prefetch_factor,
@@ -228,6 +233,9 @@ def main(
     )
     # A config is a dict key downstream (it groups the tasks that chose it),
     # and a caller that came through JSON hands these over as lists.
+    assert set(splits) <= set(items_per_task), (
+        f"no items_per_task for {sorted(set(splits) - set(items_per_task))}"
+    )
     grid = [tuple(cfg) for cfg in lcs_bw_pl_grid]
     ctx_sizes = sorted(ctx_size_list)
     assert ctx_sizes, "nothing to evaluate at"
@@ -248,6 +256,10 @@ def main(
 
         # `splits` without "test" stops after tuning: the val scores land in
         # tuning.json and a later run evaluates test with the winner.
+        assert n_cfgs == 1 or "val" in items_per_task, (
+            "tuning reads the val split whatever `splits` says, so it needs a "
+            "val entry in items_per_task"
+        )
         tune_only = "test" not in splits
         assert not (tune_only and n_cfgs == 1), (
             "one configuration has nothing to tune; ask for the test split"
@@ -265,6 +277,8 @@ def main(
             test_tasks,
             grid=grid,
             ctx_sizes=ctx_sizes,
+            val_items=items_per_task.get("val"),
+            test_items=items_per_task.get("test"),
             val_ensemble_size=val_ensemble_size,
             test_ensemble_size=test_ensemble_size,
             tune_only=tune_only,
@@ -284,9 +298,13 @@ def main(
         raise SystemExit(f"no tasks found in {pre_dir}")
     (ctx_size,) = ctx_sizes
     lcs, bw, pl = grid[0]
+    # One evaluator over every requested split, so they have to agree on how
+    # many rows a task contributes.
+    (items,) = {items_per_task[s] for s in splits}
     ev = build_evaluator(
         tasks,
         pre_dir,
+        items_per_task=items,
         ctx_size_list=[ctx_size],
         local_ctx_size=lcs,
         bfs_width=bw,
@@ -455,6 +473,8 @@ def run_ensemble(
     *,
     grid,
     ctx_sizes,
+    val_items,
+    test_items,
     val_ensemble_size,
     test_ensemble_size,
     tune_only,
@@ -523,6 +543,7 @@ def run_ensemble(
                 ev = build_evaluator(
                     val_tasks,
                     pre_dir,
+                    items_per_task=val_items,
                     ctx_size_list=ctxs,
                     local_ctx_size=lcs,
                     bfs_width=bw,
@@ -647,6 +668,7 @@ def run_ensemble(
             ev = build_evaluator(
                 tasks,
                 pre_dir,
+                items_per_task=test_items,
                 ctx_size_list=ctxs,
                 local_ctx_size=lcs,
                 bfs_width=bw,
