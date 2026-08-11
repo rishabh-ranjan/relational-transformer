@@ -1433,10 +1433,15 @@ impl Sampler {
                 // Temporal: only nodes within the target's bound (or without a
                 // timestamp) can serve as similar seeds.
                 let seed_node = get_node(dataset, seed_node_idx);
+                // A same-table seed is a task row, so it has to be strictly
+                // past: one at the target's own timestamp is the same forecast
+                // horizon and its row is dropped when the cells are added.
+                // Skipping it here spends the seed on a usable row instead.
                 if past_bound(
                     seed_node,
                     temporal_bound(target_node.timestamp.as_ref().map(|t| (*t).into()), cutoff),
-                ) {
+                ) || same_horizon_task_row(seed_node, target_node)
+                {
                     continue;
                 }
                 if seed_label_missing(seed_node, target_column) {
@@ -1545,9 +1550,14 @@ impl Sampler {
                 // - not the source
                 // - same table as the source (target)
                 // - within the source's temporal bound (or no timestamp)
+                // - not the source's own forecast horizon: a same-table row is
+                //   a task row, and one at the source's timestamp is dropped
+                //   when its cells are added, so ranking it as a similar seed
+                //   only spends a seed slot on a row that contributes nothing
                 if current_node.table_name_idx == source_node.table_name_idx
                     && current_idx != source_idx
                     && !past_bound(current_node, bound)
+                    && !same_horizon_task_row(current_node, source_node)
                 {
                     *similar_node_visits.entry(current_idx).or_insert(0) += 1;
                 }
@@ -1905,6 +1915,23 @@ fn extend_with_seed_bfs(
         visited_in_ctx.insert(bfs_node_idx);
 
         let node = get_node(dataset, bfs_node_idx);
+
+        // Task rows are strictly past; db rows may share the timestamp.
+        //
+        // A task row at the target's timestamp is the same forecast horizon,
+        // so its label is not something the prediction could have had. Where
+        // a task's entities share the rows its label aggregates over --
+        // rel-trial `site-success` over the studies a facility hosts -- a few
+        // hundred concurrent labels reconstruct the target outright. A db row
+        // at that timestamp is not a label and is kept; `columns_to_drop`
+        // below is what strips the columns of those that encode one.
+        //
+        // The target's own row is exempt: it is what is being predicted, and
+        // its target cell is skipped separately.
+        if bfs_node_idx != target_node_idx && same_horizon_task_row(node, target_node) {
+            continue;
+        }
+
         for cell_i in 0..node.col_name_idxs.len() {
             if cell_i & (DEADLINE_CHECK_EVERY - 1) == 0 {
                 check_deadline(deadline);
@@ -2107,6 +2134,19 @@ fn temporal_bound(target_ts: Option<i32>, cutoff: Option<i32>) -> Option<i32> {
         (a, None) => a,
         (None, b) => b,
     }
+}
+
+/// True when `node` is a task row sharing `target`'s timestamp.
+///
+/// A task row at the target's timestamp is the same forecast horizon, so its
+/// label is not something the prediction could have had. Where a task's
+/// entities share the rows its label aggregates over -- rel-trial
+/// `site-success` over the studies a facility hosts -- a few hundred
+/// concurrent labels reconstruct the target outright. Db rows at that
+/// timestamp are not labels and are kept; `columns_to_drop` is what strips the
+/// columns of those that encode one.
+fn same_horizon_task_row(node: &ArchivedNode, target: &ArchivedNode) -> bool {
+    node.is_task_node && target.timestamp.is_some() && node.timestamp == target.timestamp
 }
 
 /// True when a node's timestamp puts it past `bound` (see `temporal_bound`).
