@@ -2,6 +2,7 @@
 
 import functools
 import json
+import math
 from pathlib import Path
 
 from roach.slurm import Resources, submit
@@ -124,6 +125,45 @@ def ntest() -> dict[str, float]:
     return {
         f"{r.database}/{r.task}": float(r.num_rows_test) for r in stats.itertuples()
     }
+
+
+@functools.cache
+def nsplit() -> dict[str, dict[str, float]]:
+    """Rows per split per `{db}/{task}`, from the same RelBench task stats.
+
+    What an epoch is: `rt.train`'s stream is every row of the splits in
+    `train_splits`, uncapped here (`items_per_task` is far above any of them),
+    so an epoch is their sum and a step covers `total_bs` of it.
+    """
+    import pandas as pd
+    from huggingface_hub import hf_hub_download
+
+    stats = pd.read_parquet(
+        hf_hub_download(
+            "stanford-star/relbench", "STATS/tasks.parquet", repo_type="dataset"
+        )
+    )
+    return {
+        f"{r.database}/{r.task}": {
+            "train": float(r.num_rows_train),
+            "val": float(r.num_rows_val),
+            "test": float(r.num_rows_test),
+        }
+        for r in stats.itertuples()
+    }
+
+
+def total_steps_for(db: str, task: str, splits: list[str], total_bs: int) -> int:
+    """100 epochs of this task, or 50k steps, whichever comes first.
+
+    The two ends of the task-size range want different things: rel-f1 is a few
+    thousand rows, where 100 epochs is under a thousand steps, and rel-amazon
+    is millions, where 100 epochs is more compute than the answer is worth.
+    Training on train+val is a bigger epoch and so a longer run -- which is why
+    this reads `splits` rather than assuming the train split.
+    """
+    rows = sum(nsplit()[f"{db}/{task}"][s] for s in splits)
+    return min(math.ceil(100 * rows / total_bs), 50_000)
 
 
 def targets_for(db: str, task: str) -> dict[str, float]:
@@ -286,6 +326,15 @@ def main() -> None:
     for db, task in sorted(TASKS, key=lambda p: ntest()[f"{p[0]}/{p[1]}"]):
         resources = RESOURCES[db, task]
         name = f"{db}/{task}"
+        # The three values the rest of the schedule is derived from. Editing
+        # `train_splits` here moves `total_steps` with it: the val rows are
+        # part of the epoch when they are trained on.
+        train_splits = ["train"]
+        total_bs = 256
+        total_steps = total_steps_for(db, task, train_splits, total_bs)
+        # Long enough to matter, short enough to leave a decay on the shortest
+        # runs -- 100 epochs of rel-f1/driver-top3 is a few hundred steps.
+        lr_warmup_steps = min(1_000, total_steps // 10)
         print(f"  {name:38s} {resources.gpus} {resources.qos:15s} {resources.time}")
         submit(
             "rt.train:main",
@@ -303,7 +352,7 @@ def main() -> None:
                 loss_fn=loss_fn_for(db, task),
                 load_ckpt_path=ckpt_for(db, task),
                 db_task_list=[(db, task)],
-                train_splits=["train"],
+                train_splits=train_splits,
                 pre_dir="/dfs/user/ranjanr/share/stanford-star/relbench-preprocessed",
                 tokens_per_gpu=2**18 if resources.gpus.startswith("b200") else 2**17,
                 num_workers=resources.cpus_per_task,
@@ -318,11 +367,11 @@ def main() -> None:
                 items_per_task=1_000_000_000,
                 lr=5e-4,
                 wd=0.1,
-                lr_warmup_steps=1_000,
-                lr_decay_steps=0,
+                lr_warmup_steps=lr_warmup_steps,
+                lr_decay_steps=total_steps - lr_warmup_steps,
                 grad_norm_max=1.0,
-                total_bs=256,
-                total_steps=1_000_000_000,
+                total_bs=total_bs,
+                total_steps=total_steps,
                 early_stop_after_steps=10_000,
                 swa_momentum=0.9999,
                 seed=0,
