@@ -37,6 +37,7 @@ def smoke(
         load_ckpt_path=None,
         # data + optimization
         db_task_list=[("rel-f1", "driver-dnf")],
+        train_splits=["train"],
         pre_dir=pre_dir,
         tokens_per_gpu=256,
         num_workers=0,

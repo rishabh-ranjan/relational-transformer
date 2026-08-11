@@ -197,6 +197,12 @@ def main(
     load_ckpt_path: str | None,
     # data + optimization
     db_task_list: list[tuple[str, str]] | str,
+    # Splits the training stream is drawn from. ``["train"]`` is the only
+    # choice that keeps the val split clean; adding ``"val"`` trains on it, so
+    # a val metric can no longer select a checkpoint and `eval_splits` must not
+    # carry ``"val"``. Each split of a task enters the mixture as its own task,
+    # with its own `items_per_task` cap.
+    train_splits: list[str],
     pre_dir: str,
     tokens_per_gpu: int,
     num_workers: int,
@@ -266,11 +272,11 @@ def main(
     """
     params = dict(locals())
 
-    # Training draws from the "train" split alone, so an evaluated split must
-    # not be it: a split that is trained on cannot select the checkpoint, and
+    # A split that is trained on cannot also select the checkpoint, and
     # `consider` selects on val alone.
-    assert "train" not in eval_splits, (
-        f"eval_splits={eval_splits} carries the split that is trained on"
+    assert not (set(train_splits) & set(eval_splits)), (
+        f"train_splits={train_splits} overlaps eval_splits={eval_splits}: an "
+        f"evaluated split must not be trained on"
     )
     assert early_stop_after_steps is None or "val" in eval_splits, (
         f"early_stop_after_steps={early_stop_after_steps} needs a val metric, "
@@ -464,7 +470,7 @@ def main(
     # ---- data: re-seed by resumed step so the stream does not replay ----
     data_seed = seed + SEED_STRIDE * start_step
     train_init_tic = time.time()
-    train_tasks = get_tasks(pre_dir, db_task_list, ("train",))
+    train_tasks = get_tasks(pre_dir, db_task_list, tuple(train_splits))
     train_ds = TrainDataset(
         tasks=train_tasks,
         pre_dir=pre_dir,
@@ -732,9 +738,10 @@ def main(
         resume.pt is rewritten at every eval and once more at the end, and it
         carries the same weights.
 
-        Nothing is selected when no val split is evaluated, and then the latest
-        step is all there is to keep -- pruning to an empty set would leave the
-        run without a single ``.safetensors``.
+        Nothing is selected when no val split is evaluated (`train_splits`
+        holding ``"val"`` is the case that makes that a configuration, not a
+        mistake), and then the latest step is all there is to keep -- pruning
+        to an empty set would leave the run without a single ``.safetensors``.
         """
         if keep_all_ckpts or not is_main:
             return

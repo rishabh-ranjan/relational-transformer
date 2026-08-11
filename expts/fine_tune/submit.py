@@ -303,6 +303,7 @@ def main() -> None:
                 loss_fn=loss_fn_for(db, task),
                 load_ckpt_path=ckpt_for(db, task),
                 db_task_list=[(db, task)],
+                train_splits=["train"],
                 pre_dir="/dfs/user/ranjanr/share/stanford-star/relbench-preprocessed",
                 tokens_per_gpu=2**18 if resources.gpus.startswith("b200") else 2**17,
                 num_workers=resources.cpus_per_task,

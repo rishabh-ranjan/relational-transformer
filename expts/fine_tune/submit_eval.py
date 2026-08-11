@@ -346,7 +346,7 @@ def main() -> None:
                     context_seed=0,
                     vector_db_path=None,
                     db_upto_test_timestamp=True,
-                    ctx_size_list=[1024] if arm == "ens_only" else [512, 1024, 2048],
+                    ctx_size_list=[1024] if arm == "ens_only" else [256, 512, 1024],
                     lcs_bw_pl_grid=(
                         [(1024, 256, False)]
                         if arm == "ens_only"
