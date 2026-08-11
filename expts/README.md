@@ -256,6 +256,14 @@ What to do about it:
 - **A freed slot is worth a card check, not an assumption.** `il-interactive`
   having room does not mean blackwell1 has a b200 free; read `AllocTRES` before
   spending it, and if there is none, re-ask the blackwell question below.
+- **`CfgTRES - AllocTRES > 0` is not a card you can have.** A spare b200 may be
+  held by a reservation, and a job pinned to `blackwell1` then sits on
+  `ReqNodeNotAvail` forever rather than falling back to an ampere. So a
+  blackwell submission is not done until you have seen it start: check its
+  pending reason within a minute of submitting, and move it to an ampere the
+  moment it reads `ReqNodeNotAvail`. This is the one move that can leave a
+  *running* job worse off — it was cancelled to be promoted, and the promotion
+  never ran.
 - **If a tier has room while anything of yours is pending**, cancel the pending
   one and resubmit it into the tier that freed — a pending job has lost nothing
   by being moved.
