@@ -334,7 +334,7 @@ def main() -> None:
         total_steps = total_steps_for(db, task, train_splits, total_bs)
         # Long enough to matter, short enough to leave a decay on the shortest
         # runs -- 100 epochs of rel-f1/driver-top3 is a few hundred steps.
-        lr_warmup_steps = min(1_000, total_steps // 10)
+        lr_warmup_steps = min(1_000, total_steps // 5)
         print(f"  {name:38s} {resources.gpus} {resources.qos:15s} {resources.time}")
         submit(
             "rt.train:main",
