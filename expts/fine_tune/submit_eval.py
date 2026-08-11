@@ -6,8 +6,10 @@ Two arms over the same weights and the same rows:
 - **ens_only** fixes the eval context at what the fine-tuning runs evaluated with
   and averages over context seeds. Nothing reads validation, so it waits on
   nothing and is the arm that answers first;
-- **hpo_ens** ranks 36 context configurations on validation and ensembles the
-  winner on test, in one job.
+- **hpo_ens** ranks 66 context configurations on validation and ensembles the
+  winner on test, in one job. It pays 24 passes, one per `lcs_bw_pl_grid`
+  entry: the ctx sizes ride along on each as prefixes of the contexts already
+  built.
 
 Both score the *whole* test split, once per context seed -- nothing is
 subsampled, so the metric is RelBench's own and each run writes a submission
@@ -228,16 +230,16 @@ def main() -> None:
                         if arm == "ens_only"
                         else [
                             (lcs, bw, pl)
-                            for lcs in (512, 1024, 2048)
-                            for bw in (64, 128, 256)
-                            for pl in (True, False)
+                            for lcs in (128, 256, 512, 1024)
+                            for bw in (16, 64, 256)
+                            for pl in (False, True)
                         ]
                     ),
-                    val_ensemble_size=1,
-                    test_ensemble_size=16 if arm == "ens_only" else 4,
+                    val_ensemble_size=1 if arm == "ens_only" else 4,
+                    test_ensemble_size=8,
                     run_name=name,
                     targets=targets_for(db, task),
-                    project=f"2026-08-11-fine_tune_{arm}",
+                    project="2026-08-11-eval",
                     entity="rtv2",
                     out_root="/dfs/user/ranjanr/ckpts",
                     wandb_disabled=False,

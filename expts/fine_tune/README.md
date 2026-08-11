@@ -51,15 +51,15 @@ both loading the best-on-val checkpoint of that task's most recent fine-tuning
 run:
 
 - **ens_only** fixes the context at the `(1024, 256, False)` the fine-tuning runs
-  evaluated with and averages over 16 context seeds. It reads nothing but test
+  evaluated with and averages over 8 context seeds. It reads nothing but test
   and waits on nothing, so it is the arm that answers first, and it takes the
   better slots;
-- **hpo_ens** ranks 36 context configurations — `ctx_size` x `local_ctx_size`
-  in {512, 1024, 2048}, `bfs_width` in {64, 128, 256}, `prefer_latest` in
-  {True, False}, minus `local_ctx_size > ctx_size` — on validation, then
-  ensembles the winner over 4 seeds on test. It pays only the 18 passes of
-  `lcs_bw_pl_grid`: the three ctx sizes ride along on each pass as prefixes of
-  the contexts it already built.
+- **hpo_ens** ranks 66 context configurations — `ctx_size` in {512, 1024, 2048}
+  x `local_ctx_size` in {128, 256, 512, 1024}, `bfs_width` in {16, 64, 256},
+  `prefer_latest` in {False, True}, minus `local_ctx_size > ctx_size` — each
+  scored over 4 val seeds, then ensembles the winner over 8 seeds on test. It
+  pays only the 24 passes of `lcs_bw_pl_grid`: the three ctx sizes ride along
+  on each pass as prefixes of the contexts it already built.
 
 Both score the whole test split -- nothing subsampled, so the numbers are
 RelBench's own and each run writes a submission directory -- and both score the
