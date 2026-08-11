@@ -35,12 +35,11 @@ def probe(*, run_id: str, num_workers: int) -> None:
     tasks = get_tasks(PRE_DIR, [DB_TASK], ("test",))
 
     started = time.time()
-    for dtype in (torch.bfloat16, torch.float16, torch.float32):
-        # 2**18 is what the eval jobs use (eval_bs 128 at ctx 2048); the small
-        # one is there to tell "the card cannot hold this batch" apart from
-        # "the card cannot run this at all", and is the shape the older cards
-        # are compared to the a100 at.
-        for tokens_per_gpu in (2**18, 2**15):
+    for dtype in (torch.bfloat16,):
+        # 2**18 is what the eval jobs use (eval_bs 128 at ctx 2048); the rest
+        # find the largest batch each card holds, and -- on a card where every
+        # size fits -- say whether the metric moves with the batch size.
+        for tokens_per_gpu in (2**18, 2**17, 2**16, 2**15):
             name = f"{dtype}".removeprefix("torch.")
             if time.time() - started > 3600:
                 log(skipped=name, tokens_per_gpu=tokens_per_gpu, reason="time_budget")
@@ -121,7 +120,7 @@ def nodes() -> list[tuple[str, str, str | None, str | None, int]]:
     at all, so there is nothing to time.
     """
     return [
-        ("a100", "a100:1", "ampere", None, 14),
+        # ("a100", "a100:1", "ampere", None, 14),
         ("rtx8000", "rtx8000:1", None, "hyperturing2", 9),
         ("2080ti", "2080ti:1", None, "turing3", 8),
     ]
