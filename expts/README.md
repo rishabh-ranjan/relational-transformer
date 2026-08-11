@@ -48,9 +48,27 @@ forget, and the first round nobody starts is the round the watch ends — which
 looks exactly like a sweep that is fine. A stated interval with no live monitor
 behind it is not a watch.
 
+**Make the monitor watch the tier counts, not just the jobs.** A high-tier slot
+frees the instant any job of yours ends, which is far more often than any sane
+interval, so a loop that only reports progress leaves you finding free `il`
+slots by hand — or being told about them. Count the running jobs per qos
+against [the budget](#allocating-a-sweep) every round and emit a distinct line
+when a tier has room while anything of yours is pending; that line is a
+[promotion to make now](#rebalance-while-it-runs), not a status update. A sweep
+of short jobs turns tiers over every few minutes, so poll minutes, not
+quarter-hours.
+
 The loop has to end by itself, too: make it emit on the queue going empty, and
 on the pending reasons below that mean a job will never start, not only on
 progress. Silence has to mean "still going", never "the watcher stopped".
+
+```bash
+# The shape: a round line, and a PROMOTE line the moment a tier has room.
+il=$(squeue -u $USER -h -t RUNNING -o "%q" | grep -cx il)
+int=$(squeue -u $USER -h -t RUNNING -o "%q" | grep -cx il-interactive)
+pend=$(squeue -u $USER -h -t PENDING -o "%i" | wc -l)
+[ $pend -gt 0 ] && [ $(( (10 - il) + (2 - int) )) -gt 0 ] && echo "PROMOTE: ..."
+```
 
 Check right after submitting, again once the runs are past startup — a few
 minutes, longer with `compile=True`, and long enough that step lines must have
