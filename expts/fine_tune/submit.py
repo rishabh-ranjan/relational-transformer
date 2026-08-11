@@ -153,11 +153,8 @@ def nsplit() -> dict[str, dict[str, float]]:
     }
 
 
-def total_steps_for(
-    db: str, task: str, splits: list[str], total_bs: int, eval_freq: int
-) -> int:
-    """100 epochs of this task, or 50k steps, whichever comes first, rounded up
-    to a multiple of `eval_freq`.
+def steps_for(db: str, task: str, splits: list[str], total_bs: int) -> int:
+    """100 epochs of this task, or 50k steps, whichever comes first.
 
     The two ends of the task-size range want different things: rel-f1 is a few
     thousand rows, where 100 epochs is under a thousand steps, and rel-amazon
@@ -165,14 +162,11 @@ def total_steps_for(
     Training on train+val is a bigger epoch and so a longer run -- which is why
     this reads `splits` rather than assuming the train split.
 
-    The rounding keeps the end on the eval cadence: `rt.train` evaluates every
-    `eval_freq` steps and once more at the last step whatever it is, so an
-    unrounded `total_steps` puts the final point at an x no other run shares.
-    The last step is evaluated either way -- it needs no step of its own.
+    The step budget, not `total_steps`: the caller rounds it up to the eval
+    cadence it picks.
     """
     rows = sum(nsplit()[f"{db}/{task}"][s] for s in splits)
-    steps = min(math.ceil(100 * rows / total_bs), 50_000)
-    return math.ceil(steps / eval_freq) * eval_freq
+    return min(math.ceil(100 * rows / total_bs), 50_000)
 
 
 def targets_for(db: str, task: str) -> dict[str, float]:
@@ -340,8 +334,15 @@ def main() -> None:
         # part of the epoch when they are trained on.
         train_splits = ["train", "val"]
         total_bs = 256
-        eval_freq = 100
-        total_steps = total_steps_for(db, task, train_splits, total_bs, eval_freq)
+        steps = steps_for(db, task, train_splits, total_bs)
+        # Eleven points of curve on every run, and never more than one eval per
+        # thousand steps: an eval here reads `eval_items_per_task` rows of the
+        # test split, which on the big tasks is minutes, so a fixed cadence
+        # either costs more than the training or leaves the short runs with two
+        # points. `total_steps` is rounded up to it, which keeps the last step
+        # on the cadence -- it is evaluated either way.
+        eval_freq = min(1_000, steps // 10)
+        total_steps = math.ceil(steps / eval_freq) * eval_freq
         # Long enough to matter, short enough to leave a decay on the shortest
         # runs -- 100 epochs of rel-f1/driver-top3 is a few hundred steps.
         lr_warmup_steps = min(1_000, total_steps // 5)
@@ -400,15 +401,15 @@ def main() -> None:
                 eval_prefetch_factor=2,
                 eval_num_walks=10_000,
                 eval_walk_length=20,
-                eval_items_per_task=1024,
+                eval_items_per_task=2**14,
                 eval_ctx_size_list=[1024],
                 eval_mmap_populate=True,
                 eval_shuffle_seed=0,
                 eval_context_seed=0,
                 eval_vector_db_path=None,
-                eval_lcs_bw_pl_grid=[(1024, 256, False)],
+                eval_lcs_bw_pl_grid=[(1024, 128, False)],
                 targets=targets_for(db, task),
-                project="2026-08-11-fine_tune",
+                project="2026-08-12-fine_tune",
                 entity="rtv2",
                 run_name=name,
                 wandb_disabled=False,
