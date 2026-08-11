@@ -10,27 +10,27 @@ from roach.slurm import Resources, submit
 HERE = Path(__file__).parent
 
 TASKS = (
-    ("rel-event", "user-repeat"),
+    # ("rel-event", "user-repeat"),
     ("rel-f1", "driver-dnf"),
-    ("rel-f1", "driver-top3"),
-    ("rel-f1", "driver-position"),
-    ("rel-trial", "study-outcome"),
-    ("rel-avito", "ad-ctr"),
-    ("rel-event", "user-attendance"),
-    ("rel-event", "user-ignore"),
-    ("rel-trial", "study-adverse"),
-    ("rel-trial", "site-success"),
-    ("rel-avito", "user-visits"),
-    ("rel-avito", "user-clicks"),
-    ("rel-hm", "user-churn"),
-    ("rel-stack", "user-engagement"),
-    ("rel-hm", "item-sales"),
-    ("rel-stack", "post-votes"),
-    ("rel-amazon", "item-churn"),
-    ("rel-amazon", "item-ltv"),
-    ("rel-stack", "user-badge"),
-    ("rel-amazon", "user-churn"),
-    ("rel-amazon", "user-ltv"),
+    # ("rel-f1", "driver-top3"),
+    # ("rel-f1", "driver-position"),
+    # ("rel-trial", "study-outcome"),
+    # ("rel-avito", "ad-ctr"),
+    # ("rel-event", "user-attendance"),
+    # ("rel-event", "user-ignore"),
+    # ("rel-trial", "study-adverse"),
+    # ("rel-trial", "site-success"),
+    # ("rel-avito", "user-visits"),
+    # ("rel-avito", "user-clicks"),
+    # ("rel-hm", "user-churn"),
+    # ("rel-stack", "user-engagement"),
+    # ("rel-hm", "item-sales"),
+    # ("rel-stack", "post-votes"),
+    # ("rel-amazon", "item-churn"),
+    # ("rel-amazon", "item-ltv"),
+    # ("rel-stack", "user-badge"),
+    # ("rel-amazon", "user-churn"),
+    # ("rel-amazon", "user-ltv"),
 )
 
 # Random init instead of RT-P, as the control for a task whose fine-tuned
@@ -226,7 +226,8 @@ def a100(qos: str, time: str) -> Resources:
 # gives:
 #
 #   il-interactive  2 b200            the two smallest-test jobs
-#   il              10 a100           the next ten
+#   il              8 a100            the next ten, less the two given back
+#                                     to another experiment while pending
 #   il-lo           30 a100           everything from rel-event/user-attendance on
 #
 # Both arms of a task sit in the same tier: the pair is the comparison, and a
@@ -238,7 +239,7 @@ def a100(qos: str, time: str) -> Resources:
 RESOURCES: dict[tuple[str, str, str], Resources] = {
     ("train", "rel-event", "user-repeat"): b200("il-interactive", "12:00:00"),
     ("trainval", "rel-event", "user-repeat"): b200("il-interactive", "12:00:00"),
-    ("train", "rel-f1", "driver-dnf"): a100("il", "1-00:00:00"),
+    ("train", "rel-f1", "driver-dnf"): a100("il-lo", "1-00:00:00"),
     ("trainval", "rel-f1", "driver-dnf"): a100("il", "1-00:00:00"),
     ("train", "rel-f1", "driver-top3"): a100("il", "1-00:00:00"),
     ("trainval", "rel-f1", "driver-top3"): a100("il", "1-00:00:00"),
@@ -247,7 +248,7 @@ RESOURCES: dict[tuple[str, str, str], Resources] = {
     ("train", "rel-trial", "study-outcome"): a100("il", "1-00:00:00"),
     ("trainval", "rel-trial", "study-outcome"): a100("il", "1-00:00:00"),
     ("train", "rel-avito", "ad-ctr"): a100("il", "1-00:00:00"),
-    ("trainval", "rel-avito", "ad-ctr"): a100("il", "1-00:00:00"),
+    ("trainval", "rel-avito", "ad-ctr"): a100("il-lo", "1-00:00:00"),
     ("train", "rel-event", "user-attendance"): a100("il-lo", "1-00:00:00"),
     ("trainval", "rel-event", "user-attendance"): a100("il-lo", "1-00:00:00"),
     ("train", "rel-event", "user-ignore"): a100("il-lo", "1-00:00:00"),
@@ -283,7 +284,7 @@ RESOURCES: dict[tuple[str, str, str], Resources] = {
 
 def main() -> None:
     tasks = sorted(TASKS, key=lambda p: ntest()[f"{p[0]}/{p[1]}"])
-    arms = [("train", ["train"]), ("trainval", ["train", "val"])]
+    arms = [("train", ["train"])]
     for (db, task), (arm, train_splits) in itertools.product(tasks, arms):
         resources = RESOURCES[arm, db, task]
         name = f"{db}/{task}-{arm}" + ("-rand" if RANDOM_INIT else "")
