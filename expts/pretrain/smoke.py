@@ -86,7 +86,8 @@ def main() -> None:
             # optimization: enough steps to prove the loop turns over
             lr=5e-4,
             wd=0.1,
-            warmup_steps=10,
+            lr_warmup_steps=10,
+            lr_decay_steps=0,
             grad_norm_max=1.0,
             total_bs=64,
             total_steps=20,

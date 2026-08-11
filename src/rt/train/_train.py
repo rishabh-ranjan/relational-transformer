@@ -217,7 +217,14 @@ def main(
     items_per_task: int,
     lr: float,
     wd: float,
-    warmup_steps: int,
+    # Linear warmup from 0 to `lr` over the first this many steps; 0 starts at
+    # full lr. Linear decay to 0 over the last `lr_decay_steps` of
+    # `total_steps`; 0 holds `lr` to the end. The decay is measured back from
+    # `total_steps`, so a run that stops early -- `early_stop_after_steps`, or
+    # a `total_steps` set far past where the run is meant to end -- never
+    # reaches it.
+    lr_warmup_steps: int,
+    lr_decay_steps: int,
     grad_norm_max: float,
     total_bs: int,
     total_steps: int,
@@ -284,6 +291,10 @@ def main(
     assert early_stop_after_steps is None or "val" in eval_splits, (
         f"early_stop_after_steps={early_stop_after_steps} needs a val metric, "
         f"but eval_splits={eval_splits}"
+    )
+
+    assert 0 <= lr_decay_steps <= total_steps, (
+        f"lr_decay_steps={lr_decay_steps} must fit inside total_steps={total_steps}"
     )
 
     # Reference point for time-to-first-step: everything before the first
@@ -410,10 +421,10 @@ def main(
     ]
 
     def lr_lambda(step):
-        # warmup_steps=0 means no warmup: full lr from the first step.
-        if step >= warmup_steps:
-            return 1.0
-        return (step + 1) / warmup_steps
+        warm = 1.0 if step >= lr_warmup_steps else (step + 1) / lr_warmup_steps
+        decayed = total_steps - step
+        decay = 1.0 if decayed >= lr_decay_steps else max(0.0, decayed / lr_decay_steps)
+        return warm * decay
 
     scheds = [optim.lr_scheduler.LambdaLR(o, lr_lambda) for o in opts]
 

@@ -108,7 +108,8 @@ def main() -> None:
             # optimization
             lr=5e-4,
             wd=0.1,
-            warmup_steps=2_000,
+            lr_warmup_steps=2_000,
+            lr_decay_steps=0,
             grad_norm_max=1.0,
             total_bs=1024,
             total_steps=100_001,

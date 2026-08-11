@@ -63,6 +63,13 @@ turns SWA off: no second net is built, so there are no `swa_steps=` or
 `best_swa_*` files and nothing is selected on a `swa/` metric. It cannot be
 changed across a resume — the average is part of `resume.pt`.
 
+`lr_warmup_steps` and `lr_decay_steps` shape the learning rate: linear warmup
+from 0 over the first, linear decay to 0 over the last that many steps of
+`total_steps`, and `0` disables either end. The decay is measured back from
+`total_steps`, so a run that ends before it — early stopping, or a
+`total_steps` set far beyond where the run is meant to stop — never reaches the
+decay at all.
+
 `early_stop_after_steps` ends the run early once neither the live nor the SWA
 val metric has improved on — or matched again — its best for that many steps,
 checked at each eval. `None` runs the full `total_steps`. It needs `"val"` in
