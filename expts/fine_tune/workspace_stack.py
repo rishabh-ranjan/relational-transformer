@@ -83,7 +83,12 @@ def main() -> None:
     w._internal_id = ""
 
     workspace.save(w)
-    print(f"https://wandb.ai/{w.entity}/{w.project}?nw={w._internal_name}")
+    # `?nw=` carries the view name without the wrapper the app puts around a
+    # workspace view: `nw-<slug>-w` on disk is `?nw=<slug>` in the link, and the
+    # full name in the link is a view the app never finds -- it spins instead of
+    # loading.
+    slug = SLUG.removeprefix("nw-").removesuffix("-w")
+    print(f"https://wandb.ai/{w.entity}/{w.project}?nw={slug}")
 
 
 if __name__ == "__main__":
