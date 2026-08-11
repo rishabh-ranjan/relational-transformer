@@ -47,9 +47,14 @@ def task_types() -> dict[str, str]:
 
 def tuned() -> dict[str, dict]:
     """`{db}/{task}` -> the `tuning.json` its run wrote: winning config and the
-    validation score that chose it."""
+    validation score that chose it.
+
+    Newest wins: a cancelled attempt that got as far as writing one leaves it
+    behind, and run directories are named by timestamp.
+    """
     out = {}
-    for path in (OUT_ROOT / ENTITY / PROJECT).glob("*/tuning.json"):
+    root = OUT_ROOT / ENTITY / PROJECT
+    for path in sorted(root.glob("*/tuning.json"), key=lambda q: q.parent.name):
         out.update(json.loads(path.read_text()))
     return out
 

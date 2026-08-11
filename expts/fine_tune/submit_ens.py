@@ -1,16 +1,32 @@
-"""Score each task on test with the context `submit_hpo_only.py` picked on
-validation, ensembled over context seeds, one job per task. See
-[README.md](README.md)."""
+"""Score each task on test with the context its tuning run picked on
+validation, ensembled over context seeds, one job per task, over the *whole*
+test split. See [README.md](README.md).
+
+`submit_hpo_ens.py` caps the biggest test sets (`submit_ens_only.items_for`),
+which makes those numbers incomparable to a published one. This is the pass
+that removes the cap, so it only has the tasks that were capped: everything
+else already has a whole-split number and rerunning it would buy nothing.
+"""
 
 import json
 from pathlib import Path
 
 from roach.slurm import Resources, submit
 
-from submit import TASKS, ntrain
-from submit_hpo_only import b200, ckpt_for
+from submit import a100, targets_for
+from submit_ens_only import TASKS, ckpt_for, items_for, ntest
 
-TUNING_ROOT = Path("/dfs/user/ranjanr/ckpts/rtv2/2026-08-10-fine_tune_hpo")
+TUNING_ROOT = Path("/dfs/user/ranjanr/ckpts/rtv2/2026-08-10-fine_tune_hpo_ens")
+
+
+def capped() -> list[tuple[str, str]]:
+    """The tasks `submit_hpo_ens.py` subsampled, costliest first.
+
+    A task whose whole test split already fits under the cap was never
+    subsampled and is not rerun here.
+    """
+    out = [t for t in TASKS if items_for(*t) < ntest()[f"{t[0]}/{t[1]}"]]
+    return sorted(out, key=lambda t: -ntest()[f"{t[0]}/{t[1]}"])
 
 
 def cfg_for(db: str, task: str) -> tuple[int, int, int, bool]:
@@ -19,43 +35,46 @@ def cfg_for(db: str, task: str) -> tuple[int, int, int, bool]:
 
     Read from the `tuning.json` every tuning run writes beside its `eval_out`,
     over every run under `TUNING_ROOT`: which run covered which task is not in
-    the path, and one entry per task must match or the decision is ambiguous.
+    the path. A task can have several -- a cancelled attempt that got as far as
+    writing one leaves it behind -- so the newest wins, run directories being
+    named by timestamp.
     """
     hits = [
         entry
-        for p in TUNING_ROOT.glob("*/tuning.json")
+        for p in sorted(TUNING_ROOT.glob("*/tuning.json"), key=lambda q: q.parent.name)
         for key, entry in json.loads(p.read_text()).items()
         if key == f"{db}/{task}"
     ]
-    assert len(hits) == 1, (
-        f"{len(hits)} tuning entries for {db}/{task} in {TUNING_ROOT}"
-    )
-    ctx, lcs, bw, pl = hits[0]["best_cfg"]
+    assert hits, f"no tuning entry for {db}/{task} in {TUNING_ROOT}"
+    ctx, lcs, bw, pl = hits[-1]["best_cfg"]
     return ctx, lcs, bw, pl
 
 
 def plan(n: int) -> list[Resources]:
     """The best n slots this cluster will give one-GPU jobs, best first.
 
-    Its own count, not `submit_hpo_only.plan`'s: this submission goes out after the
-    tuning one has finished, at whichever moment that is, and what was free
-    then says nothing about now. `il-interactive` caps at 2 gpus of any type,
-    `il` at 10 together with only 2 b200, `il-lo` is preemptible and
-    uncapped. Blackwell throughout while blackwell1 has the cards: a test pass
-    per context seed is the whole wall clock.
+    Its own count, not another script's: this submission goes out whenever the
+    tuning it reads has finished, and what was free then says nothing about
+    now. Per [../README.md](../README.md#allocating-a-sweep), and recount it
+    before every submission.
 
-    Recount and rewrite this before every submission.
+    Today: the fine-tuning sweep has finished and released `il`, so its 10 are
+    free bar the one `il-interactive` slot the site-success control holds.
+    Amperes throughout -- blackwell1's 8 cards are held by other people's
+    non-preemptible jobs, and a queued high-priority job there waits longer
+    than an ampere job takes to run.
 
     An eval run does not checkpoint: a preemption restarts it from the top, so
     `il-lo` costs wall clock in whole runs rather than in minutes.
     """
-    out = [b200("il-interactive", "12:00:00")] * min(n, 2)
-    out += [b200("il-lo", "21-00:00:00")] * (n - len(out))
+    out = [a100("il-interactive", "12:00:00")] * min(n, 1)
+    out += [a100("il", "12:00:00")] * min(n - len(out), 10)
+    out += [a100("il-lo", "21-00:00:00")] * (n - len(out))
     return out
 
 
 def main() -> None:
-    tasks = sorted(TASKS, key=lambda p: -ntrain()[f"{p[0]}/{p[1]}"])
+    tasks = capped()
     # Every checkpoint and winning config before any job: both assert, and a
     # task whose fine-tuning or tuning run has not got that far must abort the
     # submission rather than leave the tasks ahead of it queued and the rest
@@ -95,12 +114,12 @@ def main() -> None:
                 lcs_bw_pl_grid=[(lcs, bw, pl)],
                 val_ensemble_size=1,
                 test_ensemble_size=4,
-                run_name=None,
-                targets={},
-                project="2026-08-10-fine_tune_ens",
+                run_name=name,
+                targets=targets_for(db, task),
+                project="2026-08-10-fine_tune_ens_full",
                 entity="rtv2",
                 out_root="/dfs/user/ranjanr/ckpts",
-                wandb_disabled=True,
+                wandb_disabled=False,
             ),
             resources=resources,
             name=f"ens-{db}-{task}",
