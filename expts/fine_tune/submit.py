@@ -1,7 +1,6 @@
 """Submit one fine-tuning job per task. See [README.md](README.md)."""
 
 import functools
-import itertools
 import json
 from pathlib import Path
 
@@ -32,12 +31,6 @@ TASKS = (
     ("rel-amazon", "user-churn"),
     ("rel-amazon", "user-ltv"),
 )
-
-# Random init instead of RT-P, as the control for a task whose fine-tuned
-# numbers are far better than every published method's: if a model that never
-# saw pretraining lands in the same place, what it knows came from the context
-# it is given, not from what it was pretrained on.
-RANDOM_INIT = False
 
 
 @functools.cache
@@ -217,9 +210,8 @@ def a100(qos: str, time: str) -> Resources:
     )
 
 
-# Which slot each job goes in, laid out by hand -- one line per job, keyed by
-# `(arm, db, task)`. Commenting a line out is how a job is left out of a
-# submission.
+# Which slot each job goes in, laid out by hand -- one line per task.
+# Commenting a line out is how a job is left out of a submission.
 #
 # NOT A DEFAULT TO INHERIT: whatever the last submission put here is a record of
 # a different cluster and a different instruction. Work the assignment out again
@@ -227,83 +219,38 @@ def a100(qos: str, time: str) -> Resources:
 # read the cluster, subtract what your own jobs already hold, spend the tiers
 # top down.
 #
-# Read at submission time: I hold no gpu jobs. blackwell1 has 3 of 8 b200 free,
-# and the soonest of the 5 running frees in ~9h. Of those 3, only the two
-# `il-interactive` jobs actually start: a reservation holds the third
-# (`ReqNodeNotAvail`), so the `il` tier is all ampere. All 64 usable a100 are
-# allocated (ampere7 is down) but ~50 of them are one user's `il-lo`, which `il`
-# preempts, so the `il` amperes start and the `il-lo` tail queues behind. That
-# gives:
-#
-#   il-interactive  2 b200            the smallest-test pair, and when that
-#                                     pair finishes the next pair still pending
-#   il              8 a100            two slots of the ten are left free for
-#                                     another experiment; the eight go to the
-#                                     two largest-test tasks (rel-stack
-#                                     user-engagement, user-badge), which are
-#                                     the slowest and lose the most to `il-lo`
-#                                     preemption, plus the smallest four still
-#                                     running
-#   il-lo           30 a100           everything from rel-event/user-attendance on
-#
-# Both arms of a task sit in the same tier: the pair is the comparison, and a
-# half-finished pair answers nothing. Order is ascending test-set size
-# (`ntest()`), so the fastest answers land first.
-#
-# A job with no line here stops the submission rather than taking a slot
+# A task with no line here stops the submission rather than taking a slot
 # nobody chose for it.
-RESOURCES: dict[tuple[str, str, str], Resources] = {
-    ("train", "rel-event", "user-repeat"): b200("il-interactive", "12:00:00"),
-    ("trainval", "rel-event", "user-repeat"): b200("il-interactive", "12:00:00"),
-    ("train", "rel-f1", "driver-dnf"): a100("il-lo", "1-00:00:00"),
-    ("trainval", "rel-f1", "driver-dnf"): a100("il", "1-00:00:00"),
-    ("train", "rel-f1", "driver-top3"): a100("il", "1-00:00:00"),
-    ("trainval", "rel-f1", "driver-top3"): a100("il", "1-00:00:00"),
-    ("train", "rel-f1", "driver-position"): a100("il-lo", "1-00:00:00"),
-    ("trainval", "rel-f1", "driver-position"): a100("il-lo", "1-00:00:00"),
-    ("train", "rel-trial", "study-outcome"): a100("il-lo", "1-00:00:00"),
-    ("trainval", "rel-trial", "study-outcome"): a100("il-lo", "1-00:00:00"),
-    ("train", "rel-avito", "ad-ctr"): a100("il", "1-00:00:00"),
-    ("trainval", "rel-avito", "ad-ctr"): a100("il-lo", "1-00:00:00"),
-    ("train", "rel-event", "user-attendance"): a100("il-lo", "1-00:00:00"),
-    ("trainval", "rel-event", "user-attendance"): a100("il-lo", "1-00:00:00"),
-    ("train", "rel-event", "user-ignore"): a100("il-lo", "1-00:00:00"),
-    ("trainval", "rel-event", "user-ignore"): a100("il-lo", "1-00:00:00"),
-    ("train", "rel-trial", "study-adverse"): b200("il-interactive", "12:00:00"),
-    ("trainval", "rel-trial", "study-adverse"): b200("il-interactive", "12:00:00"),
-    ("train", "rel-trial", "site-success"): b200("il-interactive", "12:00:00"),
-    ("trainval", "rel-trial", "site-success"): b200("il-interactive", "12:00:00"),
-    ("train", "rel-avito", "user-visits"): a100("il-lo", "1-00:00:00"),
-    ("trainval", "rel-avito", "user-visits"): a100("il-lo", "1-00:00:00"),
-    ("train", "rel-avito", "user-clicks"): a100("il-lo", "1-00:00:00"),
-    ("trainval", "rel-avito", "user-clicks"): a100("il-lo", "1-00:00:00"),
-    ("train", "rel-hm", "user-churn"): a100("il-lo", "1-00:00:00"),
-    ("trainval", "rel-hm", "user-churn"): a100("il-lo", "1-00:00:00"),
-    ("train", "rel-stack", "user-engagement"): a100("il", "1-00:00:00"),
-    ("trainval", "rel-stack", "user-engagement"): a100("il", "1-00:00:00"),
-    ("train", "rel-hm", "item-sales"): a100("il-lo", "1-00:00:00"),
-    ("trainval", "rel-hm", "item-sales"): a100("il-lo", "1-00:00:00"),
-    ("train", "rel-stack", "post-votes"): a100("il-lo", "1-00:00:00"),
-    ("trainval", "rel-stack", "post-votes"): a100("il-lo", "1-00:00:00"),
-    ("train", "rel-amazon", "item-churn"): a100("il-lo", "1-00:00:00"),
-    ("trainval", "rel-amazon", "item-churn"): a100("il-lo", "1-00:00:00"),
-    ("train", "rel-amazon", "item-ltv"): a100("il-lo", "1-00:00:00"),
-    ("trainval", "rel-amazon", "item-ltv"): a100("il-lo", "1-00:00:00"),
-    ("train", "rel-stack", "user-badge"): a100("il", "1-00:00:00"),
-    ("trainval", "rel-stack", "user-badge"): a100("il", "1-00:00:00"),
-    ("train", "rel-amazon", "user-churn"): a100("il-lo", "1-00:00:00"),
-    ("trainval", "rel-amazon", "user-churn"): a100("il-lo", "1-00:00:00"),
-    ("train", "rel-amazon", "user-ltv"): a100("il-lo", "1-00:00:00"),
-    ("trainval", "rel-amazon", "user-ltv"): a100("il-lo", "1-00:00:00"),
+RESOURCES: dict[tuple[str, str], Resources] = {
+    ("rel-event", "user-repeat"): b200("il-interactive", "12:00:00"),
+    ("rel-f1", "driver-dnf"): a100("il", "1-00:00:00"),
+    ("rel-f1", "driver-top3"): a100("il", "1-00:00:00"),
+    ("rel-f1", "driver-position"): a100("il", "1-00:00:00"),
+    ("rel-trial", "study-outcome"): a100("il", "1-00:00:00"),
+    ("rel-avito", "ad-ctr"): a100("il", "1-00:00:00"),
+    ("rel-event", "user-attendance"): a100("il-lo", "1-00:00:00"),
+    ("rel-event", "user-ignore"): a100("il-lo", "1-00:00:00"),
+    ("rel-trial", "study-adverse"): b200("il-interactive", "12:00:00"),
+    ("rel-trial", "site-success"): b200("il-interactive", "12:00:00"),
+    ("rel-avito", "user-visits"): a100("il-lo", "1-00:00:00"),
+    ("rel-avito", "user-clicks"): a100("il-lo", "1-00:00:00"),
+    ("rel-hm", "user-churn"): a100("il-lo", "1-00:00:00"),
+    ("rel-stack", "user-engagement"): a100("il", "1-00:00:00"),
+    ("rel-hm", "item-sales"): a100("il-lo", "1-00:00:00"),
+    ("rel-stack", "post-votes"): a100("il-lo", "1-00:00:00"),
+    ("rel-amazon", "item-churn"): a100("il-lo", "1-00:00:00"),
+    ("rel-amazon", "item-ltv"): a100("il-lo", "1-00:00:00"),
+    ("rel-stack", "user-badge"): a100("il", "1-00:00:00"),
+    ("rel-amazon", "user-churn"): a100("il-lo", "1-00:00:00"),
+    ("rel-amazon", "user-ltv"): a100("il-lo", "1-00:00:00"),
 }
 
 
 def main() -> None:
-    tasks = sorted(TASKS, key=lambda p: ntest()[f"{p[0]}/{p[1]}"])
-    arms = ["train"]
-    for (db, task), arm in itertools.product(tasks, arms):
-        resources = RESOURCES[arm, db, task]
-        name = f"{db}/{task}-{arm}" + ("-rand" if RANDOM_INIT else "")
+    # Ascending test-set size, so the fastest answers land first.
+    for db, task in sorted(TASKS, key=lambda p: ntest()[f"{p[0]}/{p[1]}"]):
+        resources = RESOURCES[db, task]
+        name = f"{db}/{task}"
         print(f"  {name:38s} {resources.gpus} {resources.qos:15s} {resources.time}")
         submit(
             "rt.train:main",
@@ -319,7 +266,7 @@ def main() -> None:
                 compile=True,
                 materialize_attn_masks=True,
                 loss_fn=loss_fn_for(db, task),
-                load_ckpt_path=None if RANDOM_INIT else ckpt_for(db, task),
+                load_ckpt_path=ckpt_for(db, task),
                 db_task_list=[(db, task)],
                 pre_dir="/dfs/user/ranjanr/share/stanford-star/relbench-preprocessed",
                 tokens_per_gpu=2**17 if resources.gpus.startswith("b200") else 2**16,
@@ -372,7 +319,7 @@ def main() -> None:
                 out_root="/dfs/user/ranjanr/ckpts",
             ),
             resources=resources,
-            name=f"{db}-{task}-{arm}" + ("-rand" if RANDOM_INIT else ""),
+            name=f"{db}-{task}",
             repo_root="/lfs/hyperturing1/0/ranjanr/clones/rishabh-ranjan/relational-transformer",
             log_root="/dfs/user/ranjanr/slurm-logs/rishabh-ranjan/relational-transformer/expts/fine-tune",
             clone_root="/lfs/local/0/roach_clones",
