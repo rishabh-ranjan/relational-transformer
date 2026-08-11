@@ -8,7 +8,10 @@ by mean validation metric.
 
 Checkpoints land in the per-run directory
 `<out-root>/<entity>/<project>/<id>/` as `steps=<N>.safetensors` (live) and
-`swa_steps=<N>.safetensors` (SWA, when `swa_momentum` is set); at the end the
+`swa_steps=<N>.safetensors` (SWA, when `swa_momentum` is set), with
+`latest.safetensors` (and `latest_swa.safetensors`) pointing at the most recent
+of each -- a stable path for a reader that wants the current weights of a run
+still training, or of one with no val split and so no `best_*`. At the end the
 run copies each net's best
 classifier and regressor to `best_live_clf.safetensors` /
 `best_swa_clf.safetensors` (and the `reg` pair), plus `best_clf.safetensors` /

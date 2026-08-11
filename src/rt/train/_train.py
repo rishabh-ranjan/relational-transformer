@@ -741,21 +741,42 @@ def main(
             tmp.unlink(missing_ok=True)
             raise
 
+    def publish_latest(src, name):
+        """Point ``name`` at ``src``, atomically and without a second copy.
+
+        A hard link, so the weights are written once however many names they
+        answer to, and ``os.replace`` over the old link, so a reader either
+        opens the previous checkpoint or this one. The link also outlives
+        ``prune_ckpts`` deleting ``src``: the file is the inode, not the name.
+        """
+        tmp = out_dir / f"{name}.{os.getpid()}.tmp"
+        tmp.unlink(missing_ok=True)
+        try:
+            os.link(src, tmp)
+            os.replace(tmp, out_dir / name)
+        except BaseException:
+            tmp.unlink(missing_ok=True)
+            raise
+
     def checkpoint(step):
         if not is_main:
             return
-        save_model(
-            raw_net.state_dict(),
-            out_dir / f"steps={step}.safetensors",
-            metadata={"step": step},
-        )
+        live = out_dir / f"steps={step}.safetensors"
+        save_model(raw_net.state_dict(), live, metadata={"step": step})
+        # The step this run is at, under a name that does not move. A reader
+        # that wants the current weights -- an eval sweep on a run still
+        # training, a run with no val split and so no `best_*` -- has one path
+        # to open instead of a directory to sort.
+        publish_latest(live, "latest.safetensors")
         if swa is not None and swa.n > 0:
             swa.sync_to(swa_net.named_parameters())
+            swa_ckpt = out_dir / f"swa_steps={step}.safetensors"
             save_model(
                 swa_net.state_dict(),
-                out_dir / f"swa_steps={step}.safetensors",
+                swa_ckpt,
                 metadata={"step": step, "swa_n": swa.n},
             )
+            publish_latest(swa_ckpt, "latest_swa.safetensors")
 
     def prune_ckpts(step):
         """Delete every periodic checkpoint no longer worth keeping.
