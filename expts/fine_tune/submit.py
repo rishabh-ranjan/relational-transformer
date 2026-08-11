@@ -15,19 +15,19 @@ TASKS = (
     # ("rel-f1", "driver-position"),
     # ("rel-trial", "study-outcome"),
     # ("rel-avito", "ad-ctr"),
-    # ("rel-event", "user-attendance"),
+    ("rel-event", "user-attendance"),
     # ("rel-event", "user-ignore"),
     # ("rel-trial", "study-adverse"),
     # ("rel-trial", "site-success"),
     # ("rel-avito", "user-visits"),
     # ("rel-avito", "user-clicks"),
-    # ("rel-hm", "user-churn"),
+    ("rel-hm", "user-churn"),
     # ("rel-stack", "user-engagement"),
     # ("rel-hm", "item-sales"),
     # ("rel-stack", "post-votes"),
     # ("rel-amazon", "item-churn"),
     ("rel-amazon", "item-ltv"),
-    # ("rel-stack", "user-badge"),
+    ("rel-stack", "user-badge"),
     # ("rel-amazon", "user-churn"),
     # ("rel-amazon", "user-ltv"),
 )
@@ -231,9 +231,10 @@ def a100(qos: str, time: str, reservation: str | None = None) -> Resources:
 # A task with no line here stops the submission rather than taking a slot
 # nobody chose for it.
 #
-# 13:48: rel-amazon/item-ltv goes back on an ampere. blackwell1 reads 7 of 8
-# allocated, but the eighth is reserved, so a b200 job pins itself to a node
-# that will not take it and sits on ReqNodeNotAvail however long it is left.
+# 15:00: the eval sweep is what the tiers are for now, so the four runs still
+# fine-tuning drop to `il-lo` and hand back 2 b200 and 2 amperes. No
+# reservation on them: ampere8 is for the eval jobs. They checkpoint, so
+# preemption costs minutes.
 #
 # 2026-08-11: blackwell1 has 6 of 8 b200 allocated, so exactly 2 are free and
 # the rest sit under 7-day walls -- `il-interactive`'s 2 gpus take those two and
@@ -245,18 +246,18 @@ def a100(qos: str, time: str, reservation: str | None = None) -> Resources:
 RESOURCES: dict[tuple[str, str], Resources] = {
     ("rel-amazon", "user-churn"): b200("il-interactive", "12:00:00"),
     ("rel-amazon", "user-ltv"): b200("il-interactive", "12:00:00"),
-    ("rel-stack", "user-badge"): b200("il-interactive", "12:00:00"),
-    ("rel-amazon", "item-ltv"): a100("il", "1-00:00:00"),
+    ("rel-stack", "user-badge"): a100("il-lo", "2-00:00:00"),
+    ("rel-amazon", "item-ltv"): a100("il-lo", "2-00:00:00"),
     ("rel-amazon", "item-churn"): a100("il", "1-00:00:00"),
     ("rel-stack", "post-votes"): a100("il", "1-00:00:00"),
     ("rel-hm", "item-sales"): b200("il-interactive", "12:00:00"),
     ("rel-stack", "user-engagement"): a100("il", "1-00:00:00"),
-    ("rel-hm", "user-churn"): b200("il-interactive", "12:00:00"),
+    ("rel-hm", "user-churn"): a100("il-lo", "2-00:00:00"),
     ("rel-avito", "user-clicks"): a100("il", "1-00:00:00"),
     ("rel-avito", "user-visits"): a100("il", "1-00:00:00"),
     ("rel-trial", "site-success"): a100("il", "1-00:00:00"),
     ("rel-trial", "study-adverse"): a100("il", "1-00:00:00"),
-    ("rel-event", "user-attendance"): a100("il", "1-00:00:00"),
+    ("rel-event", "user-attendance"): a100("il-lo", "2-00:00:00"),
     ("rel-event", "user-ignore"): a100("il", "1-00:00:00"),
     ("rel-avito", "ad-ctr"): a100("il", "1-00:00:00"),
     ("rel-trial", "study-outcome"): a100("il-lo", "1-00:00:00"),
@@ -270,7 +271,10 @@ RESOURCES: dict[tuple[str, str], Resources] = {
 # Resume an existing run instead of starting a new one: the run whose
 # `out_dir` this is picks its `resume.pt` back up. Empty when nothing resumes.
 RUN_IDS: dict[tuple[str, str], str] = {
+    ("rel-hm", "user-churn"): "26-08-11_04-08-29_393879227",
+    ("rel-stack", "user-badge"): "26-08-11_04-08-34_223077465",
     ("rel-amazon", "item-ltv"): "26-08-11_04-08-33_375863348",
+    ("rel-event", "user-attendance"): "26-08-11_04-08-24_553959895",
 }
 
 
