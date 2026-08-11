@@ -21,12 +21,12 @@ TASKS = (
     # ("rel-trial", "site-success"),
     # ("rel-avito", "user-visits"),
     # ("rel-avito", "user-clicks"),
-    ("rel-hm", "user-churn"),
+    # ("rel-hm", "user-churn"),
     # ("rel-stack", "user-engagement"),
     # ("rel-hm", "item-sales"),
     # ("rel-stack", "post-votes"),
     # ("rel-amazon", "item-churn"),
-    # ("rel-amazon", "item-ltv"),
+    ("rel-amazon", "item-ltv"),
     # ("rel-stack", "user-badge"),
     # ("rel-amazon", "user-churn"),
     # ("rel-amazon", "user-ltv"),
@@ -222,10 +222,10 @@ def a100(qos: str, time: str) -> Resources:
 # A task with no line here stops the submission rather than taking a slot
 # nobody chose for it.
 #
-# 13:03: rel-hm/item-sales finished and handed its b200 back, so one
-# `il-interactive` gpu is unspent and blackwell1 has one free. It goes to
-# rel-hm/user-churn -- the furthest behind of the runs still on an ampere, and
-# the largest train set among them -- resuming from `RUN_IDS`.
+# 13:33: three more tasks finished. `il-interactive` is full (2 b200 of mine)
+# but `il`'s 2-b200 sub-cap is untouched and blackwell1 has one card free, so
+# rel-amazon/item-ltv -- 9h in, the longest-running of the three left on an
+# ampere -- takes it on `il`, resuming from `RUN_IDS`.
 #
 # 2026-08-11: blackwell1 has 6 of 8 b200 allocated, so exactly 2 are free and
 # the rest sit under 7-day walls -- `il-interactive`'s 2 gpus take those two and
@@ -238,7 +238,7 @@ RESOURCES: dict[tuple[str, str], Resources] = {
     ("rel-amazon", "user-churn"): b200("il-interactive", "12:00:00"),
     ("rel-amazon", "user-ltv"): b200("il-interactive", "12:00:00"),
     ("rel-stack", "user-badge"): b200("il-interactive", "12:00:00"),
-    ("rel-amazon", "item-ltv"): a100("il", "1-00:00:00"),
+    ("rel-amazon", "item-ltv"): b200("il", "1-00:00:00"),
     ("rel-amazon", "item-churn"): a100("il", "1-00:00:00"),
     ("rel-stack", "post-votes"): a100("il", "1-00:00:00"),
     ("rel-hm", "item-sales"): b200("il-interactive", "12:00:00"),
@@ -262,7 +262,7 @@ RESOURCES: dict[tuple[str, str], Resources] = {
 # Resume an existing run instead of starting a new one: the run whose
 # `out_dir` this is picks its `resume.pt` back up. Empty when nothing resumes.
 RUN_IDS: dict[tuple[str, str], str] = {
-    ("rel-hm", "user-churn"): "26-08-11_04-08-29_393879227",
+    ("rel-amazon", "item-ltv"): "26-08-11_04-08-33_375863348",
 }
 
 
