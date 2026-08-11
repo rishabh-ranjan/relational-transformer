@@ -152,19 +152,29 @@ def targets_for(db: str, task: str) -> dict[str, float]:
     }
 
 
-def ckpt_for(db: str, task: str) -> str:
-    """The RT-P weights this task warm-starts from.
-
-    One head per task type, each in its own subdirectory, so which one a run
-    loads follows from the task's `task_type` in results.csv. A local mirror
-    rather than `stanford-star/rt-p`: a compute node has no Hub access.
-    """
+def task_type_for(db: str, task: str) -> str:
+    """This task's RelBench task type, from results.csv."""
     import pandas as pd
 
     raw = pd.read_csv(HERE / "results.csv")
     (task_type,) = set(raw[(raw.dataset == db) & (raw.task == task)].task_type)
+    return task_type
+
+
+def ckpt_for(db: str, task: str) -> str:
+    """The RT-P weights this task warm-starts from.
+
+    One head per task type, each in its own subdirectory, so which one a run
+    loads follows from the task's `task_type`. A local mirror rather than
+    `stanford-star/rt-p`: a compute node has no Hub access.
+    """
     sub = {"BINARY_CLASSIFICATION": "classification", "REGRESSION": "regression"}
-    return f"/dfs/user/ranjanr/share/stanford-star/rt-p/{sub[task_type]}"
+    return f"/dfs/user/ranjanr/share/stanford-star/rt-p/{sub[task_type_for(db, task)]}"
+
+
+def loss_fn_for(db: str, task: str) -> str:
+    """The loss this task trains under: the one its metric is scored by."""
+    return {"BINARY_CLASSIFICATION": "bce", "REGRESSION": "l1"}[task_type_for(db, task)]
 
 
 def b200(qos: str, time: str) -> Resources:
@@ -308,7 +318,7 @@ def main() -> None:
                 d_ff=2048,
                 compile=True,
                 materialize_attn_masks=True,
-                loss_fn="huber",
+                loss_fn=loss_fn_for(db, task),
                 load_ckpt_path=None if RANDOM_INIT else ckpt_for(db, task),
                 db_task_list=[(db, task)],
                 pre_dir="/dfs/user/ranjanr/share/stanford-star/relbench-preprocessed",
