@@ -7,7 +7,8 @@ twin and published target folded into the panel of the curve they belong to.
         --project 2026-08-10-fine_tune_ens_only --x ens_size
 
 wandb has no horizontal-reference-line primitive, so `rt.train` logs each
-target from `submit.targets_for` as a constant at every step -- a flat series.
+target the submit script passes it as a constant at every step -- a flat
+series.
 That series is a metric key of its own (`target/{key}`), and wandb's default
 auto-panels would put it in a panel by itself; this script is what pairs it
 with the curve it bounds. The same goes for the `swa/` twins.
@@ -27,7 +28,7 @@ just because this script did not anticipate it, telemetry included.
 The key list comes from the runs themselves (the summary of every run, plus
 the system stream), so this works against any project, and a metric added to
 `rt.train` shows up as soon as one run has logged it. On top of that the whole
-benchmark is seeded from `submit.published_best` -- all 21 RelBench forecast
+benchmark is seeded from `published_best` below -- all 21 RelBench forecast
 tasks, curve and target alike -- so a task the sweep has not run yet, or runs
 later, has its panel waiting rather than needing this script rerun.
 
@@ -37,6 +38,12 @@ it wholesale: edit this script, not the UI, or the next run drops your changes.
 
 Runs are grouped by `run_name`, so a task interrupted and requeued reads as one
 curve rather than one curve per attempt; see the runset settings in `build`.
+
+This script imports nothing from a submit script and must not start to. A
+submit script is edited every submission -- a name, a helper, a whole sweep
+shape can go at any time -- and this one script builds the workspace for every
+project. `published_best` and `ntrain` live here as their own copies; keep them
+that way, and if a submit script needs the same numbers let it carry its own.
 
 New runs show up in the view on their own: every run in the project is in its
 runset (no filters), no run limit is written (a panel draws the whole sweep,
@@ -51,13 +58,14 @@ import argparse
 import functools
 import json
 import math
+from pathlib import Path
 
 import wandb
 import wandb_workspaces.reports.v2.interface as wr
 import wandb_workspaces.workspaces as ws
 from wandb_workspaces.workspaces.internal import execute_graphql
 
-from submit import ntrain, published_best
+HERE = Path(__file__).parent
 
 ENTITY = "rtv2"
 PROJECT = "2026-08-08-fine_tune"
@@ -118,8 +126,75 @@ TRAIN_ORDER = (
 PAGE_SIZE = 100
 
 
-# `submit.published_best` and `submit.ntrain`, read once each: both are asked
-# for per key below, and neither changes within a run.
+def published_best() -> dict[str, float]:
+    """The best published number per wandb metric key, from results.csv.
+
+    Over the default and the HPO arm of every model, AUROC as a percent and MAE
+    normalized by the train-target std and taken as a percent -- the same way
+    `make_results.py` builds results.md, so a value here is the bolded number
+    in that table and lands on the axis the run's own curve is drawn against.
+
+    `{metric}/{split}/mean` comes along too: the best mean over that table's
+    whole task set, i.e. where the field's best all-round model sits.
+    """
+    import pandas as pd
+    from huggingface_hub import hf_hub_download
+
+    stds = json.load(
+        open(
+            hf_hub_download(
+                "stanford-star/relbench", "regression_stds.json", repo_type="dataset"
+            )
+        )
+    )["stds"]
+
+    raw = pd.read_csv(HERE / "results.csv")
+    raw["pair"] = raw.dataset + "/" + raw.task
+    dflt = raw[raw.config_tag == "default"].assign(arm="D")
+    hpo = raw[raw.selected].assign(arm="H")
+    d = pd.concat([dflt, hpo])
+    d["row"] = d.model + " (" + d.arm + ")"
+
+    out: dict[str, float] = {}
+    for task_type, metric, higher in [
+        ("BINARY_CLASSIFICATION", "auroc", True),
+        ("REGRESSION", "nmae", False),
+    ]:
+        sub = d[d.task_type == task_type]
+        best = max if higher else min
+        for split in ("val", "test"):
+            v = sub[f"{split}_score"] * 100
+            if not higher:
+                v = v / sub.pair.map(stds)
+            for pair, x in v.groupby(sub.pair):
+                out[f"{metric}/{split}/{pair}"] = float(best(x))
+            out[f"{metric}/{split}/mean"] = float(best(v.groupby(sub.row).mean()))
+    return out
+
+
+def ntrain() -> dict[str, float]:
+    """Train-set size per `{db}/{task}`, from RelBench's own task stats.
+
+    The `num_rows_train` column results.md orders its table columns by, so
+    anything ordered by this reads in the order that table does. A pair the
+    stats do not cover sorts last rather than raising -- this only decides a
+    display order, and `mean` is such a pair.
+    """
+    import pandas as pd
+    from huggingface_hub import hf_hub_download
+
+    stats = pd.read_parquet(
+        hf_hub_download(
+            "stanford-star/relbench", "STATS/tasks.parquet", repo_type="dataset"
+        )
+    )
+    return {
+        f"{r.database}/{r.task}": float(r.num_rows_train) for r in stats.itertuples()
+    }
+
+
+# Read once each: both are asked for per key below, and neither changes within
+# a run.
 targets = functools.cache(published_best)
 sizes = functools.cache(ntrain)
 
@@ -266,9 +341,9 @@ def project_keys(entity: str, project: str) -> set[str]:
     # keyed by the same `{metric}/{split}/{db}/{task}` names `rt.train` logs,
     # and its task set is exactly RelBench's 21 forecast tasks (`results.csv`
     # covers the whole of `db-task-lists/forecast.json`, checked), so seeding
-    # the lot is what makes the view outlive the run set: a task uncommented in
-    # `submit.TASKS`, or an arm submitted by hand, starts logging into a panel
-    # that is already there instead of into no panel at all. Both halves are
+    # the lot is what makes the view outlive the run set: a task added to a
+    # sweep, or a run submitted by hand, starts logging into a panel that is
+    # already there instead of into no panel at all. Both halves are
     # seeded -- the target alone would land in a panel of its own.
     for k in targets():
         keys |= {k, target_key(k)}
