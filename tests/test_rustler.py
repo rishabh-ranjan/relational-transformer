@@ -111,6 +111,7 @@ def test_sampler_drops_remove_columns_on_the_targets_horizon(
             0,  # shuffle_seed, context_seed
             [target_idx],
             [columns_to_drop],
+            [None],  # cutoff_timestamps
             -1,  # items_per_task
             True,
             False,

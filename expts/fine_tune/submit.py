@@ -235,6 +235,7 @@ def main() -> None:
                 eval_freq=500,
                 keep_all_ckpts=False,
                 vector_db_path=None,
+                db_upto_test_timestamp=False,
                 resume_save_mins=20.0,
                 eval_splits=["val", "test"],
                 eval_db_task_list=[(db, task)],

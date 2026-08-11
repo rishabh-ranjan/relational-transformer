@@ -83,6 +83,7 @@ def main(
     shuffle_seed: int,
     context_seed: int,
     vector_db_path: str | None,
+    db_upto_test_timestamp: bool,
     lcs_bw_pl_grid: list[tuple[int, int, bool]],
     val_ensemble_size: int,
     test_ensemble_size: int,
@@ -110,6 +111,11 @@ def main(
     from ``local_ctx_size == ctx_size``. More than one surviving combination is
     a tuning run, which picks one per task on validation; exactly one is a
     fixed configuration, and nothing reads validation at all.
+
+    ``db_upto_test_timestamp`` trims the database the contexts are built from
+    to the dataset's test timestamp, as relbench's
+    ``Dataset.get_db(upto_test_timestamp=True)`` does. It only bites where the
+    database extends past that timestamp.
 
     ``items_per_task`` caps the rows scored per task, per split: the tuning
     phase reads ``["val"]`` and the test phase ``["test"]``. They are separate
@@ -226,6 +232,7 @@ def main(
         prefetch_factor=prefetch_factor,
         mmap_populate=mmap_populate,
         vector_db_path=vector_db_path,
+        db_upto_test_timestamp=db_upto_test_timestamp,
         global_rank=global_rank,
         local_rank=local_rank,
         world_size=world_size,
@@ -354,6 +361,7 @@ def build_evaluator(
     mmap_populate,
     prefetch_factor,
     vector_db_path,
+    db_upto_test_timestamp,
     global_rank=0,
     local_rank=0,
     world_size=1,
@@ -396,6 +404,7 @@ def build_evaluator(
         context_seed=context_seed,
         vector_db_path=vector_db_path,
         train_only_fallback=False,
+        db_upto_test_timestamp=db_upto_test_timestamp,
         global_rank=global_rank,
         local_rank=local_rank,
         world_size=world_size,

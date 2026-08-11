@@ -37,6 +37,7 @@ def evaluate(pre_dir: str, out_root: str, checkpoint: str, run_id: str) -> None:
         shuffle_seed=0,
         context_seed=0,
         vector_db_path=None,
+        db_upto_test_timestamp=False,
         ctx_size_list=[8192],
         lcs_bw_pl_grid=[(256, 32, True)],
         val_ensemble_size=1,

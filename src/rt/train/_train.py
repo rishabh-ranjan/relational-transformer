@@ -222,6 +222,11 @@ def main(
     eval_freq: int | None,
     keep_all_ckpts: bool,
     vector_db_path: str | None,
+    # Trim the database the contexts are built from to each dataset's test
+    # timestamp, as relbench's `Dataset.get_db(upto_test_timestamp=True)` does.
+    # One switch for training and in-loop eval alike: they have to see the same
+    # database or the validation number is not the training model's.
+    db_upto_test_timestamp: bool,
     resume_save_mins: float,
     # in-loop validation
     eval_splits: list[str],
@@ -464,6 +469,7 @@ def main(
         timeout_per_item=timeout_per_item,
         vector_db_path=vector_db_path,
         train_only_fallback=False,
+        db_upto_test_timestamp=db_upto_test_timestamp,
     )
     # total_bs items enter the model per optimizer step, so the whole run
     # consumes total_steps * total_bs items. Measured against the stream's size,
@@ -592,6 +598,7 @@ def main(
                     context_seed=eval_context_seed,
                     vector_db_path=eval_vector_db_path,
                     train_only_fallback=False,
+                    db_upto_test_timestamp=db_upto_test_timestamp,
                     global_rank=rank,
                     local_rank=local_rank,
                     world_size=world_size,

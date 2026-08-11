@@ -86,6 +86,21 @@ best-on-val checkpoint of the most recent run of that task, `best_clf`/
 `best_reg` (the better of the live and the SWA net; `best_live_*` and
 `best_swa_*` sit beside it).
 
+## Trimming the database to the test timestamp
+
+`db_upto_test_timestamp` builds the contexts from the database RelBench's
+`get_db(upto_test_timestamp=True)` hands a model, instead of the whole one. It
+only bites on rel-f1, whose raw tables run to 2023 against a test timestamp of
+2010-01-01; every other RelBench dataset stops at its test timestamp already.
+
+Two jobs per rel-f1 task, one per arm, at `submit_ens_only.py`'s weights and
+context:
+
+```
+pixi run python expts/fine_tune/submit_cutoff.py
+pixi run python expts/fine_tune/cutoff_table.py
+```
+
 ## Workspaces
 
 One script builds all three, and it writes the view the project's bare URL

@@ -3,6 +3,7 @@
 import json
 import math
 import random
+from functools import cache
 from pathlib import Path
 
 import ml_dtypes  # noqa: F401  # registers bfloat16 numpy dtype for rustler
@@ -10,11 +11,32 @@ import numpy as np
 import torch
 from torch.utils.data import Dataset, IterableDataset
 
-from rt.data.resolve import get_column_index, resolve_pre_dir
+from rt.data.resolve import get_column_index, read_meta, resolve_pre_dir
 
 from rt.rustler import Sampler
 
 MAX_F2P_NBRS = 5  # See fly.rs L32
+
+
+@cache
+def _test_timestamp(db_name: str, pre_dir: str) -> int:
+    """``db_name``'s test timestamp, in rustler's seconds since the epoch.
+
+    relbench owns this number and the preprocessed data does not carry it, so
+    it is read from relbench at run time. ``meta.json``'s ``source`` is how the
+    dataset was addressed when it was preprocessed -- a local directory or a
+    Hub ``org/repo[/subdir]`` spec -- which is exactly what
+    ``relbench.load_dataset`` takes.
+    """
+    import relbench
+
+    source = read_meta(pre_dir, db_name).get("source")
+    if not source:
+        raise RuntimeError(
+            f"{db_name}/meta.json has no 'source'; cannot read its test "
+            f"timestamp from relbench, so db_upto_test_timestamp cannot be honored"
+        )
+    return int(relbench.load_dataset(source).test_timestamp.timestamp())
 
 
 def process_batch(tup, d_text):
@@ -80,6 +102,7 @@ class RustlerDataset:
         timeout_per_item,
         vector_db_path: str | None,
         train_only_fallback: bool,
+        db_upto_test_timestamp: bool,
     ):
         pre_dir = resolve_pre_dir(pre_dir)
         if vector_db_path is not None:
@@ -88,6 +111,7 @@ class RustlerDataset:
         dataset_tuples = []
         target_column_indices = []
         drop_column_indices = []
+        cutoff_timestamps = []
         skipped_tasks = []
 
         num_tasks = 0
@@ -136,6 +160,15 @@ class RustlerDataset:
                         pass  # column absent from this db's index; ignore
                 drop_column_indices.append(drop_indices)
 
+                # relbench's ``get_db(upto_test_timestamp=True)``: rows past the
+                # dataset's test timestamp are not in the database the model is
+                # allowed to see.
+                cutoff_timestamps.append(
+                    _test_timestamp(db_name, pre_dir)
+                    if db_upto_test_timestamp
+                    else None
+                )
+
                 dataset_tuples.append((db_name, table_name, node_idx_offset, num_nodes))
             except Exception as e:
                 if not ignore_data_errors:
@@ -172,6 +205,7 @@ class RustlerDataset:
             context_seed=context_seed,
             target_columns=target_column_indices,
             columns_to_drop=drop_column_indices,
+            cutoff_timestamps=cutoff_timestamps,
             items_per_task=items_per_task,
             quiet=quiet,
             ignore_data_errors=ignore_data_errors,
@@ -215,6 +249,7 @@ class TrainDataset(RustlerDataset, IterableDataset):
         timeout_per_item,
         vector_db_path: str | None,
         train_only_fallback: bool,
+        db_upto_test_timestamp: bool,
     ):
         # TrainDataset drives both shuffle and context construction from the
         # same seed — this matches prior single-seed behavior.
@@ -242,6 +277,7 @@ class TrainDataset(RustlerDataset, IterableDataset):
             timeout_per_item=timeout_per_item,
             vector_db_path=vector_db_path,
             train_only_fallback=train_only_fallback,
+            db_upto_test_timestamp=db_upto_test_timestamp,
         )
         self.train_ctx_size_list = train_ctx_size_list
         self.seed = random.Random(seed).getrandbits(64)

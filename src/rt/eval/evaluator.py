@@ -47,6 +47,7 @@ class Evaluator:
         context_seed,
         vector_db_path,
         train_only_fallback,
+        db_upto_test_timestamp,
         global_rank,
         local_rank,
         world_size,
@@ -99,6 +100,7 @@ class Evaluator:
                 timeout_per_item=3600.0,
                 vector_db_path=vector_db_path,
                 train_only_fallback=train_only_fallback,
+                db_upto_test_timestamp=db_upto_test_timestamp,
             )
             total_items += rustler_dataset.num_items
             eval_dataset = EvalDataset(

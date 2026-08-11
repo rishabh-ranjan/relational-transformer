@@ -401,6 +401,9 @@ pub struct Sampler {
     context_seed: u64,
     target_columns: Vec<i32>,
     columns_to_drop: Vec<Vec<i32>>,
+    // Per task: the latest timestamp a row may carry to be visible at all, or
+    // `None` for no cutoff. See `past_cutoff`.
+    cutoff_timestamps: Vec<Option<i32>>,
     items_per_task: i64,
     dataset_tuples: Vec<(String, String, i32, i32)>, // (db_name, table_name, node_idx_offset, num_nodes) for each dataset
     table_ranges: Vec<(i32, i32)>, // (range_start, range_end) per dataset tuple, cached for fallback same-table sampling
@@ -445,6 +448,7 @@ impl Sampler {
         context_seed: u64,
         target_columns: Vec<i32>,
         columns_to_drop: Vec<Vec<i32>>,
+        cutoff_timestamps: Vec<Option<i32>>,
         items_per_task: i64,
         quiet: bool,
         ignore_data_errors: bool,
@@ -473,6 +477,7 @@ impl Sampler {
                 context_seed,
                 target_columns,
                 columns_to_drop,
+                cutoff_timestamps,
                 items_per_task,
                 quiet,
                 ignore_data_errors,
@@ -581,6 +586,7 @@ impl Sampler {
         context_seed: u64,
         target_columns: Vec<i32>,
         columns_to_drop: Vec<Vec<i32>>,
+        cutoff_timestamps: Vec<Option<i32>>,
         items_per_task: i64,
         quiet: bool,
         ignore_data_errors: bool,
@@ -591,6 +597,12 @@ impl Sampler {
         train_only_fallback: bool,
     ) -> Self {
         let embedder_ref = embedder;
+
+        assert_eq!(
+            cutoff_timestamps.len(),
+            dataset_tuples.len(),
+            "cutoff_timestamps must have one entry per task"
+        );
 
         // Collect unique db_names and their associated table_names for deduplication.
         let mut db_to_tables: HashMap<String, Vec<String>> = HashMap::new();
@@ -664,10 +676,18 @@ impl Sampler {
         // warning, drop the offending task and its parallel arrays. When
         // false (e.g. eval), let panics propagate — eval tasks are expected
         // to be pre-validated.
-        let (dataset_tuples, target_columns, columns_to_drop, table_ranges, rust_skipped) = {
+        let (
+            dataset_tuples,
+            target_columns,
+            columns_to_drop,
+            cutoff_timestamps,
+            table_ranges,
+            rust_skipped,
+        ) = {
             let mut kept_tuples: Vec<(String, String, i32, i32)> = Vec::new();
             let mut kept_targets: Vec<i32> = Vec::new();
             let mut kept_drops: Vec<Vec<i32>> = Vec::new();
+            let mut kept_cutoffs: Vec<Option<i32>> = Vec::new();
             let mut kept_ranges: Vec<(i32, i32)> = Vec::new();
             let mut skipped: usize = 0;
             for (i, tuple) in dataset_tuples.into_iter().enumerate() {
@@ -708,6 +728,7 @@ impl Sampler {
                         kept_tuples.push(tuple);
                         kept_targets.push(target_columns[i]);
                         kept_drops.push(columns_to_drop[i].clone());
+                        kept_cutoffs.push(cutoff_timestamps[i]);
                         kept_ranges.push(range);
                     }
                     Err(panic_info) => {
@@ -726,7 +747,14 @@ impl Sampler {
                     }
                 }
             }
-            (kept_tuples, kept_targets, kept_drops, kept_ranges, skipped)
+            (
+                kept_tuples,
+                kept_targets,
+                kept_drops,
+                kept_cutoffs,
+                kept_ranges,
+                skipped,
+            )
         };
         assert!(
             !dataset_tuples.is_empty(),
@@ -763,6 +791,7 @@ impl Sampler {
             context_seed: StdRng::seed_from_u64(context_seed).random(),
             target_columns,
             columns_to_drop,
+            cutoff_timestamps,
             items_per_task,
             dataset_tuples,
             table_ranges,
@@ -1104,6 +1133,7 @@ impl Sampler {
         let dataset = &self.datasets[db_name];
         let target_column = self.target_columns[item.dataset_idx as usize];
         let columns_to_drop = &self.columns_to_drop[item.dataset_idx as usize];
+        let cutoff = self.cutoff_timestamps[item.dataset_idx as usize];
 
         let target_node_idx = item.node_idx;
         let target_node = get_node(dataset, target_node_idx);
@@ -1175,6 +1205,7 @@ impl Sampler {
                 self.num_walks,
                 self.walk_length,
                 step_seed,
+                cutoff,
                 deadline,
             )
         } else {
@@ -1267,6 +1298,7 @@ impl Sampler {
                 target_node,
                 target_column,
                 columns_to_drop,
+                cutoff,
                 local_ctx_size,
                 bfs_width,
                 ctx_len,
@@ -1304,7 +1336,7 @@ impl Sampler {
                                 item.table_name
                             )
                         });
-                    let mut vdb = VectorDbStream::new(entry, target_node_idx, target_node);
+                    let mut vdb = VectorDbStream::new(entry, target_node_idx, target_node, cutoff);
                     while let Some(seed_node_idx) = vdb.next(dataset) {
                         check_deadline(deadline);
                         if seed_label_missing(get_node(dataset, seed_node_idx), target_column) {
@@ -1345,6 +1377,7 @@ impl Sampler {
                         target_node,
                         target_column,
                         columns_to_drop,
+                        cutoff,
                         local_ctx_size,
                         bfs_width,
                         ctx_len,
@@ -1397,13 +1430,13 @@ impl Sampler {
                 if tier1_seen.contains(&seed_node_idx) {
                     continue;
                 }
-                // Temporal: only nodes with timestamp <= target.ts (or None)
-                // can serve as similar seeds.
+                // Temporal: only nodes within the target's bound (or without a
+                // timestamp) can serve as similar seeds.
                 let seed_node = get_node(dataset, seed_node_idx);
-                if target_node.timestamp.is_some()
-                    && seed_node.timestamp.is_some()
-                    && seed_node.timestamp > target_node.timestamp
-                {
+                if past_bound(
+                    seed_node,
+                    temporal_bound(target_node.timestamp.as_ref().map(|t| (*t).into()), cutoff),
+                ) {
                     continue;
                 }
                 if seed_label_missing(seed_node, target_column) {
@@ -1417,6 +1450,7 @@ impl Sampler {
                     target_node,
                     target_column,
                     columns_to_drop,
+                    cutoff,
                     local_ctx_size,
                     bfs_width,
                     ctx_len,
@@ -1482,6 +1516,7 @@ impl Sampler {
         num_walks: usize,
         max_walk_length: usize,
         step_seed: u64,
+        cutoff: Option<i32>,
         deadline: Instant,
     ) -> HashMap<i32, usize> {
         // Distinct stream from the other (step_seed + target_node_idx)
@@ -1493,6 +1528,8 @@ impl Sampler {
                 .wrapping_add(source_idx as u64)
                 .wrapping_add(0xD0D0_D0D0_D0D0_D0D0),
         );
+
+        let bound = temporal_bound(source_node.timestamp.as_ref().map(|t| (*t).into()), cutoff);
 
         let mut similar_node_visits: HashMap<i32, usize> = HashMap::new();
 
@@ -1507,28 +1544,20 @@ impl Sampler {
                 // Count this step iff:
                 // - not the source
                 // - same table as the source (target)
-                // - temporally valid (ts <= source.ts, or ts is None)
+                // - within the source's temporal bound (or no timestamp)
                 if current_node.table_name_idx == source_node.table_name_idx
                     && current_idx != source_idx
+                    && !past_bound(current_node, bound)
                 {
-                    let temporally_valid = current_node.timestamp.is_none()
-                        || source_node.timestamp.is_none()
-                        || current_node.timestamp <= source_node.timestamp;
-                    if temporally_valid {
-                        *similar_node_visits.entry(current_idx).or_insert(0) += 1;
-                    }
+                    *similar_node_visits.entry(current_idx).or_insert(0) += 1;
                 }
 
                 // Select next node randomly
-                let next_idx = match self.select_random_neighbor(
-                    dataset,
-                    current_idx,
-                    source_node,
-                    &mut rng,
-                ) {
-                    Some(idx) => idx,
-                    None => break,
-                };
+                let next_idx =
+                    match self.select_random_neighbor(dataset, current_idx, bound, &mut rng) {
+                        Some(idx) => idx,
+                        None => break,
+                    };
 
                 current_idx = next_idx;
             }
@@ -1542,36 +1571,51 @@ impl Sampler {
         &self,
         dataset: &Dataset,
         current_idx: i32,
-        target_node: &ArchivedNode,
+        bound: Option<i32>,
         rng: &mut StdRng,
     ) -> Option<i32> {
         let current_node = get_node(dataset, current_idx);
         let p2f_edges = get_p2f_edges(dataset, current_idx);
 
         // Filter p2f edges by temporal constraint (edges are sorted by timestamp)
-        let valid_p2f_count = if target_node.timestamp.is_some() {
-            let target_ts = target_node.timestamp;
+        let valid_p2f_count = if bound.is_some() {
             p2f_edges
                 .as_slice()
-                .partition_point(|edge| edge.timestamp.is_none() || edge.timestamp <= target_ts)
+                .partition_point(|edge| !edge_past_bound(edge, bound))
         } else {
             p2f_edges.len()
         };
 
-        let total_valid_neighbors = current_node.f2p_edges.len() + valid_p2f_count;
+        // f2p edges are unsorted, but a row has one per foreign key -- a
+        // handful -- so the valid ones are counted and then indexed directly.
+        let f2p_edges = current_node.f2p_edges.as_slice();
+        let valid_f2p_count = if bound.is_some() {
+            f2p_edges
+                .iter()
+                .filter(|edge| !edge_past_bound(edge, bound))
+                .count()
+        } else {
+            f2p_edges.len()
+        };
+
+        let total_valid_neighbors = valid_f2p_count + valid_p2f_count;
         if total_valid_neighbors == 0 {
             return None;
         }
 
         let rand_idx = rng.random_range(0..total_valid_neighbors);
-        if rand_idx < current_node.f2p_edges.len() {
-            Some(current_node.f2p_edges[rand_idx].node_idx.into())
-        } else {
+        if rand_idx < valid_f2p_count {
             Some(
-                p2f_edges[rand_idx - current_node.f2p_edges.len()]
+                f2p_edges
+                    .iter()
+                    .filter(|edge| !edge_past_bound(edge, bound))
+                    .nth(rand_idx)
+                    .unwrap()
                     .node_idx
                     .into(),
             )
+        } else {
+            Some(p2f_edges[rand_idx - valid_f2p_count].node_idx.into())
         }
     }
 
@@ -1662,6 +1706,7 @@ impl Sampler {
         dataset: &Dataset,
         start_idx: i32,
         rng: &mut StdRng,
+        cutoff: Option<i32>,
         local_ctx_size: usize,
         bfs_width: usize,
         visited_at_depth: &mut HashMap<i32, usize>,
@@ -1670,6 +1715,7 @@ impl Sampler {
         let mut result: Vec<(i32, usize)> = Vec::with_capacity(128);
 
         let start_node = get_node(dataset, start_idx);
+        let bound = temporal_bound(start_node.timestamp.as_ref().map(|t| (*t).into()), cutoff);
         let mut num_cells = 0;
 
         // Two frontier data structures:
@@ -1718,6 +1764,9 @@ impl Sampler {
 
             // Add f2p edges to f2p frontier
             for edge in node.f2p_edges.iter() {
+                if edge_past_bound(edge, bound) {
+                    continue;
+                }
                 f2p_ftr.push((depth + 1, edge.node_idx.into()));
             }
 
@@ -1725,10 +1774,15 @@ impl Sampler {
             let p2f_edges = get_p2f_edges(dataset, node_idx);
 
             // The edges are sorted by timestamp, so we can binary search to find valid ones
-            let valid_edges = p2f_edges.as_slice().partition_point(|edge| {
-                edge.timestamp.is_none()
-                    || (start_node.timestamp.is_some() && edge.timestamp <= start_node.timestamp)
-            });
+            let valid_edges = if bound.is_some() {
+                p2f_edges
+                    .as_slice()
+                    .partition_point(|edge| !edge_past_bound(edge, bound))
+            } else {
+                p2f_edges
+                    .as_slice()
+                    .partition_point(|edge| edge.timestamp.is_none())
+            };
 
             // Filter valid edges by table constraints
             let p2f_edges = &p2f_edges.as_slice()[..valid_edges];
@@ -1822,6 +1876,7 @@ fn extend_with_seed_bfs(
     target_node: &ArchivedNode,
     target_column: i32,
     columns_to_drop: &[i32],
+    cutoff: Option<i32>,
     local_ctx_size: usize,
     bfs_width: usize,
     ctx_len: usize,
@@ -1835,6 +1890,7 @@ fn extend_with_seed_bfs(
         dataset,
         seed_node_idx,
         bfs_rng,
+        cutoff,
         local_ctx_size,
         bfs_width,
         visited_at_depth,
@@ -1929,7 +1985,12 @@ const VDB_INIT_K: usize = 64;
 
 #[cfg(feature = "vecdb")]
 impl<'a> VectorDbStream<'a> {
-    fn new(entry: &'a VectorDbEntry, target_node_idx: i32, target_node: &ArchivedNode) -> Self {
+    fn new(
+        entry: &'a VectorDbEntry,
+        target_node_idx: i32,
+        target_node: &ArchivedNode,
+        cutoff: Option<i32>,
+    ) -> Self {
         let local_offset = target_node_idx - entry.node_idx_offset;
         assert!(
             local_offset >= 0 && (local_offset as usize) < entry.num_rows,
@@ -1945,7 +2006,7 @@ impl<'a> VectorDbStream<'a> {
             "FAISS vectors mmap is not f32-aligned"
         );
         let query = &vectors[local_idx * entry.dim..(local_idx + 1) * entry.dim];
-        let target_ts = target_node.timestamp.as_ref().map(|t| (*t).into());
+        let target_ts = temporal_bound(target_node.timestamp.as_ref().map(|t| (*t).into()), cutoff);
         Self {
             entry,
             target_node_idx,
@@ -2024,6 +2085,45 @@ impl<'a> VectorDbStream<'a> {
         if new_k >= self.entry.num_rows {
             self.exhausted = true;
         }
+    }
+}
+
+/// The tightest timestamp a row may carry and still be usable as context for a
+/// target at `target_ts`, under a database `cutoff`.
+///
+/// `cutoff` mirrors relbench's `Dataset.get_db(upto_test_timestamp=True)`,
+/// which keeps only rows at or before the dataset's test timestamp (`upto` is
+/// inclusive, so this bound is too). It composes with the target's own
+/// timestamp -- a context never sees the target's future either -- as the
+/// smaller of the two. A row without a timestamp is never cut: relbench trims
+/// only tables that designate a time column.
+///
+/// Applied to database and task rows alike. The target row itself is exempt
+/// simply by never being filtered: it is the BFS root and its cell is emitted
+/// before any traversal.
+fn temporal_bound(target_ts: Option<i32>, cutoff: Option<i32>) -> Option<i32> {
+    match (target_ts, cutoff) {
+        (Some(a), Some(b)) => Some(a.min(b)),
+        (a, None) => a,
+        (None, b) => b,
+    }
+}
+
+/// True when a node's timestamp puts it past `bound` (see `temporal_bound`).
+fn past_bound(node: &ArchivedNode, bound: Option<i32>) -> bool {
+    match (node.timestamp.as_ref(), bound) {
+        (Some(ts), Some(b)) => i32::from(*ts) > b,
+        _ => false,
+    }
+}
+
+/// True when an edge's timestamp puts its endpoint past `bound`. A p2f edge
+/// carries the child's timestamp and an f2p edge the parent's, so this is the
+/// endpoint's own timestamp without dereferencing the node.
+fn edge_past_bound(edge: &ArchivedEdge, bound: Option<i32>) -> bool {
+    match (edge.timestamp.as_ref(), bound) {
+        (Some(ts), Some(b)) => i32::from(*ts) > b,
+        _ => false,
     }
 }
 
@@ -2121,6 +2221,7 @@ pub fn main(cli: Cli) {
         0,                                                     // context_seed
         vec![0_i32],                                           // target_columns
         vec![Vec::<i32>::new()],                               // columns_to_drop
+        vec![None],                                            // cutoff_timestamps
         -1,                                                    // items_per_task (no limit)
         false,                                                 // quiet
         false,                                                 // ignore_data_errors

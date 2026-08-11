@@ -112,6 +112,7 @@ def main() -> None:
             eval_freq=1_000,
             keep_all_ckpts=True,
             vector_db_path=None,
+            db_upto_test_timestamp=False,
             resume_save_mins=20.0,
             # in-loop validation: the benchmark's forecast tasks, val split
             eval_splits=["val"],

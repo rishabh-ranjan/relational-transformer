@@ -62,6 +62,7 @@ def smoke(
         eval_freq=None,
         keep_all_ckpts=False,
         vector_db_path=None,
+        db_upto_test_timestamp=False,
         resume_save_mins=60.0,
         # in-loop validation: the final eval always runs, so keep it minimal
         eval_splits=["val"],

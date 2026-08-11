@@ -96,6 +96,7 @@ def main() -> None:
             eval_freq=1_000_000,  # the final eval at the last step is enough
             keep_all_ckpts=False,
             vector_db_path=None,
+            db_upto_test_timestamp=False,
             resume_save_mins=1e9,
             eval_splits=["val"],
             eval_db_task_list=TASKS,

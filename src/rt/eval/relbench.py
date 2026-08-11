@@ -10,7 +10,7 @@ from pathlib import Path
 import numpy as np
 import relbench
 import sklearn.metrics as M
-from relbench.leaderboard import evaluate_task
+from relbench.submit import evaluate_task
 
 from rt.data import read_meta, resolve_pre_dir
 
@@ -30,7 +30,7 @@ def _seed_offset(pre_dir: str, db: str, table: str, split: str, embedder: str) -
 
 @cache
 def _load_relbench_task(source: str, table: str):
-    return relbench.load_task(source, table)
+    return relbench.load_dataset(source).load_task(table)
 
 
 def _train_stats(rtask) -> tuple[float, float]:

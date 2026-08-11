@@ -74,5 +74,5 @@ uv = "*"
 
 [tool.pixi.pypi-dependencies]
 relational-transformer = { path = ".", editable = true }
-# pinned until the relbench-hf branch (HF Hub data loading) lands in a relbench release
-relbench = { git = "https://github.com/snap-stanford/relbench.git", rev = "6e4a3a3d271f981b7f61e2ecbb6fd1c0f1cd3eeb" }
+# pinned until manifest-driven Hub data loading lands in a relbench release
+relbench = { git = "https://github.com/rishabh-ranjan/relbench", branch = "main" }
