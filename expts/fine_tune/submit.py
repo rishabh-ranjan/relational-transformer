@@ -373,7 +373,7 @@ def main() -> None:
                 eval_prefetch_factor=2,
                 eval_num_walks=10_000,
                 eval_walk_length=20,
-                eval_items_per_task=2**14,
+                eval_items_per_task=2**16,
                 eval_ctx_size_list=[1024],
                 eval_mmap_populate=True,
                 eval_shuffle_seed=0,
