@@ -23,20 +23,20 @@ TASKS = (
     # ("rel-avito", "user-visits"),
     # ("rel-avito", "user-clicks"),
     # ("rel-hm", "user-churn"),
-    # ("rel-stack", "user-engagement"),
-    ("rel-hm", "item-sales"),
-    ("rel-stack", "post-votes"),
-    ("rel-amazon", "item-churn"),
-    ("rel-amazon", "item-ltv"),
-    ("rel-stack", "user-badge"),
-    ("rel-amazon", "user-churn"),
-    ("rel-amazon", "user-ltv"),
+    ("rel-stack", "user-engagement"),
+    # ("rel-hm", "item-sales"),
+    # ("rel-stack", "post-votes"),
+    # ("rel-amazon", "item-churn"),
+    # ("rel-amazon", "item-ltv"),
+    # ("rel-stack", "user-badge"),
+    # ("rel-amazon", "user-churn"),
+    # ("rel-amazon", "user-ltv"),
 )
 
 # The one thing this sweep varies: does fine-tuning on train+val beat train
 # alone. Every other value is shared by both arms.
 ARMS = {
-    "train": ["train"],
+    # "train": ["train"],
     "trainval": ["train", "val"],
 }
 
