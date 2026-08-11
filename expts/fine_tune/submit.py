@@ -290,8 +290,8 @@ RESOURCES: dict[tuple[str, str, str], Resources] = {
 
 def main() -> None:
     tasks = sorted(TASKS, key=lambda p: ntest()[f"{p[0]}/{p[1]}"])
-    arms = [("train", ["train"]), ("trainval", ["train", "val"])]
-    for (db, task), (arm, train_splits) in itertools.product(tasks, arms):
+    arms = ["train"]
+    for (db, task), arm in itertools.product(tasks, arms):
         resources = RESOURCES[arm, db, task]
         name = f"{db}/{task}-{arm}" + ("-rand" if RANDOM_INIT else "")
         print(f"  {name:38s} {resources.gpus} {resources.qos:15s} {resources.time}")
@@ -311,7 +311,6 @@ def main() -> None:
                 loss_fn="huber",
                 load_ckpt_path=None if RANDOM_INIT else ckpt_for(db, task),
                 db_task_list=[(db, task)],
-                train_splits=train_splits,
                 pre_dir="/dfs/user/ranjanr/share/stanford-star/relbench-preprocessed",
                 tokens_per_gpu=2**17 if resources.gpus.startswith("b200") else 2**16,
                 num_workers=resources.cpus_per_task,
@@ -330,6 +329,7 @@ def main() -> None:
                 grad_norm_max=1.0,
                 total_bs=256,
                 total_steps=10_001,
+                early_stop_after_steps=None,
                 swa_momentum=0.9999,
                 seed=0,
                 mmap_populate=True,

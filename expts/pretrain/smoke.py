@@ -70,7 +70,6 @@ def main() -> None:
             load_ckpt_path=None,
             # data: one small database, no page-cache population
             db_task_list=TASKS,
-            train_splits=["train"],
             pre_dir=PRE_DIR,
             tokens_per_gpu=2**15,
             num_workers=4,
@@ -90,6 +89,7 @@ def main() -> None:
             grad_norm_max=1.0,
             total_bs=64,
             total_steps=20,
+            early_stop_after_steps=None,
             swa_momentum=0.9995,
             seed=0,
             mmap_populate=False,

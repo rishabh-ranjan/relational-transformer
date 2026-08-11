@@ -37,7 +37,6 @@ def smoke(
         load_ckpt_path=None,
         # data + optimization
         db_task_list=[("rel-f1", "driver-dnf")],
-        train_splits=["train"],
         pre_dir=pre_dir,
         tokens_per_gpu=256,
         num_workers=0,
@@ -56,6 +55,7 @@ def smoke(
         grad_norm_max=1.0,
         total_bs=2,
         total_steps=total_steps,
+        early_stop_after_steps=None,
         swa_momentum=0.9,
         seed=0,
         mmap_populate=False,

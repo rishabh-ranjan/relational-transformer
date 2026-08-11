@@ -197,12 +197,6 @@ def main(
     load_ckpt_path: str | None,
     # data + optimization
     db_task_list: list[tuple[str, str]] | str,
-    # Splits the training stream is drawn from. ``["train"]`` is the only
-    # choice that keeps the val split clean; adding ``"val"`` trains on it, so
-    # a val metric can no longer select a checkpoint and `eval_splits` must not
-    # carry ``"val"``. Each split of a task enters the mixture as its own task,
-    # with its own `items_per_task` cap.
-    train_splits: list[str],
     pre_dir: str,
     tokens_per_gpu: int,
     num_workers: int,
@@ -221,6 +215,11 @@ def main(
     grad_norm_max: float,
     total_bs: int,
     total_steps: int,
+    # Stop once neither the live nor the swa val metric has improved on -- or
+    # matched again -- its best for this many steps, measured at eval points.
+    # ``None`` runs the full `total_steps`. Needs a val split in `eval_splits`;
+    # with nothing selected there is nothing to stop on.
+    early_stop_after_steps: int | None,
     swa_momentum: float,
     seed: int,
     mmap_populate: bool,
@@ -267,11 +266,15 @@ def main(
     """
     params = dict(locals())
 
-    # A split that is trained on cannot also select the checkpoint, and
+    # Training draws from the "train" split alone, so an evaluated split must
+    # not be it: a split that is trained on cannot select the checkpoint, and
     # `consider` selects on val alone.
-    assert not (set(train_splits) & set(eval_splits)), (
-        f"train_splits={train_splits} overlaps eval_splits={eval_splits}: an "
-        f"evaluated split must not be trained on"
+    assert "train" not in eval_splits, (
+        f"eval_splits={eval_splits} carries the split that is trained on"
+    )
+    assert early_stop_after_steps is None or "val" in eval_splits, (
+        f"early_stop_after_steps={early_stop_after_steps} needs a val metric, "
+        f"but eval_splits={eval_splits}"
     )
 
     # Reference point for time-to-first-step: everything before the first
@@ -409,6 +412,9 @@ def main(
     # resumes: the live and the swa net are selected separately, and the
     # overall best is whichever of the two wins at the end.
     best = {tt: {"live": None, "swa": None} for tt, _, _ in BEST_METRICS}
+    # Last step at which some (task type, kind) val metric improved on or
+    # matched its best. Persisted, so a resume does not restart the patience.
+    improved_at = 0
     start_step = 0
     resume_evaled_at = None
 
@@ -447,6 +453,7 @@ def main(
             "per-kind selection and cannot be resumed"
         )
         resume_evaled_at = ck.get("evaled_at", start_step)
+        improved_at = ck.get("improved_at", start_step)
         if is_main:
             log(
                 resumed_from=resume_path,
@@ -457,7 +464,7 @@ def main(
     # ---- data: re-seed by resumed step so the stream does not replay ----
     data_seed = seed + SEED_STRIDE * start_step
     train_init_tic = time.time()
-    train_tasks = get_tasks(pre_dir, db_task_list, tuple(train_splits))
+    train_tasks = get_tasks(pre_dir, db_task_list, ("train",))
     train_ds = TrainDataset(
         tasks=train_tasks,
         pre_dir=pre_dir,
@@ -688,6 +695,7 @@ def main(
                         # preemption save can land on an eval multiple without
                         # the eval having run.
                         "evaled_at": evaled_at,
+                        "improved_at": improved_at,
                     },
                     f,
                 )
@@ -724,10 +732,9 @@ def main(
         resume.pt is rewritten at every eval and once more at the end, and it
         carries the same weights.
 
-        Nothing is selected when no val split is evaluated (`train_splits`
-        holding ``"val"`` is the case that makes that a configuration, not a
-        mistake), and then the latest step is all there is to keep -- pruning
-        to an empty set would leave the run without a single ``.safetensors``.
+        Nothing is selected when no val split is evaluated, and then the latest
+        step is all there is to keep -- pruning to an empty set would leave the
+        run without a single ``.safetensors``.
         """
         if keep_all_ckpts or not is_main:
             return
@@ -742,6 +749,12 @@ def main(
                 f.unlink(missing_ok=True)
 
     def consider(metrics, step):
+        """Update `best` from this eval; True if any tracker moved.
+
+        A value that merely ties the best counts as an improvement: it moves
+        the tracker to this step and so refreshes the early-stopping patience.
+        """
+        improved = False
         # Selection is val-only: a test split may be evaluated alongside for
         # its curves, but must never pick the checkpoint. With no val split
         # configured, nothing is selected.
@@ -760,10 +773,14 @@ def main(
                         "value": v,
                         "metric": metric,
                     }
+                    improved = True
+        return improved
 
     def run_eval(step):
+        """Evaluate, log, and update `best`; True if the run should stop early."""
+        nonlocal improved_at
         if not evaluators:
-            return
+            return False
         nets = [(raw_net, "")]
         # Unconditionally, including at n == 0, where the swa metrics just
         # duplicate the live ones: every eval must run both nets, so that each
@@ -778,7 +795,8 @@ def main(
         # Rank 0 only: ``evaluate_raw`` yields there and nowhere else, so the
         # other ranks hold empty metrics and must not touch ``best``.
         if is_main:
-            consider(metrics, step)
+            if consider(metrics, step):
+                improved_at = step
         if is_main:
             if use_wandb:
                 # {metric}/{split}/mean and .../{db}/{table}, the swa twin
@@ -800,6 +818,23 @@ def main(
                 )
         for n, _ in nets:
             n.train()
+        # `best` and so `improved_at` live on rank 0 alone (only it holds the
+        # metrics), so the decision is made there and broadcast: every rank has
+        # to leave the loop together or the rest hang at their next collective.
+        if early_stop_after_steps is None:
+            return False
+        stop_early = is_main and step - improved_at >= early_stop_after_steps
+        if ddp:
+            flag = torch.tensor([1.0 if stop_early else 0.0], device=device)
+            dist.broadcast(flag, src=0)
+            stop_early = flag.item() > 0
+        if stop_early and is_main:
+            log(
+                early_stop_at_step=step,
+                last_improved_at=improved_at,
+                patience=early_stop_after_steps,
+            )
+        return stop_early
 
     def reduce_step_stats(local_loss):
         """(mean loss over ranks, any rank preempted?).
@@ -871,11 +906,13 @@ def main(
     measure_mem = is_cuda
     while step < total_steps:
         if eval_freq and step % eval_freq == 0 and step != evaled_at:
-            run_eval(step)
+            stop_early = run_eval(step)
             evaled_at = step  # before save_resume, which persists it
             checkpoint(step)
             prune_ckpts(step)
             save_resume(step)
+            if stop_early:
+                break
             step_t0 = time.perf_counter()  # don't count eval/ckpt in step time
 
         total_loss = 0.0
@@ -1021,10 +1058,14 @@ def main(
             return
 
     # ---- final eval + best selection ----
-    run_eval(step)
-    checkpoint(step)
-    prune_ckpts(step)
-    save_resume(step)
+    # Early stopping breaks out right after evaluating and saving at `step`;
+    # only a run that reached `total_steps` still owes a final eval.
+    if step != evaled_at:
+        run_eval(step)
+        evaled_at = step
+        checkpoint(step)
+        prune_ckpts(step)
+        save_resume(step)
     if is_main:
         # best_live_{tt} and best_swa_{tt} are each net's own val winner;
         # best_{tt} is the better of the two, so a reader that wants one
