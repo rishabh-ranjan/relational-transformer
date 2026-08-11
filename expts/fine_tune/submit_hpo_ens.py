@@ -33,18 +33,17 @@ def plan(n: int) -> list[Resources]:
     that does not move rather than a faster card. An ampere now beats a b200 in
     four hours.
 
-    `il-interactive`'s 2 gpus are free; `submit.py`'s fine-tuning sweep holds 7
-    of `il`'s 10, leaving 3. That is 5 jobs at high priority and the rest on
-    `il-lo`, which is preemptible and restarts an eval from the first
-    configuration.
+    `il-interactive`'s 2 gpus and 3 of `il`'s 10 are already held by this
+    sweep's running jobs, and the fine-tuning sweep has released the rest, so
+    this submission is placing into `il` alone. The rest stays on `il-lo`,
+    which is preemptible and restarts an eval from the first configuration.
 
     Ask for the time the job needs, not the time the tier allows: a 12-hour
     request backfills into gaps that a 7-day one cannot.
 
     Recount and rewrite this before every submission.
     """
-    out = [a100("il-interactive", "12:00:00")] * min(n, 2)
-    out += [a100("il", "12:00:00")] * min(n - len(out), 3)
+    out = [a100("il", "12:00:00")] * min(n, 5)
     out += [a100("il-lo", "21-00:00:00")] * (n - len(out))
     return out
 
