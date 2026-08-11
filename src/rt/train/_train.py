@@ -726,9 +726,9 @@ def main(
         """Delete every periodic checkpoint no longer worth keeping.
 
         With ``keep_all_ckpts=False`` the only checkpoints that must survive
-        are the ones ``best`` still points at -- a best from an earlier eval
-        is copied to its ``best_*`` name only at the very end, so its file has
-        to live until then, for the live and the swa winner alike. The latest step needs no file of its own:
+        are the ones ``best`` still points at, for the live and the swa winner
+        alike: ``publish_best`` copies from them, and it runs before this on
+        the eval that improved. The latest step needs no file of its own:
         resume.pt is rewritten at every eval and once more at the end, and it
         carries the same weights.
 
@@ -747,6 +747,57 @@ def main(
         for f in out_dir.glob("*steps=*.safetensors"):
             if f.name not in keep:
                 f.unlink(missing_ok=True)
+
+    def publish_best():
+        """Copy each tracker's winner to its ``best_*`` name.
+
+        ``best_live_{tt}`` and ``best_swa_{tt}`` are each net's own val winner;
+        ``best_{tt}`` is the better of the two, so a reader that wants one
+        checkpoint per task type has the name it always had.
+
+        Run at every eval that improves, not only at the end: a reader that
+        picks up a run still in flight needs the current winner under a stable
+        name, and the periodic file it is copied from is pruned as soon as a
+        later eval beats it. Each copy lands through a temporary and an
+        ``os.replace``, so a reader either sees the old winner or the new one.
+        """
+        if not is_main:
+            return
+        for tt, _, better in BEST_METRICS:
+            by_kind = {k: b for k, b in best[tt].items() if b is not None}
+            if not by_kind:
+                log(skipped=f"best_{tt}", task_type=tt, reason="no_val_tasks")
+                continue
+            top = better(b["value"] for b in by_kind.values())
+            overall = next(b for b in by_kind.values() if b["value"] == top)
+            for label, b in [
+                *((f"best_{kind}_{tt}", b) for kind, b in by_kind.items()),
+                (f"best_{tt}", overall),
+            ]:
+                src = out_dir / (
+                    f"swa_steps={b['step']}.safetensors"
+                    if b["kind"] == "swa"
+                    else f"steps={b['step']}.safetensors"
+                )
+                if not src.exists():
+                    log(warning="best_ckpt_missing", label=label, expected=src)
+                    continue
+                dst = out_dir / f"{label}.safetensors"
+                tmp = dst.with_suffix(f".{os.getpid()}.tmp")
+                try:
+                    shutil.copyfile(src, tmp)
+                    os.replace(tmp, dst)
+                except BaseException:
+                    tmp.unlink(missing_ok=True)
+                    raise
+                log(
+                    saved=label,
+                    kind=b["kind"],
+                    step=b["step"],
+                    metric=b["metric"],
+                    value=f"{b['value']:.4f}",
+                    path=f"{label}.safetensors",
+                )
 
     def consider(metrics, step):
         """Update `best` from this eval; True if any tracker moved.
@@ -909,6 +960,11 @@ def main(
             stop_early = run_eval(step)
             evaled_at = step  # before save_resume, which persists it
             checkpoint(step)
+            # After checkpoint(): a winner at this very step has no file until
+            # it is written. Before prune_ckpts(): both read `best`, and the
+            # copy has to happen while its source is still there.
+            if improved_at == step:
+                publish_best()
             prune_ckpts(step)
             save_resume(step)
             if stop_early:
@@ -1064,40 +1120,10 @@ def main(
         run_eval(step)
         evaled_at = step
         checkpoint(step)
+        publish_best()
         prune_ckpts(step)
         save_resume(step)
     if is_main:
-        # best_live_{tt} and best_swa_{tt} are each net's own val winner;
-        # best_{tt} is the better of the two, so a reader that wants one
-        # checkpoint per task type has the name it always had.
-        for tt, _, better in BEST_METRICS:
-            by_kind = {k: b for k, b in best[tt].items() if b is not None}
-            if not by_kind:
-                log(skipped=f"best_{tt}", task_type=tt, reason="no_val_tasks")
-                continue
-            top = better(b["value"] for b in by_kind.values())
-            overall = next(b for b in by_kind.values() if b["value"] == top)
-            for label, b in [
-                *((f"best_{kind}_{tt}", b) for kind, b in by_kind.items()),
-                (f"best_{tt}", overall),
-            ]:
-                src = out_dir / (
-                    f"swa_steps={b['step']}.safetensors"
-                    if b["kind"] == "swa"
-                    else f"steps={b['step']}.safetensors"
-                )
-                if src.exists():
-                    shutil.copyfile(src, out_dir / f"{label}.safetensors")
-                else:
-                    log(warning="best_ckpt_missing", label=label, expected=src)
-                log(
-                    saved=label,
-                    kind=b["kind"],
-                    step=b["step"],
-                    metric=b["metric"],
-                    value=f"{b['value']:.4f}",
-                    path=f"{label}.safetensors",
-                )
         log(load_with=f"rt.model.load_rt_model('{out_dir}/best_clf.safetensors')")
     if use_wandb:
         wandb.finish()

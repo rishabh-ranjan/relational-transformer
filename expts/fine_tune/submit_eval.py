@@ -31,7 +31,6 @@ import shutil
 import subprocess
 from pathlib import Path
 
-import wandb
 from roach.slurm import Resources, submit
 
 # a100 / b200 are unused while RESOURCES is blank, and imported so that
@@ -66,9 +65,8 @@ TASKS = (
     ("rel-trial", "study-outcome"),
 )
 
-# Where `submit.py`'s fine-tuning runs land, and the wandb project they log to.
+# Where `submit.py`'s fine-tuning runs land.
 CKPT_ROOT = Path("/dfs/user/ranjanr/ckpts/rtv2/2026-08-11-fine_tune")
-FINE_TUNE_PROJECT = "rtv2/2026-08-11-fine_tune"
 
 # Where the weights a job is going to load are copied to, out of reach of the
 # training run that wrote them. 163M a task, shared by both arms, and deleted
@@ -93,51 +91,37 @@ def task_metric(db: str, task: str) -> tuple[str, bool]:
     return metric, metric == "auroc"
 
 
+def best_ckpt(db: str, task: str) -> Path:
+    """Where that task's fine-tuning run publishes its best-on-val weights."""
+    metric, _ = task_metric(db, task)
+    return (
+        run_dirs()[f"{db}/{task}"]
+        / f"best_{'clf' if metric == 'auroc' else 'reg'}.safetensors"
+    )
+
+
 def ckpt_for(db: str, task: str) -> str:
-    """The best-on-val checkpoint of that task's fine-tuning run *so far*.
+    """The best-on-val checkpoint of that task's fine-tuning run.
 
-    `best_{clf,reg}.safetensors` is written only when a run reaches its final
-    eval, so waiting for it would mean waiting for the whole sweep. Until then
-    the same weights are already on disk under the name the periodic save gave
-    them: `rt.train` prunes every checkpoint its running best does not point
-    at, and keeps the live net's winner and the SWA net's.
+    `rt.train` republishes `best_{clf,reg}.safetensors` at every eval that
+    improves -- the better of the live net's winner and the SWA net's, over
+    every segment the run was preempted into -- so a run still training has
+    one under that name too, and it is whatever it was at the last eval.
 
-    Which of the two is the better -- what `best_{tt}` would end up being -- is
-    in the run's own val curve, so it is read from wandb: the highest AUROC or
-    the lowest nMAE over both nets and every attempt, and the step it happened
-    at names the file.
+    Copied, not pointed at: the run that wrote it is still going, and its next
+    improvement replaces the file underneath a job that has not loaded it yet.
+    A directory of its own, with the run's `config.json` beside the weights:
+    `from_pretrained` reads the dims from a `config.json` sitting next to the
+    file, under that exact name.
     """
     run = run_dirs()[f"{db}/{task}"]
-    metric, higher = task_metric(db, task)
-    key = f"{metric}/val/{db}/{task}"
-    best = None  # (value, filename), better first
-    for r in wandb.Api().runs(FINE_TUNE_PROJECT, {"config.run_name": f"{db}/{task}"}):
-        for row in r.scan_history(keys=["step", key, f"swa/{key}"]):
-            for k, name in ((key, "steps"), (f"swa/{key}", "swa_steps")):
-                # A row carries a key only at the steps that logged it: evals
-                # are every `eval_freq` steps, the rest of the history is the
-                # per-step training curve.
-                v = row.get(k)
-                if v is None:
-                    continue
-                cand = (v, f"{name}={row['step']}.safetensors")
-                if best is None or (cand[0] > best[0]) == higher:
-                    best = cand
-    assert best is not None, f"no val curve for {db}/{task} in {FINE_TUNE_PROJECT}"
-    path = run / best[1]
-    assert path.exists(), f"{path} was pruned; the val curve says it is the best"
-    # Copied, not pointed at: the run that wrote it is still training, and its
-    # next eval prunes every checkpoint its new best does not point at. A job
-    # that starts after that finds nothing at the path -- and `load_rt_model`
-    # reads a path that does not exist as a Hub repo id, so it fails on a 404
-    # from the Hub rather than on the file that went missing.
-    # A directory of its own: `from_pretrained` reads the dims from the
-    # `config.json` sitting beside the weights file, under that exact name.
-    pinned = PINNED / f"{db}__{task}" / path.name
+    src = best_ckpt(db, task)
+    assert src.exists(), f"{src} does not exist; has that run reached an eval?"
+    pinned = PINNED / f"{db}__{task}" / src.name
     if not pinned.exists():
         pinned.parent.mkdir(parents=True, exist_ok=True)
         tmp = pinned.with_suffix(f".{os.getpid()}.tmp")
-        shutil.copyfile(path, tmp)
+        shutil.copyfile(src, tmp)
         tmp.rename(pinned)
         shutil.copyfile(run / "config.json", pinned.parent / "config.json")
     return str(pinned)
@@ -221,8 +205,7 @@ def ready(arm: str) -> list[tuple[str, str]]:
     started = [
         t
         for t in TASKS
-        if any(run_dirs()[f"{t[0]}/{t[1]}"].glob("*steps=*.safetensors"))
-        and f"{arm}-{t[0]}-{t[1]}" not in in_flight()
+        if best_ckpt(*t).exists() and f"{arm}-{t[0]}-{t[1]}" not in in_flight()
     ]
     return sorted(started, key=lambda t: -cost(*t))
 
