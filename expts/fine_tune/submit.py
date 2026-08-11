@@ -10,27 +10,27 @@ from roach.slurm import Resources, submit
 HERE = Path(__file__).parent
 
 TASKS = (
-    ("rel-event", "user-repeat"),
-    ("rel-f1", "driver-dnf"),
-    ("rel-f1", "driver-top3"),
+    # ("rel-event", "user-repeat"),
+    # ("rel-f1", "driver-dnf"),
+    # ("rel-f1", "driver-top3"),
     ("rel-f1", "driver-position"),
     ("rel-trial", "study-outcome"),
-    ("rel-avito", "ad-ctr"),
-    ("rel-event", "user-attendance"),
-    ("rel-event", "user-ignore"),
-    ("rel-trial", "study-adverse"),
-    ("rel-trial", "site-success"),
-    ("rel-avito", "user-visits"),
-    ("rel-avito", "user-clicks"),
-    ("rel-hm", "user-churn"),
+    # ("rel-avito", "ad-ctr"),
+    # ("rel-event", "user-attendance"),
+    # ("rel-event", "user-ignore"),
+    # ("rel-trial", "study-adverse"),
+    # ("rel-trial", "site-success"),
+    # ("rel-avito", "user-visits"),
+    # ("rel-avito", "user-clicks"),
+    # ("rel-hm", "user-churn"),
     ("rel-stack", "user-engagement"),
-    ("rel-hm", "item-sales"),
-    ("rel-stack", "post-votes"),
-    ("rel-amazon", "item-churn"),
-    ("rel-amazon", "item-ltv"),
+    # ("rel-hm", "item-sales"),
+    # ("rel-stack", "post-votes"),
+    # ("rel-amazon", "item-churn"),
+    # ("rel-amazon", "item-ltv"),
     ("rel-stack", "user-badge"),
-    ("rel-amazon", "user-churn"),
-    ("rel-amazon", "user-ltv"),
+    # ("rel-amazon", "user-churn"),
+    # ("rel-amazon", "user-ltv"),
 )
 
 # Random init instead of RT-P, as the control for a task whose fine-tuned
@@ -226,8 +226,13 @@ def a100(qos: str, time: str) -> Resources:
 # gives:
 #
 #   il-interactive  2 b200            the two smallest-test jobs
-#   il              8 a100            the next ten, less the two given back
-#                                     to another experiment while pending
+#   il              8 a100            two slots of the ten are left free for
+#                                     another experiment; the eight go to the
+#                                     two largest-test tasks (rel-stack
+#                                     user-engagement, user-badge), which are
+#                                     the slowest and lose the most to `il-lo`
+#                                     preemption, plus the smallest four still
+#                                     running
 #   il-lo           30 a100           everything from rel-event/user-attendance on
 #
 # Both arms of a task sit in the same tier: the pair is the comparison, and a
@@ -243,10 +248,10 @@ RESOURCES: dict[tuple[str, str, str], Resources] = {
     ("trainval", "rel-f1", "driver-dnf"): a100("il", "1-00:00:00"),
     ("train", "rel-f1", "driver-top3"): a100("il", "1-00:00:00"),
     ("trainval", "rel-f1", "driver-top3"): a100("il", "1-00:00:00"),
-    ("train", "rel-f1", "driver-position"): a100("il", "1-00:00:00"),
-    ("trainval", "rel-f1", "driver-position"): a100("il", "1-00:00:00"),
-    ("train", "rel-trial", "study-outcome"): a100("il", "1-00:00:00"),
-    ("trainval", "rel-trial", "study-outcome"): a100("il", "1-00:00:00"),
+    ("train", "rel-f1", "driver-position"): a100("il-lo", "1-00:00:00"),
+    ("trainval", "rel-f1", "driver-position"): a100("il-lo", "1-00:00:00"),
+    ("train", "rel-trial", "study-outcome"): a100("il-lo", "1-00:00:00"),
+    ("trainval", "rel-trial", "study-outcome"): a100("il-lo", "1-00:00:00"),
     ("train", "rel-avito", "ad-ctr"): a100("il", "1-00:00:00"),
     ("trainval", "rel-avito", "ad-ctr"): a100("il-lo", "1-00:00:00"),
     ("train", "rel-event", "user-attendance"): a100("il-lo", "1-00:00:00"),
@@ -263,8 +268,8 @@ RESOURCES: dict[tuple[str, str, str], Resources] = {
     ("trainval", "rel-avito", "user-clicks"): a100("il-lo", "1-00:00:00"),
     ("train", "rel-hm", "user-churn"): a100("il-lo", "1-00:00:00"),
     ("trainval", "rel-hm", "user-churn"): a100("il-lo", "1-00:00:00"),
-    ("train", "rel-stack", "user-engagement"): a100("il-lo", "1-00:00:00"),
-    ("trainval", "rel-stack", "user-engagement"): a100("il-lo", "1-00:00:00"),
+    ("train", "rel-stack", "user-engagement"): a100("il", "1-00:00:00"),
+    ("trainval", "rel-stack", "user-engagement"): a100("il", "1-00:00:00"),
     ("train", "rel-hm", "item-sales"): a100("il-lo", "1-00:00:00"),
     ("trainval", "rel-hm", "item-sales"): a100("il-lo", "1-00:00:00"),
     ("train", "rel-stack", "post-votes"): a100("il-lo", "1-00:00:00"),
@@ -273,8 +278,8 @@ RESOURCES: dict[tuple[str, str, str], Resources] = {
     ("trainval", "rel-amazon", "item-churn"): a100("il-lo", "1-00:00:00"),
     ("train", "rel-amazon", "item-ltv"): a100("il-lo", "1-00:00:00"),
     ("trainval", "rel-amazon", "item-ltv"): a100("il-lo", "1-00:00:00"),
-    ("train", "rel-stack", "user-badge"): a100("il-lo", "1-00:00:00"),
-    ("trainval", "rel-stack", "user-badge"): a100("il-lo", "1-00:00:00"),
+    ("train", "rel-stack", "user-badge"): a100("il", "1-00:00:00"),
+    ("trainval", "rel-stack", "user-badge"): a100("il", "1-00:00:00"),
     ("train", "rel-amazon", "user-churn"): a100("il-lo", "1-00:00:00"),
     ("trainval", "rel-amazon", "user-churn"): a100("il-lo", "1-00:00:00"),
     ("train", "rel-amazon", "user-ltv"): a100("il-lo", "1-00:00:00"),
