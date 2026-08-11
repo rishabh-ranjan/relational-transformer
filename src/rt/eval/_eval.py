@@ -77,7 +77,8 @@ def main(
     prefetch_factor: int,
     num_walks: int,
     walk_length: int,
-    items_per_task: dict[str, int],
+    val_items_per_task: int | None,
+    test_items_per_task: int | None,
     ctx_size_list: list[int],
     mmap_populate: bool,
     shuffle_seed: int,
@@ -117,11 +118,12 @@ def main(
     ``Dataset.get_db(upto_test_timestamp=True)`` does. It only bites where the
     database extends past that timestamp.
 
-    ``items_per_task`` caps the rows scored per task, per split: the tuning
-    phase reads ``["val"]`` and the test phase ``["test"]``. They are separate
-    because they buy different things -- the val cap only has to rank the
-    configurations against each other, while the test cap is the number being
-    reported.
+    ``val_items_per_task`` and ``test_items_per_task`` cap the rows scored per
+    task, one per split. They are separate because they buy different things --
+    the val cap only has to rank the configurations against each other, while
+    the test cap is the number being reported. ``None`` is a split this run
+    never reads: a one-configuration grid touches no validation, and
+    ``splits`` without ``"test"`` stops after tuning.
 
     The ctx sizes cost almost nothing to add: ``Evaluator`` builds each item's
     context once at ``max(ctx_size_list)`` and scores every requested size off
@@ -240,8 +242,11 @@ def main(
     )
     # A config is a dict key downstream (it groups the tasks that chose it),
     # and a caller that came through JSON hands these over as lists.
-    assert set(splits) <= set(items_per_task), (
-        f"no items_per_task for {sorted(set(splits) - set(items_per_task))}"
+    assert "val" not in splits or val_items_per_task is not None, (
+        "no val_items_per_task for the val split"
+    )
+    assert "test" not in splits or test_items_per_task is not None, (
+        "no test_items_per_task for the test split"
     )
     grid = [tuple(cfg) for cfg in lcs_bw_pl_grid]
     ctx_sizes = sorted(ctx_size_list)
@@ -263,9 +268,9 @@ def main(
 
         # `splits` without "test" stops after tuning: the val scores land in
         # tuning.json and a later run evaluates test with the winner.
-        assert n_cfgs == 1 or "val" in items_per_task, (
+        assert n_cfgs == 1 or val_items_per_task is not None, (
             "tuning reads the val split whatever `splits` says, so it needs a "
-            "val entry in items_per_task"
+            "val_items_per_task"
         )
         tune_only = "test" not in splits
         assert not (tune_only and n_cfgs == 1), (
@@ -284,8 +289,8 @@ def main(
             test_tasks,
             grid=grid,
             ctx_sizes=ctx_sizes,
-            val_items=items_per_task.get("val"),
-            test_items=items_per_task.get("test"),
+            val_items=val_items_per_task,
+            test_items=test_items_per_task,
             val_ensemble_size=val_ensemble_size,
             test_ensemble_size=test_ensemble_size,
             tune_only=tune_only,
@@ -307,7 +312,9 @@ def main(
     lcs, bw, pl = grid[0]
     # One evaluator over every requested split, so they have to agree on how
     # many rows a task contributes.
-    (items,) = {items_per_task[s] for s in splits}
+    (items,) = {
+        {"val": val_items_per_task, "test": test_items_per_task}[s] for s in splits
+    }
     ev = build_evaluator(
         tasks,
         pre_dir,

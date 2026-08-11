@@ -120,7 +120,7 @@ frequent (`False`). The best setting is task-dependent — which motivates tunin
 and ensembling below.
 
 `shuffle_seed` seeds the per-task subset selection and item
-shuffle. Fixing it while capping rows with `items_per_task=N` evaluates
+shuffle. Fixing it while capping rows with `val_items_per_task=N` evaluates
 the *same* N validation rows across every config — the basis for a
 like-for-like context grid search.
 
