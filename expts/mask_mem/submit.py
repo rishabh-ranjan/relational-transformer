@@ -1,11 +1,34 @@
 """Submit the attention-mask memory probe. See [README.md](README.md)."""
 
-import dataclasses
+# dataclasses / AMPERE are unused while RESOURCES is blank, and imported so that
+# filling it in is one line and not an import hunt.
+import dataclasses  # noqa: F401
 
-from roach.slurm import AMPERE, submit
+from roach.slurm import AMPERE, Resources, submit  # noqa: F401
+
+# The slot this one job goes in, chosen by hand at submission time.
+#
+# NOT A DEFAULT TO INHERIT, and blank on purpose: whatever the last submission
+# used is a record of a different cluster. Work it out again every time,
+# following [Allocating a sweep](../README.md#allocating-a-sweep) -- read the
+# cluster, subtract what your own jobs already hold, spend the tiers top down --
+# and write today's answer here, e.g.
+#
+#     RESOURCES = dataclasses.replace(
+#         AMPERE, gpus="a100:1", exclusive=False, cpus_per_task=8,
+#         qos="il-interactive", time="00:20:00",
+#     )
+#
+# One card, a shared node and a short wall is the shape it wants: the probe
+# wants a GPU now, not the run's eight.
+RESOURCES: Resources | None = None
 
 
 def main() -> None:
+    assert RESOURCES is not None, (
+        "RESOURCES is blank: pick this submission's slot per "
+        "../README.md#allocating-a-sweep and write it in"
+    )
     submit(
         "expts.mask_mem.probe:main",
         args=dict(
@@ -18,16 +41,7 @@ def main() -> None:
             num_nodes=1024,
             repeats=5,
         ),
-        resources=dataclasses.replace(
-            AMPERE,
-            # One card, shared node, short wall: the probe wants a GPU now, not
-            # the run's eight.
-            gpus="a100:1",
-            exclusive=False,
-            cpus_per_task=8,
-            qos="il-interactive",
-            time="00:20:00",
-        ),
+        resources=RESOURCES,
         name="mask-mem",
         repo_root="/lfs/hyperturing1/0/ranjanr/clones/rishabh-ranjan/relational-transformer",
         log_root="/dfs/user/ranjanr/slurm-logs/rishabh-ranjan/relational-transformer/expts/mask-mem",

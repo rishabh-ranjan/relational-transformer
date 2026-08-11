@@ -110,6 +110,19 @@ def text_bytes(sizes: dict, name: str, default: int) -> int:
     return sizes.get(name, {}).get("text", default)
 
 
+# The qos every job in this sweep asks for, chosen by hand at submission time.
+#
+# NOT A DEFAULT TO INHERIT, and blank on purpose: whatever the last submission
+# used is a record of a different cluster. Work it out again every time,
+# following [Allocating a sweep](../README.md#allocating-a-sweep) -- read the
+# cluster, subtract what your own jobs already hold, spend the tiers top down --
+# and write today's answer here, e.g. `QOS = "il-lo"`.
+#
+# The walltimes and node lists below are sized from the data and are not part of
+# that choice; the tier is.
+QOS: str | None = None
+
+
 def resources_for(expected_bytes: int) -> Resources:
     """The cpu-only rustler stage: one cpu, memory from the expected output.
 
@@ -137,7 +150,7 @@ def resources_for(expected_bytes: int) -> Resources:
     return Resources(
         partition="il",
         account="infolab",
-        qos="il-lo",
+        qos=QOS,
         time=walltime,
         # No GPU: this stage never touches one, and holding it would cap the
         # sweep at the 50 GPUs these five nodes have between them.
@@ -203,7 +216,7 @@ def embed_resources(text_bytes_: int) -> Resources:
         return Resources(
             partition="il",
             account="infolab",
-            qos="il-lo",
+            qos=QOS,
             time=walltime,
             gpus=str(BIG_GPUS),
             # Four cpus per GPU, the same ratio the one-GPU shape uses: the
@@ -221,7 +234,7 @@ def embed_resources(text_bytes_: int) -> Resources:
     return Resources(
         partition="il",
         account="infolab",
-        qos="il-lo",
+        qos=QOS,
         time=walltime,
         # ONE GPU. Fanning out over several is only worth a job's while for the
         # long poles above: six cards return 4.06x on an RTX8000 node and 4.29x
@@ -420,6 +433,10 @@ def main() -> None:
     stages at once, and the GPU queue fills behind the cpu one without any
     dependency to declare.
     """
+    assert QOS is not None, (
+        "QOS is blank: pick this submission's tier per "
+        "../README.md#allocating-a-sweep and write it in"
+    )
     check_tree_is_submittable()
     sizes, out = load_sizes(), Path(OUT_DIR)
     names = datasets()

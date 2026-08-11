@@ -56,7 +56,13 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         "the checkpoint directory, so the job resumes where it left off",
     )
     p.add_argument("--nodes", type=int, default=1)
-    p.add_argument("--qos", default="il-lo", choices=("il-lo", "il"))
+    # No default: the tier is chosen against the cluster at the moment of
+    # submission, following
+    # [Allocating a sweep](../README.md#allocating-a-sweep) -- read the cluster,
+    # subtract what your own jobs already hold, spend the tiers top down.
+    # Whatever the last submission used is a record of a different cluster.
+    # `autoscale.py` computes it live and always passes it.
+    p.add_argument("--qos", required=True, choices=("il-lo", "il"))
     p.add_argument(
         "--nodelist",
         default="ampere1,ampere2,ampere3,ampere4,ampere5,ampere6,ampere7,ampere8,ampere9",
