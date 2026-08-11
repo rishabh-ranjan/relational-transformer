@@ -17,6 +17,10 @@ only whether the test phase runs at all. `["test"]` is therefore both phases.
 
 **ens goes out first and takes the better slots**: its curve is the one the
 paper needs, and hpo-ens only says how much tuning would add on top.
+
+One config block for both: everything the arms share is the single `args` dict
+in `main()`, and `ARMS` above it holds the four values they disagree on. An
+arm's wandb project, job name and log directory follow from its name.
 """
 
 import functools
@@ -240,118 +244,93 @@ def ready(arm: str) -> list[tuple[str, str]]:
 RESOURCES: dict[tuple[str, str, str], Resources] = {}
 
 
+# Everything the two arms disagree on, and nothing else -- the rest of the
+# config is the single block in `main()`. Insertion order is submission order,
+# so ens comes first and gets the better slots.
+#
+# `val_items` is None on an arm that reads no validation: a one-configuration
+# grid tunes nothing, so `items_per_task` carries no val entry either.
+ARMS: dict[str, dict] = {
+    "ens": dict(
+        ctx_size_list=[1024],
+        lcs_bw_pl_grid=[(1024, 256, False)],
+        val_items=None,
+        test_ensemble_size=16,
+    ),
+    "hpo-ens": dict(
+        ctx_size_list=[512, 1024, 2048],
+        lcs_bw_pl_grid=[
+            (lcs, bw, pl)
+            for lcs in (512, 1024, 2048)
+            for bw in (64, 128, 256)
+            for pl in (True, False)
+        ],
+        val_items=2**14,
+        test_ensemble_size=4,
+    ),
+}
+
+
 def main() -> None:
     # ens first: it takes the slots while the budget is still unspent, and a
     # hpo-ens job that finds no line in RESOURCES stops a submission that has
     # already placed every ens job it was going to.
-    for db, task in ready("ens"):
-        resources = RESOURCES["ens", db, task]
-        name = f"{db}/{task}"
-        print(
-            f"  ens      {name:28s} {resources.gpus} {resources.qos:15s} {resources.time}"
-        )
-        submit(
-            "rt.eval:main",
-            # Do not put comments inside this dict: it is a config block,
-            # and reading it means scanning the values.
-            args=dict(
-                load_ckpt_path=ckpt_for(db, task),
-                embedder="all-MiniLM-L12-v2",
-                d_text=384,
-                num_blocks=12,
-                d_model=512,
-                num_heads=8,
-                d_ff=2048,
-                splits=["test"],
-                db_task_list=[(db, task)],
-                pre_dir="/dfs/user/ranjanr/share/stanford-star/relbench-preprocessed",
-                tokens_per_gpu=2**18,
-                num_workers=resources.cpus_per_task,
-                prefetch_factor=2,
-                num_walks=10_000,
-                walk_length=20,
-                items_per_task={"test": items_for(db, task)},
-                mmap_populate=True,
-                shuffle_seed=0,
-                context_seed=0,
-                vector_db_path=None,
-                db_upto_test_timestamp=True,
-                ctx_size_list=[1024],
-                lcs_bw_pl_grid=[(1024, 256, False)],
-                val_ensemble_size=1,
-                test_ensemble_size=16,
-                run_name=name,
-                targets=targets_for(db, task),
-                project="2026-08-11-fine_tune_ens",
-                entity="rtv2",
-                out_root="/dfs/user/ranjanr/ckpts",
-                wandb_disabled=False,
-            ),
-            resources=resources,
-            name=f"ens-{db}-{task}",
-            repo_root="/lfs/hyperturing1/0/ranjanr/clones/rishabh-ranjan/relational-transformer",
-            log_root="/dfs/user/ranjanr/slurm-logs/rishabh-ranjan/relational-transformer/expts/fine-tune-ens",
-            clone_root="/lfs/local/0/roach_clones",
-            secrets_dir="/dfs/user/ranjanr/.secrets",
-            run_id=None,
-        )
-
-    for db, task in ready("hpo-ens"):
-        resources = RESOURCES["hpo-ens", db, task]
-        name = f"{db}/{task}"
-        print(
-            f"  hpo-ens  {name:28s} {resources.gpus} {resources.qos:15s} {resources.time}"
-        )
-        submit(
-            "rt.eval:main",
-            # Do not put comments inside this dict: it is a config block,
-            # and reading it means scanning the values.
-            args=dict(
-                load_ckpt_path=ckpt_for(db, task),
-                embedder="all-MiniLM-L12-v2",
-                d_text=384,
-                num_blocks=12,
-                d_model=512,
-                num_heads=8,
-                d_ff=2048,
-                splits=["test"],
-                db_task_list=[(db, task)],
-                pre_dir="/dfs/user/ranjanr/share/stanford-star/relbench-preprocessed",
-                tokens_per_gpu=2**18,
-                num_workers=resources.cpus_per_task,
-                prefetch_factor=2,
-                num_walks=10_000,
-                walk_length=20,
-                items_per_task={"val": 2**14, "test": items_for(db, task)},
-                mmap_populate=True,
-                shuffle_seed=0,
-                context_seed=0,
-                vector_db_path=None,
-                db_upto_test_timestamp=True,
-                ctx_size_list=[512, 1024, 2048],
-                lcs_bw_pl_grid=[
-                    (lcs, bw, pl)
-                    for lcs in (512, 1024, 2048)
-                    for bw in (64, 128, 256)
-                    for pl in (True, False)
-                ],
-                val_ensemble_size=1,
-                test_ensemble_size=4,
-                run_name=name,
-                targets=targets_for(db, task),
-                project="2026-08-11-fine_tune_hpo_ens",
-                entity="rtv2",
-                out_root="/dfs/user/ranjanr/ckpts",
-                wandb_disabled=False,
-            ),
-            resources=resources,
-            name=f"hpo-ens-{db}-{task}",
-            repo_root="/lfs/hyperturing1/0/ranjanr/clones/rishabh-ranjan/relational-transformer",
-            log_root="/dfs/user/ranjanr/slurm-logs/rishabh-ranjan/relational-transformer/expts/fine-tune-hpo-ens",
-            clone_root="/lfs/local/0/roach_clones",
-            secrets_dir="/dfs/user/ranjanr/.secrets",
-            run_id=None,
-        )
+    for arm, arm_args in ARMS.items():
+        for db, task in ready(arm):
+            resources = RESOURCES[arm, db, task]
+            name = f"{db}/{task}"
+            items = {"test": items_for(db, task)}
+            if arm_args["val_items"] is not None:
+                items["val"] = arm_args["val_items"]
+            print(
+                f"  {arm:8s} {name:28s} "
+                f"{resources.gpus} {resources.qos:15s} {resources.time}"
+            )
+            submit(
+                "rt.eval:main",
+                # Do not put comments inside this dict: it is a config block,
+                # and reading it means scanning the values.
+                args=dict(
+                    load_ckpt_path=ckpt_for(db, task),
+                    embedder="all-MiniLM-L12-v2",
+                    d_text=384,
+                    num_blocks=12,
+                    d_model=512,
+                    num_heads=8,
+                    d_ff=2048,
+                    splits=["test"],
+                    db_task_list=[(db, task)],
+                    pre_dir="/dfs/user/ranjanr/share/stanford-star/relbench-preprocessed",
+                    tokens_per_gpu=2**18,
+                    num_workers=resources.cpus_per_task,
+                    prefetch_factor=2,
+                    num_walks=10_000,
+                    walk_length=20,
+                    items_per_task=items,
+                    mmap_populate=True,
+                    shuffle_seed=0,
+                    context_seed=0,
+                    vector_db_path=None,
+                    db_upto_test_timestamp=True,
+                    ctx_size_list=arm_args["ctx_size_list"],
+                    lcs_bw_pl_grid=arm_args["lcs_bw_pl_grid"],
+                    val_ensemble_size=1,
+                    test_ensemble_size=arm_args["test_ensemble_size"],
+                    run_name=name,
+                    targets=targets_for(db, task),
+                    project=f"2026-08-11-fine_tune_{arm.replace('-', '_')}",
+                    entity="rtv2",
+                    out_root="/dfs/user/ranjanr/ckpts",
+                    wandb_disabled=False,
+                ),
+                resources=resources,
+                name=f"{arm}-{db}-{task}",
+                repo_root="/lfs/hyperturing1/0/ranjanr/clones/rishabh-ranjan/relational-transformer",
+                log_root=f"/dfs/user/ranjanr/slurm-logs/rishabh-ranjan/relational-transformer/expts/fine-tune-{arm}",
+                clone_root="/lfs/local/0/roach_clones",
+                secrets_dir="/dfs/user/ranjanr/.secrets",
+                run_id=None,
+            )
 
 
 if __name__ == "__main__":
