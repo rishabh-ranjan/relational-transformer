@@ -37,6 +37,7 @@ import shutil
 import subprocess
 from pathlib import Path
 
+import wandb
 from roach.slurm import Resources, submit
 
 # a100 / b200 are unused while RESOURCES is blank, and imported so that
@@ -71,7 +72,8 @@ TASKS = (
     ("rel-trial", "study-outcome"),
 )
 
-# Where `submit.py`'s fine-tuning runs land.
+# Where this experiment's runs land, and where `submit.py`'s fine-tuning runs do.
+PROJECT = "rtv2/2026-08-11-eval"
 CKPT_ROOT = Path("/dfs/user/ranjanr/ckpts/rtv2/2026-08-11-fine_tune")
 
 # Where the weights a job is going to load are copied to, out of reach of the
@@ -149,6 +151,25 @@ def in_flight() -> set[str]:
     return set(out.stdout.split())
 
 
+@functools.cache
+def scored(arm: str) -> set[tuple[str, str]]:
+    """The tasks that arm has already carried to its full ensemble.
+
+    A finished job leaves the queue, so `in_flight` stops filtering it and a
+    rerun -- the way a newly fine-tuned task is picked up, and the way a
+    pending job is moved to a tier that freed -- would queue it a second time.
+    Its own run says whether it got there: the last `ens_size` it logged
+    against the `test_ensemble_size` it was submitted with.
+    """
+    out = set()
+    for r in wandb.Api().runs(PROJECT):
+        name = r.config.get("run_name", "").split("/")
+        if len(name) == 3 and name[0] == arm:
+            if r.summary.get("ens_size") == r.config.get("test_ensemble_size"):
+                out.add((name[1], name[2]))
+    return out
+
+
 def ready(arm: str) -> list[tuple[str, str]]:
     """The tasks that arm can score now, smallest test set first.
 
@@ -160,12 +181,15 @@ def ready(arm: str) -> list[tuple[str, str]]:
 
     A task whose fine-tuning run has not written a checkpoint yet -- it has not
     reached its first eval -- is skipped rather than aborting the submission:
-    that run is still going, and this is rerun as they land.
+    that run is still going, and this is rerun as they land. So is one already
+    in flight, and one that has finished its curve.
     """
     started = [
         t
         for t in TASKS
-        if best_ckpt(*t).exists() and f"{arm}-{t[0]}-{t[1]}" not in in_flight()
+        if best_ckpt(*t).exists()
+        and t not in scored(arm)
+        and f"{arm}-{t[0]}-{t[1]}" not in in_flight()
     ]
     return sorted(started, key=lambda t: ntest()[f"{t[0]}/{t[1]}"])
 
@@ -258,7 +282,9 @@ RESOURCES: dict[tuple[str, str, str], Resources] = {
     ),
     # The rest of hpo_ens waits on the contended pool. Preemption costs one
     # pass now, and these are 1-3h jobs.
-    ("hpo_ens", "rel-hm", "user-churn"): a100("il-lo", "2-00:00:00"),
+    # 15:20: an ens_only job finished and handed back an `il` slot; the longest
+    # pending hpo_ens job takes it.
+    ("hpo_ens", "rel-hm", "user-churn"): a100("il", "1-00:00:00"),
     ("hpo_ens", "rel-avito", "user-clicks"): a100("il-lo", "2-00:00:00"),
     ("hpo_ens", "rel-avito", "user-visits"): a100("il-lo", "2-00:00:00"),
     ("hpo_ens", "rel-trial", "site-success"): a100("il-lo", "2-00:00:00"),
@@ -330,7 +356,7 @@ def main() -> None:
                     test_ensemble_size=8,
                     run_name=name,
                     targets=targets_for(db, task),
-                    project="2026-08-11-eval",
+                    project=PROJECT.split("/")[1],
                     entity="rtv2",
                     out_root="/dfs/user/ranjanr/ckpts",
                     wandb_disabled=False,
