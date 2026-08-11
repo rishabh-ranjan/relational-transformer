@@ -38,7 +38,8 @@ def probe(*, run_id: str, num_workers: int) -> None:
     for dtype in (torch.bfloat16, torch.float16, torch.float32):
         # 2**18 is what the eval jobs use (eval_bs 128 at ctx 2048); the small
         # one is there to tell "the card cannot hold this batch" apart from
-        # "the card cannot run this at all".
+        # "the card cannot run this at all", and is the shape the older cards
+        # are compared to the a100 at.
         for tokens_per_gpu in (2**18, 2**15):
             name = f"{dtype}".removeprefix("torch.")
             if time.time() - started > 3600:
@@ -48,6 +49,18 @@ def probe(*, run_id: str, num_workers: int) -> None:
             try:
                 net, config = load_rt_model(CKPT, device="cuda", compile=False)
                 net = net.to(dtype)
+                # The batches carry bf16 text embeddings whatever the net is,
+                # so a net in another dtype needs its inputs cast with it.
+                predict = net.predict
+
+                def _predict(batch, *a, _p=predict, _d=dtype, **k):
+                    batch = {
+                        key: v.to(_d) if v.is_floating_point() else v
+                        for key, v in batch.items()
+                    }
+                    return _p(batch, *a, **k)
+
+                net.predict = _predict
                 ev = build_evaluator(
                     tasks,
                     PRE_DIR,
@@ -91,7 +104,6 @@ def probe(*, run_id: str, num_workers: int) -> None:
                     value=f"{r['value']:.6f}",
                 )
                 ev = None
-                break
             except Exception as e:
                 log(FAILED=name, tokens_per_gpu=tokens_per_gpu, error=type(e).__name__)
                 traceback.print_exc()
@@ -105,12 +117,13 @@ def nodes() -> list[tuple[str, str, str | None, str | None, int]]:
 
     cpus is what the node can give one gpu without --exclusive; hyperturing2
     has 9 physical cores per card, so 9 there rather than the a100 nodes' 14.
+    hyperion3's titanxp (sm 61) is not here: this torch has no kernels for it
+    at all, so there is nothing to time.
     """
     return [
         ("a100", "a100:1", "ampere", None, 14),
         ("rtx8000", "rtx8000:1", None, "hyperturing2", 9),
         ("2080ti", "2080ti:1", None, "turing3", 8),
-        ("titanxp", "titanxp:1", None, "hyperion3", 14),
     ]
 
 
