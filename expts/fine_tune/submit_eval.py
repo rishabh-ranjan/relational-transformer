@@ -42,7 +42,7 @@ from roach.slurm import Resources, submit
 
 # a100 / b200 are unused while RESOURCES is blank, and imported so that
 # filling it in is one line and not an import hunt.
-from submit import a100, b200, ntest, targets_for  # noqa: F401
+from submit import a100, b200, nsplit, targets_for  # noqa: F401
 
 # The 21 RelBench forecast tasks, this experiment's own list rather than
 # `submit.TASKS`: that one is whatever the fine-tuning sweep last submitted,
@@ -191,7 +191,7 @@ def ready(arm: str) -> list[tuple[str, str]]:
         and t not in scored(arm)
         and f"{arm}-{t[0]}-{t[1]}" not in in_flight()
     ]
-    return sorted(started, key=lambda t: ntest()[f"{t[0]}/{t[1]}"])
+    return sorted(started, key=lambda t: nsplit()[f"{t[0]}/{t[1]}"]["test"])
 
 
 # Which slot each job goes in, laid out by hand -- one line per job, keyed by

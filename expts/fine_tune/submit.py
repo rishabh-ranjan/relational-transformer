@@ -1,4 +1,20 @@
-"""Submit one fine-tuning job per task. See [README.md](README.md)."""
+"""Submit one fine-tuning job per task. See [README.md](README.md).
+
+What this arm is, in the values below rather than in prose elsewhere -- it
+changes every submission, and a description that lives in another file goes
+stale the moment one of these does:
+
+- warm-started from RT-P (`ckpt_for`), one head per task type;
+- **fixed** eval context, not stochastic: the `*_list` knobs are single-valued,
+  and `eval_lcs_bw_pl_grid` is the same configuration, so the curve measures
+  what the model is trained under;
+- no token masking (`mask_prob_max=0.0`);
+- trained on train **and** val, so nothing selects a checkpoint: `eval_splits`
+  is test alone, `swa_momentum` is None, and the run keeps its last step
+  (`latest.safetensors`, and the one surviving `steps=` file);
+- a finite budget -- `steps_for` epochs, the lr warmed up over a fifth of it
+  and decayed to zero by the end -- instead of early stopping.
+"""
 
 import functools
 import json
@@ -86,50 +102,8 @@ def published_best() -> dict[str, float]:
 
 
 @functools.cache
-def ntrain() -> dict[str, float]:
-    """Train-set size per `{db}/{task}`, from RelBench's own task stats.
-
-    The same `num_rows_train` column `make_results.py` orders its table columns
-    by, so anything ordered by this reads in the order results.md does. A pair
-    the stats do not cover sorts last rather than raising -- this only decides
-    a display order, and `mean` is such a pair.
-    """
-    import pandas as pd
-    from huggingface_hub import hf_hub_download
-
-    stats = pd.read_parquet(
-        hf_hub_download(
-            "stanford-star/relbench", "STATS/tasks.parquet", repo_type="dataset"
-        )
-    )
-    return {
-        f"{r.database}/{r.task}": float(r.num_rows_train) for r in stats.itertuples()
-    }
-
-
-@functools.cache
-def ntest() -> dict[str, float]:
-    """Test-set size per `{db}/{task}`, from the same RelBench task stats.
-
-    What this sweep's submission order is keyed on: the test split is what an
-    eval pass walks, so smallest-first is fastest-to-an-answer-first.
-    """
-    import pandas as pd
-    from huggingface_hub import hf_hub_download
-
-    stats = pd.read_parquet(
-        hf_hub_download(
-            "stanford-star/relbench", "STATS/tasks.parquet", repo_type="dataset"
-        )
-    )
-    return {
-        f"{r.database}/{r.task}": float(r.num_rows_test) for r in stats.itertuples()
-    }
-
-
-@functools.cache
 def nsplit() -> dict[str, dict[str, float]]:
-    """Rows per split per `{db}/{task}`, from the same RelBench task stats.
+    """Rows per split per `{db}/{task}`, from RelBench's own task stats.
 
     What an epoch is: `rt.train`'s stream is every row of the splits in
     `train_splits`, uncapped here (`items_per_task` is far above any of them),
@@ -322,7 +296,9 @@ RUN_IDS: dict[tuple[str, str], str] = {}
 
 def main() -> None:
     # Ascending test-set size, so the fastest answers land first.
-    for db, task in sorted(TASKS, key=lambda p: ntest()[f"{p[0]}/{p[1]}"]):
+    # Shortest run first, so the fastest answers land first. The step budget,
+    # not the test split: what a job costs here is overwhelmingly its training.
+    for db, task in sorted(TASKS, key=lambda p: steps_for(*p, ["train", "val"], 256)):
         resources = RESOURCES[db, task]
         name = f"{db}/{task}"
         # The three values the rest of the schedule is derived from. Editing

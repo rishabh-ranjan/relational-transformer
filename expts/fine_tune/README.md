@@ -3,10 +3,8 @@
 What a Relational Transformer gets from training on one task, and how that
 compares with the task-specific baselines.
 
-`submit.py` is the default: stochastic context without token masking,
-warm-started from the published RT-P checkpoint.
-
-Tasks are submitted smallest test set first, so the fastest answers land first.
+`submit.py`'s docstring says what the current arm is -- the values it lists
+change every submission, so they are described where they live, not here.
 
 ## Running it
 
