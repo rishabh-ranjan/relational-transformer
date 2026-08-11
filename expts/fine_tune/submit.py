@@ -221,28 +221,36 @@ def a100(qos: str, time: str) -> Resources:
 #
 # A task with no line here stops the submission rather than taking a slot
 # nobody chose for it.
+#
+# 2026-08-11: blackwell1 has 6 of 8 b200 allocated, so exactly 2 are free and
+# the rest sit under 7-day walls -- `il-interactive`'s 2 gpus take those two and
+# nothing else goes to blackwell. Amperes are full on paper (only ampere4 has 4
+# idle, ampere7 down), but ~24 of them are yanay's `il-lo` jobs, which an `il`
+# job preempts, so the 10 `il` slots are amperes. I hold no gpu of my own, so
+# the whole budget is free. The heaviest tasks by test-set size take the good
+# slots; the tail runs on `il-lo` and resumes through preemption.
 RESOURCES: dict[tuple[str, str], Resources] = {
-    ("rel-event", "user-repeat"): b200("il-interactive", "12:00:00"),
-    ("rel-f1", "driver-dnf"): a100("il", "1-00:00:00"),
-    ("rel-f1", "driver-top3"): a100("il", "1-00:00:00"),
-    ("rel-f1", "driver-position"): a100("il", "1-00:00:00"),
-    ("rel-trial", "study-outcome"): a100("il", "1-00:00:00"),
-    ("rel-avito", "ad-ctr"): a100("il", "1-00:00:00"),
+    ("rel-amazon", "user-churn"): b200("il-interactive", "12:00:00"),
+    ("rel-amazon", "user-ltv"): b200("il-interactive", "12:00:00"),
+    ("rel-stack", "user-badge"): a100("il", "1-00:00:00"),
+    ("rel-amazon", "item-ltv"): a100("il", "1-00:00:00"),
+    ("rel-amazon", "item-churn"): a100("il", "1-00:00:00"),
+    ("rel-stack", "post-votes"): a100("il", "1-00:00:00"),
+    ("rel-hm", "item-sales"): a100("il", "1-00:00:00"),
+    ("rel-stack", "user-engagement"): a100("il", "1-00:00:00"),
+    ("rel-hm", "user-churn"): a100("il", "1-00:00:00"),
+    ("rel-avito", "user-clicks"): a100("il", "1-00:00:00"),
+    ("rel-avito", "user-visits"): a100("il", "1-00:00:00"),
+    ("rel-trial", "site-success"): a100("il", "1-00:00:00"),
+    ("rel-trial", "study-adverse"): a100("il-lo", "1-00:00:00"),
     ("rel-event", "user-attendance"): a100("il-lo", "1-00:00:00"),
     ("rel-event", "user-ignore"): a100("il-lo", "1-00:00:00"),
-    ("rel-trial", "study-adverse"): b200("il-interactive", "12:00:00"),
-    ("rel-trial", "site-success"): b200("il-interactive", "12:00:00"),
-    ("rel-avito", "user-visits"): a100("il-lo", "1-00:00:00"),
-    ("rel-avito", "user-clicks"): a100("il-lo", "1-00:00:00"),
-    ("rel-hm", "user-churn"): a100("il-lo", "1-00:00:00"),
-    ("rel-stack", "user-engagement"): a100("il", "1-00:00:00"),
-    ("rel-hm", "item-sales"): a100("il-lo", "1-00:00:00"),
-    ("rel-stack", "post-votes"): a100("il-lo", "1-00:00:00"),
-    ("rel-amazon", "item-churn"): a100("il-lo", "1-00:00:00"),
-    ("rel-amazon", "item-ltv"): a100("il-lo", "1-00:00:00"),
-    ("rel-stack", "user-badge"): a100("il", "1-00:00:00"),
-    ("rel-amazon", "user-churn"): a100("il-lo", "1-00:00:00"),
-    ("rel-amazon", "user-ltv"): a100("il-lo", "1-00:00:00"),
+    ("rel-avito", "ad-ctr"): a100("il-lo", "1-00:00:00"),
+    ("rel-trial", "study-outcome"): a100("il-lo", "1-00:00:00"),
+    ("rel-f1", "driver-position"): a100("il-lo", "1-00:00:00"),
+    ("rel-f1", "driver-top3"): a100("il-lo", "1-00:00:00"),
+    ("rel-f1", "driver-dnf"): a100("il-lo", "1-00:00:00"),
+    ("rel-event", "user-repeat"): a100("il-lo", "1-00:00:00"),
 }
 
 
