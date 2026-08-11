@@ -19,6 +19,26 @@ TASKS = (
 )
 
 
+def b200(qos: str, time: str) -> Resources:
+    """One B200. 36 cpus is blackwell1's 288 cores split eight ways, and the
+    memory is that share of the node -- under the site's MaxMemPerCPU of 10700M
+    times 36, which is what an explicit --mem is capped at."""
+    return Resources(
+        partition="il",
+        account="infolab",
+        qos=qos,
+        time=time,
+        gpus="b200:1",
+        cpus_per_task=36,
+        ntasks=None,
+        exclusive=False,
+        mem="375000M",
+        mem_per_gpu=None,
+        constraint=None,
+        nodelist="blackwell1",
+    )
+
+
 def a100(qos: str, time: str) -> Resources:
     """One A100. 14 cpus is what the site allows per gpu on a job that is not
     --exclusive; no --mem, so the partition's DefMemPerGPU (240000M) applies,
@@ -45,17 +65,18 @@ def a100(qos: str, time: str) -> Resources:
 # NOT A DEFAULT TO INHERIT: work the assignment out again every time, following
 # [Allocating a sweep](../README.md#allocating-a-sweep).
 #
-# Read at submission time: the huber sweep of this directory holds both my
-# high-priority tiers outright -- 2 b200 on `il-interactive` and 10 a100 on
-# `il`, both caps full, with 30 more of its jobs pending on `il-lo`. Nothing is
-# left to spend, so both jobs go to `il-lo` behind that tail; the b200 question
-# does not arise, 7 of blackwell1's 8 are allocated and the free one is mine.
+# Read at submission time: the huber sweep of this directory holds my
+# `il-interactive` cap (2 b200) outright, but two of its `il` a100 have since
+# finished, so `il` has 2 of its 10 free and both jobs take them. blackwell1 is
+# 7 of 8 allocated and the one free b200 is untaken, so the larger of the two
+# tasks asks for it; if a reservation holds that card (`ReqNodeNotAvail`, seen
+# on this node before) the job moves to an ampere rather than sitting there.
 #
 # A job with no line here stops the submission rather than taking a slot
 # nobody chose for it.
 RESOURCES: dict[tuple[str, str], Resources] = {
-    ("rel-stack", "user-badge"): a100("il-lo", "1-00:00:00"),
-    ("rel-stack", "user-engagement"): a100("il-lo", "1-00:00:00"),
+    ("rel-stack", "user-badge"): b200("il", "1-00:00:00"),
+    ("rel-stack", "user-engagement"): a100("il", "1-00:00:00"),
 }
 
 
@@ -83,7 +104,7 @@ def main() -> None:
                 db_task_list=[(db, task)],
                 train_splits=["train", "val"],
                 pre_dir="/dfs/user/ranjanr/share/stanford-star/relbench-preprocessed",
-                tokens_per_gpu=2**16,
+                tokens_per_gpu=2**17 if resources.gpus.startswith("b200") else 2**16,
                 num_workers=resources.cpus_per_task,
                 prefetch_factor=2,
                 ctx_size_list=[1024],
