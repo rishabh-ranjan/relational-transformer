@@ -158,9 +158,13 @@ def main(
                 console_chunk_max_seconds=60,
             ),
         )
-        # The ensemble size is the x-axis of everything logged here.
+        # Two phases, two x-axes: the tuning sweeps configurations and the
+        # ensembling sweeps seeds. Neither is wandb's own step counter, which
+        # just counts log calls and is left to do that.
         wandb.define_metric("ens_size")
+        wandb.define_metric("tune/idx")
         wandb.define_metric("*", step_metric="ens_size")
+        wandb.define_metric("tune/*", step_metric="tune/idx")
 
     checkpoint = load_ckpt_path
     assert checkpoint is not None, "model.load_ckpt_path is required"
@@ -504,6 +508,7 @@ def run_ensemble(
         # ---- tune on val: best context config per task ----
         best = {}  # (db, table) -> {"cfg", "value", "task_type"}
         scores = defaultdict(dict)  # (db, table) -> str(cfg) -> value
+        tuned = []  # one row per scored configuration, for the wandb table
         for lcs, bw, pl in grid:
             # Every ctx size this entry can serve, in one pass.
             ctxs = [c for c in ctx_sizes if lcs <= c]
@@ -547,6 +552,26 @@ def run_ensemble(
                     ens_size=val_ensemble_size,
                     value=f"{v:.4f}",
                 )
+                if use_wandb:
+                    # The search as it happens: this configuration's score, the
+                    # best so far beside it, and the knobs that produced it --
+                    # all against `tune/idx`, so the panel is the trajectory
+                    # and a hover says which configuration a point was.
+                    metric = METRIC_NAMES[task_type]
+                    tuned.append([f"{db}/{table}", ctx, lcs, bw, pl, metric, v * 100])
+                    wandb.log(
+                        {
+                            "tune/idx": len(tuned),
+                            f"tune/{metric}/val/{db}/{table}": v * 100,
+                            f"tune/best/{metric}/val/{db}/{table}": (
+                                best[key]["value"] * 100
+                            ),
+                            "tune/ctx_size": ctx,
+                            "tune/local_ctx_size": lcs,
+                            "tune/bfs_width": bw,
+                            "tune/prefer_latest": int(pl),
+                        }
+                    )
 
         # Only rank 0 saw the tuning metrics, so only it writes them and only
         # it knows the winning configs. Every rank must group the test tasks
@@ -571,6 +596,17 @@ def run_ensemble(
                 )
             )
             log(tuning_written=str(tuning_out_path), tasks=len(scores))
+        if use_wandb:
+            # The same rows as a table, which is sortable in the app and is
+            # what a scatter of score against any one knob is built from.
+            wandb.log(
+                {
+                    "tune/scores": wandb.Table(
+                        columns=["task", "ctx", "lcs", "bw", "pl", "metric", "value"],
+                        data=tuned,
+                    )
+                }
+            )
         if tune_only:
             return
         if ddp:
@@ -687,7 +723,7 @@ def run_ensemble(
                 # A constant at every size, so it draws as the horizontal line
                 # the curve is measured against.
                 logged.update({f"target/{k}": v for k, v in targets.items()})
-                wandb.log(logged, step=size)
+                wandb.log(logged)
     if not is_main:
         return results
     for size in sorted(curve):

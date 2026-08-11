@@ -84,7 +84,16 @@ SYSTEM = "System"
 
 # wandb's own bookkeeping series, plus the two axes every panel is drawn
 # against. Panels for these say nothing about a run.
-INTERNAL = {"_runtime", "_step", "_timestamp", "_wandb", "step", "epoch", "ens_size"}
+INTERNAL = {
+    "_runtime",
+    "_step",
+    "_timestamp",
+    "_wandb",
+    "step",
+    "epoch",
+    "ens_size",
+    "tune/idx",
+}
 
 # Keys whose panel gets a log y-axis: timings whose interesting structure is
 # the occasional order-of-magnitude spike, which a linear axis flattens the
@@ -132,6 +141,21 @@ def target_key(key: str) -> str:
     return f"target/{key}"
 
 
+def best_key(key: str) -> str:
+    """Where `rt.eval` logs the best-so-far twin of a `tune/` key."""
+    return key.replace("tune/", "tune/best/", 1) if key.startswith("tune/") else ""
+
+
+def axis(key: str, x: str) -> str:
+    """The x this key is logged against.
+
+    The tuning phase sweeps configurations and the ensembling phase sweeps
+    seeds, so a project carrying both has two x-axes and a panel has to pick
+    the one its key moves along.
+    """
+    return "tune/idx" if key.startswith("tune/") else x
+
+
 def task_size(key: str) -> float:
     """The train-set size behind a `{metric}/{split}/{db}/{task}` key.
 
@@ -152,10 +176,14 @@ def panel(key: str, keys: set[str], x: str, prefix: str = "") -> wr.LinePlot:
     `prefix` comes off the title: what the section name already says does not
     need repeating in every panel inside it.
     """
-    y = [k for k in (key, swa_key(key), target_key(key)) if k in keys]
+    y = [
+        k
+        for k in (key, swa_key(key), best_key(key), target_key(key))
+        if k and k in keys
+    ]
     return wr.LinePlot(
         title=key.removeprefix(prefix),
-        x=x,
+        x=axis(key, x),
         y=y,
         smoothing_show_original=True,
         log_y=key in LOG_Y or None,
@@ -295,7 +323,11 @@ def build(entity: str, project: str, x: str) -> ws.Workspace:
     keys = project_keys(entity, project)
     # A key that is some other key's twin or target gets no panel of its own:
     # it already rides along in that key's panel.
-    folded = {swa_key(k) for k in keys} | {target_key(k) for k in keys}
+    folded = (
+        {swa_key(k) for k in keys}
+        | {target_key(k) for k in keys}
+        | {best_key(k) for k in keys if best_key(k)}
+    )
     leaders = sorted(keys - folded)
 
     sections, shown = [], set()
@@ -322,6 +354,24 @@ def build(entity: str, project: str, x: str) -> ws.Workspace:
             # has the most to prove at the front of the section.
             picked.sort(key=task_size)
             dashboard(f"{metric}/{split}", picked)
+    # The context search, per task: the score of each configuration in the
+    # order they were tried, with the best so far riding along in the same
+    # panel. `tune/` is where `rt.eval` logs its tuning phase, and only the
+    # tuning experiments have it.
+    picked = [
+        k
+        for k in leaders
+        if k.startswith("tune/") and not k.endswith("/mean") and "/val/" in k
+    ]
+    picked.sort(key=lambda k: task_size(k.removeprefix("tune/")))
+    dashboard("tune", picked)
+    # The knobs themselves, so a point on those curves can be read back to the
+    # configuration that produced it.
+    dashboard(
+        "tune: config",
+        [k for k in leaders if k.startswith("tune/") and k not in picked],
+    )
+
     # The `mean` keys get no dashboard of their own: they fall through to the
     # namespace grouping below with the rest of their metric.
 

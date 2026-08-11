@@ -30,14 +30,17 @@ def plan(n: int) -> list[Resources]:
     priority; the rest is `il-lo`, which is preemptible and restarts an eval
     from the first configuration.
 
-    12 hours covers a blackwell job here -- `len(grid)` val passes plus
-    `test_ensemble_size` test passes, measured at ~20 min a pass on an ampere
-    and a bit over twice that fast on a blackwell.
+    Ask for the time the job needs, not the time the tier allows: a b200 job
+    here is ~2.5 hours (`len(grid)` val passes plus `test_ensemble_size` test
+    passes, ~20 min a pass on an ampere and 2.3x that on a blackwell), and a
+    7-day request on a full blackwell1 cannot be backfilled into the gap before
+    the next planned start -- it sits at `ReqNodeNotAvail` while a 12-hour one
+    slots in.
 
     Recount and rewrite this before every submission.
     """
     out = [b200("il-interactive", "12:00:00")] * min(n, 2)
-    out += [b200("il", "7-00:00:00")] * min(n - len(out), 2)
+    out += [b200("il", "12:00:00")] * min(n - len(out), 2)
     out += [a100("il", "7-00:00:00")] * min(n - len(out), 2)
     out += [a100("il-lo", "21-00:00:00")] * (n - len(out))
     return out
