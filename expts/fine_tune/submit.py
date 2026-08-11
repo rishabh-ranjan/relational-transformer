@@ -9,12 +9,19 @@ from roach.slurm import Resources, submit
 HERE = Path(__file__).parent
 
 TASKS = (
-    ("rel-trial", "study-adverse"),
-    ("rel-event", "user-attendance"),
-    ("rel-event", "user-ignore"),
-    ("rel-trial", "study-outcome"),
-    ("rel-f1", "driver-dnf"),
+    ("rel-trial", "site-success"),
+    # ("rel-trial", "study-adverse"),
+    # ("rel-event", "user-attendance"),
+    # ("rel-event", "user-ignore"),
+    # ("rel-trial", "study-outcome"),
+    # ("rel-f1", "driver-dnf"),
 )
+
+# Random init instead of RT-P, as the control for a task whose fine-tuned
+# numbers are far better than every published method's: if a model that never
+# saw pretraining lands in the same place, what it knows came from the context
+# it is given, not from what it was pretrained on.
+RANDOM_INIT = True
 
 
 @functools.cache
@@ -190,7 +197,7 @@ def plan(n: int) -> list[Resources]:
 def main() -> None:
     tasks = sorted(TASKS, key=lambda p: -ntrain()[f"{p[0]}/{p[1]}"])
     for (db, task), resources in zip(tasks, plan(len(tasks)), strict=True):
-        name = f"{db}/{task}"
+        name = f"{db}/{task}" + ("-rand" if RANDOM_INIT else "")
         print(f"  {name:28s} {resources.gpus} {resources.qos:15s} {resources.time}")
         submit(
             "rt.train:main",
@@ -206,7 +213,7 @@ def main() -> None:
                 compile=True,
                 materialize_attn_masks=True,
                 loss_fn="huber",
-                load_ckpt_path=ckpt_for(db, task),
+                load_ckpt_path=None if RANDOM_INIT else ckpt_for(db, task),
                 db_task_list=[(db, task)],
                 pre_dir="/dfs/user/ranjanr/share/stanford-star/relbench-preprocessed",
                 tokens_per_gpu=2**17 if resources.gpus.startswith("b200") else 2**16,
@@ -257,7 +264,7 @@ def main() -> None:
                 out_root="/dfs/user/ranjanr/ckpts",
             ),
             resources=resources,
-            name=f"{db}-{task}",
+            name=f"{db}-{task}" + ("-rand" if RANDOM_INIT else ""),
             repo_root="/lfs/hyperturing1/0/ranjanr/clones/rishabh-ranjan/relational-transformer",
             log_root="/dfs/user/ranjanr/slurm-logs/rishabh-ranjan/relational-transformer/expts/fine-tune",
             clone_root="/lfs/local/0/roach_clones",
