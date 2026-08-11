@@ -20,7 +20,9 @@ The table is `cutoff_table.py`. See [README.md](README.md).
 
 from roach.slurm import submit
 
-from submit import a100, b200, targets_for
+# a100 is unused while every line that asked for one is commented out, and
+# imported so that putting a job back on one is a line and not an import hunt.
+from submit import a100, b200, targets_for  # noqa: F401
 from submit_ens_only import ckpt_for, items_for
 
 TASKS = (
@@ -55,12 +57,12 @@ PROJECTS = {
 # another session's jobs in any case: they count against the same per-user cap,
 # but they are not this script's to cancel.
 RESOURCES = {
-    # ("rel-f1", "driver-dnf", False): a100("il", "1-00:00:00"),  # already running
-    ("rel-f1", "driver-dnf", True): a100("il-lo", "1-00:00:00"),
-    ("rel-f1", "driver-position", False): a100("il-lo", "1-00:00:00"),
+    # ("rel-f1", "driver-dnf", False): a100("il", "1-00:00:00"),  # done
+    # ("rel-f1", "driver-dnf", True): a100("il", "1-00:00:00"),  # done
+    # ("rel-f1", "driver-position", False): a100("il", "1-00:00:00"),  # done
     ("rel-f1", "driver-position", True): b200("il", "1-00:00:00"),
     ("rel-f1", "driver-top3", False): b200("il", "1-00:00:00"),
-    # ("rel-f1", "driver-top3", True): a100("il-lo", "1-00:00:00"),  # already queued there
+    # ("rel-f1", "driver-top3", True): a100("il-lo", "1-00:00:00"),  # already queued
 }
 
 
