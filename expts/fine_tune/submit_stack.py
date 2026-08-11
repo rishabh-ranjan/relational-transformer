@@ -15,7 +15,8 @@ HERE = Path(__file__).parent
 
 TASKS = (
     ("rel-stack", "user-badge"),
-    ("rel-stack", "user-engagement"),
+    # already running from this file's previous submission
+    # ("rel-stack", "user-engagement"),
 )
 
 
@@ -68,14 +69,14 @@ def a100(qos: str, time: str) -> Resources:
 # Read at submission time: the huber sweep of this directory holds my
 # `il-interactive` cap (2 b200) outright, but two of its `il` a100 have since
 # finished, so `il` has 2 of its 10 free and both jobs take them. blackwell1 is
-# 7 of 8 allocated and the one free b200 is untaken, so the larger of the two
-# tasks asks for it; if a reservation holds that card (`ReqNodeNotAvail`, seen
-# on this node before) the job moves to an ampere rather than sitting there.
+# 7 of 8 allocated and the one free b200 looked untaken, but asking for it came
+# back `ReqNodeNotAvail`: a reservation holds that card, and a b200 job pinned
+# to blackwell1 has nowhere else to go. So both jobs are on amperes.
 #
 # A job with no line here stops the submission rather than taking a slot
 # nobody chose for it.
 RESOURCES: dict[tuple[str, str], Resources] = {
-    ("rel-stack", "user-badge"): b200("il", "1-00:00:00"),
+    ("rel-stack", "user-badge"): a100("il", "1-00:00:00"),
     ("rel-stack", "user-engagement"): a100("il", "1-00:00:00"),
 }
 
