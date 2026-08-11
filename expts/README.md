@@ -59,6 +59,10 @@ or gets preempted long after it started training fine. Every time:
   called normal or not: a training step is seconds, an eval pass over a whole
   test split is minutes to hours;
 - `ls -laS` the log directory and `df -h` the output filesystem;
+- **recount what is free and what you hold**, and move a pending job up if a
+  better slot appeared — see
+  [Rebalance while it runs](#rebalance-while-it-runs). A round that only looked
+  at your own logs missed half of what changed;
 - cancel what is broken, delete what it wrote, fix the cause, resubmit.
 
 **A pending job is a job to diagnose, not a job to wait for.** `squeue -u
@@ -190,25 +194,75 @@ accounts for. Nothing pins the amperes.
 
 ### Rebalance while it runs
 
-**An allocation is right when it is made and wrong an hour later.** A tier
-frees as your own jobs finish, and a sweep left alone spends the rest of its
-life on `il-lo` behind everyone else. So every monitoring round (see
-[Watch every job](#watch-every-job-you-submit)) also asks: *is the budget
-full?*
+**An allocation is right when it is made and wrong an hour later.** What is
+free changes without you: other people's jobs end, your own finish and hand
+back your cap, and a preempted job of yours goes back to the queue. A sweep
+left alone spends the rest of its life on `il-lo` behind everyone else.
 
-- Recount `squeue -u $USER -h -o "%q %b" | sort | uniq -c` against the table.
-- If `il-interactive` or `il` has room and `il-lo` jobs are still pending,
-  **cancel the pending ones and resubmit them into the tier that freed** —
-  a pending job has lost nothing by being moved.
-- **Re-ask the blackwell question, both ways.** A high-tier job still pending
-  on blackwell is a job you are paying priority for and getting nothing from:
-  move it to an ampere. A high-tier job on an ampere when b200 cards have since
-  freed is the same mistake mirrored: move it back. Read the remaining wall
-  clocks, do not guess.
-- Move a *running* job only when what it loses is smaller than what it gains: a
-  run that checkpoints loses minutes, an eval that does not loses everything it
-  has done.
+So a monitoring round has **two** questions, not one. The first is
+[per job](#watch-every-job-you-submit) — is each one further along than last
+round? The second is about the cluster: *has what is free changed, and is there
+a better slot for something of mine now?* Ask it every round, whether or not
+anything of yours looks wrong.
+
+Read the supply, not just your jobs:
+
+```
+squeue -u $USER -h -o "%q %b %T" | sort | uniq -c   # what you hold, by tier
+squeue -u $USER -o "%.8i %.30j %.14q %.9T %R"       # your pending, with reasons
+scontrol show node blackwell1 | grep -E "CfgTRES|AllocTRES"   # b200 free = Cfg - Alloc
+sinfo -p il -N -o "%N %G %C %t"                     # ampere nodes, and what is down
+squeue -p il -h -t RUNNING -o "%u %b %M %l %q"      # elapsed vs limit: when a card frees
+```
+
+**Any pending job of yours plus any free card is a move you have not made.**
+That pair is the whole trigger; it does not need a reason beyond itself. The
+most common way it appears is not someone else finishing — it is **your own job
+completing and handing your cap back**, which is invisible unless you recount.
+Short jobs make this constant: a sweep whose jobs take four minutes turns the
+queue over many times inside a twenty-minute check.
+
+What to do about it:
+
+- **Recount your holdings against the budget table**, and if a tier has room
+  while anything of yours is pending, **cancel the pending one and resubmit it
+  into the tier that freed** — a pending job has lost nothing by being moved.
+- **Re-ask the blackwell question, both ways.** A high-tier job still pending on
+  blackwell is a job you are paying priority for and getting nothing from: move
+  it to an ampere. A high-tier job on an ampere when b200 cards have since freed
+  is the same mistake mirrored: move it back. Read the remaining wall clocks, do
+  not guess.
+- **Move a *running* job only when what it loses is smaller than what it
+  gains**: a run that checkpoints loses minutes, an eval that does not loses
+  everything it has done, a pending job loses nothing. Prefer moving your
+  youngest job when you need to free a slot of your own.
+- **Only ever move your own jobs.** Other sessions' and other people's jobs
+  count against the same per-user cap and are part of the arithmetic, but they
+  are never yours to cancel.
 - Leave the budget under-spent only deliberately, and say why.
+
+**Set the interval from the job, not from habit.** The check has to be more
+frequent than the thing it is watching for: a sweep of four-minute evals needs
+minutes, a multi-day pretraining run does not. If your jobs are shorter than
+your monitoring interval, you are guaranteed to miss every card that freed.
+
+### Preemption is a state change to act on
+
+`il-lo` is preemptible, and a preempted job is not a job that carries on. Watch
+for it explicitly — a job whose `%M` elapsed went *backwards* between rounds, or
+whose `%R` is a requeue reason, has restarted:
+
+```
+squeue -u $USER -h -o "%.8i %.30j %.9T %.10M %R"   # elapsed shrank = it restarted
+sacct -u $USER -X --format=JobID,JobName%30,State,Elapsed --starttime now-1day
+```
+
+What it costs decides what to do. **A run that checkpoints resumes and has lost
+minutes** — leave it, but count the restart. **An eval does not checkpoint: a
+preemption restarts it from the top**, so a job that has been preempted once on
+`il-lo` will lose everything again, and it is the first thing to promote when a
+non-preemptible slot frees. Being preempted twice on the same tier is a
+placement to change, not luck to retry.
 
 ## What every experiment owes
 
