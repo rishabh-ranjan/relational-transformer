@@ -37,8 +37,7 @@ Outside `expts/`, write for eventual release.
   worse than a crash.
 - **Match the surrounding module** in naming, comment density and idiom rather
   than importing a new style.
-- **Keep examples runnable and minimal.** An example shows one path end to end,
-  with no flags or branching for variants.
+- **Keep examples runnable and minimal.** An example shows one path end to end.
 - Public API changes ripple into `docs/` and released checkpoints — update the
   docs in the same change.
 
