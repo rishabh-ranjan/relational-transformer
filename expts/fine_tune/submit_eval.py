@@ -185,7 +185,93 @@ def ready(arm: str) -> list[tuple[str, str]]:
 #
 # The ens_only arm is the one to spend the high tiers on. A job with no line here
 # stops the submission rather than taking a slot nobody chose for it.
-RESOURCES: dict[tuple[str, str, str], Resources] = {}
+RESOURCES: dict[tuple[str, str, str], Resources] = {
+    # il-interactive: the two longest ens_only jobs, on the b200s the
+    # fine-tuning runs are handing back. ~4.3h each there.
+    ("ens_only", "rel-amazon", "user-churn"): b200("il-interactive", "12:00:00"),
+    ("ens_only", "rel-amazon", "user-ltv"): b200("il-interactive", "12:00:00"),
+    # il: the next ten ens_only jobs. Amperes are full, but `il` preempts
+    # the `il-lo` jobs holding them; longest is ~5h against a 1d wall.
+    ("ens_only", "rel-stack", "user-badge"): a100("il", "1-00:00:00"),
+    ("ens_only", "rel-amazon", "item-ltv"): a100("il", "1-00:00:00"),
+    ("ens_only", "rel-amazon", "item-churn"): a100("il", "1-00:00:00"),
+    ("ens_only", "rel-stack", "post-votes"): a100("il", "1-00:00:00"),
+    ("ens_only", "rel-hm", "item-sales"): a100("il", "1-00:00:00"),
+    ("ens_only", "rel-stack", "user-engagement"): a100("il", "1-00:00:00"),
+    ("ens_only", "rel-hm", "user-churn"): a100("il", "1-00:00:00"),
+    ("ens_only", "rel-avito", "user-clicks"): a100("il", "1-00:00:00"),
+    ("ens_only", "rel-avito", "user-visits"): a100("il", "1-00:00:00"),
+    ("ens_only", "rel-trial", "site-success"): a100("il", "1-00:00:00"),
+    # ampere8 is reserved for us: 4 concurrent jobs of this shape, and the
+    # only cards free anywhere right now. The nine short ens_only jobs go
+    # first and clear in minutes, then the eight longest hpo_ens jobs.
+    ("ens_only", "rel-trial", "study-adverse"): a100(
+        "il-lo", "2-00:00:00", "ranjanr_deadline"
+    ),
+    ("ens_only", "rel-event", "user-attendance"): a100(
+        "il-lo", "2-00:00:00", "ranjanr_deadline"
+    ),
+    ("ens_only", "rel-event", "user-ignore"): a100(
+        "il-lo", "2-00:00:00", "ranjanr_deadline"
+    ),
+    ("ens_only", "rel-avito", "ad-ctr"): a100(
+        "il-lo", "2-00:00:00", "ranjanr_deadline"
+    ),
+    ("ens_only", "rel-trial", "study-outcome"): a100(
+        "il-lo", "2-00:00:00", "ranjanr_deadline"
+    ),
+    ("ens_only", "rel-f1", "driver-position"): a100(
+        "il-lo", "2-00:00:00", "ranjanr_deadline"
+    ),
+    ("ens_only", "rel-f1", "driver-top3"): a100(
+        "il-lo", "2-00:00:00", "ranjanr_deadline"
+    ),
+    ("ens_only", "rel-f1", "driver-dnf"): a100(
+        "il-lo", "2-00:00:00", "ranjanr_deadline"
+    ),
+    ("ens_only", "rel-event", "user-repeat"): a100(
+        "il-lo", "2-00:00:00", "ranjanr_deadline"
+    ),
+    ("hpo_ens", "rel-amazon", "user-churn"): a100(
+        "il-lo", "2-00:00:00", "ranjanr_deadline"
+    ),
+    ("hpo_ens", "rel-amazon", "user-ltv"): a100(
+        "il-lo", "2-00:00:00", "ranjanr_deadline"
+    ),
+    ("hpo_ens", "rel-stack", "user-badge"): a100(
+        "il-lo", "2-00:00:00", "ranjanr_deadline"
+    ),
+    ("hpo_ens", "rel-amazon", "item-ltv"): a100(
+        "il-lo", "2-00:00:00", "ranjanr_deadline"
+    ),
+    ("hpo_ens", "rel-amazon", "item-churn"): a100(
+        "il-lo", "2-00:00:00", "ranjanr_deadline"
+    ),
+    ("hpo_ens", "rel-stack", "post-votes"): a100(
+        "il-lo", "2-00:00:00", "ranjanr_deadline"
+    ),
+    ("hpo_ens", "rel-hm", "item-sales"): a100(
+        "il-lo", "2-00:00:00", "ranjanr_deadline"
+    ),
+    ("hpo_ens", "rel-stack", "user-engagement"): a100(
+        "il-lo", "2-00:00:00", "ranjanr_deadline"
+    ),
+    # The rest of hpo_ens waits on the contended pool. Preemption costs one
+    # pass now, and these are 1-3h jobs.
+    ("hpo_ens", "rel-hm", "user-churn"): a100("il-lo", "2-00:00:00"),
+    ("hpo_ens", "rel-avito", "user-clicks"): a100("il-lo", "2-00:00:00"),
+    ("hpo_ens", "rel-avito", "user-visits"): a100("il-lo", "2-00:00:00"),
+    ("hpo_ens", "rel-trial", "site-success"): a100("il-lo", "2-00:00:00"),
+    ("hpo_ens", "rel-trial", "study-adverse"): a100("il-lo", "2-00:00:00"),
+    ("hpo_ens", "rel-event", "user-attendance"): a100("il-lo", "2-00:00:00"),
+    ("hpo_ens", "rel-event", "user-ignore"): a100("il-lo", "2-00:00:00"),
+    ("hpo_ens", "rel-avito", "ad-ctr"): a100("il-lo", "2-00:00:00"),
+    ("hpo_ens", "rel-trial", "study-outcome"): a100("il-lo", "2-00:00:00"),
+    ("hpo_ens", "rel-f1", "driver-position"): a100("il-lo", "2-00:00:00"),
+    ("hpo_ens", "rel-f1", "driver-top3"): a100("il-lo", "2-00:00:00"),
+    ("hpo_ens", "rel-f1", "driver-dnf"): a100("il-lo", "2-00:00:00"),
+    ("hpo_ens", "rel-event", "user-repeat"): a100("il-lo", "2-00:00:00"),
+}
 
 
 def main() -> None:
