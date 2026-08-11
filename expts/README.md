@@ -48,6 +48,17 @@ forget, and the first round nobody starts is the round the watch ends — which
 looks exactly like a sweep that is fine. A stated interval with no live monitor
 behind it is not a watch.
 
+**Two monitors: one edge-triggered, one heartbeat.** A loop that speaks every
+round has to be slow enough not to drown you, and a slow loop is exactly what
+misses a slot that freed a minute after it looked. Split the two jobs: poll
+often but **emit only on a change** — a tier or a card that has room, a pending
+reason that will never start, a job that went from running back to the queue, a
+reservation that moved or vanished — and run a second, quarter-hour loop that
+prints one line whatever happened, so silence from the first is never mistaken
+for a watcher that died. Keep the edge monitor's state between rounds and
+compare against it; emitting the same condition twice is the same noise you
+were avoiding.
+
 **Make the monitor watch the tier counts, not just the jobs.** A high-tier slot
 frees the instant any job of yours ends, which is far more often than any sane
 interval, so a loop that only reports progress leaves you finding free `il`
