@@ -22,6 +22,20 @@ Logs and `args.json` land under
 `/dfs/user/ranjanr/slurm-logs/rishabh-ranjan/relational-transformer/expts/fine-tune`,
 checkpoints and `params.json` under `/dfs/user/ranjanr/ckpts/rtv2/fine-tune/<run_id>`.
 
+**Progress is in wandb, not in the log.** After `time_to_first_step` a run's
+stdout only prints `resume_saved_at_step` every `resume_save_mins`, so a quiet
+log is the normal state and says nothing either way. Read the step count per run
+from the API instead:
+
+```python
+import wandb
+for r in wandb.Api().runs("rtv2/2026-08-11-fine_tune"):
+    print(r.name, r.state, r.summary.get("step"))
+```
+
+A run is alive when that step is higher than the one you read last round. Keep
+the log for what wandb does not carry: a traceback, `resumed_from`, a preemption.
+
 Neither preemption nor the wall clock needs you: both requeue and resume from
 the run's own checkpoint (see [`roach.slurm`](../../src/roach/slurm/README.md)),
 which matters most on `il-interactive`'s 12 hours.

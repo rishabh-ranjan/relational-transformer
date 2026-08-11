@@ -41,6 +41,18 @@ arrives as one notification long after it could have been acted on. Monitoring
 is a *repeated* check while the jobs are still running, and every round of it
 ends in an answer to "is each job further along than last time?".
 
+**Arm the next check before you finish the current one.** A watch that depends
+on someone remembering to start the next round is a watch that ends at the first
+round nobody starts, and a sweep left unwatched for hours looks exactly like a
+sweep that is fine. Put a mechanism behind it — a persistent monitor over a poll
+loop that emits a line per round, or a scheduled loop that re-fires the check —
+and only then say when the next check is. A stated interval with nothing
+scheduled behind it is not a watch.
+
+The loop has to end by itself, too: make it emit on the queue going empty, and
+on the pending reasons below that mean a job will never start, not only on
+progress. Silence has to mean "still going", never "the watcher stopped".
+
 Check right after submitting, again once the runs are past startup — a few
 minutes, longer with `compile=True`, and long enough that step lines must have
 appeared by then — and then **on a fixed interval until every job has
@@ -236,6 +248,14 @@ What to do about it:
   gains**: a run that checkpoints loses minutes, an eval that does not loses
   everything it has done, a pending job loses nothing. Prefer moving your
   youngest job when you need to free a slot of your own.
+- **Move a checkpointing run by its `run_id`, never by starting it over.**
+  `submit(..., run_id=<the cancelled run's id>)` reuses that run's `out_dir`, so
+  the new job picks its `resume.pt` back up and the move costs at most
+  `resume_save_mins`. Read the id off the submission's own output, check
+  `resume.pt`'s mtime is recent, cancel, then submit. Confirm the new log says
+  `resumed_from: ... step: <the step it was at>` — a job that reports
+  `time_to_first_step` with no `resumed_from` has silently restarted from zero
+  and has to be caught in that round, not later.
 - **Only ever move your own jobs.** Other sessions' and other people's jobs
   count against the same per-user cap and are part of the arithmetic, but they
   are never yours to cancel.
