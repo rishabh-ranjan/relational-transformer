@@ -50,11 +50,11 @@ Two arms over the same weights and the same rows, one job per task per arm,
 both loading the best-on-val checkpoint of that task's most recent fine-tuning
 run:
 
-- **ens** fixes the context at the `(1024, 256, False)` the fine-tuning runs
+- **ens_only** fixes the context at the `(1024, 256, False)` the fine-tuning runs
   evaluated with and averages over 16 context seeds. It reads nothing but test
   and waits on nothing, so it is the arm that answers first, and it takes the
   better slots;
-- **hpo-ens** ranks 36 context configurations — `ctx_size` x `local_ctx_size`
+- **hpo_ens** ranks 36 context configurations — `ctx_size` x `local_ctx_size`
   in {512, 1024, 2048}, `bfs_width` in {64, 128, 256}, `prefer_latest` in
   {True, False}, minus `local_ctx_size > ctx_size` — on validation, then
   ensembles the winner over 4 seeds on test. It pays only the 18 passes of

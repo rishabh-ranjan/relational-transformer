@@ -3,10 +3,10 @@
 
 Two arms over the same weights and the same rows:
 
-- **ens** fixes the eval context at what the fine-tuning runs evaluated with
+- **ens_only** fixes the eval context at what the fine-tuning runs evaluated with
   and averages over context seeds. Nothing reads validation, so it waits on
   nothing and is the arm that answers first;
-- **hpo-ens** ranks 36 context configurations on validation and ensembles the
+- **hpo_ens** ranks 36 context configurations on validation and ensembles the
   winner on test, in one job.
 
 Both score the *whole* test split, once per context seed -- nothing is
@@ -18,8 +18,8 @@ other needs less of the split than the number being reported does.
 `rt.eval.main` reads the val split whatever `splits` says, and `splits` decides
 only whether the test phase runs at all. `["test"]` is therefore both phases.
 
-**ens goes out first and takes the better slots**: its curve is the one the
-paper needs, and hpo-ens only says how much tuning would add on top.
+**ens_only goes out first and takes the better slots**: its curve is the one the
+paper needs, and hpo_ens only says how much tuning would add on top.
 
 One config block for both: `main()` loops the two arm names over a single
 `args` dict, and the four values the arms disagree on -- the context grid, the
@@ -176,18 +176,18 @@ def ready(arm: str) -> list[tuple[str, str]]:
 # subtract what your own jobs already hold, spend the tiers top down -- and
 # write today's answer here, one line per job this submission sends:
 #
-#     ("ens", "rel-f1", "driver-dnf"): a100("il", "12:00:00"),
+#     ("ens_only", "rel-f1", "driver-dnf"): a100("il", "12:00:00"),
 #
-# The ens arm is the one to spend the high tiers on. A job with no line here
+# The ens_only arm is the one to spend the high tiers on. A job with no line here
 # stops the submission rather than taking a slot nobody chose for it.
 RESOURCES: dict[tuple[str, str, str], Resources] = {}
 
 
 def main() -> None:
-    # ens first: it takes the slots while the budget is still unspent, and a
-    # hpo-ens job that finds no line in RESOURCES stops a submission that has
-    # already placed every ens job it was going to.
-    for arm in ("ens", "hpo-ens"):
+    # ens_only first: it takes the slots while the budget is still unspent, and
+    # a hpo_ens job that finds no line in RESOURCES stops a submission that has
+    # already placed every ens_only job it was going to.
+    for arm in ("ens_only", "hpo_ens"):
         for db, task in ready(arm):
             resources = RESOURCES[arm, db, task]
             name = f"{db}/{task}"
@@ -215,17 +215,17 @@ def main() -> None:
                     prefetch_factor=2,
                     num_walks=10_000,
                     walk_length=20,
-                    val_items_per_task=None if arm == "ens" else 2**12,
+                    val_items_per_task=None if arm == "ens_only" else 2**12,
                     test_items_per_task=1_000_000_000,
                     mmap_populate=True,
                     shuffle_seed=0,
                     context_seed=0,
                     vector_db_path=None,
                     db_upto_test_timestamp=True,
-                    ctx_size_list=[1024] if arm == "ens" else [512, 1024, 2048],
+                    ctx_size_list=[1024] if arm == "ens_only" else [512, 1024, 2048],
                     lcs_bw_pl_grid=(
                         [(1024, 256, False)]
-                        if arm == "ens"
+                        if arm == "ens_only"
                         else [
                             (lcs, bw, pl)
                             for lcs in (512, 1024, 2048)
@@ -234,10 +234,10 @@ def main() -> None:
                         ]
                     ),
                     val_ensemble_size=1,
-                    test_ensemble_size=16 if arm == "ens" else 4,
+                    test_ensemble_size=16 if arm == "ens_only" else 4,
                     run_name=name,
                     targets=targets_for(db, task),
-                    project=f"2026-08-11-fine_tune_{arm.replace('-', '_')}",
+                    project=f"2026-08-11-fine_tune_{arm}",
                     entity="rtv2",
                     out_root="/dfs/user/ranjanr/ckpts",
                     wandb_disabled=False,
