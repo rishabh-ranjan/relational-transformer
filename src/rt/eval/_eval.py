@@ -125,6 +125,11 @@ def main(
     never reads: a one-configuration grid touches no validation, and
     ``splits`` without ``"test"`` stops after tuning.
 
+    ``context_seed`` seeds the contexts: on its own for a single-configuration,
+    single-seed run, and as the base an ensemble draws its members from --
+    member *i* samples at ``member_context_seed(context_seed, i)``, so the
+    seeds are the run's to control at both levels.
+
     The ctx sizes cost almost nothing to add: ``Evaluator`` builds each item's
     context once at ``max(ctx_size_list)`` and scores every requested size off
     a prefix of it, so a whole ``ctx_size_list`` is one pass over the data, not
@@ -261,11 +266,6 @@ def main(
     )
 
     if n_cfgs > 1 or test_ensemble_size > 1:
-        assert context_seed == 0, (
-            "ensembling sweeps context seeds 0..N-1; a fixed eval.context_seed "
-            "only applies to single-config runs"
-        )
-
         # `splits` without "test" stops after tuning: the val scores land in
         # tuning.json and a later run evaluates test with the winner.
         assert n_cfgs == 1 or val_items_per_task is not None, (
@@ -291,6 +291,7 @@ def main(
             ctx_sizes=ctx_sizes,
             val_items=val_items_per_task,
             test_items=test_items_per_task,
+            context_seed=context_seed,
             val_ensemble_size=val_ensemble_size,
             test_ensemble_size=test_ensemble_size,
             tune_only=tune_only,
@@ -345,6 +346,23 @@ def _teardown_dist(ddp):
     if ddp:
         dist.barrier()
         dist.destroy_process_group()
+
+
+def member_context_seed(context_seed: int, member: int) -> int:
+    """The context seed ensemble member ``member`` draws its contexts with.
+
+    Mixed, not added: ``context_seed + member`` would make run *s* member 1 and
+    run *s+1* member 0 the identical draw, so two runs meant to be independent
+    would share most of their ensemble. This is rustler's own construction in
+    ``fly.rs`` -- spread the base seed through an rng, then offset by the index
+    -- with splitmix64 as the spreader, so a base picks a family of seeds and
+    the member picks one within it.
+    """
+    mask = (1 << 64) - 1
+    z = (context_seed + 0x9E3779B97F4A7C15) & mask
+    z = ((z ^ (z >> 30)) * 0xBF58476D1CE4E5B9) & mask
+    z = ((z ^ (z >> 27)) * 0x94D049BB133111EB) & mask
+    return ((z ^ (z >> 31)) + member) & mask
 
 
 def build_evaluator(
@@ -491,6 +509,7 @@ def run_ensemble(
     ctx_sizes,
     val_items,
     test_items,
+    context_seed,
     val_ensemble_size,
     test_ensemble_size,
     tune_only,
@@ -564,7 +583,7 @@ def run_ensemble(
                     local_ctx_size=lcs,
                     bfs_width=bw,
                     prefer_latest=pl,
-                    context_seed=seed,
+                    context_seed=member_context_seed(context_seed, seed),
                     **eval_kwargs,
                 )
                 for task, ctx, labels, preds_by_prefix, _nl in ev.evaluate_raw(
@@ -700,7 +719,7 @@ def run_ensemble(
                 local_ctx_size=lcs,
                 bfs_width=bw,
                 prefer_latest=pl,
-                context_seed=seed,
+                context_seed=member_context_seed(context_seed, seed),
                 **eval_kwargs,
             )
             for task, ctx, labels, preds_by_prefix, _nl, node_idxs in ev.evaluate_raw(
