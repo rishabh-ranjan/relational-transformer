@@ -40,6 +40,36 @@ Neither preemption nor the wall clock needs you: both requeue and resume from
 the run's own checkpoint (see [`roach.slurm`](../../src/roach/slurm/README.md)),
 which matters most on `il-interactive`'s 12 hours.
 
+## Ensembling the fine-tuned checkpoints
+
+```
+pixi run python expts/fine_tune/submit_eval.py
+```
+
+Two arms over the same weights and the same rows, one job per task per arm,
+both loading the best-on-val checkpoint of that task's most recent fine-tuning
+run:
+
+- **ens** fixes the context at the `(1024, 256, False)` the fine-tuning runs
+  evaluated with and averages over 16 context seeds. It reads nothing but test
+  and waits on nothing, so it is the arm that answers first, and it takes the
+  better slots;
+- **hpo-ens** ranks 36 context configurations — `ctx_size` x `local_ctx_size`
+  in {512, 1024, 2048}, `bfs_width` in {64, 128, 256}, `prefer_latest` in
+  {True, False}, minus `local_ctx_size > ctx_size` — on validation, then
+  ensembles the winner over 4 seeds on test. It pays only the 18 passes of
+  `lcs_bw_pl_grid`: the three ctx sizes ride along on each pass as prefixes of
+  the contexts it already built.
+
+Both score the running average after each seed, so a log carries the test
+metric at every ensemble size, not just the last, and both log against
+`ens_size` with the task's published target beside the curve.
+
+Rerun it as fine-tuning runs land: a task with no checkpoint yet is skipped,
+and one whose job is already queued is not sent twice. The weights each job
+loads are copied to `fine-tune-pinned` first, out of reach of the training run
+that is still pruning its own checkpoints.
+
 ## Workspaces
 
 `workspace.py` writes the view the project's bare URL opens on, so there is
