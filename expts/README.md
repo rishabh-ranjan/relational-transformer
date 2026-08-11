@@ -62,12 +62,26 @@ The loop has to end by itself, too: make it emit on the queue going empty, and
 on the pending reasons below that mean a job will never start, not only on
 progress. Silence has to mean "still going", never "the watcher stopped".
 
+Every line of the budget is worth a counter, not just `il`: `il-interactive`'s
+two, `il`'s b200 sub-cap, the b200 cards themselves, and the end time of any
+reservation you are relying on. A card is only yours to take if its node is not
+flagged `RESERVED` — a spare b200 under someone else's reservation pins the job
+on `ReqNodeNotAvail` for good, so the monitor should read that flag rather than
+`CfgTRES - AllocTRES` alone.
+
 ```bash
-# The shape: a round line, and a PROMOTE line the moment a tier has room.
-il=$(squeue -u $USER -h -t RUNNING -o "%q" | grep -cx il)
-int=$(squeue -u $USER -h -t RUNNING -o "%q" | grep -cx il-interactive)
-pend=$(squeue -u $USER -h -t PENDING -o "%i" | wc -l)
+# The shape: a round line, and a PROMOTE line the moment a slot or card frees.
+q=$(squeue -u $USER -h -o "%i %j %q %T %b %R" | grep -v dev-node)
+il=$(echo "$q" | awk '$4=="RUNNING" && $3=="il"' | wc -l)
+int=$(echo "$q" | awk '$4=="RUNNING" && $3=="il-interactive"' | wc -l)
+ilb=$(echo "$q" | awk '$4=="RUNNING" && $3=="il" && $5 ~ /b200/' | wc -l)
+pend=$(echo "$q" | grep -c PENDING)
+bw=$(scontrol show node blackwell1)
+bwfree=$(( 8 - $(echo "$bw" | grep -oE "b200=[0-9]+$" | cut -d= -f2) ))
+echo "$bw" | grep -q "State=.*RESERVED" && bwfree=0      # not yours to take
+scontrol show res <name> | grep -oE "EndTime=[^ ]+"      # empty = gone
 [ $pend -gt 0 ] && [ $(( (10 - il) + (2 - int) )) -gt 0 ] && echo "PROMOTE: ..."
+[ $pend -gt 0 ] && [ $bwfree -gt 0 ] && [ $ilb -lt 2 ] && echo "PROMOTE: b200 ..."
 ```
 
 Check right after submitting, again once the runs are past startup — a few
