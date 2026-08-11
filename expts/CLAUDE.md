@@ -18,8 +18,8 @@ rules in
 - **Keep a derived input beside the file that uses it** — a curated task list,
   a subset.
 - **Edit a submit script, do not configure it.** No arguments, no flags, no
-  `--dry-run`, no `if variant == ...`. Expect to change the file every
-  submission, and commit before submitting: the job clones that commit.
+  `--dry-run`. Expect to change the file every submission, and commit before
+  submitting: the job clones that commit.
 - **Comment out to switch.** Leave the shape you are not using sitting there
   commented; coming back to it is uncommenting.
 - **No helper wrapping the submit call.** The `submit(...)` call sits in the
