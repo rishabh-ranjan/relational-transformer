@@ -29,7 +29,7 @@ from the API instead:
 
 ```python
 import wandb
-for r in wandb.Api().runs("rtv2/2026-08-11-fine_tune"):
+for r in wandb.Api().runs("rtv2/2026-08-12-fine_tune"):
     print(r.name, r.state, r.summary.get("step"))
 ```
 
@@ -84,10 +84,10 @@ key the view has no panel for; it rewrites the layout wholesale, so edit
 `workspace.py`, never the UI.
 
 ```
-pixi run python expts/fine_tune/workspace.py --project 2026-08-11-fine_tune
+pixi run python expts/fine_tune/workspace.py --project 2026-08-12-fine_tune
 ```
 
-It prints the URL it wrote: <https://wandb.ai/rtv2/2026-08-11-fine_tune>.
+It prints the URL it wrote: <https://wandb.ai/rtv2/2026-08-12-fine_tune>.
 
 ## What is fixed and what is not
 

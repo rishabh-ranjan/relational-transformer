@@ -172,13 +172,14 @@ def steps_for(db: str, task: str, splits: list[str], total_bs: int) -> int:
 def targets_for(db: str, task: str) -> dict[str, float]:
     """The published bests this task's run should draw as reference lines.
 
-    Only this task's entries, plus the `mean` line for the metric it is scored
-    by: a target for a task a run never evaluates would draw a line in a panel
-    that has no curve. `rt.train` logs each as a constant at every step (wandb
-    has no reference-line primitive, a flat series is the line) under a
-    `target/` prefix, and `workspace.py` pairs it with the curve it bounds.
+    Test only, and only this task's entries plus the `mean` line for the metric
+    it is scored by: a target for a split or a task a run never evaluates draws
+    a line in a panel that has no curve. `rt.train` logs each as a constant at
+    every step (wandb has no reference-line primitive, a flat series is the
+    line) under a `target/` prefix, and `workspace.py` pairs it with the curve
+    it bounds.
     """
-    keys = published_best()
+    keys = {k: v for k, v in published_best().items() if "/test/" in k}
     metrics = {k.split("/")[0] for k in keys if k.endswith(f"/{db}/{task}")}
     return {
         k: v
@@ -316,12 +317,7 @@ RESOURCES: dict[tuple[str, str], Resources] = {
 
 # Resume an existing run instead of starting a new one: the run whose
 # `out_dir` this is picks its `resume.pt` back up. Empty when nothing resumes.
-RUN_IDS: dict[tuple[str, str], str] = {
-    ("rel-hm", "user-churn"): "26-08-11_04-08-29_393879227",
-    ("rel-stack", "user-badge"): "26-08-11_04-08-34_223077465",
-    ("rel-amazon", "item-ltv"): "26-08-11_04-08-33_375863348",
-    ("rel-event", "user-attendance"): "26-08-11_04-08-24_553959895",
-}
+RUN_IDS: dict[tuple[str, str], str] = {}
 
 
 def main() -> None:
