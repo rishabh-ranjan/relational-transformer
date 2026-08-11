@@ -1,86 +1,114 @@
-"""Probe: can `rt.eval:main` run on the pre-Ampere cards of the `il` partition,
-and how much slower are they than an a100?
+"""Probe: can `rt.eval`'s inference run on the pre-Ampere cards of the `il`
+partition, in which dtype, and how much slower than an a100?
 
-`probe` runs the same fixed eval twice, at two item counts, and reports the
-slope: items per second with the one-off cost (clone warm-up, page cache,
-model load, context build fixed cost) differenced out.
+`probe` rebuilds what `rt.eval._eval.main` does for a fixed single-config eval
+-- load the checkpoint, cast it, score one task -- once per dtype, and times
+the scoring pass alone. The cast is the thing under test, so it is here rather
+than taken from `rt.eval`.
 """
 
 import time
+import traceback
 from pathlib import Path
 
 from roach.slurm import Resources, submit
 
 # The pinned RT-P fine-tune checkpoint `submit_ens_only.ckpt_for` copied for
-# this task; read-only here, and not deleted by this probe's teardown.
+# this task; read-only here.
 CKPT = "/dfs/user/ranjanr/ckpts/rtv2/fine-tune-pinned/rel-f1__driver-dnf/swa_steps=4000.safetensors"
+PRE_DIR = "/dfs/user/ranjanr/share/stanford-star/relbench-preprocessed"
+DB_TASK = ("rel-f1", "driver-dnf")
+ITEMS = 512
 
 
-def probe(*, run_id: str, num_workers: int, out_root: str) -> None:
-    """Two eval passes over the same task, at 512 and 2560 test items."""
+def probe(*, run_id: str, num_workers: int) -> None:
+    """Score the same 512 test rows in bf16, fp16 and fp32, timing each."""
     import torch
 
-    from rt.eval._eval import main as eval_main
+    from rt.data import get_tasks
+    from rt.eval._eval import build_evaluator, run_and_report
+    from rt.model import load_rt_model
     from rt.progress import log
 
     p = torch.cuda.get_device_properties(0)
-    log(gpu=p.name.replace(" ", "-"), capability=f"{p.major}.{p.minor}")
+    log(gpu=p.name.replace(" ", "-"), capability=f"{p.major}.{p.minor}", run=run_id)
+    tasks = get_tasks(PRE_DIR, [DB_TASK], ("test",))
 
-    times = {}
-    for n in (512, 2560):
-        tic = time.time()
-        eval_main(
-            load_ckpt_path=CKPT,
-            embedder="all-MiniLM-L12-v2",
-            d_text=384,
-            num_blocks=12,
-            d_model=512,
-            num_heads=8,
-            d_ff=2048,
-            splits=["test"],
-            db_task_list=[("rel-f1", "driver-dnf")],
-            pre_dir="/dfs/user/ranjanr/share/stanford-star/relbench-preprocessed",
-            tokens_per_gpu=2**18,
-            num_workers=num_workers,
-            prefetch_factor=2,
-            num_walks=10_000,
-            walk_length=20,
-            items_per_task={"test": n},
-            mmap_populate=True,
-            shuffle_seed=0,
-            context_seed=0,
-            vector_db_path=None,
-            ctx_size_list=[2048],
-            lcs_bw_pl_grid=[(2048, 128, True)],
-            val_ensemble_size=1,
-            test_ensemble_size=1,
-            run_id=f"{run_id}-{n}",
-            run_name=None,
-            targets={},
-            project="probe-gpu",
-            entity="rtv2",
-            out_root=out_root,
-            wandb_disabled=True,
-        )
-        times[n] = time.time() - tic
-        log(probe_items=n, elapsed=f"{times[n]:.1f}s")
-    log(
-        probe_slope_items_per_s=f"{2048 / (times[2560] - times[512]):.2f}",
-        t512=f"{times[512]:.1f}s",
-        t2560=f"{times[2560]:.1f}s",
-    )
+    started = time.time()
+    for dtype in (torch.bfloat16, torch.float16, torch.float32):
+        # 2**18 is what the eval jobs use (eval_bs 128 at ctx 2048); the small
+        # one is there to tell "the card cannot hold this batch" apart from
+        # "the card cannot run this at all".
+        for tokens_per_gpu in (2**18, 2**15):
+            name = f"{dtype}".removeprefix("torch.")
+            if time.time() - started > 3600:
+                log(skipped=name, tokens_per_gpu=tokens_per_gpu, reason="time_budget")
+                continue
+            net = None
+            try:
+                net, config = load_rt_model(CKPT, device="cuda", compile=False)
+                net = net.to(dtype)
+                ev = build_evaluator(
+                    tasks,
+                    PRE_DIR,
+                    embedder=config["embedder"],
+                    d_text=config["d_text"],
+                    device="cuda",
+                    ctx_size_list=[2048],
+                    local_ctx_size=2048,
+                    bfs_width=128,
+                    num_walks=10_000,
+                    walk_length=20,
+                    tokens_per_gpu=tokens_per_gpu,
+                    items_per_task=ITEMS,
+                    num_workers=num_workers,
+                    context_seed=0,
+                    prefer_latest=True,
+                    shuffle_seed=0,
+                    mmap_populate=True,
+                    prefetch_factor=2,
+                    vector_db_path=None,
+                )
+                tic = time.time()
+                results = run_and_report(
+                    net,
+                    tasks,
+                    PRE_DIR,
+                    ctx_size=2048,
+                    csv_out_dir=None,
+                    evaluator=ev,
+                    embedder=config["embedder"],
+                )
+                dt = time.time() - tic
+                (r,) = results.values()
+                log(
+                    RESULT=name,
+                    eval_bs=ev.eval_bs,
+                    n=r["n"],
+                    seconds=f"{dt:.1f}",
+                    items_per_s=f"{r['n'] / dt:.2f}",
+                    metric=r["metric"],
+                    value=f"{r['value']:.6f}",
+                )
+                ev = None
+                break
+            except Exception as e:
+                log(FAILED=name, tokens_per_gpu=tokens_per_gpu, error=type(e).__name__)
+                traceback.print_exc()
+            finally:
+                net = None
+                torch.cuda.empty_cache()
 
 
 def nodes() -> list[tuple[str, str, str | None, str | None, int]]:
     """(label, gpu type, constraint, nodelist, cpus) per card to probe.
 
-    cpus is what the node can give one gpu without --exclusive: the turing
-    nodes have 8 cores per card against the a100 nodes' 14, so their data
-    workers are part of what is being measured.
+    cpus is what the node can give one gpu without --exclusive; hyperturing2
+    has 9 physical cores per card, so 9 there rather than the a100 nodes' 14.
     """
     return [
         ("a100", "a100:1", "ampere", None, 14),
-        ("rtx8000", "rtx8000:1", None, "hyperturing2", 14),
+        ("rtx8000", "rtx8000:1", None, "hyperturing2", 9),
         ("2080ti", "2080ti:1", None, "turing3", 8),
         ("titanxp", "titanxp:1", None, "hyperion3", 14),
     ]
@@ -105,10 +133,7 @@ def main() -> None:
         print(f"  {label:10s} {resources.gpus} {resources.qos}")
         submit(
             "expts.probe_gpu.submit:probe",
-            args=dict(
-                num_workers=cpus,
-                out_root="/dfs/user/ranjanr/ckpts/probe-gpu",
-            ),
+            args=dict(num_workers=cpus),
             resources=resources,
             name=f"probe-gpu-{label}",
             repo_root=str(Path(__file__).resolve().parents[2]),
