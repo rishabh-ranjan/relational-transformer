@@ -12,7 +12,7 @@ stale the moment one of these does:
 - trained on train **and** val, so nothing selects a checkpoint: `eval_splits`
   is test alone, `swa_momentum` is None, and the run keeps its last step
   (`latest.safetensors`, and the one surviving `steps=` file);
-- a finite budget -- `steps_for` epochs, the lr warmed up over a fifth of it
+- a finite budget -- `steps_for` steps, the lr warmed up over a fifth of it
   and decayed to zero by the end -- instead of early stopping.
 """
 
@@ -295,17 +295,17 @@ RUN_IDS: dict[tuple[str, str], str] = {}
 
 
 def main() -> None:
-    # Ascending test-set size, so the fastest answers land first.
+    # The two the schedule is derived from, and the same for every task, so
+    # they are read once here rather than per job: editing `train_splits` moves
+    # every task's `total_steps` with it, because the val rows are part of the
+    # epoch when they are trained on.
+    train_splits = ["train", "val"]
+    total_bs = 256
     # Shortest run first, so the fastest answers land first. The step budget,
     # not the test split: what a job costs here is overwhelmingly its training.
-    for db, task in sorted(TASKS, key=lambda p: steps_for(*p, ["train", "val"], 256)):
+    for db, task in sorted(TASKS, key=lambda p: steps_for(*p, train_splits, total_bs)):
         resources = RESOURCES[db, task]
         name = f"{db}/{task}"
-        # The three values the rest of the schedule is derived from. Editing
-        # `train_splits` here moves `total_steps` with it: the val rows are
-        # part of the epoch when they are trained on.
-        train_splits = ["train", "val"]
-        total_bs = 256
         steps = steps_for(db, task, train_splits, total_bs)
         # Eleven points of curve on every run, whatever its length, at a round
         # number of steps: an eval reads `eval_items_per_task` rows of the test
