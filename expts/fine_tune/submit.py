@@ -220,9 +220,10 @@ def a100(qos: str, time: str) -> Resources:
 # Read at submission time: I hold no gpu jobs. blackwell1 has 3 of 8 b200 free,
 # and the soonest of the 5 running frees in ~9h. Of those 3, only the two
 # `il-interactive` jobs actually start: a reservation holds the third
-# (`ReqNodeNotAvail`), so the `il` tier is all ampere. All 64 usable a100 are allocated (ampere7 is down) but
-# ~50 of them are one user's `il-lo`, which `il` preempts, so the `il` amperes
-# start and the `il-lo` tail queues behind. That gives:
+# (`ReqNodeNotAvail`), so the `il` tier is all ampere. All 64 usable a100 are
+# allocated (ampere7 is down) but ~50 of them are one user's `il-lo`, which `il`
+# preempts, so the `il` amperes start and the `il-lo` tail queues behind. That
+# gives:
 #
 #   il-interactive  2 b200            the two smallest-test jobs
 #   il              10 a100           the next ten
