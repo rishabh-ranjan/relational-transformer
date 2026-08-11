@@ -2,6 +2,10 @@
 
 Run from the repo root: `pixi run python expts/fine_tune/make_results.py`.
 Rewrites results.md wholesale -- edit this script, not the markdown.
+
+`my_results.py` imports `SHORT`, `NTRAIN`, `stds`, `table` and `legend` from
+here to build the same tables with our own row in them, so the two documents
+cannot drift in ordering, bolding or units.
 """
 
 import pandas as pd
@@ -93,7 +97,13 @@ def render(rows, nleft=2):
     return "\n".join(out)
 
 
-def table(sub, split, higher):
+def table(sub, split, higher, mark=None):
+    """The markdown table, and the task columns in the order it used them.
+
+    `mark` is `{(row, pair): suffix}`, appended inside a cell after the number
+    and outside the bold markers: a footnote on one value, not a value.
+    """
+    mark = mark or {}
     sub = sub.copy()
     if higher:
         sub["v"] = sub[f"{split}_score"] * 100
@@ -118,7 +128,8 @@ def table(sub, split, higher):
                 cells.append("-")
                 continue
             s = f"{v:.1f}"
-            cells.append(f"__{s}__" if v == best[c] else s)
+            s = f"__{s}__" if v == best[c] else s
+            cells.append(s + mark.get((name, c), ""))
         rows.append([str(rank[name]), name] + cells)
     return render(rows), cols[1:]
 
@@ -137,29 +148,44 @@ def legend(pairs):
     return "\n".join(out)
 
 
-clf = a[a.task_type == "BINARY_CLASSIFICATION"]
-reg = a[a.task_type == "REGRESSION"]
-secs = []
-for name, sub, split, higher in [
-    ("Classification, val (ROC-AUC %, higher is better)", clf, "val", True),
-    ("Classification, test (ROC-AUC %, higher is better)", clf, "test", True),
-    ("Regression, val (nMAE %, lower is better)", reg, "val", False),
-    ("Regression, test (nMAE %, lower is better)", reg, "test", False),
-]:
-    t, _ = table(sub, split, higher)
-    secs.append(f"## {name}\n\n{t}")
+def sections(frame, mark=None):
+    """The four `## ...` sections, in the order results.md gives them."""
+    clf = frame[frame.task_type == "BINARY_CLASSIFICATION"]
+    reg = frame[frame.task_type == "REGRESSION"]
+    secs = []
+    for name, sub, split, higher in [
+        ("Classification, val (AUROC %, higher is better)", clf, "val", True),
+        ("Classification, test (AUROC %, higher is better)", clf, "test", True),
+        ("Regression, val (nMAE %, lower is better)", reg, "val", False),
+        ("Regression, test (nMAE %, lower is better)", reg, "test", False),
+    ]:
+        t, _ = table(sub, split, higher, mark)
+        secs.append(f"## {name}\n\n{t}")
+    return secs
 
-out = (
-    "# Results\n\n"
-    + "\n\n".join(secs)
-    + "\n\n# Legend\n\n"
-    + legend(list(SHORT))
-    + "\n\n- `(D)` = default config; `(H)` = HPO, i.e. best of ~30 random-search trials by val score, refit and evaluated on test.\n"
-    + "- `(H)` val numbers are the selection criterion itself, so they are optimistically biased; `(D)` val numbers are not.\n"
-    + "- Task columns are ordered by train-set size (`num_rows_train` from `stanford-star/relbench`, `STATS/tasks.parquet`), smallest to largest; the `train size` row gives it.\n"
-    + "- `rank` = position by `mean` within that table (ties share the lower number).\n"
-    + "- `mean` = unweighted mean over the tasks in that table; rows sorted by it (best on top). Best value per column in bold.\n"
-    + "- nMAE = MAE / std(train target), std from `stanford-star/relbench` (`regression_stds.json`).\n"
+
+NOTES = (
+    "- `(D)` = default config; `(H)` = HPO, i.e. best of ~30 random-search trials by val score, refit and evaluated on test.\n"
+    "- `(H)` val numbers are the selection criterion itself, so they are optimistically biased; `(D)` val numbers are not.\n"
+    "- Task columns are ordered by train-set size (`num_rows_train` from `stanford-star/relbench`, `STATS/tasks.parquet`), smallest to largest; the `train size` row gives it.\n"
+    "- `rank` = position by `mean` within that table (ties share the lower number).\n"
+    "- `mean` = unweighted mean over the tasks in that table; rows sorted by it (best on top). Best value per column in bold.\n"
+    "- nMAE = MAE / std(train target), std from `stanford-star/relbench` (`regression_stds.json`).\n"
 )
-open("expts/fine_tune/results.md", "w").write(out)
-print("wrote expts/fine_tune/results.md")
+
+
+def main():
+    out = (
+        "# Results\n\n"
+        + "\n\n".join(sections(a))
+        + "\n\n# Legend\n\n"
+        + legend(list(SHORT))
+        + "\n\n"
+        + NOTES
+    )
+    open("expts/fine_tune/results.md", "w").write(out)
+    print("wrote expts/fine_tune/results.md")
+
+
+if __name__ == "__main__":
+    main()
