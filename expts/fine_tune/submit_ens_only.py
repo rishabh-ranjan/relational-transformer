@@ -273,7 +273,7 @@ def main() -> None:
                 shuffle_seed=0,
                 context_seed=0,
                 vector_db_path=None,
-                db_upto_test_timestamp=False,
+                db_upto_test_timestamp=True,
                 ctx_size_list=[2048],
                 lcs_bw_pl_grid=[(2048, 128, True)],
                 val_ensemble_size=1,

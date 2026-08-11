@@ -116,7 +116,7 @@ def main() -> None:
                 shuffle_seed=0,
                 context_seed=0,
                 vector_db_path=None,
-                db_upto_test_timestamp=False,
+                db_upto_test_timestamp=True,
                 ctx_size_list=[512, 1024, 2048],
                 lcs_bw_pl_grid=[
                     (lcs, bw, pl)
