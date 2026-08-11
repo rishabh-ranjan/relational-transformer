@@ -1535,6 +1535,9 @@ impl Sampler {
         );
 
         let bound = temporal_bound(source_node.timestamp.as_ref().map(|t| (*t).into()), cutoff);
+        // The walk always starts at the target (`source_idx == target_node_idx`
+        // at every call), so the source's timestamp is the target's.
+        let target_ts: Option<i32> = source_node.timestamp.as_ref().map(|t| (*t).into());
 
         let mut similar_node_visits: HashMap<i32, usize> = HashMap::new();
 
@@ -1563,11 +1566,16 @@ impl Sampler {
                 }
 
                 // Select next node randomly
-                let next_idx =
-                    match self.select_random_neighbor(dataset, current_idx, bound, &mut rng) {
-                        Some(idx) => idx,
-                        None => break,
-                    };
+                let next_idx = match self.select_random_neighbor(
+                    dataset,
+                    current_idx,
+                    bound,
+                    target_ts,
+                    &mut rng,
+                ) {
+                    Some(idx) => idx,
+                    None => break,
+                };
 
                 current_idx = next_idx;
             }
@@ -1582,6 +1590,7 @@ impl Sampler {
         dataset: &Dataset,
         current_idx: i32,
         bound: Option<i32>,
+        target_ts: Option<i32>,
         rng: &mut StdRng,
     ) -> Option<i32> {
         let current_node = get_node(dataset, current_idx);
@@ -1591,7 +1600,7 @@ impl Sampler {
         let valid_p2f_count = if bound.is_some() {
             p2f_edges
                 .as_slice()
-                .partition_point(|edge| !edge_past_bound(edge, bound))
+                .partition_point(|edge| edge_visible(edge, bound, target_ts))
         } else {
             p2f_edges.len()
         };
@@ -1602,7 +1611,7 @@ impl Sampler {
         let valid_f2p_count = if bound.is_some() {
             f2p_edges
                 .iter()
-                .filter(|edge| !edge_past_bound(edge, bound))
+                .filter(|edge| edge_visible(edge, bound, target_ts))
                 .count()
         } else {
             f2p_edges.len()
@@ -1618,7 +1627,7 @@ impl Sampler {
             Some(
                 f2p_edges
                     .iter()
-                    .filter(|edge| !edge_past_bound(edge, bound))
+                    .filter(|edge| edge_visible(edge, bound, target_ts))
                     .nth(rand_idx)
                     .unwrap()
                     .node_idx
@@ -1717,6 +1726,7 @@ impl Sampler {
         start_idx: i32,
         rng: &mut StdRng,
         cutoff: Option<i32>,
+        target_ts: Option<i32>,
         local_ctx_size: usize,
         bfs_width: usize,
         visited_at_depth: &mut HashMap<i32, usize>,
@@ -1774,7 +1784,7 @@ impl Sampler {
 
             // Add f2p edges to f2p frontier
             for edge in node.f2p_edges.iter() {
-                if edge_past_bound(edge, bound) {
+                if !edge_visible(edge, bound, target_ts) {
                     continue;
                 }
                 f2p_ftr.push((depth + 1, edge.node_idx.into()));
@@ -1787,7 +1797,7 @@ impl Sampler {
             let valid_edges = if bound.is_some() {
                 p2f_edges
                     .as_slice()
-                    .partition_point(|edge| !edge_past_bound(edge, bound))
+                    .partition_point(|edge| edge_visible(edge, bound, target_ts))
             } else {
                 p2f_edges
                     .as_slice()
@@ -1901,6 +1911,7 @@ fn extend_with_seed_bfs(
         seed_node_idx,
         bfs_rng,
         cutoff,
+        target_node.timestamp.as_ref().map(|t| (*t).into()),
         local_ctx_size,
         bfs_width,
         visited_at_depth,
@@ -2134,6 +2145,30 @@ fn temporal_bound(target_ts: Option<i32>, cutoff: Option<i32>) -> Option<i32> {
         (a, None) => a,
         (None, b) => b,
     }
+}
+
+/// True when an edge lands on a task row sharing the target's timestamp.
+///
+/// No node dereference: the edge carries the endpoint's table type and its
+/// timestamp, and the only task table a context ever reaches is the target's
+/// own (see the `eligible` filter on p2f expansion), so a non-db edge at the
+/// target's timestamp *is* a same-horizon row of the target's task.
+///
+/// This is what makes such a row invisible rather than merely unquotable:
+/// gating the traversal here means it is never walked through and never
+/// enters the bfs frontier, so the sample is the one a graph without that row
+/// would have produced.
+fn edge_same_horizon_task(edge: &ArchivedEdge, target_ts: Option<i32>) -> bool {
+    edge.table_type != ArchivedTableType::Db
+        && match (edge.timestamp.as_ref(), target_ts) {
+            (Some(ts), Some(t)) => i32::from(*ts) == t,
+            _ => false,
+        }
+}
+
+/// True when an edge's endpoint may be traversed at all.
+fn edge_visible(edge: &ArchivedEdge, bound: Option<i32>, target_ts: Option<i32>) -> bool {
+    !edge_past_bound(edge, bound) && !edge_same_horizon_task(edge, target_ts)
 }
 
 /// True when `node` is a task row sharing `target`'s timestamp.
