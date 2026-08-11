@@ -171,27 +171,27 @@ def a100(qos: str, time: str) -> Resources:
     )
 
 
-def plan(n: int) -> list[Resources]:
-    """The best n slots this cluster will give one-GPU jobs, per
-    [../README.md](../README.md#allocating-a-sweep).
-
-    Amperes: blackwell1's 8 cards are all held by other people's
-    non-preemptible jobs, so a b200 request sits at `Resources` for hours
-    while an ampere starts now. `il-interactive` is the highest priority and
-    its 12 hours cover a fine-tuning run, which checkpoints and requeues
-    anyway.
-
-    Recount and rewrite this before every submission.
-    """
-    out = [a100("il-interactive", "12:00:00")] * min(n, 2)
-    out += [a100("il", "7-00:00:00")] * min(n - len(out), 10)
-    out += [a100("il-lo", "21-00:00:00")] * (n - len(out))
-    return out
+# Which slot each job goes in, laid out by hand -- one line per job, keyed by
+# `(db, task)`. Commenting a line out is how a job is left out of a submission.
+#
+# NOT A DEFAULT TO INHERIT, and blank on purpose: whatever the last submission
+# put here is a record of a different cluster and a different instruction. Work
+# the assignment out again every time, following
+# [Allocating a sweep](../README.md#allocating-a-sweep) -- read the cluster,
+# subtract what your own jobs already hold, spend the tiers top down -- and
+# write today's answer here, one line per job this submission sends:
+#
+#     ("rel-f1", "driver-dnf"): a100("il", "12:00:00"),
+#
+# A job with no line here stops the submission rather than taking a slot
+# nobody chose for it.
+RESOURCES: dict[tuple[str, str], Resources] = {}
 
 
 def main() -> None:
     tasks = sorted(TASKS, key=lambda p: -ntrain()[f"{p[0]}/{p[1]}"])
-    for (db, task), resources in zip(tasks, plan(len(tasks)), strict=True):
+    for db, task in tasks:
+        resources = RESOURCES[db, task]
         name = f"{db}/{task}" + ("-rand" if RANDOM_INIT else "")
         print(f"  {name:28s} {resources.gpus} {resources.qos:15s} {resources.time}")
         submit(

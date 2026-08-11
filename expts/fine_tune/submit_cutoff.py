@@ -18,9 +18,9 @@ separate measurement of them.
 The table is `cutoff_table.py`. See [README.md](README.md).
 """
 
-from roach.slurm import Resources, submit
+from roach.slurm import submit
 
-from submit import a100, targets_for
+from submit import a100, b200, targets_for
 from submit_ens_only import ckpt_for, items_for
 
 TASKS = (
@@ -37,34 +37,40 @@ PROJECTS = {
 }
 
 
-def plan(n: int) -> list[Resources]:
-    """One slot per job, in the order `main` hands them out.
-
-    Amperes, not blackwell. blackwell1's 8 cards are all held by other people's
-    non-preemptible jobs and the soonest to free is ~11h out (12h limit, 1h
-    elapsed); the rest run to 17h, 23h and 5d. One of these evals is minutes to
-    an hour, so a card now beats a b200 tomorrow.
-
-    Three `il` slots and no more: `il` is 10 gpus across all my sweeps and the
-    fine-tuning sweep holds 7, `il-interactive`'s 2 are held by it too. The
-    three that fit go there, the other three take `il-lo`.
-
-    Which three matters here, unlike in a training sweep: an eval run does not
-    checkpoint, so a preemption on `il-lo` restarts it from ensemble size 1.
-    `il` is non-preemptible and 7 days, so 1 day is more than these need.
-
-    Recount and rewrite this before every submission.
-    """
-    return [a100("il", "1-00:00:00")] * min(n, 3) + [a100("il-lo", "1-00:00:00")] * max(
-        0, n - 3
-    )
+# Which slot each job goes in, laid out by hand. Commenting a line out is how a
+# job is left out of this submission.
+#
+# NOT A DEFAULT TO INHERIT. It records one cluster at one moment, and it is
+# stale by the next submission. Work the assignment out again every time,
+# following [Allocating a sweep](../README.md#allocating-a-sweep) -- read the
+# cluster, subtract what your own jobs already hold, spend the tiers top down --
+# and rewrite every line below with today's answer.
+#
+# 2026-08-10: `il-interactive` is full and `il` holds 10 -- 7 ensembling evals
+# from another session, 3 of these. blackwell1 has 2 of its 8 b200 free, so the two jobs still
+# waiting take them on `il` -- its whole b200 sub-cap, and those cost 2 of the
+# ten, which the two `il` jobs demoted to `il-lo` here pay for. Demoting these
+# and not the ensembling evals is the cheap direction: an eval does not
+# checkpoint, and these are two minutes old against their forty. The seven are
+# another session's jobs in any case: they count against the same per-user cap,
+# but they are not this script's to cancel.
+RESOURCES = {
+    # ("rel-f1", "driver-dnf", False): a100("il", "1-00:00:00"),  # already running
+    ("rel-f1", "driver-dnf", True): a100("il-lo", "1-00:00:00"),
+    ("rel-f1", "driver-position", False): a100("il-lo", "1-00:00:00"),
+    ("rel-f1", "driver-position", True): b200("il", "1-00:00:00"),
+    ("rel-f1", "driver-top3", False): b200("il", "1-00:00:00"),
+    # ("rel-f1", "driver-top3", True): a100("il-lo", "1-00:00:00"),  # already queued there
+}
 
 
 def main() -> None:
-    jobs = [(db, task, upto) for db, task in TASKS for upto in (False, True)]
-    for (db, task, upto), resources in zip(jobs, plan(len(jobs)), strict=True):
+    for (db, task, upto), resources in RESOURCES.items():
         name = f"{db}/{task}"
-        print(f"  {name:28s} db_upto_test_timestamp={upto} {resources.qos}")
+        print(
+            f"  {name:28s} upto={upto!s:5s} {resources.gpus} "
+            f"{resources.qos:15s} {resources.time}"
+        )
         submit(
             "rt.eval:main",
             # Do not put comments inside this dict: it is a config block,
@@ -81,7 +87,7 @@ def main() -> None:
                 db_task_list=[(db, task)],
                 pre_dir="/dfs/user/ranjanr/share/stanford-star/relbench-preprocessed",
                 tokens_per_gpu=2**18,
-                num_workers=14,
+                num_workers=resources.cpus_per_task,
                 prefetch_factor=2,
                 num_walks=10_000,
                 walk_length=20,

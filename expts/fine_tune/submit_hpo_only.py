@@ -64,23 +64,21 @@ def b200(qos: str, time: str) -> Resources:
     )
 
 
-def plan(n: int) -> list[Resources]:
-    """The best n slots this cluster will give one-GPU jobs, best first.
-
-    `il-interactive` is idle and caps at 2 gpus of any type; `il`'s 10-gpu cap
-    is spent in full by the fine-tuning sweep these checkpoints come from, so
-    the rest drop to preemptible `il-lo` rather than queue behind it.
-    Blackwell throughout: blackwell1 has the cards free, and eval is one pass
-    per grid entry, so the faster card is the whole wall clock.
-
-    Recount and rewrite this before every submission.
-
-    An eval run does not checkpoint: a preemption restarts it from the top, so
-    `il-lo` costs wall clock in whole runs rather than in minutes.
-    """
-    out = [b200("il-interactive", "12:00:00")] * min(n, 2)
-    out += [b200("il-lo", "21-00:00:00")] * (n - len(out))
-    return out
+# Which slot each job goes in, laid out by hand -- one line per job, keyed by
+# `(db, task)`. Commenting a line out is how a job is left out of a submission.
+#
+# NOT A DEFAULT TO INHERIT, and blank on purpose: whatever the last submission
+# put here is a record of a different cluster and a different instruction. Work
+# the assignment out again every time, following
+# [Allocating a sweep](../README.md#allocating-a-sweep) -- read the cluster,
+# subtract what your own jobs already hold, spend the tiers top down -- and
+# write today's answer here, one line per job this submission sends:
+#
+#     ("rel-f1", "driver-dnf"): a100("il", "12:00:00"),
+#
+# A job with no line here stops the submission rather than taking a slot
+# nobody chose for it.
+RESOURCES: dict[tuple[str, str], Resources] = {}
 
 
 def main() -> None:
@@ -89,7 +87,8 @@ def main() -> None:
     # fine-tuning run has not reached its first eval must abort the submission
     # rather than leave the tasks ahead of it queued and the rest not.
     ckpts = {t: ckpt_for(*t) for t in tasks}
-    for (db, task), resources in zip(tasks, plan(len(tasks)), strict=True):
+    for db, task in tasks:
+        resources = RESOURCES[db, task]
         name = f"{db}/{task}"
         print(f"  {name:28s} {resources.gpus} {resources.qos:15s} {resources.time}")
         submit(

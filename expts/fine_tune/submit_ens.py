@@ -13,7 +13,9 @@ from pathlib import Path
 
 from roach.slurm import Resources, submit
 
-from submit import a100, targets_for
+# a100 / b200 are unused while RESOURCES is blank, and imported so that
+# filling it in is one line and not an import hunt.
+from submit import a100, b200, targets_for  # noqa: F401
 from submit_ens_only import TASKS, ckpt_for, items_for, ntest
 
 TUNING_ROOT = Path("/dfs/user/ranjanr/ckpts/rtv2/2026-08-10-fine_tune_hpo_ens")
@@ -50,27 +52,21 @@ def cfg_for(db: str, task: str) -> tuple[int, int, int, bool]:
     return ctx, lcs, bw, pl
 
 
-def plan(n: int) -> list[Resources]:
-    """The best n slots this cluster will give one-GPU jobs, best first.
-
-    Its own count, not another script's: this submission goes out whenever the
-    tuning it reads has finished, and what was free then says nothing about
-    now. Per [../README.md](../README.md#allocating-a-sweep), and recount it
-    before every submission.
-
-    Today: the fine-tuning sweep has finished and released `il`, so its 10 are
-    free bar the one `il-interactive` slot the site-success control holds.
-    Amperes throughout -- blackwell1's 8 cards are held by other people's
-    non-preemptible jobs, and a queued high-priority job there waits longer
-    than an ampere job takes to run.
-
-    An eval run does not checkpoint: a preemption restarts it from the top, so
-    `il-lo` costs wall clock in whole runs rather than in minutes.
-    """
-    out = [a100("il-interactive", "12:00:00")] * min(n, 1)
-    out += [a100("il", "12:00:00")] * min(n - len(out), 10)
-    out += [a100("il-lo", "21-00:00:00")] * (n - len(out))
-    return out
+# Which slot each job goes in, laid out by hand -- one line per job, keyed by
+# `(db, task)`. Commenting a line out is how a job is left out of a submission.
+#
+# NOT A DEFAULT TO INHERIT, and blank on purpose: whatever the last submission
+# put here is a record of a different cluster and a different instruction. Work
+# the assignment out again every time, following
+# [Allocating a sweep](../README.md#allocating-a-sweep) -- read the cluster,
+# subtract what your own jobs already hold, spend the tiers top down -- and
+# write today's answer here, one line per job this submission sends:
+#
+#     ("rel-f1", "driver-dnf"): a100("il", "12:00:00"),
+#
+# A job with no line here stops the submission rather than taking a slot
+# nobody chose for it.
+RESOURCES: dict[tuple[str, str], Resources] = {}
 
 
 def main() -> None:
@@ -81,7 +77,8 @@ def main() -> None:
     # not.
     ckpts = {t: ckpt_for(*t) for t in tasks}
     cfgs = {t: cfg_for(*t) for t in tasks}
-    for (db, task), resources in zip(tasks, plan(len(tasks)), strict=True):
+    for db, task in tasks:
+        resources = RESOURCES[db, task]
         name = f"{db}/{task}"
         ctx, lcs, bw, pl = cfgs[db, task]
         print(f"  {name:28s} {(ctx, lcs, bw, pl)} {resources.qos:15s} {resources.time}")

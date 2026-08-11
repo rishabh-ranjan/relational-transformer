@@ -19,34 +19,28 @@ the same weights on the same rows.
 """
 
 from roach.slurm import Resources, submit
-from submit import a100, targets_for
+
+# a100 / b200 are unused while RESOURCES is blank, and imported so that
+# filling it in is one line and not an import hunt.
+from submit import a100, b200, targets_for  # noqa: F401
 from submit_ens_only import ckpt_for, in_flight, items_for, nval, ntest, ready
 
 
-def plan(n: int) -> list[Resources]:
-    """The qos budget spent top down, best slots first, per
-    [../README.md](../README.md#allocating-a-sweep).
-
-    Today: amperes throughout, high tiers included. blackwell1's 8 cards are
-    all held by other people's non-preemptible jobs and the soonest frees in
-    about 3 hours, longer than a job here takes on an ampere, so the high
-    tiers buy a place in a queue that does not move rather than a faster card.
-
-    Both `il-interactive` gpus and 8 of `il`'s 10 are already held by this
-    sweep, so there are 2 `il` slots left and this submission spends them.
-    A job pending on `il` is not running any sooner than one pending on
-    `il-lo`, but it outranks it for the next card that frees, and the slot
-    costs nothing to hold. The rest stays on `il-lo`, which is preemptible and
-    restarts an eval from the first configuration.
-
-    Ask for the time the job needs, not the time the tier allows: a 12-hour
-    request backfills into gaps that a 7-day one cannot.
-
-    Recount and rewrite this before every submission.
-    """
-    out = [a100("il", "12:00:00")] * min(n, 2)
-    out += [a100("il-lo", "21-00:00:00")] * (n - len(out))
-    return out
+# Which slot each job goes in, laid out by hand -- one line per job, keyed by
+# `(db, task)`. Commenting a line out is how a job is left out of a submission.
+#
+# NOT A DEFAULT TO INHERIT, and blank on purpose: whatever the last submission
+# put here is a record of a different cluster and a different instruction. Work
+# the assignment out again every time, following
+# [Allocating a sweep](../README.md#allocating-a-sweep) -- read the cluster,
+# subtract what your own jobs already hold, spend the tiers top down -- and
+# write today's answer here, one line per job this submission sends:
+#
+#     ("rel-f1", "driver-dnf"): a100("il", "12:00:00"),
+#
+# A job with no line here stops the submission rather than taking a slot
+# nobody chose for it.
+RESOURCES: dict[tuple[str, str], Resources] = {}
 
 
 def job_name(db: str, task: str) -> str:
@@ -70,7 +64,8 @@ def main() -> None:
     # Slowest first, so the best slots go where they buy the most.
     tasks.sort(key=lambda t: -cost(*t))
     ckpts = {t: ckpt_for(*t) for t in tasks}
-    for (db, task), resources in zip(tasks, plan(len(tasks)), strict=True):
+    for db, task in tasks:
+        resources = RESOURCES[db, task]
         name = f"{db}/{task}"
         print(f"  {name:28s} {resources.gpus} {resources.qos:15s} {resources.time}")
         submit(

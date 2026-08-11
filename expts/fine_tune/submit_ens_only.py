@@ -22,7 +22,10 @@ import wandb
 from roach.slurm import Resources, submit
 
 from ens_table import ENTITY, PROJECT, curves
-from submit import a100, ntrain, targets_for
+
+# a100 / b200 are unused while RESOURCES is blank, and imported so that
+# filling it in is one line and not an import hunt.
+from submit import a100, b200, ntrain, targets_for  # noqa: F401
 
 # The 21 RelBench forecast tasks, this experiment's own list rather than
 # `submit.TASKS`: that one is whatever the fine-tuning sweep last submitted,
@@ -213,30 +216,21 @@ def ready() -> list[tuple[str, str]]:
     return sorted(started, key=lambda p: -ntrain()[f"{p[0]}/{p[1]}"])
 
 
-def plan(n: int) -> list[Resources]:
-    """One slot per task, in the order `main` hands out tasks: largest train
-    set first.
-
-    Amperes, not blackwells: `b200` pins `nodelist="blackwell1"`, and that one
-    node's 8 cards are mostly other people's long jobs, so a sweep this wide
-    sits at `ReqNodeNotAvail` however many jobs it has. The a100s are 8 nodes
-    of 8 behind no nodelist at all, so a queued job takes the first card that
-    frees anywhere in the partition. A b200 is the faster card, but a queue
-    this deep is bound by how often a card frees, not by how fast one runs.
-
-    `il-lo` throughout: it is preemptible but uncapped, where `il`'s cap is 10
-    gpus of any kind together and `submit.py`'s fine-tuning sweep already holds
-    all ten, so an `il` job here would wait on my own jobs rather than on a
-    card. `il-interactive` is 2 gpus and the highest priority, worth having,
-    but the two are in use by the runs still going.
-
-    A whole 16-seed curve is minutes to an hour, so preemption costs one
-    restart at worst -- an eval run does not checkpoint, and a preemption or a
-    wall limit restarts it from ensemble size 1.
-
-    Recount and rewrite this before every submission.
-    """
-    return [a100("il-lo", "21-00:00:00")] * n
+# Which slot each job goes in, laid out by hand -- one line per job, keyed by
+# `(db, task)`. Commenting a line out is how a job is left out of a submission.
+#
+# NOT A DEFAULT TO INHERIT, and blank on purpose: whatever the last submission
+# put here is a record of a different cluster and a different instruction. Work
+# the assignment out again every time, following
+# [Allocating a sweep](../README.md#allocating-a-sweep) -- read the cluster,
+# subtract what your own jobs already hold, spend the tiers top down -- and
+# write today's answer here, one line per job this submission sends:
+#
+#     ("rel-f1", "driver-dnf"): a100("il", "12:00:00"),
+#
+# A job with no line here stops the submission rather than taking a slot
+# nobody chose for it.
+RESOURCES: dict[tuple[str, str], Resources] = {}
 
 
 def main() -> None:
@@ -250,7 +244,8 @@ def main() -> None:
     # is what would otherwise skip them. Leave commented in the normal case.
     # tasks = [("rel-amazon", "user-churn")]
     ckpts = {t: ckpt_for(*t) for t in tasks}
-    for (db, task), resources in zip(tasks, plan(len(tasks)), strict=True):
+    for db, task in tasks:
+        resources = RESOURCES[db, task]
         name = f"{db}/{task}"
         print(f"  {name:28s} {resources.gpus} {resources.qos:15s} {resources.time}")
         submit(
