@@ -10,11 +10,12 @@ that makes them comparable -- the panels, the targets, the axis -- is
 `workspace.build`'s, so this takes that workspace and narrows it:
 
 - the runset draws only the four runs of the comparison and groups on
-  `run_name`, so each panel carries one curve per arm per task and the legend
-  names the arm;
-- panels for the other 19 benchmark tasks come out. The project seeds all of
-  them so a task starting later has a panel waiting, which is right for the
-  project view and wrong here: 19 empty panels bury the two being compared.
+  `loss_fn`, the one argument the arms differ in, so a panel -- which is one
+  task already -- carries one curve per arm and the legend names the loss;
+- panels for the other 19 benchmark tasks come out, and so does the val split.
+  The project seeds every benchmark task so one starting later has a panel
+  waiting, which is right for the project view and wrong here: they bury the
+  two being compared.
 """
 
 import math
@@ -74,6 +75,11 @@ def main() -> None:
 
     sections = []
     for s in w.sections:
+        # The val split says what the run scored on data the trainval arm
+        # trained on: not a comparison, and beside the test panels it reads as
+        # one.
+        if s.name == "dashboard: auroc/val":
+            continue
         s.panels = [p for p in s.panels if keeps(p.title)]
         # The System section is panel-less by design and filled by the app;
         # every other empty one is a section this view has nothing for.
@@ -83,7 +89,9 @@ def main() -> None:
     w.sections = sections
 
     w.runset_settings = ws.RunsetSettings(
-        groupby=[ws.Config("run_name")],
+        # By the loss and not by the run: a panel is one task already, so this
+        # draws the two arms against each other and names them by what differs.
+        groupby=[ws.Config("loss_fn")],
         filters=[ws.Config("run_name").isin(RUNS)],
     )
 
