@@ -7,9 +7,12 @@ Two arms over the same weights and the same rows:
   and averages over context seeds. Nothing reads validation, so it waits on
   nothing and is the arm that answers first;
 - **hpo-ens** ranks 36 context configurations on validation and ensembles the
-  winner on test, in one job. The tuning reads fewer rows than the test pass it
-  feeds: ranking configurations against each other needs less of the split than
-  the number being reported does.
+  winner on test, in one job.
+
+Both score the *whole* test split, once per context seed -- nothing is
+subsampled, so the metric is RelBench's own and each run writes a submission
+directory. Only the tuning caps its rows: ranking configurations against each
+other needs less of the split than the number being reported does.
 
 `splits` does not gate the tuning: with a grid of more than one entry
 `rt.eval.main` reads the val split whatever `splits` says, and `splits` decides
@@ -35,7 +38,7 @@ from roach.slurm import Resources, submit
 
 # a100 / b200 are unused while RESOURCES is blank, and imported so that
 # filling it in is one line and not an import hunt.
-from submit import a100, b200, targets_for  # noqa: F401
+from submit import a100, b200, ntest, targets_for  # noqa: F401
 
 # The 21 RelBench forecast tasks, this experiment's own list rather than
 # `submit.TASKS`: that one is whatever the fine-tuning sweep last submitted,
@@ -127,58 +130,6 @@ def ckpt_for(db: str, task: str) -> str:
     return str(pinned)
 
 
-@functools.cache
-def split_sizes() -> dict[str, dict[str, float]]:
-    """`{db}/{task}` -> val and test row counts, from RelBench's task stats."""
-    import pandas as pd
-    from huggingface_hub import hf_hub_download
-
-    stats = pd.read_parquet(
-        hf_hub_download(
-            "stanford-star/relbench", "STATS/tasks.parquet", repo_type="dataset"
-        )
-    )
-    return {
-        f"{r.database}/{r.task}": {
-            "val": float(r.num_rows_val),
-            "test": float(r.num_rows_test),
-        }
-        for r in stats.itertuples()
-    }
-
-
-def items_for(db: str, task: str) -> int:
-    """How many test items one context seed scores.
-
-    A seed is a whole pass over them and there are `test_ensemble_size` of
-    them, so the largest splits are hours of wall clock for one curve. Above
-    the largest rel-avito task the split is subsampled to 2**16; below it every
-    row is scored.
-
-    `shuffle_seed` fixes which rows a subsample takes, so the seeds being
-    averaged score the same items, and the metric comes back named `nmae~` /
-    `roc_auc~`: the same definition on part of the split, and no RelBench
-    submission (`_emit_and_score` refuses to write one that does not cover the
-    test set).
-    """
-    ntest = {k: v["test"] for k, v in split_sizes().items()}
-    limit = max(ntest[f"{d}/{t}"] for d, t in TASKS if d == "rel-avito")
-    return 2**16 if ntest[f"{db}/{task}"] > limit else 10_000_000
-
-
-def cost(db: str, task: str) -> float:
-    """Roughly what a job on this task costs: the rows one pass scores.
-
-    What the submission order is keyed on, rather than train-set size: an eval
-    job's wall clock is the split it reads, and `items_for` caps the biggest
-    ones, so the two orders disagree. Both splits count -- the hpo arm reads
-    val as well, and the arm that does not passes the same order.
-    """
-    sizes = split_sizes()[f"{db}/{task}"]
-    cap = items_for(db, task)
-    return min(sizes["val"], cap) + min(sizes["test"], cap)
-
-
 def in_flight() -> set[str]:
     """The job names already queued or running, either arm.
 
@@ -196,7 +147,11 @@ def in_flight() -> set[str]:
 
 
 def ready(arm: str) -> list[tuple[str, str]]:
-    """The tasks that arm can score now, slowest first.
+    """The tasks that arm can score now, largest test set first.
+
+    An eval job's wall clock is the rows it reads, and nothing is subsampled:
+    both arms score the whole test split, once per context seed. So the
+    slowest job starts first and the small ones fill the slots behind it.
 
     A task whose fine-tuning run has not written a checkpoint yet -- it has not
     reached its first eval -- is skipped rather than aborting the submission:
@@ -207,7 +162,7 @@ def ready(arm: str) -> list[tuple[str, str]]:
         for t in TASKS
         if best_ckpt(*t).exists() and f"{arm}-{t[0]}-{t[1]}" not in in_flight()
     ]
-    return sorted(started, key=lambda t: -cost(*t))
+    return sorted(started, key=lambda t: -ntest()[f"{t[0]}/{t[1]}"])
 
 
 # Which slot each job goes in, laid out by hand -- one line per job, keyed by
@@ -260,22 +215,24 @@ def main() -> None:
                     prefetch_factor=2,
                     num_walks=10_000,
                     walk_length=20,
-                    val_items_per_task=None if arm == "ens" else 2**14,
-                    test_items_per_task=items_for(db, task),
+                    val_items_per_task=None if arm == "ens" else 2**12,
+                    test_items_per_task=1_000_000_000,
                     mmap_populate=True,
                     shuffle_seed=0,
                     context_seed=0,
                     vector_db_path=None,
                     db_upto_test_timestamp=True,
                     ctx_size_list=[1024] if arm == "ens" else [512, 1024, 2048],
-                    lcs_bw_pl_grid=[(1024, 256, False)]
-                    if arm == "ens"
-                    else [
-                        (lcs, bw, pl)
-                        for lcs in (512, 1024, 2048)
-                        for bw in (64, 128, 256)
-                        for pl in (True, False)
-                    ],
+                    lcs_bw_pl_grid=(
+                        [(1024, 256, False)]
+                        if arm == "ens"
+                        else [
+                            (lcs, bw, pl)
+                            for lcs in (512, 1024, 2048)
+                            for bw in (64, 128, 256)
+                            for pl in (True, False)
+                        ]
+                    ),
                     val_ensemble_size=1,
                     test_ensemble_size=16 if arm == "ens" else 4,
                     run_name=name,

@@ -61,9 +61,11 @@ run:
   `lcs_bw_pl_grid`: the three ctx sizes ride along on each pass as prefixes of
   the contexts it already built.
 
-Both score the running average after each seed, so a log carries the test
-metric at every ensemble size, not just the last, and both log against
-`ens_size` with the task's published target beside the curve.
+Both score the whole test split -- nothing subsampled, so the numbers are
+RelBench's own and each run writes a submission directory -- and both score the
+running average after each seed, so a log carries the test metric at every
+ensemble size, not just the last, logged against `ens_size` with the task's
+published target beside the curve.
 
 Rerun it as fine-tuning runs land: a task with no checkpoint yet is skipped,
 and one whose job is already queued is not sent twice. The weights each job
