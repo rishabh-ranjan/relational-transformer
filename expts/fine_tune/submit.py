@@ -157,7 +157,7 @@ def total_steps_for(
     db: str, task: str, splits: list[str], total_bs: int, eval_freq: int
 ) -> int:
     """100 epochs of this task, or 50k steps, whichever comes first, rounded up
-    to a multiple of `eval_freq` plus one.
+    to a multiple of `eval_freq`.
 
     The two ends of the task-size range want different things: rel-f1 is a few
     thousand rows, where 100 epochs is under a thousand steps, and rel-amazon
@@ -165,13 +165,14 @@ def total_steps_for(
     Training on train+val is a bigger epoch and so a longer run -- which is why
     this reads `splits` rather than assuming the train split.
 
-    The rounding puts the last multiple of `eval_freq` one step before the end,
-    so the fully decayed weights are evaluated on the cadence rather than only
-    by the final eval `rt.train` runs on its way out.
+    The rounding keeps the end on the eval cadence: `rt.train` evaluates every
+    `eval_freq` steps and once more at the last step whatever it is, so an
+    unrounded `total_steps` puts the final point at an x no other run shares.
+    The last step is evaluated either way -- it needs no step of its own.
     """
     rows = sum(nsplit()[f"{db}/{task}"][s] for s in splits)
     steps = min(math.ceil(100 * rows / total_bs), 50_000)
-    return math.ceil(steps / eval_freq) * eval_freq + 1
+    return math.ceil(steps / eval_freq) * eval_freq
 
 
 def targets_for(db: str, task: str) -> dict[str, float]:
