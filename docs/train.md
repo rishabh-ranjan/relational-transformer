@@ -8,7 +8,8 @@ by mean validation metric.
 
 Checkpoints land in the per-run directory
 `<out-root>/<entity>/<project>/<id>/` as `steps=<N>.safetensors` (live) and
-`swa_steps=<N>.safetensors` (SWA); at the end the run copies each net's best
+`swa_steps=<N>.safetensors` (SWA, when `swa_momentum` is set); at the end the
+run copies each net's best
 classifier and regressor to `best_live_clf.safetensors` /
 `best_swa_clf.safetensors` (and the `reg` pair), plus `best_clf.safetensors` /
 `best_reg.safetensors` for whichever of the two nets won. Selection is by mean
@@ -55,6 +56,12 @@ from. `["train"]` is the usual choice; `["train", "val"]` fine-tunes on the
 validation labels too, which means `eval_splits` must drop `"val"` — a split
 that is trained on cannot select the checkpoint, and with no val metric the
 final step is what the run keeps (and `early_stop_after_steps` must be `None`).
+
+`swa_momentum` is the momentum of the running weight average kept beside the
+live net, evaluated, checkpointed and selected on in parallel with it. `None`
+turns SWA off: no second net is built, so there are no `swa_steps=` or
+`best_swa_*` files and nothing is selected on a `swa/` metric. It cannot be
+changed across a resume — the average is part of `resume.pt`.
 
 `early_stop_after_steps` ends the run early once neither the live nor the SWA
 val metric has improved on — or matched again — its best for that many steps,

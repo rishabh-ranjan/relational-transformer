@@ -226,7 +226,10 @@ def main(
     # ``None`` runs the full `total_steps`. Needs a val split in `eval_splits`;
     # with nothing selected there is nothing to stop on.
     early_stop_after_steps: int | None,
-    swa_momentum: float,
+    # Momentum of the running weight average evaluated and checkpointed beside
+    # the live net. ``None`` turns SWA off: no second net is built, evaluated
+    # or saved, and nothing is selected on a ``swa/`` metric.
+    swa_momentum: float | None,
     seed: int,
     mmap_populate: bool,
     timeout_per_item: float,
@@ -417,7 +420,10 @@ def main(
     # best (step, value) trackers, one per (task type, kind), persisted across
     # resumes: the live and the swa net are selected separately, and the
     # overall best is whichever of the two wins at the end.
-    best = {tt: {"live": None, "swa": None} for tt, _, _ in BEST_METRICS}
+    # The nets selection tracks: the live one always, the swa one when it
+    # exists. Every structure keyed by kind follows this list.
+    kinds = ["live"] + (["swa"] if swa_momentum is not None else [])
+    best = {tt: {k: None for k in kinds} for tt, _, _ in BEST_METRICS}
     # Last step at which some (task type, kind) val metric improved on or
     # matched its best. Persisted, so a resume does not restart the patience.
     improved_at = 0
@@ -438,8 +444,12 @@ def main(
     # n == 0 average is whatever `raw_net` holds at step 0, so seeding it from
     # weights the warm start is about to replace would make the step-0 swa
     # metrics those of a net that never trains.
-    swa = SwaState(raw_net.named_parameters(), momentum=swa_momentum)
-    swa_net = build_net()
+    swa = (
+        None
+        if swa_momentum is None
+        else SwaState(raw_net.named_parameters(), momentum=swa_momentum)
+    )
+    swa_net = None if swa is None else build_net()
 
     # ---- resume from preemption (GPU-count flexible: full model+opt per rank) ----
     if resume_path.exists():
@@ -449,11 +459,19 @@ def main(
             o.load_state_dict(sd)
         for s, sd in zip(scheds, ck["schedulers"], strict=True):
             s.load_state_dict(sd)
-        swa.load_state_dict(ck["swa"])
+        # A resume across a change of `swa_momentum` would carry a tracker for
+        # a net this run does not have, or drop the average this one is
+        # keeping: neither is resumable.
+        assert (ck["swa"] is None) == (swa is None), (
+            f"{resume_path} was written with swa_momentum "
+            f"{'set' if ck['swa'] is not None else 'None'}; this run has the other"
+        )
+        if swa is not None:
+            swa.load_state_dict(ck["swa"])
         start_step = ck["step"]
         best = ck["best"]
         assert all(
-            isinstance(v, dict) and set(v) == {"live", "swa"} for v in best.values()
+            isinstance(v, dict) and set(v) == set(kinds) for v in best.values()
         ), (
             f"{resume_path} carries a per-task-type best tracker; it predates "
             "per-kind selection and cannot be resumed"
@@ -693,7 +711,7 @@ def main(
                         "model": raw_net.state_dict(),
                         "optimizers": [o.state_dict() for o in opts],
                         "schedulers": [s.state_dict() for s in scheds],
-                        "swa": swa.state_dict(),
+                        "swa": None if swa is None else swa.state_dict(),
                         "step": step,
                         "best": best,
                         # Whether an eval has already been logged *at* this
@@ -720,7 +738,7 @@ def main(
             out_dir / f"steps={step}.safetensors",
             metadata={"step": step},
         )
-        if swa.n > 0:
+        if swa is not None and swa.n > 0:
             swa.sync_to(swa_net.named_parameters())
             save_model(
                 swa_net.state_dict(),
@@ -750,7 +768,9 @@ def main(
             for by_kind in best.values()
             for b in by_kind.values()
             if b is not None
-        } or {f"steps={step}.safetensors", f"swa_steps={step}.safetensors"}
+        } or {f"steps={step}.safetensors"} | (
+            set() if swa is None else {f"swa_steps={step}.safetensors"}
+        )
         for f in out_dir.glob("*steps=*.safetensors"):
             if f.name not in keep:
                 f.unlink(missing_ok=True)
@@ -760,7 +780,8 @@ def main(
 
         ``best_live_{tt}`` and ``best_swa_{tt}`` are each net's own val winner;
         ``best_{tt}`` is the better of the two, so a reader that wants one
-        checkpoint per task type has the name it always had.
+        checkpoint per task type has the name it always had. Without SWA there
+        is one net, and ``best_{tt}`` is its winner under both names.
 
         Run at every eval that improves, not only at the end: a reader that
         picks up a run still in flight needs the current winner under a stable
@@ -816,7 +837,7 @@ def main(
         # Selection is val-only: a test split may be evaluated alongside for
         # its curves, but must never pick the checkpoint. With no val split
         # configured, nothing is selected.
-        for prefix, kind in [("", "live"), ("swa/", "swa")]:
+        for prefix, kind in [(("" if k == "live" else "swa/"), k) for k in kinds]:
             if prefix not in metrics or "val" not in metrics[prefix]:
                 continue
             for tt, metric, better in BEST_METRICS:
@@ -840,11 +861,12 @@ def main(
         if not evaluators:
             return False
         nets = [(raw_net, "")]
-        # Unconditionally, including at n == 0, where the swa metrics just
-        # duplicate the live ones: every eval must run both nets, so that each
-        # one is also the memory check for the evals after it.
-        swa.sync_to(swa_net.named_parameters())
-        nets.append((swa_net, "swa/"))
+        if swa is not None:
+            # Unconditionally, including at n == 0, where the swa metrics just
+            # duplicate the live ones: every eval must run both nets, so that
+            # each one is also the memory check for the evals after it.
+            swa.sync_to(swa_net.named_parameters())
+            nets.append((swa_net, "swa/"))
         metrics = {}
         for tag, evaluator in evaluators:
             tagged_nets = [(n, tag + p) for n, p in nets]
@@ -949,7 +971,7 @@ def main(
     if evaluators:
         # First grid entry only: the others differ in context-building knobs,
         # not in the shapes the net sees.
-        evaluators[0][1].mem_guard([raw_net, swa_net])
+        evaluators[0][1].mem_guard([n for n in (raw_net, swa_net) if n is not None])
         if is_main:
             if is_cuda:
                 torch.cuda.synchronize()
@@ -1058,7 +1080,8 @@ def main(
             measure_mem = False
         for s in scheds:
             s.step()
-        swa.update(raw_net.named_parameters())
+        if swa is not None:
+            swa.update(raw_net.named_parameters())
         step += 1
 
         total_loss, stop = reduce_step_stats(total_loss)
