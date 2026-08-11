@@ -14,20 +14,20 @@ TASKS = (
     # ("rel-f1", "driver-top3"),
     # ("rel-f1", "driver-position"),
     # ("rel-trial", "study-outcome"),
-    ("rel-avito", "ad-ctr"),
-    ("rel-event", "user-attendance"),
-    ("rel-event", "user-ignore"),
-    ("rel-trial", "study-adverse"),
+    # ("rel-avito", "ad-ctr"),
+    # ("rel-event", "user-attendance"),
+    # ("rel-event", "user-ignore"),
+    # ("rel-trial", "study-adverse"),
     # ("rel-trial", "site-success"),
     # ("rel-avito", "user-visits"),
     # ("rel-avito", "user-clicks"),
     # ("rel-hm", "user-churn"),
     # ("rel-stack", "user-engagement"),
-    # ("rel-hm", "item-sales"),
+    ("rel-hm", "item-sales"),
     # ("rel-stack", "post-votes"),
     # ("rel-amazon", "item-churn"),
     # ("rel-amazon", "item-ltv"),
-    # ("rel-stack", "user-badge"),
+    ("rel-stack", "user-badge"),
     # ("rel-amazon", "user-churn"),
     # ("rel-amazon", "user-ltv"),
 )
@@ -222,9 +222,10 @@ def a100(qos: str, time: str) -> Resources:
 # A task with no line here stops the submission rather than taking a slot
 # nobody chose for it.
 #
-# 12:30: the 12 tasks that finished handed back 5 of the 10 `il` slots, so the
-# four still on `il-lo` -- preempted two and three times each -- move up. They
-# resume from `RUN_IDS` rather than starting over.
+# 12:45: `il-interactive`'s 2 gpus went back to unspent when the two b200 runs
+# finished, and blackwell1 has 3 free. They go to the two largest train sets
+# still training -- rel-hm/item-sales and rel-stack/user-badge -- which resume
+# from `RUN_IDS` onto a card that takes twice the tokens per step.
 #
 # 2026-08-11: blackwell1 has 6 of 8 b200 allocated, so exactly 2 are free and
 # the rest sit under 7-day walls -- `il-interactive`'s 2 gpus take those two and
@@ -236,11 +237,11 @@ def a100(qos: str, time: str) -> Resources:
 RESOURCES: dict[tuple[str, str], Resources] = {
     ("rel-amazon", "user-churn"): b200("il-interactive", "12:00:00"),
     ("rel-amazon", "user-ltv"): b200("il-interactive", "12:00:00"),
-    ("rel-stack", "user-badge"): a100("il", "1-00:00:00"),
+    ("rel-stack", "user-badge"): b200("il-interactive", "12:00:00"),
     ("rel-amazon", "item-ltv"): a100("il", "1-00:00:00"),
     ("rel-amazon", "item-churn"): a100("il", "1-00:00:00"),
     ("rel-stack", "post-votes"): a100("il", "1-00:00:00"),
-    ("rel-hm", "item-sales"): a100("il", "1-00:00:00"),
+    ("rel-hm", "item-sales"): b200("il-interactive", "12:00:00"),
     ("rel-stack", "user-engagement"): a100("il", "1-00:00:00"),
     ("rel-hm", "user-churn"): a100("il", "1-00:00:00"),
     ("rel-avito", "user-clicks"): a100("il", "1-00:00:00"),
@@ -261,10 +262,8 @@ RESOURCES: dict[tuple[str, str], Resources] = {
 # Resume an existing run instead of starting a new one: the run whose
 # `out_dir` this is picks its `resume.pt` back up. Empty when nothing resumes.
 RUN_IDS: dict[tuple[str, str], str] = {
-    ("rel-avito", "ad-ctr"): "26-08-11_04-08-23_757632361",
-    ("rel-event", "user-attendance"): "26-08-11_04-08-24_553959895",
-    ("rel-event", "user-ignore"): "26-08-11_04-08-25_397201156",
-    ("rel-trial", "study-adverse"): "26-08-11_04-08-26_194112533",
+    ("rel-hm", "item-sales"): "26-08-11_04-08-31_005536971",
+    ("rel-stack", "user-badge"): "26-08-11_04-08-34_223077465",
 }
 
 
