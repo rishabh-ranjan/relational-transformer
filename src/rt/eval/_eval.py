@@ -154,10 +154,10 @@ def main(
     use_wandb = (not wandb_disabled) and global_rank == 0
     if use_wandb:
         # One wandb run per *attempt*, grouped under the run_id, as in
-        # ``rt.train``. An eval run does not checkpoint, so an attempt that is
-        # preempted replays the whole curve from ensemble size 1; a fresh
-        # wandb id per attempt is what keeps those from colliding on a step
-        # axis that only ever increases.
+        # ``rt.train``. An attempt resumes the ensemble where the last one
+        # stopped, so its curve starts at the seed it picked up from rather
+        # than at size 1; a fresh wandb id per attempt is what keeps the
+        # segments from colliding on a step axis that only ever increases.
         job = os.environ.get("SLURM_JOB_ID")
         attempt = (
             f"{job}.{os.environ.get('SLURM_RESTART_COUNT', '0')}"
@@ -296,6 +296,7 @@ def main(
             test_ensemble_size=test_ensemble_size,
             tune_only=tune_only,
             tuning_out_path=csv_out_dir.parent / "tuning.json",
+            resume_path=csv_out_dir.parent / "ensemble_resume.pt",
             csv_out_dir=csv_out_dir,
             targets=targets,
             use_wandb=use_wandb,
@@ -514,6 +515,7 @@ def run_ensemble(
     test_ensemble_size,
     tune_only,
     tuning_out_path,
+    resume_path,
     csv_out_dir,
     targets,
     use_wandb,
@@ -541,6 +543,12 @@ def run_ensemble(
     usually ranks the configs the same, while matching them scores a config on
     the quantity it will be used at.
 
+    Both phases resume: state is written to ``resume_path`` after every pass
+    that completes -- each tuning configuration, each ensemble seed -- and a
+    later attempt picks up the scores and the running prediction sums rather
+    than starting the sweep over. Preemption therefore costs one pass, so an
+    eval job is safe on a preemptible queue.
+
     Tuning writes every cfg's val score, and the winner per task, to
     ``tuning_out_path``. With ``tune_only`` the run stops there and never reads
     test: a later run evaluates the winner it recorded.
@@ -555,19 +563,70 @@ def run_ensemble(
     ddp = eval_kwargs.get("ddp", False)
     is_main = eval_kwargs.get("global_rank", 0) == 0
 
+    # A pass is minutes to hours and there are `len(grid) + test_ensemble_size`
+    # of them, so a preempted attempt that started over would lose the lot.
+    # State is written after every pass that completes and read back at entry:
+    # what a resumed attempt skips is what it already has scored.
+    #
+    # Read on every rank, written on rank 0 alone. The skip counts come out of
+    # the same file, so the ranks walk the same pass sequence and their
+    # collectives still line up.
+    resume_path = Path(resume_path).expanduser()
+    guard = [
+        sorted(grid),
+        sorted(ctx_sizes),
+        val_items,
+        test_items,
+        context_seed,
+        val_ensemble_size,
+        test_ensemble_size,
+        tune_only,
+        sorted(f"{t.db_name}/{t.table_name}" for t in (test_tasks or [])),
+    ]
+    state = {}
+    if resume_path.exists():
+        state = torch.load(resume_path, weights_only=False)
+        # A state file from a different evaluation is not something to work
+        # around: it means this run_id was reused with the knobs changed.
+        assert state["guard"] == guard, (
+            f"{resume_path} was written by a different evaluation; "
+            "delete it or use a fresh run_id"
+        )
+        log(
+            resumed_from=str(resume_path),
+            tuned=len((state.get("tune") or {"done": []})["done"]),
+            seeds=(state.get("test") or {"seeds": 0})["seeds"],
+        )
+
+    def save_state(phase):
+        if not is_main:
+            return
+        resume_path.parent.mkdir(parents=True, exist_ok=True)
+        tmp = resume_path.with_suffix(f".{os.getpid()}.tmp")
+        try:
+            torch.save({"guard": guard, **phase}, tmp)
+            os.replace(tmp, resume_path)
+        except BaseException:
+            tmp.unlink(missing_ok=True)
+            raise
+
     cfgs = [(c, lcs, bw, pl) for lcs, bw, pl in grid for c in ctx_sizes if lcs <= c]
     if len(cfgs) == 1:
         assert val_tasks is None, "one configuration tunes nothing; pass val_tasks=None"
         best = {(t.db_name, t.table_name): {"cfg": cfgs[0]} for t in test_tasks}
     else:
         # ---- tune on val: best context config per task ----
-        best = {}  # (db, table) -> {"cfg", "value", "task_type"}
-        scores = defaultdict(dict)  # (db, table) -> str(cfg) -> value
-        tuned = []  # one row per scored configuration, for the wandb table
+        tune = state.get("tune") or {"best": {}, "scores": {}, "tuned": [], "done": []}
+        best = tune["best"]  # (db, table) -> {"cfg", "value", "task_type"}
+        scores = defaultdict(dict, tune["scores"])  # (db, table) -> str(cfg) -> value
+        tuned = tune["tuned"]  # one row per scored configuration, for the wandb table
         for lcs, bw, pl in grid:
             # Every ctx size this entry can serve, in one pass.
             ctxs = [c for c in ctx_sizes if lcs <= c]
             if not ctxs:
+                continue
+            # Scored by an earlier attempt: its scores are in `tune`.
+            if [lcs, bw, pl] in tune["done"]:
                 continue
             # Each configuration is scored on the average over its own seeds,
             # so it is picked on the quantity it will be used at -- as long as
@@ -639,6 +698,9 @@ def run_ensemble(
                             },
                         }
                     )
+            tune["done"].append([lcs, bw, pl])
+            state["tune"] = {**tune, "scores": dict(scores)}
+            save_state({"tune": state["tune"]})
 
         # Only rank 0 saw the tuning metrics, so only it writes them and only
         # it knows the winning configs. Every rank must group the test tasks
@@ -698,8 +760,18 @@ def run_ensemble(
     csv_out_dir = None if csv_out_dir is None else Path(csv_out_dir).expanduser()
     # size -> metric -> per-task values, so the mean curve is logged per size
     # too; `results` is the full ensemble, the run's headline number.
-    curve: dict[int, dict[str, list[float]]] = defaultdict(lambda: defaultdict(list))
-    results = {}
+    test = state.get("test") or {
+        "group": 0,
+        "seeds": 0,
+        "acc": {},
+        "curve": {},
+        "results": {},
+    }
+    curve: dict[int, dict[str, list[float]]] = defaultdict(
+        lambda: defaultdict(list),
+        {k: defaultdict(list, v) for k, v in test["curve"].items()},
+    )
+    results = test["results"]
     if is_main:
         log(eval_mode="ensembled", configs=len(groups))
     # Each group replays the same 1..N sizes, and wandb's step axis only ever
@@ -707,10 +779,24 @@ def run_ensemble(
     assert not use_wandb or len(groups) == 1, (
         "wandb logging needs one context config across the run's tasks"
     )
-    for (lcs, bw, pl), tasks in groups.items():
+    for gi, ((lcs, bw, pl), tasks) in enumerate(groups.items()):
+        # Groups before the one the last attempt was on are done, and the one
+        # it was on keeps the seeds it had already summed.
+        if gi < test["group"]:
+            continue
         ctxs = sorted({won_ctx[t.db_name, t.table_name] for t in tasks})
-        acc = {}  # key -> [labels, sum_preds, task, node_idxs]
-        for seed in range(test_ensemble_size):
+        # key -> [labels, sum_preds, task, node_idxs]; `task` is rebuilt here
+        # rather than carried in the state file, so only arrays are persisted.
+        acc = {
+            k: [
+                labels,
+                sp,
+                next(t for t in tasks if (t.db_name, t.table_name) == k),
+                ni,
+            ]
+            for k, (labels, sp, ni) in test["acc"].items()
+        }
+        for seed in range(test["seeds"], test_ensemble_size):
             ev = build_evaluator(
                 tasks,
                 pre_dir,
@@ -792,6 +878,19 @@ def run_ensemble(
                 # the curve is measured against.
                 logged.update({f"target/{k}": v for k, v in targets.items()})
                 wandb.log(logged)
+            save_state(
+                {
+                    "tune": state.get("tune"),
+                    "test": {
+                        "group": gi,
+                        "seeds": size,
+                        "acc": {k: [v[0], v[1], v[3]] for k, v in acc.items()},
+                        "curve": {k: dict(v) for k, v in curve.items()},
+                        "results": results,
+                    },
+                }
+            )
+        test = {"group": gi + 1, "seeds": 0, "acc": {}, "curve": {}, "results": results}
     if not is_main:
         return results
     for size in sorted(curve):

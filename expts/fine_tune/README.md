@@ -67,6 +67,10 @@ running average after each seed, so a log carries the test metric at every
 ensemble size, not just the last, logged against `ens_size` with the task's
 published target beside the curve.
 
+Preemption costs one pass, not the job: `rt.eval` writes `ensemble_resume.pt`
+beside `eval_out` after every tuning configuration and every ensemble seed, and
+a requeued attempt picks the sums back up. `il-lo` is safe for these.
+
 Rerun it as fine-tuning runs land: a task with no checkpoint yet is skipped,
 and one whose job is already queued is not sent twice. The weights each job
 loads are copied to `fine-tune-pinned` first, out of reach of the training run

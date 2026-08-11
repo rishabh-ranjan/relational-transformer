@@ -26,7 +26,8 @@ paper needs, and hpo_ens only says how much tuning would add on top.
 One config block for both: `main()` loops the two arm names over a single
 `args` dict, and the four values the arms disagree on -- the context grid, the
 val cap and the ensemble size -- sit inline at the arguments that take them.
-An arm's wandb project, job name and log directory follow from its name.
+An arm's job name, log directory and wandb run name follow from its name; both
+arms log to one project, so the two curves for a task sit in the same panel.
 """
 
 import functools
@@ -192,7 +193,9 @@ def main() -> None:
     for arm in ("ens_only", "hpo_ens"):
         for db, task in ready(arm):
             resources = RESOURCES[arm, db, task]
-            name = f"{db}/{task}"
+            # The arm is in the run name, not just the job name: both arms log
+            # to one project, and `workspace.py` groups its panels by run name.
+            name = f"{arm}/{db}/{task}"
             print(
                 f"  {arm:8s} {name:28s} "
                 f"{resources.gpus} {resources.qos:15s} {resources.time}"
