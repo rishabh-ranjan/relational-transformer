@@ -288,7 +288,7 @@ def main() -> None:
                 load_ckpt_path=ckpt_for(db, task),
                 db_task_list=[(db, task)],
                 pre_dir="/dfs/user/ranjanr/share/stanford-star/relbench-preprocessed",
-                tokens_per_gpu=2**17 if resources.gpus.startswith("b200") else 2**16,
+                tokens_per_gpu=2**18 if resources.gpus.startswith("b200") else 2**17,
                 num_workers=resources.cpus_per_task,
                 prefetch_factor=2,
                 ctx_size_list=[256, 512, 1024],
