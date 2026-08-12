@@ -35,13 +35,37 @@ SHARE = "/dfs/user/ranjanr/share/relarena"
 # read on every context build.
 CACHE_DIR = "/tmp/ranjanr/relarena-cache"
 
+# rt-norefit over the same 21 tasks: the reporting arm reports the selection
+# arm's checkpoint instead of retraining on train+val, so the pair isolates what
+# the refit is worth. Ordered by what the `rt` sweep measured, minus its refit
+# term, fastest first -- so the answers land in that order and a card freed
+# early takes the next job.
 EXPERIMENTS = tuple(
-    ("rt", db, task)
+    ("rt-norefit", db, task)
     for db, task in (
-        # A promotion. rel-event/user-attendance finished on its b200 in 23
-        # minutes and gave the card back, so the one job still pending on
-        # `il-lo` takes it rather than waiting behind eighteen of my own.
-        ("rel-avito", "user-visits"),
+        # measured `rt` fit_tuning + predict, in minutes
+        ("rel-avito", "ad-ctr"),            # 21
+        ("rel-event", "user-attendance"),   # 23
+        ("rel-avito", "user-visits"),       # 31
+        ("rel-trial", "study-outcome"),     # 35
+        ("rel-f1", "driver-position"),      # 35
+        ("rel-event", "user-repeat"),       # 39
+        ("rel-f1", "driver-top3"),          # 44
+        ("rel-trial", "site-success"),      # 75
+        ("rel-f1", "driver-dnf"),           # 80
+        ("rel-event", "user-ignore"),       # 81
+        ("rel-avito", "user-clicks"),       # 95
+        ("rel-stack", "post-votes"),        # 138
+        ("rel-hm", "user-churn"),           # 194
+        # still running under `rt`, so unmeasured -- ordered by database size.
+        ("rel-trial", "study-adverse"),
+        ("rel-hm", "item-sales"),
+        ("rel-stack", "user-engagement"),
+        ("rel-stack", "user-badge"),
+        ("rel-amazon", "item-churn"),
+        ("rel-amazon", "item-ltv"),
+        ("rel-amazon", "user-churn"),
+        ("rel-amazon", "user-ltv"),
     )
 )
 
@@ -138,55 +162,49 @@ def a100(qos: str, time: str) -> Resources:
     )
 
 
-# One line per experiment, worked out against the cluster at 07:05.
+# One line per experiment, worked out against the cluster at 13:30.
 #
-# Held already: three `il` a100 (129999 and the two cutoff probes), so 7 of
-# `il`'s 10 are free and both `il-interactive` slots are.
+# Held: 7 `il` and 1 `il-lo` from the `rt` sweep still finishing, so 3 of `il`'s
+# ten are free and both `il-interactive` slots are. blackwell1 reads 3 of 8 b200
+# allocated and is MIXED, not RESERVED -- five cards free, which is the most
+# there has been all day.
 #
-# blackwell1 reads 6/8 b200 allocated and is MIXED, not RESERVED, so the two
-# free cards are takeable. The b200 jobs currently running have 20h, 1d and 1d
-# limits with an hour to six elapsed, so waiting for a third card is a day away
-# -- the other high-tier work goes on amperes rather than queue for one.
+# `ranjanr_deadline` holds ampere8 until 2026-08-13T00:00, 10.5 hours out, with
+# 7 of its 8 cards free. Those take `il-lo` and a 10-hour wall, so nothing there
+# can outlive the reservation.
 #
-# `ranjanr_deadline` holds all 8 of ampere8 until 2026-08-13T00:00, ~17h out.
-# Those cards are ours whatever tier asks, so they take `il-lo` and the wall
-# stays inside the reservation.
-#
-# Sizing: the selection arm is a flat 10k steps (~4.5h on an a100 at the 1.6
-# s/step measured, less on a b200), early stopping usually ends it sooner; the
-# refit adds the chosen step scaled by the row ratio; and the 8-seed test
-# prediction scales with the test split, which is what makes the big tasks
-# long. So the largest tasks take `il`'s 7-day wall and the smallest take the
-# reservation.
+# The high tiers go to the *slowest* jobs, not the fastest: a b200 saves more
+# wall clock on a three-hour run than on a twenty-minute one, and the short jobs
+# finish anywhere.
 RESOURCES: dict[tuple[str, str, str], Resources] = {
-    # il-interactive (2, 12h wall): the two free b200. Medium tasks, so the
-    # 12-hour cap is not the thing that ends them.
-    ("rt", "rel-avito", "ad-ctr"): b200("il-interactive", "12:00:00"),
-    ("rt", "rel-event", "user-attendance"): b200("il-interactive", "12:00:00"),
-    # il (7 free of 10, 7d wall): the seven biggest, where a long wall matters
-    # most -- their test splits are millions of rows and the ensemble is 8 of
-    # them.
-    ("rt", "rel-amazon", "user-churn"): a100("il", "2-00:00:00"),
-    ("rt", "rel-amazon", "user-ltv"): a100("il", "2-00:00:00"),
-    ("rt", "rel-amazon", "item-churn"): a100("il", "2-00:00:00"),
-    ("rt", "rel-amazon", "item-ltv"): a100("il", "2-00:00:00"),
-    ("rt", "rel-stack", "user-badge"): a100("il", "2-00:00:00"),
-    ("rt", "rel-hm", "user-churn"): a100("il", "2-00:00:00"),
-    ("rt", "rel-hm", "item-sales"): a100("il", "2-00:00:00"),
-    # il-lo on the reservation (8 cards, ours, nothing preempts): the eight
-    # smallest, walled inside the reservation's end.
-    ("rt", "rel-f1", "driver-dnf"): reserved("12:00:00"),
-    ("rt", "rel-f1", "driver-position"): reserved("12:00:00"),
-    ("rt", "rel-event", "user-repeat"): reserved("12:00:00"),
-    ("rt", "rel-event", "user-ignore"): reserved("12:00:00"),
-    ("rt", "rel-trial", "study-outcome"): reserved("12:00:00"),
-    ("rt", "rel-trial", "study-adverse"): reserved("12:00:00"),
-    ("rt", "rel-trial", "site-success"): reserved("12:00:00"),
-    ("rt", "rel-avito", "user-clicks"): reserved("12:00:00"),
-    # il-lo in the general pool: preemptible, and these three resume.
-    ("rt", "rel-avito", "user-visits"): b200("il-interactive", "12:00:00"),
-    ("rt", "rel-stack", "user-engagement"): a100("il", "2-00:00:00"),
-    ("rt", "rel-stack", "post-votes"): a100("il", "2-00:00:00"),
+    # il-interactive: the two slowest measured, on b200.
+    ("rt-norefit", "rel-hm", "user-churn"): b200("il-interactive", "12:00:00"),
+    ("rt-norefit", "rel-stack", "post-votes"): b200("il-interactive", "12:00:00"),
+    # il's three free slots: the three next slowest.
+    ("rt-norefit", "rel-avito", "user-clicks"): a100("il", "1-00:00:00"),
+    ("rt-norefit", "rel-event", "user-ignore"): a100("il", "1-00:00:00"),
+    ("rt-norefit", "rel-f1", "driver-dnf"): a100("il", "1-00:00:00"),
+    # The reservation's seven free cards: the seven fastest, all well inside a
+    # 10-hour wall and so inside the reservation.
+    ("rt-norefit", "rel-avito", "ad-ctr"): reserved("10:00:00"),
+    ("rt-norefit", "rel-event", "user-attendance"): reserved("10:00:00"),
+    ("rt-norefit", "rel-avito", "user-visits"): reserved("10:00:00"),
+    ("rt-norefit", "rel-trial", "study-outcome"): reserved("10:00:00"),
+    ("rt-norefit", "rel-f1", "driver-position"): reserved("10:00:00"),
+    ("rt-norefit", "rel-event", "user-repeat"): reserved("10:00:00"),
+    ("rt-norefit", "rel-f1", "driver-top3"): reserved("10:00:00"),
+    # Everything else on the uncapped tier. The rel-amazon four pay ~5h of
+    # preprocessing before a gradient step (see models/rt/export.py), so they
+    # get the long wall.
+    ("rt-norefit", "rel-trial", "site-success"): a100("il-lo", "1-00:00:00"),
+    ("rt-norefit", "rel-trial", "study-adverse"): a100("il-lo", "1-00:00:00"),
+    ("rt-norefit", "rel-hm", "item-sales"): a100("il-lo", "2-00:00:00"),
+    ("rt-norefit", "rel-stack", "user-engagement"): a100("il-lo", "2-00:00:00"),
+    ("rt-norefit", "rel-stack", "user-badge"): a100("il-lo", "2-00:00:00"),
+    ("rt-norefit", "rel-amazon", "item-churn"): a100("il-lo", "2-00:00:00"),
+    ("rt-norefit", "rel-amazon", "item-ltv"): a100("il-lo", "2-00:00:00"),
+    ("rt-norefit", "rel-amazon", "user-churn"): a100("il-lo", "2-00:00:00"),
+    ("rt-norefit", "rel-amazon", "user-ltv"): a100("il-lo", "2-00:00:00"),
 }
 
 ZERO_SHOT_RESOURCES: dict[tuple[str, str], Resources] = {
