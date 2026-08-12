@@ -338,11 +338,11 @@ RESOURCES: dict[tuple[str, str], Resources] = {
     ("rel-event", "user-attendance"): a100("il-lo", "8:00:00", "ranjanr_deadline"),
     ("rel-event", "user-ignore"): a100("il", "8:00:00"),
     ("rel-trial", "study-outcome"): a100("il", "8:00:00"),
-    ("rel-f1", "driver-dnf"): a100("il", "8:00:00"),
+    ("rel-f1", "driver-dnf"): a100("il-lo", "8:00:00", "ranjanr_deadline"),
     ("rel-f1", "driver-position"): a100("il-lo", "8:00:00", "ranjanr_deadline"),
-    ("rel-avito", "ad-ctr"): a100("il", "8:00:00"),
-    ("rel-event", "user-repeat"): a100("il", "8:00:00"),
-    ("rel-f1", "driver-top3"): a100("il", "8:00:00"),
+    ("rel-avito", "ad-ctr"): a100("il-lo", "8:00:00", "ranjanr_deadline"),
+    ("rel-event", "user-repeat"): b200("il-interactive", "8:00:00"),
+    ("rel-f1", "driver-top3"): b200("il-interactive", "8:00:00"),
 }
 
 
@@ -362,8 +362,8 @@ def main() -> None:
     # length's in the same project -- the comparison is one panel per task with
     # a group per epoch budget.
     # epochs, total_bs, lr, opt, tag = 50, 256, 5e-4, "muon", "-bs256-lr5e-4"
-    epochs, total_bs, lr, opt, tag = 50, 256, 1e-3, "muon", "-bs256-lr1e-3"
-    # epochs, total_bs, lr, opt, tag = 50, 512, 1e-3, "muon", "-bs512-lr1e-3"
+    # epochs, total_bs, lr, opt, tag = 50, 256, 1e-3, "muon", "-bs256-lr1e-3"
+    epochs, total_bs, lr, opt, tag = 50, 512, 1e-3, "muon", "-bs512-lr1e-3"
     # Shortest run first, so the fastest answers land first. The step budget,
     # not the test split: what a job costs here is overwhelmingly its training.
     for db, task in sorted(
