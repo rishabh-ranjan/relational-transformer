@@ -133,20 +133,20 @@ def nsplit() -> dict[str, dict[str, float]]:
     }
 
 
-def steps_for(db: str, task: str, splits: list[str], total_bs: int, epochs: int) -> int:
-    """`epochs` passes over this task, or 50k steps, whichever comes first.
+def steps_for(
+    db: str, task: str, splits: list[str], total_bs: int, epochs: int, cap: int
+) -> int:
+    """`epochs` passes over this task, or `cap` steps, whichever comes first.
 
     The two ends of the task-size range want different things: rel-f1 is a few
-    thousand rows, where 100 epochs is under a thousand steps, and rel-amazon
-    is millions, where 100 epochs is more compute than the answer is worth.
-    Training on train+val is a bigger epoch and so a longer run -- which is why
-    this reads `splits` rather than assuming the train split.
-
-    The step budget, not `total_steps`: the caller rounds it up to the eval
-    cadence it picks.
+    thousand rows, where a hundred epochs is a few hundred steps, and
+    rel-amazon is millions, where the same hundred is more compute than the
+    answer is worth -- which is what `cap` is for. Training on train+val is a
+    bigger epoch and so a longer run, which is why this reads `splits` rather
+    than assuming the train split.
     """
     rows = sum(nsplit()[f"{db}/{task}"][s] for s in splits)
-    return min(math.ceil(epochs * rows / total_bs), 50_000)
+    return min(math.ceil(epochs * rows / total_bs), cap)
 
 
 def targets_for(db: str, task: str) -> dict[str, float]:
@@ -303,12 +303,14 @@ def main() -> None:
     ):
         resources = RESOURCES[db, task]
         name = f"{db}/{task}"
-        # The two values the call below needs twice: the splits decide what an
-        # epoch is, the batch decides how many steps it takes. Everything else
-        # is written where it is passed.
+        # The two the call below needs twice -- the splits decide what an epoch
+        # is, the batch how many steps it takes -- and the budget they feed.
+        # Every other value is written in the argument that takes it.
         train_splits = ["train", "val"]
         total_bs = 512
-        total_steps = steps_for(db, task, train_splits, total_bs, epochs=100)
+        total_steps = steps_for(
+            db, task, train_splits, total_bs, epochs=100, cap=50_000
+        )
         print(f"  {name:38s} {resources.gpus} {resources.qos:15s} {resources.time}")
         submit(
             "rt.train:main",
