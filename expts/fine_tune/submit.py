@@ -4,7 +4,8 @@ What this arm is, in the values below rather than in prose elsewhere -- it
 changes every submission, and a description that lives in another file goes
 stale the moment one of these does:
 
-- warm-started from RT-P (`ckpt_for`), one head per task type;
+- warm-started from the release the arm names (`ckpt_for`), one head per task
+  type;
 - **fixed** eval context, not stochastic: the `*_list` knobs are single-valued,
   and `eval_lcs_bw_pl_grid` is the same configuration, so the curve measures
   what the model is trained under;
@@ -28,10 +29,10 @@ HERE = Path(__file__).parent
 TASKS = (
     # ("rel-event", "user-repeat"),
     # ("rel-f1", "driver-dnf"),
-    # ("rel-f1", "driver-top3"),
+    ("rel-f1", "driver-top3"),
     # ("rel-f1", "driver-position"),
     # ("rel-trial", "study-outcome"),
-    ("rel-avito", "ad-ctr"),
+    # ("rel-avito", "ad-ctr"),
     # ("rel-event", "user-attendance"),
     # ("rel-event", "user-ignore"),
     # ("rel-trial", "study-adverse"),
@@ -172,15 +173,16 @@ def task_type_for(db: str, task: str) -> str:
     return task_type
 
 
-def ckpt_for(db: str, task: str) -> str:
-    """The RT-P weights this task warm-starts from.
+def ckpt_for(db: str, task: str, release: str) -> str:
+    """The published weights this task warm-starts from, RT-P or RT-J.
 
     One head per task type, each in its own subdirectory, so which one a run
     loads follows from the task's `task_type`. A local mirror rather than
-    `stanford-star/rt-p`: a compute node has no Hub access.
+    `stanford-star/rt-{p,j}`: a compute node has no Hub access. Refresh either
+    with `huggingface_hub.snapshot_download("stanford-star/rt-j", local_dir=...)`.
     """
     sub = {"BINARY_CLASSIFICATION": "classification", "REGRESSION": "regression"}
-    return f"/dfs/user/ranjanr/share/stanford-star/rt-p/{sub[task_type_for(db, task)]}"
+    return f"/dfs/user/ranjanr/share/stanford-star/{release}/{sub[task_type_for(db, task)]}"
 
 
 def loss_fn_for(db: str, task: str) -> str:
@@ -253,6 +255,9 @@ def a100(
 # A task with no line here stops the submission rather than taking a slot
 # nobody chose for it.
 RESOURCES: dict[tuple[str, str], Resources] = {
+    # 22:00: RT-J instead of RT-P, base config, no masking. The mirror is
+    # `/dfs/user/ranjanr/share/stanford-star/rt-j`, fetched from the login node.
+    #
     # 21:50: `num_walks` is 0 from here on, train and eval alike -- so nothing
     # submitted before this is comparable, and the masking arm needs its own
     # unmasked control at the same setting. Both go out together.
@@ -354,7 +359,7 @@ RESOURCES: dict[tuple[str, str], Resources] = {
     ("rel-f1", "driver-position"): a100("il", "8:00:00"),
     ("rel-avito", "ad-ctr"): a100("il", "8:00:00"),
     ("rel-event", "user-repeat"): a100("il-lo", "8:00:00", "ranjanr_deadline"),
-    ("rel-f1", "driver-top3"): a100("il-interactive", "8:00:00"),
+    ("rel-f1", "driver-top3"): a100("il", "8:00:00"),
 }
 
 
@@ -374,13 +379,14 @@ def main() -> None:
     # length's in the same project -- the comparison is one panel per task with
     # a group per epoch budget.
     # fmt: off
-    # epochs, total_bs, lr, opt, ctx, mask, tag = 50, 256, 5e-4, "muon", 1024, 0.1, "-nw0-mask0.1"  # noqa: E501
-    epochs, total_bs, lr, opt, ctx, mask, tag = 50, 256, 5e-4, "muon", 1024, 0.0, "-nw0"
+    epochs, total_bs, lr, opt, ctx, mask, release, tag = 50, 256, 5e-4, "muon", 1024, 0.0, "rt-j", "-nw0-rtj"  # noqa: E501
+    # epochs, total_bs, lr, opt, ctx, mask, release, tag = 50, 256, 5e-4, "muon", 1024, 0.0, "rt-p", "-nw0"  # noqa: E501
+    # epochs, total_bs, lr, opt, ctx, mask, release, tag = 50, 256, 5e-4, "muon", 1024, 0.1, "rt-p", "-nw0-mask0.1"  # noqa: E501
     # fmt: on
-    # epochs, total_bs, lr, opt, ctx, mask, tag = 50, 256, 5e-4, "muon", 1024, 0.0, ""
-    # epochs, total_bs, lr, opt, ctx, mask, tag = 50, 256, 1e-3, "muon", 1024, 0.0, "-bs256-lr1e-3"
-    # epochs, total_bs, lr, opt, ctx, mask, tag = 50, 512, 1e-3, "muon", 1024, 0.0, "-bs512-lr1e-3"
-    # epochs, total_bs, lr, opt, ctx, mask, tag = 50, 256, 5e-4, "muon", 512, 0.0, "-ctx512"
+    # epochs, total_bs, lr, opt, ctx, mask, release, tag = 50, 256, 5e-4, "muon", 1024, 0.0, "rt-p", ""
+    # epochs, total_bs, lr, opt, ctx, mask, release, tag = 50, 256, 1e-3, "muon", 1024, 0.0, "rt-p", "-bs256-lr1e-3"
+    # epochs, total_bs, lr, opt, ctx, mask, release, tag = 50, 512, 1e-3, "muon", 1024, 0.0, "rt-p", "-bs512-lr1e-3"
+    # epochs, total_bs, lr, opt, ctx, mask, release, tag = 50, 256, 5e-4, "muon", 512, 0.0, "rt-p", "-ctx512"
     # Shortest run first, so the fastest answers land first. The step budget,
     # not the test split: what a job costs here is overwhelmingly its training.
     for db, task in sorted(
@@ -415,7 +421,7 @@ def main() -> None:
                 compile=True,
                 materialize_attn_masks=True,
                 loss_fn=loss_fn_for(db, task),
-                load_ckpt_path=ckpt_for(db, task),
+                load_ckpt_path=ckpt_for(db, task, release),
                 db_task_list=[(db, task)],
                 train_splits=train_splits,
                 pre_dir="/dfs/user/ranjanr/share/stanford-star/relbench-preprocessed",
