@@ -41,12 +41,12 @@ EXPERIMENTS = ()
 #: and no selection arm (see zero_shot.py). Not protocol runs -- a shortcut for
 #: reading a checkpoint's number on a task.
 ZERO_SHOT = (
-    # (dataset, task, split, quote_train_only)
-    # val at quote_train_only=False is the control: it is what rt.train's own
-    # in-loop evaluator scores, so agreeing with its number says the export,
-    # the context build, the node-index join and the denormalization are right.
-    ("rel-f1", "driver-top3", "val", False),
-    ("rel-f1", "driver-top3", "val", True),
+    # (dataset, task, split, quote_train_only, mask_labels)
+    # The last difference between a val prediction and a test one: RelArena
+    # hands `predict` a val table that still carries its own labels, and a test
+    # table with them stripped. val at mask_labels=True is val scored the way
+    # test is.
+    ("rel-f1", "driver-top3", "val", True, True),
 )
 
 
@@ -101,7 +101,7 @@ RUN_IDS: dict[tuple[str, str, str], str] = {}
 
 
 def main() -> None:
-    for dataset, task, split, quote_train_only in ZERO_SHOT:
+    for dataset, task, split, quote_train_only, mask_labels in ZERO_SHOT:
         resources = ZERO_SHOT_RESOURCES[dataset, task]
         print(
             f"  zero-shot/{dataset}/{task}/{split} "
@@ -114,11 +114,12 @@ def main() -> None:
                 task=task,
                 split=split,
                 quote_train_only=quote_train_only,
+                mask_labels=mask_labels,
                 cache_dir=CACHE_DIR,
                 out_dir=f"{SHARE}/results",
             ),
             resources=resources,
-            name=f"relarena-zero-shot-{dataset}-{task}-{split}-{quote_train_only}",
+            name=f"relarena-zero-shot-{dataset}-{task}-{split}-masked{mask_labels}",
             setup=relarena_setup(),
             repo_root=REPO_ROOT,
             log_root=f"{SHARE}/slurm-logs",

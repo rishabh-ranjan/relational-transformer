@@ -39,6 +39,7 @@ def main(
     task: str,
     split: str,
     quote_train_only: bool,
+    mask_labels: bool,
     cache_dir: str,
     out_dir: str,
     run_id: str,
@@ -56,6 +57,13 @@ def main(
     labelled rows of the split being scored. `rt.train`'s in-loop eval quotes
     them (it passes `False`), so reproducing its number needs `False` too; a
     benchmark prediction needs `True`.
+
+    `mask_labels` drops the target column from the table handed to `predict`,
+    so the export writes the same constant placeholder it writes for test. It
+    is the last difference between the two splits: RelArena's `InnerSplit` sets
+    `eval_table=eval_target=val_table`, so a val prediction is handed a table
+    that still carries its own answers, while the test table is masked. Whether
+    that matters is exactly what this flag measures.
     """
     import pandas as pd
 
@@ -83,6 +91,15 @@ def main(
         chosen = source.inner_split()
         train_table = chosen.train_table
         eval_table, target_table = chosen.eval_table, chosen.eval_target
+        if mask_labels:
+            from relbench.base import Table
+
+            eval_table = Table(
+                df=eval_table.df.drop(columns=[source.task.target_col]),
+                fkey_col_to_pkey_table=eval_table.fkey_col_to_pkey_table,
+                pkey_col=eval_table.pkey_col,
+                time_col=eval_table.time_col,
+            )
     else:
         raise ValueError(f"split must be 'test' or 'val'; got {split!r}")
     train_union = train_table
@@ -102,7 +119,7 @@ def main(
 
     print(
         f"+ zero-shot {model._checkpoint} on {dataset}/{task} {split} "
-        f"(quote_train_only={quote_train_only})",
+        f"(quote_train_only={quote_train_only}, mask_labels={mask_labels})",
         flush=True,
     )
     _patch_quoting(quote_train_only)
@@ -122,6 +139,7 @@ def main(
                 "task": task,
                 "split": split,
                 "quote_train_only": quote_train_only,
+                "mask_labels": mask_labels,
                 **scores,
             }
         ]
