@@ -4,10 +4,10 @@ The config, in the values below rather than in prose elsewhere -- it changes
 every submission, and a description that lives in another file goes stale the
 moment one of these does:
 
-- **delta fine-tuning from RT-J**: the published weights are what decay pulls
+- **delta fine-tuning from RT-P**: the published weights are what decay pulls
   back to, and the update is the ordinary one (see `rt.train`'s
   `delta_finetune`);
-- 2000 steps at batch 256, lr 5e-4 held constant -- no warmup, no decay -- and
+- 50k steps at batch 256, lr 5e-4 held constant -- no warmup, no decay -- and
   weight decay 0.1, Muon;
 - a **fixed** context: ctx and local ctx 1024, bfs width 128, prefer-latest
   off, no walks, and the eval grid the same one. No token masking;
@@ -15,11 +15,13 @@ moment one of these does:
   timestamp, so the model stands in the same relation to its labels that
   inference does. Nothing selects a checkpoint: the run keeps its last step
   (`latest.safetensors`);
-- **equal-weight SWA** (`swa_momentum=1.0`, an fp32 running mean over every
-  step), evaluated and saved beside the live net, standing in for a decay;
+- **EMA of the weights** (`swa_momentum=0.9995`, an fp32 running average with
+  a ~2k-step horizon), evaluated and saved beside the live net, standing in for
+  a decay;
 - every eval is a **4-seed context ensemble** (`eval_ensemble_size`), live net
   and SWA net alike, so the logged test curves are ensembled numbers;
-- ten evals a run, and no early stopping: the budget is the budget.
+- an eval every 5k steps -- eleven over the run -- and no early stopping: the
+  budget is the budget.
 """
 
 import functools
@@ -256,9 +258,6 @@ def main() -> None:
     for db, task in TASKS:
         resources = RESOURCES[db, task]
         name = f"{db}/{task}"
-        # The one value the call below needs twice: `eval_freq` is a tenth of
-        # it. Every other value is written in the argument that takes it.
-        total_steps = 2_000
         print(f"  {name:38s} {resources.gpus} {resources.qos:15s} {resources.time}")
         submit(
             "rt.train:main",
@@ -274,7 +273,7 @@ def main() -> None:
                 compile=True,
                 materialize_attn_masks=True,
                 loss_fn=loss_fn_for(db, task),
-                load_ckpt_path=ckpt_for(db, task, "rt-j"),
+                load_ckpt_path=ckpt_for(db, task, "rt-p"),
                 db_task_list=[(db, task)],
                 train_splits=["train", "val"],
                 pre_dir="/dfs/user/ranjanr/share/stanford-star/relbench-preprocessed",
@@ -297,13 +296,13 @@ def main() -> None:
                 lr_decay_steps=0,
                 grad_norm_max=1.0,
                 total_bs=256,
-                total_steps=total_steps,
+                total_steps=50_000,
                 early_stop_after_steps=None,
-                swa_momentum=1.0,
+                swa_momentum=0.9995,
                 seed=0,
                 mmap_populate=True,
                 timeout_per_item=10.0,
-                eval_freq=max(1, total_steps // 10),
+                eval_freq=5_000,
                 keep_all_ckpts=False,
                 vector_db_path=None,
                 db_cutoff="test",
