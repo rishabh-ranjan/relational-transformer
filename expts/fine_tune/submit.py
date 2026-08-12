@@ -20,9 +20,10 @@ moment one of these does:
   a decay;
 - every eval is a **4-seed context ensemble** (`eval_ensemble_size`), live net
   and SWA net alike, so the logged test curves are ensembled numbers;
-- an eval every 100 steps where the whole test split fits under the
-  `eval_items_per_task` cap, every 1k where it does not, and no early stopping:
-  the budget is the budget.
+- an eval every 100 steps over 4096 test rows -- the same rows every time,
+  `eval_shuffle_seed` fixes them -- so the curve is dense and cheap on every
+  task. The reportable number comes from `submit_ens.py` over the whole split;
+- no early stopping: the budget is the budget.
 """
 
 import functools
@@ -107,32 +108,6 @@ def published_best() -> dict[str, float]:
                 out[f"{metric}/{split}/{pair}"] = float(best(x))
             out[f"{metric}/{split}/mean"] = float(best(v.groupby(sub.row).mean()))
     return out
-
-
-@functools.cache
-def ntest() -> dict[str, float]:
-    """Test-set size per `{db}/{task}`, from RelBench's own task stats."""
-    import pandas as pd
-    from huggingface_hub import hf_hub_download
-
-    stats = pd.read_parquet(
-        hf_hub_download(
-            "stanford-star/relbench", "STATS/tasks.parquet", repo_type="dataset"
-        )
-    )
-    return {
-        f"{r.database}/{r.task}": float(r.num_rows_test) for r in stats.itertuples()
-    }
-
-
-def eval_freq_for(db: str, task: str, cap: int, dense: int, sparse: int) -> int:
-    """How often this task evaluates.
-
-    An eval walks `min(cap, test rows)`, so a task whose whole test split fits
-    under the cap is cheap to score and can afford a dense curve; one that hits
-    the cap pays a full pass every time and gets the sparse cadence.
-    """
-    return dense if ntest()[f"{db}/{task}"] < cap else sparse
 
 
 def targets_for(db: str, task: str) -> dict[str, float]:
@@ -329,7 +304,7 @@ def main() -> None:
                 seed=0,
                 mmap_populate=True,
                 timeout_per_item=10.0,
-                eval_freq=eval_freq_for(db, task, cap=2**16, dense=100, sparse=1_000),
+                eval_freq=100,
                 keep_all_ckpts=False,
                 vector_db_path=None,
                 db_cutoff="test",
@@ -342,7 +317,7 @@ def main() -> None:
                 eval_prefetch_factor=2,
                 eval_num_walks=0,
                 eval_walk_length=20,
-                eval_items_per_task=2**16,
+                eval_items_per_task=2**12,
                 eval_ctx_size_list=[1024],
                 eval_mmap_populate=True,
                 eval_shuffle_seed=0,
