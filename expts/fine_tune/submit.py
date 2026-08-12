@@ -503,7 +503,7 @@ def main() -> None:
                 eval_freq=eval_freq,
                 keep_all_ckpts=False,
                 vector_db_path=None,
-                db_upto_test_timestamp=True,
+                db_cutoff="test",
                 resume_save_mins=20.0,
                 eval_splits=["test"],
                 eval_db_task_list=[(db, task)],

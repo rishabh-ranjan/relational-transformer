@@ -35,7 +35,7 @@ def run(
     context_seed: int,
     mmap_populate: bool,
     vector_db_path: str | None,
-    db_upto_test_timestamp: bool,
+    db_cutoff: str | None,
 ) -> dict:
     """Evaluate one legacy architecture, one checkpoint per task.
 
@@ -76,7 +76,7 @@ def run(
             mmap_populate=mmap_populate,
             prefetch_factor=prefetch_factor,
             vector_db_path=vector_db_path,
-            db_upto_test_timestamp=db_upto_test_timestamp,
+            db_cutoff=db_cutoff,
         )
         for _task, _ctx, labels, preds_by_prefix, _nl, node_idxs in ev.evaluate_raw(
             [(model, "")], [ctx_size], with_node_idxs=True

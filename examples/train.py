@@ -61,7 +61,7 @@ def train(pre_dir: str, eval_pre_dir: str, out_root: str, run_id: str) -> None:
         eval_freq=2000,
         keep_all_ckpts=True,
         vector_db_path=None,
-        db_upto_test_timestamp=False,
+        db_cutoff=None,
         resume_save_mins=20.0,
         # in-loop validation on RelBench
         eval_splits=["val"],

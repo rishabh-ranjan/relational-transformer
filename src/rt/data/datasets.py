@@ -19,7 +19,7 @@ MAX_F2P_NBRS = 5  # See fly.rs L32
 
 
 @cache
-def _test_timestamp(db_name: str, pre_dir: str) -> int:
+def _split_timestamps(db_name: str, pre_dir: str) -> dict[str, int]:
     """``db_name``'s test timestamp, in rustler's seconds since the epoch.
 
     relbench owns this number and the preprocessed data does not carry it, so
@@ -33,10 +33,14 @@ def _test_timestamp(db_name: str, pre_dir: str) -> int:
     source = read_meta(pre_dir, db_name).get("source")
     if not source:
         raise RuntimeError(
-            f"{db_name}/meta.json has no 'source'; cannot read its test "
-            f"timestamp from relbench, so db_upto_test_timestamp cannot be honored"
+            f"{db_name}/meta.json has no 'source'; cannot read its split "
+            f"timestamps from relbench, so db_cutoff cannot be honored"
         )
-    return int(relbench.load_dataset(source).test_timestamp.timestamp())
+    dataset = relbench.load_dataset(source)
+    return {
+        "val": int(dataset.val_timestamp.timestamp()),
+        "test": int(dataset.test_timestamp.timestamp()),
+    }
 
 
 def process_batch(tup, d_text):
@@ -102,7 +106,7 @@ class RustlerDataset:
         timeout_per_item,
         vector_db_path: str | None,
         train_only_fallback: bool,
-        db_upto_test_timestamp: bool,
+        db_cutoff: str | None,
     ):
         pre_dir = resolve_pre_dir(pre_dir)
         if vector_db_path is not None:
@@ -160,13 +164,16 @@ class RustlerDataset:
                         pass  # column absent from this db's index; ignore
                 drop_column_indices.append(drop_indices)
 
-                # relbench's ``get_db(upto_test_timestamp=True)``: rows past the
-                # dataset's test timestamp are not in the database the model is
-                # allowed to see.
+                # relbench's ``get_db(upto_test_timestamp=True)`` generalized:
+                # rows past the split's own timestamp are not in the database
+                # the model is allowed to see. ``"test"`` is what a test-split
+                # eval gets; ``"val"`` is the same rule one split earlier, and
+                # is what a val-selected run has to use for val to predict
+                # test rather than to see past it.
                 cutoff_timestamps.append(
-                    _test_timestamp(db_name, pre_dir)
-                    if db_upto_test_timestamp
-                    else None
+                    None
+                    if db_cutoff is None
+                    else _split_timestamps(db_name, pre_dir)[db_cutoff]
                 )
 
                 dataset_tuples.append((db_name, table_name, node_idx_offset, num_nodes))
@@ -249,7 +256,7 @@ class TrainDataset(RustlerDataset, IterableDataset):
         timeout_per_item,
         vector_db_path: str | None,
         train_only_fallback: bool,
-        db_upto_test_timestamp: bool,
+        db_cutoff: str | None,
     ):
         # TrainDataset drives both shuffle and context construction from the
         # same seed — this matches prior single-seed behavior.
@@ -277,7 +284,7 @@ class TrainDataset(RustlerDataset, IterableDataset):
             timeout_per_item=timeout_per_item,
             vector_db_path=vector_db_path,
             train_only_fallback=train_only_fallback,
-            db_upto_test_timestamp=db_upto_test_timestamp,
+            db_cutoff=db_cutoff,
         )
         self.train_ctx_size_list = train_ctx_size_list
         self.seed = random.Random(seed).getrandbits(64)

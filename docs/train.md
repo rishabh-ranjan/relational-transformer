@@ -78,6 +78,12 @@ update is unchanged — what moves is the point weight decay pulls to: the
 pretrained weights instead of zero. It needs a `load_ckpt_path`, and with
 `wd=0` it is exactly ordinary fine-tuning.
 
+`db_cutoff` trims the database the contexts are built from to a split's
+timestamp: `"test"` (relbench's `get_db(upto_test_timestamp=True)`), `"val"`
+one split earlier, or `None` for no trim. Evaluate a split under its own
+cutoff — a val metric scored against a test-cutoff database sees the rows the
+val labels postdate, and stops predicting test.
+
 `eval_ensemble_size` averages the in-loop eval over that many context seeds
 before scoring — the **predictions** are averaged per item, as
 `rt.eval.run_ensemble` does, not the per-seed scores. `1` is the ordinary

@@ -278,7 +278,12 @@ def main(
     # timestamp, as relbench's `Dataset.get_db(upto_test_timestamp=True)` does.
     # One switch for training and in-loop eval alike: they have to see the same
     # database or the validation number is not the training model's.
-    db_upto_test_timestamp: bool,
+    # Which split's timestamp the database the contexts are built from is
+    # trimmed to: ``"test"``, ``"val"``, or ``None`` for no trim. A run that
+    # selects on val has to use ``"val"`` -- the same rule test-time inference
+    # gets, one split earlier -- or its val metric is scored against a database
+    # that already contains the rows val is meant to predict.
+    db_cutoff: str | None,
     resume_save_mins: float,
     # in-loop validation
     eval_splits: list[str],
@@ -616,7 +621,7 @@ def main(
         timeout_per_item=timeout_per_item,
         vector_db_path=vector_db_path,
         train_only_fallback=False,
-        db_upto_test_timestamp=db_upto_test_timestamp,
+        db_cutoff=db_cutoff,
     )
     # total_bs items enter the model per optimizer step, so the whole run
     # consumes total_steps * total_bs items. Measured against the stream's size,
@@ -758,7 +763,7 @@ def main(
                         context_seed=_member_seed(member),
                         vector_db_path=eval_vector_db_path,
                         train_only_fallback=False,
-                        db_upto_test_timestamp=db_upto_test_timestamp,
+                        db_cutoff=db_cutoff,
                         global_rank=rank,
                         local_rank=local_rank,
                         world_size=world_size,

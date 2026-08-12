@@ -167,7 +167,7 @@ def main() -> None:
                 shuffle_seed=0,
                 context_seed=0,
                 vector_db_path=None,
-                db_upto_test_timestamp=True,
+                db_cutoff="test",
                 ctx_size_list=[1024],
                 lcs_bw_pl_grid=[(1024, 128, False)],
                 val_ensemble_size=1,

@@ -84,7 +84,7 @@ def main(
     shuffle_seed: int,
     context_seed: int,
     vector_db_path: str | None,
-    db_upto_test_timestamp: bool,
+    db_cutoff: str | None,
     lcs_bw_pl_grid: list[tuple[int, int, bool]],
     val_ensemble_size: int,
     test_ensemble_size: int,
@@ -113,10 +113,12 @@ def main(
     a tuning run, which picks one per task on validation; exactly one is a
     fixed configuration, and nothing reads validation at all.
 
-    ``db_upto_test_timestamp`` trims the database the contexts are built from
-    to the dataset's test timestamp, as relbench's
-    ``Dataset.get_db(upto_test_timestamp=True)`` does. It only bites where the
-    database extends past that timestamp.
+    ``db_cutoff`` trims the database the contexts are built from to a split's
+    timestamp -- ``"test"`` as relbench's ``Dataset.get_db(upto_test_timestamp
+    =True)`` does, ``"val"`` one split earlier, ``None`` not at all. It only
+    bites where the database extends past that timestamp. Evaluate a split
+    under its own cutoff: val scored against a test-cutoff database sees rows
+    the val labels postdate, which is what makes it stop predicting test.
 
     ``val_items_per_task`` and ``test_items_per_task`` cap the rows scored per
     task, one per split. They are separate because they buy different things --
@@ -239,7 +241,7 @@ def main(
         prefetch_factor=prefetch_factor,
         mmap_populate=mmap_populate,
         vector_db_path=vector_db_path,
-        db_upto_test_timestamp=db_upto_test_timestamp,
+        db_cutoff=db_cutoff,
         global_rank=global_rank,
         local_rank=local_rank,
         world_size=world_size,
@@ -387,7 +389,7 @@ def build_evaluator(
     mmap_populate,
     prefetch_factor,
     vector_db_path,
-    db_upto_test_timestamp,
+    db_cutoff,
     global_rank=0,
     local_rank=0,
     world_size=1,
@@ -430,7 +432,7 @@ def build_evaluator(
         context_seed=context_seed,
         vector_db_path=vector_db_path,
         train_only_fallback=False,
-        db_upto_test_timestamp=db_upto_test_timestamp,
+        db_cutoff=db_cutoff,
         global_rank=global_rank,
         local_rank=local_rank,
         world_size=world_size,

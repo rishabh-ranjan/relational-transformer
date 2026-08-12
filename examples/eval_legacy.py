@@ -30,7 +30,7 @@ CONTEXT = dict(
     context_seed=0,
     mmap_populate=True,
     vector_db_path=None,
-    db_upto_test_timestamp=False,
+    db_cutoff=None,
 )
 
 
