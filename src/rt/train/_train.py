@@ -416,16 +416,8 @@ def main(
     assert not delta_finetune or load_ckpt_path is not None, (
         "delta_finetune has nothing to be a delta of without load_ckpt_path"
     )
-    # The frozen weights the delta is measured from, captured after the warm
-    # start and before the first update. Only the decayed parameters need one:
-    # for the rest the two formulations coincide.
-    delta_base = (
-        {n: p.detach().clone() for n, p in named if _is_muon(n, p)}
-        if delta_finetune
-        else None
-    )
-    # Decay is applied against `delta_base` in the loop, so the optimizers must
-    # not apply their own.
+    # Decay is applied against `delta_base` (built below, once the warm start
+    # has actually happened) so the optimizers must not apply their own.
     opt_wd = 0.0 if delta_finetune else wd
     adamw_kwargs = dict(
         lr=lr, betas=(0.9, 0.999), eps=1e-8, fused=device.startswith("cuda")
@@ -498,6 +490,21 @@ def main(
         else SwaState(raw_net.named_parameters(), momentum=swa_momentum)
     )
     swa_net = None if swa is None else build_net()
+
+    # The weights the delta is measured from: read from the checkpoint file, not
+    # from the net -- a resumed run skips the warm start above, and its net
+    # holds the weights training reached, not the ones it started from. Only
+    # the decayed parameters need an entry; for the rest the delta formulation
+    # and the ordinary one coincide.
+    delta_base = None
+    if delta_finetune:
+        _, base_path = resolve_checkpoint(load_ckpt_path)
+        base_sd = load_model(base_path)
+        delta_base = {
+            n: base_sd[n].to(p.device, p.dtype)
+            for n, p in raw_net.named_parameters()
+            if _is_muon(n, p)
+        }
 
     # ---- resume from preemption (GPU-count flexible: full model+opt per rank) ----
     if resume_path.exists():
