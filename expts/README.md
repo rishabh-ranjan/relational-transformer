@@ -321,6 +321,21 @@ What to do about it:
 - **Spend a freed tier on the jobs with the most left to do**, not on whatever
   is nearest to hand — the long pole finishes the sweep. A short job promoted
   onto a b200 buys minutes; the largest still-training run buys hours.
+- **Ask slurm when a job would start, instead of guessing from free cards.**
+  `sbatch --test-only` prints the planned start of a job it does not submit, so
+  a placement can be checked before it costs a cancel-and-resubmit:
+
+  ```
+  sbatch --test-only -p il -A infolab -q il-lo -t 4:00:00 \
+      --gres=gpu:b200:1 --cpus-per-task=36 --mem=375000M --nodelist=blackwell1 probe.sh
+  # sbatch: Job N to start at 2026-08-13T00:56 ... on nodes blackwell1
+  ```
+
+  Run it once per qos: the answer is mostly your priority against whatever is
+  planned for those cards, so the same shape can be half an hour away on
+  `il-interactive` and a day and a half away on `il-lo`. It ignores your own
+  per-user GRES caps, so a start time on a tier you have already filled is not
+  a slot you can take.
 - **A freed slot is worth a card check, not an assumption.** `il-interactive`
   having room does not mean blackwell1 has a b200 free; read `AllocTRES` before
   spending it, and if there is none, re-ask the blackwell question below.
