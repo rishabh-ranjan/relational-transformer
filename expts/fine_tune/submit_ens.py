@@ -24,7 +24,7 @@ from pathlib import Path
 
 from roach.slurm import Resources, submit
 
-from submit import TASKS, a100, b200, nsplit, targets_for  # noqa: F401
+from submit import TASKS, a100, b200, targets_for  # noqa: F401
 
 # Where `submit.py`'s runs land, and the wandb project this one logs to.
 CKPT_ROOT = Path("/dfs/user/ranjanr/ckpts/rtv2/2026-08-13-fine_tune")
@@ -128,9 +128,8 @@ RESOURCES: dict[tuple[str, str], Resources] = {
 
 
 def main() -> None:
-    # Shortest pass first, so the fastest answers land first: a job's wall
-    # clock is 8 sweeps of its test split.
-    for db, task in sorted(TASKS, key=lambda p: nsplit()[f"{p[0]}/{p[1]}"]["test"]):
+    # `TASKS`' own order, which `submit.py` keeps shortest first.
+    for db, task in TASKS:
         # The slot is the hand-laid choice above; the dependency is read off
         # the queue at submission time and set on a copy of it.
         resources = dataclasses.replace(
