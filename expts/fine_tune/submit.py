@@ -26,13 +26,13 @@ from roach.slurm import Resources, submit
 HERE = Path(__file__).parent
 
 TASKS = (
-    ("rel-event", "user-repeat"),
-    ("rel-f1", "driver-dnf"),
-    ("rel-f1", "driver-top3"),
-    ("rel-f1", "driver-position"),
-    ("rel-trial", "study-outcome"),
-    ("rel-avito", "ad-ctr"),
-    ("rel-event", "user-attendance"),
+    # ("rel-event", "user-repeat"),
+    # ("rel-f1", "driver-dnf"),
+    # ("rel-f1", "driver-top3"),
+    # ("rel-f1", "driver-position"),
+    # ("rel-trial", "study-outcome"),
+    # ("rel-avito", "ad-ctr"),
+    # ("rel-event", "user-attendance"),
     ("rel-event", "user-ignore"),
     ("rel-trial", "study-adverse"),
     # ("rel-trial", "site-success"),
@@ -253,6 +253,12 @@ def a100(
 # A task with no line here stops the submission rather than taking a slot
 # nobody chose for it.
 RESOURCES: dict[tuple[str, str], Resources] = {
+    # 19:10: these two 100-epoch runs give their reserved cards to the pending
+    # 50-epoch jobs and resume in the general `il-lo` pool. Chosen for having
+    # real time left (99 and 402 min) where rel-f1/driver-dnf and
+    # rel-trial/study-outcome are minutes from finishing -- displacing those
+    # would cost a restart to save nothing.
+    #
     # 19:05: the whole 50-epoch arm onto the reservation -- it is the arm to
     # answer next, and ampere8's cards are the ones nothing else can take.
     #
@@ -289,9 +295,9 @@ RESOURCES: dict[tuple[str, str], Resources] = {
     # take and nothing preempts. `il-lo` only (a high tier there would buy a
     # card we already have), and the nine shortest runs fit it: all under 4h,
     # well inside the reservation's 2026-08-13T00:00 end.
-    ("rel-trial", "study-adverse"): a100("il-lo", "8:00:00", "ranjanr_deadline"),
+    ("rel-trial", "study-adverse"): a100("il-lo", "1-00:00:00"),
     ("rel-event", "user-attendance"): a100("il-lo", "8:00:00", "ranjanr_deadline"),
-    ("rel-event", "user-ignore"): a100("il-lo", "8:00:00", "ranjanr_deadline"),
+    ("rel-event", "user-ignore"): a100("il-lo", "1-00:00:00"),
     ("rel-trial", "study-outcome"): a100("il-lo", "8:00:00", "ranjanr_deadline"),
     ("rel-f1", "driver-dnf"): a100("il-lo", "8:00:00", "ranjanr_deadline"),
     ("rel-f1", "driver-position"): a100("il-lo", "8:00:00", "ranjanr_deadline"),
@@ -304,7 +310,8 @@ RESOURCES: dict[tuple[str, str], Resources] = {
 # Resume an existing run instead of starting a new one: the run whose
 # `out_dir` this is picks its `resume.pt` back up. Empty when nothing resumes.
 RUN_IDS: dict[tuple[str, str], str] = {
-    ("rel-stack", "user-engagement"): "26-08-11_16-57-12_151547107",
+    ("rel-event", "user-ignore"): "26-08-11_16-57-07_588876319",
+    ("rel-trial", "study-adverse"): "26-08-11_16-57-08_326377739",
 }
 
 
@@ -318,8 +325,8 @@ def main() -> None:
     # How long a run is, and the tag that keeps its curves apart from the other
     # length's in the same project -- the comparison is one panel per task with
     # a group per epoch budget.
-    epochs, tag = 50, "-50ep"
-    # epochs, tag = 100, ""
+    # epochs, tag = 50, "-50ep"
+    epochs, tag = 100, ""
     # Shortest run first, so the fastest answers land first. The step budget,
     # not the test split: what a job costs here is overwhelmingly its training.
     for db, task in sorted(
