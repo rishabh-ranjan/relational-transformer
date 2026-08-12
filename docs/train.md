@@ -66,6 +66,12 @@ turns SWA off: no second net is built, so there are no `swa_steps=` or
 `best_swa_*` files and nothing is selected on a `swa/` metric. It cannot be
 changed across a resume — the average is part of `resume.pt`.
 
+`optimizer` selects `"muon"` — hidden weight matrices to Muon, the per-sem-type
+encoders/decoders and every 0/1-D parameter to AdamW, which is what the released
+checkpoints were trained with — or `"adamw"`, one AdamW over all of them with the
+same weight-decay split. It cannot be changed across a resume: the optimizer
+state in `resume.pt` is per optimizer.
+
 `lr_warmup_steps` and `lr_decay_steps` shape the learning rate: linear warmup
 from 0 over the first, linear decay to 0 over the last that many steps of
 `total_steps`, and `0` disables either end. The decay is measured back from

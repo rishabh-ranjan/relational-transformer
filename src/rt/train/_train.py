@@ -215,6 +215,11 @@ def main(
     walk_length: int,
     mask_prob_max: float,
     items_per_task: int,
+    # ``"muon"`` splits the parameters -- hidden weight matrices to Muon, the
+    # per-sem-type encoders/decoders and everything 0/1-D to AdamW -- which is
+    # what every released checkpoint was trained with. ``"adamw"`` puts all of
+    # them in one AdamW, keeping the same weight-decay split.
+    optimizer: str,
     lr: float,
     wd: float,
     # Linear warmup from 0 to `lr` over the first this many steps; 0 starts at
@@ -400,25 +405,36 @@ def main(
     muon_params = [p for n, p in named if _is_muon(n, p)]
     other_params = [p for n, p in named if not _is_muon(n, p)]
     assert len(muon_params) + len(other_params) == len(named)
-    opts = [
-        Muon(
-            muon_params,
-            lr=lr,
-            momentum=0.95,
-            weight_decay=wd,
-            adjust_lr_fn="match_rms_adamw",
-            ns_steps=5,
-            compile=compile,
-        ),
-        optim.AdamW(
-            other_params,
-            lr=lr,
-            weight_decay=0.0,
-            betas=(0.9, 0.999),
-            eps=1e-8,
-            fused=device.startswith("cuda"),
-        ),
-    ]
+    assert optimizer in ("muon", "adamw"), f"optimizer={optimizer!r}"
+    adamw_kwargs = dict(
+        lr=lr, betas=(0.9, 0.999), eps=1e-8, fused=device.startswith("cuda")
+    )
+    if optimizer == "muon":
+        opts = [
+            Muon(
+                muon_params,
+                lr=lr,
+                momentum=0.95,
+                weight_decay=wd,
+                adjust_lr_fn="match_rms_adamw",
+                ns_steps=5,
+                compile=compile,
+            ),
+            optim.AdamW(other_params, weight_decay=0.0, **adamw_kwargs),
+        ]
+    else:
+        # One optimizer, the same decay policy: the matrices Muon would have
+        # taken keep `wd`, the encoders/decoders and the 0/1-D parameters keep
+        # none.
+        opts = [
+            optim.AdamW(
+                [
+                    {"params": muon_params, "weight_decay": wd},
+                    {"params": other_params, "weight_decay": 0.0},
+                ],
+                **adamw_kwargs,
+            )
+        ]
 
     def lr_lambda(step):
         warm = 1.0 if step >= lr_warmup_steps else (step + 1) / lr_warmup_steps

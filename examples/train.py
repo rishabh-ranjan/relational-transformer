@@ -44,6 +44,7 @@ def train(pre_dir: str, eval_pre_dir: str, out_root: str, run_id: str) -> None:
         walk_length=20,
         mask_prob_max=0.5,
         items_per_task=100_000,
+        optimizer="muon",
         lr=5e-4,
         wd=0.1,
         lr_warmup_steps=2000,

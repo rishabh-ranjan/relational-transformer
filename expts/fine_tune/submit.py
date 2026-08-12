@@ -253,6 +253,9 @@ def a100(
 # A task with no line here stops the submission rather than taking a slot
 # nobody chose for it.
 RESOURCES: dict[tuple[str, str], Resources] = {
+    # 20:55: the same 2e-4 shape on plain AdamW instead of Muon+AdamW -- one
+    # optimizer over every parameter, the decay split unchanged.
+    #
     # 20:45: lr 2e-4, the same shape. Queued on `il` behind the 1e-4 arm rather
     # than displacing anything: the short arms finish every few minutes, so the
     # cards come free faster than a cancel-and-resume would pay for itself.
@@ -352,12 +355,13 @@ def main() -> None:
     # How long a run is, and the tag that keeps its curves apart from the other
     # length's in the same project -- the comparison is one panel per task with
     # a group per epoch budget.
-    epochs, total_bs, lr, tag = 100, 512, 2e-4, "-100ep-bs512-lr2e-4"
-    # epochs, total_bs, lr, tag = 100, 512, 1e-4, "-100ep-bs512-lr1e-4"
-    # epochs, total_bs, lr, tag = 50, 512, 5e-4, "-50ep-bs512"
-    # epochs, total_bs, lr, tag = 25, 256, 5e-4, "-25ep"
-    # epochs, total_bs, lr, tag = 50, 256, 5e-4, "-50ep"
-    # epochs, total_bs, lr, tag = 100, 256, 5e-4, ""
+    epochs, total_bs, lr, opt, tag = 100, 512, 2e-4, "adamw", "-lr2e-4-adamw"
+    # epochs, total_bs, lr, opt, tag = 100, 512, 2e-4, "muon", "-100ep-bs512-lr2e-4"
+    # epochs, total_bs, lr, opt, tag = 100, 512, 1e-4, "muon", "-100ep-bs512-lr1e-4"
+    # epochs, total_bs, lr, opt, tag = 50, 512, 5e-4, "muon", "-50ep-bs512"
+    # epochs, total_bs, lr, opt, tag = 25, 256, 5e-4, "muon", "-25ep"
+    # epochs, total_bs, lr, opt, tag = 50, 256, 5e-4, "muon", "-50ep"
+    # epochs, total_bs, lr, opt, tag = 100, 256, 5e-4, "muon", ""
     # Shortest run first, so the fastest answers land first. The step budget,
     # not the test split: what a job costs here is overwhelmingly its training.
     for db, task in sorted(
@@ -407,6 +411,7 @@ def main() -> None:
                 walk_length=20,
                 mask_prob_max=0.0,
                 items_per_task=1_000_000_000,
+                optimizer=opt,
                 lr=lr,
                 wd=0.1,
                 lr_warmup_steps=lr_warmup_steps,
