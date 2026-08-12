@@ -337,6 +337,12 @@ What to do about it:
   per-user GRES caps, so a start time on a tier you have already filled is not
   a slot you can take.
 
+  **It does not model `--reservation`.** Asked about a reserved node it reports
+  the start time the job would get *without* the reservation, which reads as a
+  day and a half away while the reserved cards sit idle. On a reservation the
+  only honest test is a real job: submit a one-minute probe with the wall clock
+  you actually want and see whether it runs.
+
   This belongs *inside* a monitor, not just in your hands: a free-card counter
   fires on every idle b200 whether or not you could have it, and the noise
   trains you to ignore the one time it matters. Gate the alert on a start time
