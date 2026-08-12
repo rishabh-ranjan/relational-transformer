@@ -263,6 +263,9 @@ def a100(
 # A task with no line here stops the submission rather than taking a slot
 # nobody chose for it.
 #
+# 00:15: two variants off the SWA base -- lr 5e-4, and batch 256 -- both on
+# ampere8, which is idle, so the base sweep on `il` keeps its cards.
+#
 # 00:05: constant lr with SWA instead of a decay. The queue is empty again, so
 # six `il` amperes; ctx is back to 1024 and the batch to 128, which is the
 # cheapest step this base has had.
@@ -390,14 +393,14 @@ RESOURCES: dict[tuple[str, str], Resources] = {
     # card we already have), and the nine shortest runs fit it: all under 4h,
     # well inside the reservation's 2026-08-13T00:00 end.
     ("rel-trial", "study-adverse"): a100("il", "8:00:00"),
-    ("rel-event", "user-attendance"): a100("il", "8:00:00"),
+    ("rel-event", "user-attendance"): a100("il-lo", "8:00:00", "ranjanr_deadline"),
     ("rel-event", "user-ignore"): a100("il", "8:00:00"),
     ("rel-trial", "study-outcome"): a100("il", "8:00:00"),
-    ("rel-f1", "driver-dnf"): a100("il", "8:00:00"),
-    ("rel-f1", "driver-position"): a100("il", "8:00:00"),
-    ("rel-avito", "ad-ctr"): a100("il", "8:00:00"),
-    ("rel-event", "user-repeat"): a100("il", "8:00:00"),
-    ("rel-f1", "driver-top3"): a100("il", "8:00:00"),
+    ("rel-f1", "driver-dnf"): a100("il-lo", "8:00:00", "ranjanr_deadline"),
+    ("rel-f1", "driver-position"): a100("il-lo", "8:00:00", "ranjanr_deadline"),
+    ("rel-avito", "ad-ctr"): a100("il-lo", "8:00:00", "ranjanr_deadline"),
+    ("rel-event", "user-repeat"): a100("il-lo", "8:00:00", "ranjanr_deadline"),
+    ("rel-f1", "driver-top3"): a100("il-lo", "8:00:00", "ranjanr_deadline"),
 }
 
 
@@ -417,7 +420,9 @@ def main() -> None:
     # length's in the same project -- the comparison is one panel per task with
     # a group per epoch budget.
     # fmt: off
-    epochs, total_bs, lr, opt, ctx, mask, release, delta, wd, lcs, bw, pl, nw, tag = 25, 128, 1e-3, "muon", 1024, 0.0, "rt-j", True, 0.1, 1024, 128, False, 0, ""  # noqa: E501
+    epochs, total_bs, lr, opt, ctx, mask, release, delta, wd, lcs, bw, pl, nw, tag = 25, 128, 5e-4, "muon", 1024, 0.0, "rt-j", True, 0.1, 1024, 128, False, 0, "-lr5e-4"  # noqa: E501
+    # epochs, total_bs, lr, opt, ctx, mask, release, delta, wd, lcs, bw, pl, nw, tag = 25, 256, 1e-3, "muon", 1024, 0.0, "rt-j", True, 0.1, 1024, 128, False, 0, "-bs256"  # noqa: E501
+    # epochs, total_bs, lr, opt, ctx, mask, release, delta, wd, lcs, bw, pl, nw, tag = 25, 128, 1e-3, "muon", 1024, 0.0, "rt-j", True, 0.1, 1024, 128, False, 0, ""  # noqa: E501
     # fmt: on
     # epochs, total_bs, lr, opt, ctx, mask, release, delta, tag = 50, 256, 5e-4, "muon", 1024, 0.0, "rt-p", False, ""
     # epochs, total_bs, lr, opt, ctx, mask, release, delta, tag = 50, 256, 1e-3, "muon", 1024, 0.0, "rt-p", False, "-bs256-lr1e-3"
