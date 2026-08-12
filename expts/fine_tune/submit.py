@@ -29,8 +29,8 @@ HERE = Path(__file__).parent
 TASKS = (
     # ("rel-event", "user-repeat"),
     # ("rel-f1", "driver-dnf"),
-    ("rel-f1", "driver-top3"),
-    # ("rel-f1", "driver-position"),
+    # ("rel-f1", "driver-top3"),
+    ("rel-f1", "driver-position"),
     # ("rel-trial", "study-outcome"),
     # ("rel-avito", "ad-ctr"),
     # ("rel-event", "user-attendance"),
@@ -258,6 +258,8 @@ def a100(
 # A task with no line here stops the submission rather than taking a slot
 # nobody chose for it.
 RESOURCES: dict[tuple[str, str], Resources] = {
+    # 22:10: the same warm-start pair on driver-position.
+    #
     # 22:05: and the same again from a random init -- `load_ckpt_path` None,
     # so the only thing the arm changes is what the run starts from.
     #
@@ -362,7 +364,7 @@ RESOURCES: dict[tuple[str, str], Resources] = {
     ("rel-event", "user-ignore"): a100("il", "8:00:00"),
     ("rel-trial", "study-outcome"): a100("il", "8:00:00"),
     ("rel-f1", "driver-dnf"): a100("il", "8:00:00"),
-    ("rel-f1", "driver-position"): a100("il", "8:00:00"),
+    ("rel-f1", "driver-position"): a100("il-interactive", "8:00:00"),
     ("rel-avito", "ad-ctr"): a100("il", "8:00:00"),
     ("rel-event", "user-repeat"): a100("il-lo", "8:00:00", "ranjanr_deadline"),
     ("rel-f1", "driver-top3"): a100("il", "8:00:00"),
