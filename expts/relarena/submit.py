@@ -38,29 +38,14 @@ CACHE_DIR = "/tmp/ranjanr/relarena-cache"
 EXPERIMENTS = tuple(
     ("rt", db, task)
     for db, task in (
-        # Smallest first, so the fastest answers land first.
-        ("rel-f1", "driver-dnf"),
-        ("rel-f1", "driver-position"),
-        ("rel-event", "user-repeat"),
-        ("rel-event", "user-ignore"),
-        ("rel-event", "user-attendance"),
-        ("rel-trial", "study-outcome"),
-        ("rel-trial", "study-adverse"),
-        ("rel-trial", "site-success"),
-        ("rel-avito", "ad-ctr"),
-        ("rel-avito", "user-clicks"),
-        ("rel-avito", "user-visits"),
-        ("rel-hm", "user-churn"),
-        ("rel-hm", "item-sales"),
+        # A promotion, not a new submission: these two were pending on `il-lo`
+        # while `il` sat at 8 of its 10 (the two cutoff probes had finished and
+        # given their slots back). Cancelled there and resubmitted here --
+        # priority buys the next card that frees, and `il-lo` behind eighteen of
+        # my own jobs was not going to see one.
         ("rel-stack", "user-engagement"),
         ("rel-stack", "post-votes"),
-        ("rel-stack", "user-badge"),
-        ("rel-amazon", "user-churn"),
-        ("rel-amazon", "user-ltv"),
-        ("rel-amazon", "item-churn"),
-        ("rel-amazon", "item-ltv"),
     )
-    # rel-f1/driver-top3 is already running as job 129999.
 )
 
 #: Zero-shot reads: the published checkpoint scored on test with no fine-tuning
@@ -203,8 +188,8 @@ RESOURCES: dict[tuple[str, str, str], Resources] = {
     ("rt", "rel-avito", "user-clicks"): reserved("12:00:00"),
     # il-lo in the general pool: preemptible, and these three resume.
     ("rt", "rel-avito", "user-visits"): a100("il-lo", "2-00:00:00"),
-    ("rt", "rel-stack", "user-engagement"): a100("il-lo", "2-00:00:00"),
-    ("rt", "rel-stack", "post-votes"): a100("il-lo", "2-00:00:00"),
+    ("rt", "rel-stack", "user-engagement"): a100("il", "2-00:00:00"),
+    ("rt", "rel-stack", "post-votes"): a100("il", "2-00:00:00"),
 }
 
 ZERO_SHOT_RESOURCES: dict[tuple[str, str], Resources] = {
