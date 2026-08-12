@@ -11,8 +11,10 @@ stale the moment one of these does:
   weight decay 0.1, Muon;
 - a **fixed** context -- ctx and local ctx 1024, bfs width 128, prefer-latest
   off, no walks, the eval grid the same one -- and no masking;
-- trained on train **and** val, so nothing selects a checkpoint: `eval_splits`
-  is test alone and the run keeps its last step (`latest.safetensors`);
+- trained on the splits the arm names, and evaluated on the one it names, with
+  `db_cutoff` at that split's own timestamp. The reporting arm trains on
+  train+val and scores test; the selection arm trains on train and scores val,
+  to ask whether val picks the same epoch test would;
 - **equal-weight SWA** (`swa_momentum=1.0`, an fp32 running mean over every
   step) evaluated and saved beside the live net, which is what stands in for a
   decayed learning rate here;
@@ -266,6 +268,10 @@ def a100(
 # A task with no line here stops the submission rather than taking a slot
 # nobody chose for it.
 #
+# 01:20: the val-selection arm -- train on train, score val, database cut at
+# the val timestamp so val stands in the same relation to its labels that test
+# does to its own. Same six tasks, same everything else; the queue is empty.
+#
 # 00:45: the new base -- lr 5e-4 at batch 256, with a 4-seed ensemble at every
 # eval. The six tasks have test splits of a few hundred to two thousand rows,
 # so four passes over them costs seconds, not the minutes it would on the big
@@ -425,13 +431,20 @@ def main() -> None:
     # they are read once here rather than per job: editing `train_splits` moves
     # every task's `total_steps` with it, because the val rows are part of the
     # epoch when they are trained on.
-    train_splits = ["train", "val"]
+    # The splits and the database cutoff are one choice, not three: a run that
+    # selects on val trains on train alone and must see the database only up to
+    # the val timestamp -- the same rule a test-split run gets one split later.
+    # `("train", "test")` is the arm that reports; `("val", "val")` is the arm
+    # that asks whether val can pick the epoch for it.
+    train_splits, eval_split, cutoff = ["train"], "val", "val"
+    # train_splits, eval_split, cutoff = ["train", "val"], "test", "test"
 
     # How long a run is, and the tag that keeps its curves apart from the other
     # length's in the same project -- the comparison is one panel per task with
     # a group per epoch budget.
     # fmt: off
-    epochs, total_bs, lr, opt, ctx, mask, release, delta, wd, lcs, bw, pl, nw, tag = 25, 256, 5e-4, "muon", 1024, 0.0, "rt-j", True, 0.1, 1024, 128, False, 0, ""  # noqa: E501
+    epochs, total_bs, lr, opt, ctx, mask, release, delta, wd, lcs, bw, pl, nw, tag = 25, 256, 5e-4, "muon", 1024, 0.0, "rt-j", True, 0.1, 1024, 128, False, 0, "-valsel"  # noqa: E501
+    # epochs, total_bs, lr, opt, ctx, mask, release, delta, wd, lcs, bw, pl, nw, tag = 25, 256, 5e-4, "muon", 1024, 0.0, "rt-j", True, 0.1, 1024, 128, False, 0, ""  # noqa: E501
     # fmt: on
     # epochs, total_bs, lr, opt, ctx, mask, release, delta, tag = 50, 256, 5e-4, "muon", 1024, 0.0, "rt-p", False, ""
     # epochs, total_bs, lr, opt, ctx, mask, release, delta, tag = 50, 256, 1e-3, "muon", 1024, 0.0, "rt-p", False, "-bs256-lr1e-3"
@@ -503,9 +516,9 @@ def main() -> None:
                 eval_freq=eval_freq,
                 keep_all_ckpts=False,
                 vector_db_path=None,
-                db_cutoff="test",
+                db_cutoff=cutoff,
                 resume_save_mins=20.0,
-                eval_splits=["test"],
+                eval_splits=[eval_split],
                 eval_db_task_list=[(db, task)],
                 eval_pre_dir="/dfs/user/ranjanr/share/stanford-star/relbench-preprocessed",
                 eval_tokens_per_gpu=2**18,
