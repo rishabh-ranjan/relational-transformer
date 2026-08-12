@@ -84,6 +84,7 @@ def main() -> None:
             mask_prob_max=0.5,
             items_per_task=1_000,
             # optimization: enough steps to prove the loop turns over
+            delta_finetune=False,
             optimizer="muon",
             lr=5e-4,
             wd=0.1,

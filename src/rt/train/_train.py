@@ -215,6 +215,13 @@ def main(
     walk_length: int,
     mask_prob_max: float,
     items_per_task: int,
+    # Train a zero-initialized additive delta on frozen pretrained weights
+    # instead of the weights themselves. The gradient of the delta is the
+    # gradient of the weight and Muon's lr scaling is shape-only, so the update
+    # is identical -- what changes is where weight decay pulls: toward the
+    # pretrained weights rather than toward zero. Needs ``load_ckpt_path``, and
+    # with ``wd=0`` it is exactly ordinary fine-tuning.
+    delta_finetune: bool,
     # ``"muon"`` splits the parameters -- hidden weight matrices to Muon, the
     # per-sem-type encoders/decoders and everything 0/1-D to AdamW -- which is
     # what every released checkpoint was trained with. ``"adamw"`` puts all of
@@ -406,6 +413,20 @@ def main(
     other_params = [p for n, p in named if not _is_muon(n, p)]
     assert len(muon_params) + len(other_params) == len(named)
     assert optimizer in ("muon", "adamw"), f"optimizer={optimizer!r}"
+    assert not delta_finetune or load_ckpt_path is not None, (
+        "delta_finetune has nothing to be a delta of without load_ckpt_path"
+    )
+    # The frozen weights the delta is measured from, captured after the warm
+    # start and before the first update. Only the decayed parameters need one:
+    # for the rest the two formulations coincide.
+    delta_base = (
+        {n: p.detach().clone() for n, p in named if _is_muon(n, p)}
+        if delta_finetune
+        else None
+    )
+    # Decay is applied against `delta_base` in the loop, so the optimizers must
+    # not apply their own.
+    opt_wd = 0.0 if delta_finetune else wd
     adamw_kwargs = dict(
         lr=lr, betas=(0.9, 0.999), eps=1e-8, fused=device.startswith("cuda")
     )
@@ -415,7 +436,7 @@ def main(
                 muon_params,
                 lr=lr,
                 momentum=0.95,
-                weight_decay=wd,
+                weight_decay=opt_wd,
                 adjust_lr_fn="match_rms_adamw",
                 ns_steps=5,
                 compile=compile,
@@ -429,7 +450,7 @@ def main(
         opts = [
             optim.AdamW(
                 [
-                    {"params": muon_params, "weight_decay": wd},
+                    {"params": muon_params, "weight_decay": opt_wd},
                     {"params": other_params, "weight_decay": 0.0},
                 ],
                 **adamw_kwargs,
@@ -1094,6 +1115,14 @@ def main(
         torch.nn.utils.clip_grads_with_norm_(raw_net.parameters(), grad_norm_max, norm)
         for o in opts:
             o.step()
+        if delta_base is not None and wd:
+            # Decoupled decay of the delta at the scheduled lr, exactly as an
+            # optimizer would apply it -- but toward the pretrained weights.
+            factor = scheds[0].get_last_lr()[0] * wd
+            with torch.no_grad():
+                for n, p in raw_net.named_parameters():
+                    if n in delta_base:
+                        p.add_(delta_base[n] - p, alpha=factor)
         if measure_mem:
             torch.cuda.synchronize()
             peak_step = torch.cuda.max_memory_allocated()

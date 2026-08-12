@@ -106,6 +106,7 @@ def main() -> None:
             mask_prob_max=0.5,
             items_per_task=100_000,
             # optimization
+            delta_finetune=False,
             optimizer="muon",
             lr=5e-4,
             wd=0.1,

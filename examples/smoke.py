@@ -50,6 +50,7 @@ def smoke(
         walk_length=4,
         mask_prob_max=0.5,
         items_per_task=8,
+        delta_finetune=False,
         optimizer="muon",
         lr=1e-3,
         wd=0.0,

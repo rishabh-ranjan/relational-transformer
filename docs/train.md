@@ -66,6 +66,13 @@ turns SWA off: no second net is built, so there are no `swa_steps=` or
 `best_swa_*` files and nothing is selected on a `swa/` metric. It cannot be
 changed across a resume — the average is part of `resume.pt`.
 
+`delta_finetune` trains a zero-initialized additive delta on frozen pretrained
+weights rather than the weights themselves. The gradient of the delta is the
+gradient of the weight, and Muon's lr scaling depends on shape alone, so the
+update is unchanged — what moves is the point weight decay pulls to: the
+pretrained weights instead of zero. It needs a `load_ckpt_path`, and with
+`wd=0` it is exactly ordinary fine-tuning.
+
 `optimizer` selects `"muon"` — hidden weight matrices to Muon, the per-sem-type
 encoders/decoders and every 0/1-D parameter to AdamW, which is what the released
 checkpoints were trained with — or `"adamw"`, one AdamW over all of them with the

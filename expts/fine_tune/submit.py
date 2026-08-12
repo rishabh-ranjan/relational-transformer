@@ -258,6 +258,9 @@ def a100(
 # A task with no line here stops the submission rather than taking a slot
 # nobody chose for it.
 RESOURCES: dict[tuple[str, str], Resources] = {
+    # 22:20: delta fine-tuning -- the pretrained weights frozen as the point
+    # decay pulls back to, the update itself unchanged (see `delta_finetune`).
+    #
     # 22:10: the same warm-start pair on driver-position.
     #
     # 22:05: and the same again from a random init -- `load_ckpt_path` None,
@@ -387,15 +390,16 @@ def main() -> None:
     # length's in the same project -- the comparison is one panel per task with
     # a group per epoch budget.
     # fmt: off
-    # epochs, total_bs, lr, opt, ctx, mask, release, tag = 50, 256, 5e-4, "muon", 1024, 0.0, None, "-nw0-rand"  # noqa: E501
-    epochs, total_bs, lr, opt, ctx, mask, release, tag = 50, 256, 5e-4, "muon", 1024, 0.0, "rt-j", "-nw0-rtj"  # noqa: E501
-    # epochs, total_bs, lr, opt, ctx, mask, release, tag = 50, 256, 5e-4, "muon", 1024, 0.0, "rt-p", "-nw0"  # noqa: E501
-    # epochs, total_bs, lr, opt, ctx, mask, release, tag = 50, 256, 5e-4, "muon", 1024, 0.1, "rt-p", "-nw0-mask0.1"  # noqa: E501
+    # epochs, total_bs, lr, opt, ctx, mask, release, delta, tag = 50, 256, 5e-4, "muon", 1024, 0.0, None, False, "-nw0-rand"  # noqa: E501
+    epochs, total_bs, lr, opt, ctx, mask, release, delta, tag = 50, 256, 5e-4, "muon", 1024, 0.0, "rt-p", True, "-nw0-delta"  # noqa: E501
+    # epochs, total_bs, lr, opt, ctx, mask, release, delta, tag = 50, 256, 5e-4, "muon", 1024, 0.0, "rt-j", False, "-nw0-rtj"  # noqa: E501
+    # epochs, total_bs, lr, opt, ctx, mask, release, delta, tag = 50, 256, 5e-4, "muon", 1024, 0.0, "rt-p", False, "-nw0"  # noqa: E501
+    # epochs, total_bs, lr, opt, ctx, mask, release, delta, tag = 50, 256, 5e-4, "muon", 1024, 0.1, "rt-p", False, "-nw0-mask0.1"  # noqa: E501
     # fmt: on
-    # epochs, total_bs, lr, opt, ctx, mask, release, tag = 50, 256, 5e-4, "muon", 1024, 0.0, "rt-p", ""
-    # epochs, total_bs, lr, opt, ctx, mask, release, tag = 50, 256, 1e-3, "muon", 1024, 0.0, "rt-p", "-bs256-lr1e-3"
-    # epochs, total_bs, lr, opt, ctx, mask, release, tag = 50, 512, 1e-3, "muon", 1024, 0.0, "rt-p", "-bs512-lr1e-3"
-    # epochs, total_bs, lr, opt, ctx, mask, release, tag = 50, 256, 5e-4, "muon", 512, 0.0, "rt-p", "-ctx512"
+    # epochs, total_bs, lr, opt, ctx, mask, release, delta, tag = 50, 256, 5e-4, "muon", 1024, 0.0, "rt-p", False, ""
+    # epochs, total_bs, lr, opt, ctx, mask, release, delta, tag = 50, 256, 1e-3, "muon", 1024, 0.0, "rt-p", False, "-bs256-lr1e-3"
+    # epochs, total_bs, lr, opt, ctx, mask, release, delta, tag = 50, 512, 1e-3, "muon", 1024, 0.0, "rt-p", False, "-bs512-lr1e-3"
+    # epochs, total_bs, lr, opt, ctx, mask, release, delta, tag = 50, 256, 5e-4, "muon", 512, 0.0, "rt-p", False, "-ctx512"
     # Shortest run first, so the fastest answers land first. The step budget,
     # not the test split: what a job costs here is overwhelmingly its training.
     for db, task in sorted(
@@ -445,6 +449,7 @@ def main() -> None:
                 walk_length=20,
                 mask_prob_max=mask,
                 items_per_task=1_000_000_000,
+                delta_finetune=delta,
                 optimizer=opt,
                 lr=lr,
                 wd=0.1,
