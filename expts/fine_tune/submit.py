@@ -253,6 +253,11 @@ def a100(
 # A task with no line here stops the submission rather than taking a slot
 # nobody chose for it.
 RESOURCES: dict[tuple[str, str], Resources] = {
+    # 21:25: a fourth arm, arm A at half the context -- ctx and local ctx both
+    # 512, evaluated at the same 512, so the curve measures what it trains
+    # under. `il` has five slots free as the first arms finish; the two
+    # shortest take reserved cards.
+    #
     # 21:10: a focused iteration -- six short tasks, three arms, a project of
     # its own. The queue is empty and the whole budget is free: `il`'s ten take
     # the first arm and four of the second, ampere8's eight reserved cards the
@@ -335,14 +340,14 @@ RESOURCES: dict[tuple[str, str], Resources] = {
     # card we already have), and the nine shortest runs fit it: all under 4h,
     # well inside the reservation's 2026-08-13T00:00 end.
     ("rel-trial", "study-adverse"): a100("il", "8:00:00"),
-    ("rel-event", "user-attendance"): a100("il-lo", "8:00:00", "ranjanr_deadline"),
+    ("rel-event", "user-attendance"): a100("il", "8:00:00"),
     ("rel-event", "user-ignore"): a100("il", "8:00:00"),
     ("rel-trial", "study-outcome"): a100("il", "8:00:00"),
-    ("rel-f1", "driver-dnf"): a100("il-lo", "8:00:00", "ranjanr_deadline"),
-    ("rel-f1", "driver-position"): a100("il-lo", "8:00:00", "ranjanr_deadline"),
-    ("rel-avito", "ad-ctr"): a100("il-lo", "8:00:00", "ranjanr_deadline"),
-    ("rel-event", "user-repeat"): b200("il-interactive", "8:00:00"),
-    ("rel-f1", "driver-top3"): b200("il-interactive", "8:00:00"),
+    ("rel-f1", "driver-dnf"): a100("il", "8:00:00"),
+    ("rel-f1", "driver-position"): a100("il", "8:00:00"),
+    ("rel-avito", "ad-ctr"): a100("il", "8:00:00"),
+    ("rel-event", "user-repeat"): a100("il-lo", "8:00:00", "ranjanr_deadline"),
+    ("rel-f1", "driver-top3"): a100("il-lo", "8:00:00", "ranjanr_deadline"),
 }
 
 
@@ -361,9 +366,17 @@ def main() -> None:
     # How long a run is, and the tag that keeps its curves apart from the other
     # length's in the same project -- the comparison is one panel per task with
     # a group per epoch budget.
-    # epochs, total_bs, lr, opt, tag = 50, 256, 5e-4, "muon", "-bs256-lr5e-4"
-    # epochs, total_bs, lr, opt, tag = 50, 256, 1e-3, "muon", "-bs256-lr1e-3"
-    epochs, total_bs, lr, opt, tag = 50, 512, 1e-3, "muon", "-bs512-lr1e-3"
+    # epochs, total_bs, lr, opt, ctx, tag = 50, 256, 5e-4, "muon", 1024, "-bs256-lr5e-4"
+    # epochs, total_bs, lr, opt, ctx, tag = 50, 256, 1e-3, "muon", 1024, "-bs256-lr1e-3"
+    epochs, total_bs, lr, opt, ctx, tag = (
+        50,
+        256,
+        5e-4,
+        "muon",
+        512,
+        "-bs256-lr5e-4-ctx512",
+    )
+    # epochs, total_bs, lr, opt, ctx, tag = 50, 512, 1e-3, "muon", 1024, "-bs512-lr1e-3"
     # Shortest run first, so the fastest answers land first. The step budget,
     # not the test split: what a job costs here is overwhelmingly its training.
     for db, task in sorted(
@@ -405,8 +418,8 @@ def main() -> None:
                 tokens_per_gpu=2**18 if resources.gpus.startswith("b200") else 2**17,
                 num_workers=resources.cpus_per_task,
                 prefetch_factor=2,
-                ctx_size_list=[1024],
-                local_ctx_size_list=[1024],
+                ctx_size_list=[ctx],
+                local_ctx_size_list=[ctx],
                 bfs_width_list=[128],
                 prefer_latest_list=[False],
                 num_walks=10_000,
@@ -440,12 +453,12 @@ def main() -> None:
                 eval_num_walks=10_000,
                 eval_walk_length=20,
                 eval_items_per_task=2**16,
-                eval_ctx_size_list=[1024],
+                eval_ctx_size_list=[ctx],
                 eval_mmap_populate=True,
                 eval_shuffle_seed=0,
                 eval_context_seed=0,
                 eval_vector_db_path=None,
-                eval_lcs_bw_pl_grid=[(1024, 128, False)],
+                eval_lcs_bw_pl_grid=[(ctx, 128, False)],
                 targets=targets_for(db, task),
                 project="2026-08-11-iteration",
                 entity="rtv2",
