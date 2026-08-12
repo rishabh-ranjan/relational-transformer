@@ -7,7 +7,7 @@ moment one of these does:
 - **delta fine-tuning from RT-J**: the published weights are what decay pulls
   back to, and the update is the ordinary one (see `rt.train`'s
   `delta_finetune`);
-- 25 epochs at batch 512, lr 5e-4 held constant -- no warmup, no decay -- and
+- 100 epochs at batch 512, lr 5e-4 held constant -- no warmup, no decay -- and
   weight decay 0.1, Muon;
 - a **fixed** context: ctx and local ctx 1024, bfs width 128, prefer-latest
   off, no walks, and the eval grid the same one. No token masking;
@@ -190,7 +190,8 @@ def ckpt_for(db: str, task: str, release: str | None) -> str | None:
     if release is None:
         return None
     sub = {"BINARY_CLASSIFICATION": "classification", "REGRESSION": "regression"}
-    return f"/dfs/user/ranjanr/share/stanford-star/{release}/{sub[task_type_for(db, task)]}"
+    head = sub[task_type_for(db, task)]
+    return f"/dfs/user/ranjanr/share/stanford-star/{release}/{head}"
 
 
 def loss_fn_for(db: str, task: str) -> str:
@@ -292,28 +293,22 @@ RESOURCES: dict[tuple[str, str], Resources] = {
 RUN_IDS: dict[tuple[str, str], str] = {}
 
 
-def main() -> None:
-    # The run this experiment is: trained on train and val, scored on test,
-    # with the database cut at the test timestamp -- the same relation to its
-    # labels that inference gets. `steps_for` reads the splits, so the epoch
-    # budget counts the rows actually trained on.
-    train_splits, eval_split, cutoff = ["train", "val"], "test", "test"
-    epochs, total_bs, lr, wd = 25, 512, 5e-4, 0.1
+# How long a run is. `steps_for` needs them for the sort, and the call below
+# takes them as they are; nothing else in this file is a knob.
+TRAIN_SPLITS = ["train", "val"]
+EPOCHS = 100
+TOTAL_BS = 512
 
+
+def main() -> None:
     # Shortest run first, so the fastest answers land first. The step budget,
     # not the test split: what a job costs here is overwhelmingly its training.
     for db, task in sorted(
-        TASKS, key=lambda p: steps_for(*p, train_splits, total_bs, epochs)
+        TASKS, key=lambda p: steps_for(*p, TRAIN_SPLITS, TOTAL_BS, EPOCHS)
     ):
         resources = RESOURCES[db, task]
         name = f"{db}/{task}"
-        total_steps = steps_for(db, task, train_splits, total_bs, epochs)
-        # Ten evals across the run, wherever that falls, plus the one
-        # `rt.train` always does at the last step.
-        eval_freq = max(1, total_steps // 10)
-        # No schedule: `lr` from the first step to the last. SWA is what this
-        # base averages over instead of a decay.
-        lr_warmup_steps = 0
+        total_steps = steps_for(db, task, TRAIN_SPLITS, TOTAL_BS, EPOCHS)
         print(f"  {name:38s} {resources.gpus} {resources.qos:15s} {resources.time}")
         submit(
             "rt.train:main",
@@ -331,7 +326,7 @@ def main() -> None:
                 loss_fn=loss_fn_for(db, task),
                 load_ckpt_path=ckpt_for(db, task, "rt-j"),
                 db_task_list=[(db, task)],
-                train_splits=train_splits,
+                train_splits=TRAIN_SPLITS,
                 pre_dir="/dfs/user/ranjanr/share/stanford-star/relbench-preprocessed",
                 tokens_per_gpu=2**18 if resources.gpus.startswith("b200") else 2**17,
                 num_workers=resources.cpus_per_task,
@@ -346,24 +341,24 @@ def main() -> None:
                 items_per_task=1_000_000_000,
                 delta_finetune=True,
                 optimizer="muon",
-                lr=lr,
-                wd=wd,
-                lr_warmup_steps=lr_warmup_steps,
+                lr=5e-4,
+                wd=0.1,
+                lr_warmup_steps=0,
                 lr_decay_steps=0,
                 grad_norm_max=1.0,
-                total_bs=total_bs,
+                total_bs=TOTAL_BS,
                 total_steps=total_steps,
                 early_stop_after_steps=None,
                 swa_momentum=1.0,
                 seed=0,
                 mmap_populate=True,
                 timeout_per_item=10.0,
-                eval_freq=eval_freq,
+                eval_freq=max(1, total_steps // 10),
                 keep_all_ckpts=False,
                 vector_db_path=None,
-                db_cutoff=cutoff,
+                db_cutoff="test",
                 resume_save_mins=20.0,
-                eval_splits=[eval_split],
+                eval_splits=["test"],
                 eval_db_task_list=[(db, task)],
                 eval_pre_dir="/dfs/user/ranjanr/share/stanford-star/relbench-preprocessed",
                 eval_tokens_per_gpu=2**18,
