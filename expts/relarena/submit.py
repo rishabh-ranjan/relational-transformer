@@ -40,30 +40,20 @@ CACHE_DIR = "/tmp/ranjanr/relarena-cache"
 # the refit is worth. Ordered by what the `rt` sweep measured, minus its refit
 # term, fastest first -- so the answers land in that order and a card freed
 # early takes the next job.
-# Resubmitting the sixteen rt-norefit jobs that died on a cache miss: run.py
-# warmed only when the model was exactly "rt", and warm_cache knew three of the
-# four exports the two regimes need between them. Both fixed; the five that
-# survived (they landed where the rt sweep had already warmed the shared
-# selection-arm export) keep running and are not resubmitted.
+# Four jobs pended on QOSMaxGRESPerUser -- over my own cap, because the
+# resubmission reused resource lines written when `il` and `il-interactive` had
+# room and the rt sweep plus the five surviving norefit jobs have since filled
+# both. That reason never clears on its own while my own sweep holds the slots,
+# so they move to the uncapped tier rather than wait it out: two of them are
+# rel-amazon, which pays ~5h of preprocessing before a gradient step and is the
+# last thing that should be queueing.
 EXPERIMENTS = tuple(
     ("rt-norefit", db, task)
     for db, task in (
-        ("rel-avito", "ad-ctr"),
-        ("rel-event", "user-attendance"),
-        ("rel-avito", "user-visits"),
-        ("rel-f1", "driver-top3"),
-        ("rel-trial", "site-success"),
-        ("rel-f1", "driver-dnf"),
         ("rel-event", "user-ignore"),
         ("rel-avito", "user-clicks"),
-        ("rel-stack", "post-votes"),
-        ("rel-hm", "user-churn"),
-        ("rel-trial", "study-adverse"),
-        ("rel-stack", "user-engagement"),
         ("rel-amazon", "item-churn"),
         ("rel-amazon", "item-ltv"),
-        ("rel-amazon", "user-churn"),
-        ("rel-amazon", "user-ltv"),
     )
 )
 
@@ -179,8 +169,8 @@ RESOURCES: dict[tuple[str, str, str], Resources] = {
     ("rt-norefit", "rel-hm", "user-churn"): b200("il-interactive", "12:00:00"),
     ("rt-norefit", "rel-stack", "post-votes"): b200("il-interactive", "12:00:00"),
     # il's three free slots: the three next slowest.
-    ("rt-norefit", "rel-avito", "user-clicks"): a100("il", "1-00:00:00"),
-    ("rt-norefit", "rel-event", "user-ignore"): a100("il", "1-00:00:00"),
+    ("rt-norefit", "rel-avito", "user-clicks"): a100("il-lo", "1-00:00:00"),
+    ("rt-norefit", "rel-event", "user-ignore"): a100("il-lo", "1-00:00:00"),
     ("rt-norefit", "rel-f1", "driver-dnf"): a100("il", "1-00:00:00"),
     # The reservation's seven free cards: the seven fastest, all well inside a
     # 10-hour wall and so inside the reservation.
@@ -199,8 +189,8 @@ RESOURCES: dict[tuple[str, str, str], Resources] = {
     ("rt-norefit", "rel-hm", "item-sales"): a100("il-lo", "2-00:00:00"),
     ("rt-norefit", "rel-stack", "user-engagement"): a100("il-lo", "2-00:00:00"),
     ("rt-norefit", "rel-stack", "user-badge"): a100("il-lo", "2-00:00:00"),
-    ("rt-norefit", "rel-amazon", "item-churn"): b200("il-interactive", "12:00:00"),
-    ("rt-norefit", "rel-amazon", "item-ltv"): b200("il-interactive", "12:00:00"),
+    ("rt-norefit", "rel-amazon", "item-churn"): a100("il-lo", "2-00:00:00"),
+    ("rt-norefit", "rel-amazon", "item-ltv"): a100("il-lo", "2-00:00:00"),
     ("rt-norefit", "rel-amazon", "user-churn"): b200("il", "1-00:00:00"),
     ("rt-norefit", "rel-amazon", "user-ltv"): b200("il", "1-00:00:00"),
 }
