@@ -28,7 +28,10 @@ itertools = "*"
 serde = { version = "*", features = ["derive"] }
 rand = "0.9.1"
 clap = { version = "*", features = ["derive"] }
-pyo3 = { version = "*", features = ["abi3-py312"] }
+# abi3-py311: one stable-ABI extension for every CPython from 3.11 up, so a
+# single wheel covers the whole supported range and needs no rebuild per minor
+# version. The floor is the package's requires-python.
+pyo3 = { version = "*", features = ["abi3-py311"] }
 memmap2 = "*"
 rkyv = { version = "*", features = ["pointer_width_64"] }
 numpy = { version = "*", features = ["half"] }
