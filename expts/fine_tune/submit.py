@@ -253,8 +253,9 @@ def a100(
 # A task with no line here stops the submission rather than taking a slot
 # nobody chose for it.
 RESOURCES: dict[tuple[str, str], Resources] = {
-    # 20:55: the same 2e-4 shape on plain AdamW instead of Muon+AdamW -- one
-    # optimizer over every parameter, the decay split unchanged.
+    # 21:05: plain AdamW at the 50-epoch shape -- the arm that holds the only
+    # first place -- so the pair isolates the optimizer and nothing else. Above
+    # the 2e-4 arm, whose pending jobs drop to `il-lo` to make room.
     #
     # 20:45: lr 2e-4, the same shape. Queued on `il` behind the 1e-4 arm rather
     # than displacing anything: the short arms finish every few minutes, so the
@@ -355,7 +356,7 @@ def main() -> None:
     # How long a run is, and the tag that keeps its curves apart from the other
     # length's in the same project -- the comparison is one panel per task with
     # a group per epoch budget.
-    epochs, total_bs, lr, opt, tag = 100, 512, 2e-4, "adamw", "-lr2e-4-adamw"
+    epochs, total_bs, lr, opt, tag = 50, 256, 5e-4, "adamw", "-50ep-adamw"
     # epochs, total_bs, lr, opt, tag = 100, 512, 2e-4, "muon", "-100ep-bs512-lr2e-4"
     # epochs, total_bs, lr, opt, tag = 100, 512, 1e-4, "muon", "-100ep-bs512-lr1e-4"
     # epochs, total_bs, lr, opt, tag = 50, 512, 5e-4, "muon", "-50ep-bs512"
