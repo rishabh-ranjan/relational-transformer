@@ -40,28 +40,14 @@ CACHE_DIR = "/tmp/ranjanr/relarena-cache"
 # the refit is worth. Ordered by what the `rt` sweep measured, minus its refit
 # term, fastest first -- so the answers land in that order and a card freed
 # early takes the next job.
+# A promotion. The four rel-amazon norefit jobs went out on `il-lo` and sat on
+# Priority behind my own sweep, while blackwell1 had six free b200 and both
+# `il-interactive` slots were open. rel-amazon is the long pole -- ~5h of
+# preprocessing before a gradient step -- so it is exactly the job a faster
+# card is worth spending a capped tier on.
 EXPERIMENTS = tuple(
     ("rt-norefit", db, task)
     for db, task in (
-        # measured `rt` fit_tuning + predict, in minutes
-        ("rel-avito", "ad-ctr"),            # 21
-        ("rel-event", "user-attendance"),   # 23
-        ("rel-avito", "user-visits"),       # 31
-        ("rel-trial", "study-outcome"),     # 35
-        ("rel-f1", "driver-position"),      # 35
-        ("rel-event", "user-repeat"),       # 39
-        ("rel-f1", "driver-top3"),          # 44
-        ("rel-trial", "site-success"),      # 75
-        ("rel-f1", "driver-dnf"),           # 80
-        ("rel-event", "user-ignore"),       # 81
-        ("rel-avito", "user-clicks"),       # 95
-        ("rel-stack", "post-votes"),        # 138
-        ("rel-hm", "user-churn"),           # 194
-        # still running under `rt`, so unmeasured -- ordered by database size.
-        ("rel-trial", "study-adverse"),
-        ("rel-hm", "item-sales"),
-        ("rel-stack", "user-engagement"),
-        ("rel-stack", "user-badge"),
         ("rel-amazon", "item-churn"),
         ("rel-amazon", "item-ltv"),
         ("rel-amazon", "user-churn"),
@@ -201,10 +187,10 @@ RESOURCES: dict[tuple[str, str, str], Resources] = {
     ("rt-norefit", "rel-hm", "item-sales"): a100("il-lo", "2-00:00:00"),
     ("rt-norefit", "rel-stack", "user-engagement"): a100("il-lo", "2-00:00:00"),
     ("rt-norefit", "rel-stack", "user-badge"): a100("il-lo", "2-00:00:00"),
-    ("rt-norefit", "rel-amazon", "item-churn"): a100("il-lo", "2-00:00:00"),
-    ("rt-norefit", "rel-amazon", "item-ltv"): a100("il-lo", "2-00:00:00"),
-    ("rt-norefit", "rel-amazon", "user-churn"): a100("il-lo", "2-00:00:00"),
-    ("rt-norefit", "rel-amazon", "user-ltv"): a100("il-lo", "2-00:00:00"),
+    ("rt-norefit", "rel-amazon", "item-churn"): b200("il-interactive", "12:00:00"),
+    ("rt-norefit", "rel-amazon", "item-ltv"): b200("il-interactive", "12:00:00"),
+    ("rt-norefit", "rel-amazon", "user-churn"): b200("il", "1-00:00:00"),
+    ("rt-norefit", "rel-amazon", "user-ltv"): b200("il", "1-00:00:00"),
 }
 
 ZERO_SHOT_RESOURCES: dict[tuple[str, str], Resources] = {
