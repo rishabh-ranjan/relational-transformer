@@ -35,18 +35,21 @@ SHARE = "/dfs/user/ranjanr/share/relarena"
 # read on every context build.
 CACHE_DIR = "/tmp/ranjanr/relarena-cache"
 
-EXPERIMENTS = ()
+EXPERIMENTS = (
+    # (model, dataset, task)
+    ("rt", "rel-f1", "driver-top3"),
+)
 
 #: Zero-shot reads: the published checkpoint scored on test with no fine-tuning
 #: and no selection arm (see zero_shot.py). Not protocol runs -- a shortcut for
 #: reading a checkpoint's number on a task.
 ZERO_SHOT = (
     # (dataset, task, split, quote_train_only, mask_labels)
-    # The last difference between a val prediction and a test one: RelArena
-    # hands `predict` a val table that still carries its own labels, and a test
-    # table with them stripped. val at mask_labels=True is val scored the way
-    # test is.
+    # With db_cutoff bounding contexts at the split horizon, val and test are
+    # finally the same measurement: both re-run as the baseline the fine-tune
+    # has to beat.
     ("rel-f1", "driver-top3", "val", True, True),
+    ("rel-f1", "driver-top3", "test", True, False),
 )
 
 
