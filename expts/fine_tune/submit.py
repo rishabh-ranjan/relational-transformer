@@ -1,30 +1,25 @@
 """Submit one fine-tuning job per task. See [README.md](README.md).
 
-The base config, in the values below rather than in prose elsewhere -- it
-changes every submission, and a description that lives in another file goes
-stale the moment one of these does:
+The config, in the values below rather than in prose elsewhere -- it changes
+every submission, and a description that lives in another file goes stale the
+moment one of these does:
 
 - **delta fine-tuning from RT-J**: the published weights are what decay pulls
   back to, and the update is the ordinary one (see `rt.train`'s
   `delta_finetune`);
-- 25 epochs at batch 256, lr 5e-4 held constant -- no warmup, no decay -- and
+- 25 epochs at batch 512, lr 5e-4 held constant -- no warmup, no decay -- and
   weight decay 0.1, Muon;
-- a **fixed** context -- ctx and local ctx 1024, bfs width 128, prefer-latest
-  off, no walks, the eval grid the same one -- and no masking;
-- trained on the splits the arm names, and evaluated on the one it names, with
-  `db_cutoff` at that split's own timestamp. The reporting arm trains on
-  train+val and scores test; the selection arm trains on train and scores val,
-  to ask whether val picks the same epoch test would;
+- a **fixed** context: ctx and local ctx 1024, bfs width 128, prefer-latest
+  off, no walks, and the eval grid the same one. No token masking;
+- trained on train **and** val and scored on test, with `db_cutoff` at the test
+  timestamp, so the model stands in the same relation to its labels that
+  inference does. Nothing selects a checkpoint: the run keeps its last step
+  (`latest.safetensors`);
 - **equal-weight SWA** (`swa_momentum=1.0`, an fp32 running mean over every
-  step) evaluated and saved beside the live net, which is what stands in for a
-  decayed learning rate here;
-- every eval is a **4-seed context ensemble** (`eval_ensemble_size`), for the
-  live net and the SWA net alike, so the logged test curves are ensembled
-  numbers rather than single-context ones;
-- no early stopping: the budget is the budget.
-
-An arm is this file with one value changed and a `tag` that names it; the base
-carries no tag at all.
+  step), evaluated and saved beside the live net, standing in for a decay;
+- every eval is a **4-seed context ensemble** (`eval_ensemble_size`), live net
+  and SWA net alike, so the logged test curves are ensembled numbers;
+- ten evals a run, and no early stopping: the budget is the budget.
 """
 
 import functools
@@ -41,23 +36,23 @@ TASKS = (
     ("rel-f1", "driver-dnf"),
     ("rel-f1", "driver-top3"),
     ("rel-f1", "driver-position"),
-    # ("rel-trial", "study-outcome"),
+    ("rel-trial", "study-outcome"),
     ("rel-avito", "ad-ctr"),
     ("rel-event", "user-attendance"),
-    # ("rel-event", "user-ignore"),
-    # ("rel-trial", "study-adverse"),
-    # ("rel-trial", "site-success"),
-    # ("rel-avito", "user-visits"),
-    # ("rel-avito", "user-clicks"),
-    # ("rel-hm", "user-churn"),
-    # ("rel-stack", "user-engagement"),
-    # ("rel-hm", "item-sales"),
-    # ("rel-stack", "post-votes"),
-    # ("rel-amazon", "item-churn"),
-    # ("rel-amazon", "item-ltv"),
-    # ("rel-stack", "user-badge"),
-    # ("rel-amazon", "user-churn"),
-    # ("rel-amazon", "user-ltv"),
+    ("rel-event", "user-ignore"),
+    ("rel-trial", "study-adverse"),
+    ("rel-trial", "site-success"),
+    ("rel-avito", "user-visits"),
+    ("rel-avito", "user-clicks"),
+    ("rel-hm", "user-churn"),
+    ("rel-stack", "user-engagement"),
+    ("rel-hm", "item-sales"),
+    ("rel-stack", "post-votes"),
+    ("rel-amazon", "item-churn"),
+    ("rel-amazon", "item-ltv"),
+    ("rel-stack", "user-badge"),
+    ("rel-amazon", "user-churn"),
+    ("rel-amazon", "user-ltv"),
 )
 
 
@@ -267,144 +262,10 @@ def a100(
 #
 # A task with no line here stops the submission rather than taking a slot
 # nobody chose for it.
-#
-# 02:20: and batch 1024 at lr 1e-3 -- the lr the batch would want if the ratio
-# were held. On the reservation, which has room as the bs512 arm drains.
-#
-# 02:15: batch 1024 as well, on `il` -- the reservation is holding the bs512
-# arm and the val-selection runs have the rest.
-#
-# 02:10: batch 512 on the reporting arm (train+val, test, test cutoff), on
-# ampere8 so the val-selection runs keep their `il` cards.
-#
-# 01:20: the val-selection arm -- train on train, score val, database cut at
-# the val timestamp so val stands in the same relation to its labels that test
-# does to its own. Same six tasks, same everything else; the queue is empty.
-#
-# 00:45: the new base -- lr 5e-4 at batch 256, with a 4-seed ensemble at every
-# eval. The six tasks have test splits of a few hundred to two thousand rows,
-# so four passes over them costs seconds, not the minutes it would on the big
-# tasks. Six `il` amperes; the queue is empty again.
-#
-# 00:20: the fourth corner -- lr 5e-4 at batch 256. Four on `il`, which has
-# room as the base sweep's short tasks finish, two on the reservation.
-#
-# 00:15: two variants off the SWA base -- lr 5e-4, and batch 256 -- both on
-# ampere8, which is idle, so the base sweep on `il` keeps its cards.
-#
-# 00:05: constant lr with SWA instead of a decay. The queue is empty again, so
-# six `il` amperes; ctx is back to 1024 and the batch to 128, which is the
-# cheapest step this base has had.
-#
-# 23:35: ctx 1024 at batch 512 -- the same context as the arm above at the
-# same batch as the ctx-2048 base, and the first arm on the un-rounded step
-# budget. `il` has slots as the ctx-2048 runs finish.
-#
-# 23:25: ctx 1024 at batch 1024, alongside the ctx-2048 runs rather than
-# instead of them -- ampere8 is idle, so all six go on the reservation and
-# nothing already running gives up a card.
-#
-# 23:20: rel-event/user-attendance moves to a b200. It is 1200 steps at 9.4s
-# on an ampere -- three hours, against about one there -- and `sbatch
-# --test-only` puts a b200 job of mine at 23:34, so the fifteen minutes it
-# waits are bought back many times over. It resumes from its own run id.
-#
-# 23:20: the queue is mine again and empty. blackwell is planned for someone
-# else until 23:26, so no b200: six `il` amperes, which start now. ctx 2048 is
-# four times the attention of the last base, so these are the slowest short
-# runs yet.
 RESOURCES: dict[tuple[str, str], Resources] = {
-    # 22:20: delta fine-tuning -- the pretrained weights frozen as the point
-    # decay pulls back to, the update itself unchanged (see `delta_finetune`).
-    #
-    # 22:10: the same warm-start pair on driver-position.
-    #
-    # 22:05: and the same again from a random init -- `load_ckpt_path` None,
-    # so the only thing the arm changes is what the run starts from.
-    #
-    # 22:00: RT-J instead of RT-P, base config, no masking. The mirror is
-    # `/dfs/user/ranjanr/share/stanford-star/rt-j`, fetched from the login node.
-    #
-    # 21:50: `num_walks` is 0 from here on, train and eval alike -- so nothing
-    # submitted before this is comparable, and the masking arm needs its own
-    # unmasked control at the same setting. Both go out together.
-    #
-    # 21:40: driver-top3 alone, with 10% token masking. `il-interactive`'s
-    # second gpu is free and takes a card of any type, so it starts now.
-    #
-    # 21:25: a fourth arm, arm A at half the context -- ctx and local ctx both
-    # 512, evaluated at the same 512, so the curve measures what it trains
-    # under. `il` has five slots free as the first arms finish; the two
-    # shortest take reserved cards.
-    #
-    # 21:10: a focused iteration -- six short tasks, three arms, a project of
-    # its own. The queue is empty and the whole budget is free: `il`'s ten take
-    # the first arm and four of the second, ampere8's eight reserved cards the
-    # rest. blackwell is planned for someone else until 21:10, so no b200.
-    #
-    # 21:05: plain AdamW at the 50-epoch shape -- the arm that holds the only
-    # first place -- so the pair isolates the optimizer and nothing else. Above
-    # the 2e-4 arm, whose pending jobs drop to `il-lo` to make room.
-    #
-    # 20:45: lr 2e-4, the same shape. Queued on `il` behind the 1e-4 arm rather
-    # than displacing anything: the short arms finish every few minutes, so the
-    # cards come free faster than a cancel-and-resume would pay for itself.
-    #
-    # 20:35: lr 1e-4 at batch 512 for 100 epochs -- the arm to answer first, so
-    # it takes seven `il` cards from the 100-epoch runs (which resume on
-    # `il-lo`) and the two idle reserved ones. Same step count as 50ep at bs256,
-    # a fifth of the learning rate.
-    #
-    # 20:05: the five 100-epoch runs the bs512 arm displaced, resuming on
-    # `il-lo` with their own run ids.
-    #
-    # 20:00: the bs512 arm -- 50 epochs at twice the batch, so half the steps
-    # over the same data. Above the 100-epoch runs and below the other short
-    # arms: five take the `il` slots those runs give back, four take reserved
-    # cards as the 50-epoch jobs on ampere8 finish.
-    #
-    # 19:25: the nine displaced 100-epoch runs, resuming on `il-lo`. They keep
-    # their run ids, so each picks up its own resume.pt where it stopped.
-    #
-    # 19:20: the 25-epoch arm, on `il`. Nine of the ten `il` slots were held by
-    # the 50k-step 100-epoch runs, which are ~20h from an answer either way, so
-    # they step aside and resume on `il-lo`; these nine are under an hour each
-    # and `il` preempts to start them now.
-    #
-    # 19:15: and rel-event/user-attendance too -- the last reserved card the
-    # 50-epoch arm needs, with rel-f1/driver-dnf finishing on its own within
-    # the minute for the other. A resume costs a restart and a handful of
-    # steps: resume.pt is rewritten at every eval, and these evals are frequent.
-    #
-    # 19:10: these two 100-epoch runs give their reserved cards to the pending
-    # 50-epoch jobs and resume in the general `il-lo` pool. Chosen for having
-    # real time left (99 and 402 min) where rel-f1/driver-dnf and
-    # rel-trial/study-outcome are minutes from finishing -- displacing those
-    # would cost a restart to save nothing.
-    #
-    # 19:05: the whole 50-epoch arm onto the reservation -- it is the arm to
-    # answer next, and ampere8's cards are the ones nothing else can take.
-    #
-    # 19:00: the 50-epoch arm, nine short tasks. ampere8 is ours and has 3 free
-    # cards; `il-lo` on the reservation for those, and the plain pool for the
-    # rest -- every one of these is under 2h, well inside the reservation's
-    # 2026-08-13T00:00 end, and the high tiers stay on the 100-epoch runs.
-    #
-    # 18:50: back on an ampere. blackwell1 reads 2 b200 free and the node is not
-    # flagged RESERVED, but the cards are held for another job all the same --
-    # `AllocTRES` does not show that, and only the pending reason does. A b200
-    # job is not placed until it has been seen to start.
-    #
-    # 16:56, budget unspent: blackwell1 has 3 free b200 and is not flagged
-    # RESERVED, so 2 go to `il-interactive` and the third to `il`'s own 2-b200
-    # sub-cap. The three longest runs take them -- 4.4h each there against
-    # 11.8h on an ampere.
     ("rel-amazon", "user-churn"): b200("il-interactive", "12:00:00"),
     ("rel-amazon", "user-ltv"): b200("il-interactive", "12:00:00"),
     ("rel-stack", "user-badge"): b200("il", "1-00:00:00"),
-    # `il`'s nine remaining slots, next-longest first. Every ampere outside
-    # the reservation is full, but an `il` job preempts the `il-lo` ones
-    # holding them; the longest of these is 11.8h against a 1d wall.
     ("rel-amazon", "item-ltv"): a100("il-lo", "2-00:00:00"),
     ("rel-amazon", "item-churn"): a100("il-lo", "2-00:00:00"),
     ("rel-stack", "post-votes"): a100("il-lo", "2-00:00:00"),
@@ -414,10 +275,6 @@ RESOURCES: dict[tuple[str, str], Resources] = {
     ("rel-trial", "site-success"): a100("il-lo", "2-00:00:00"),
     ("rel-avito", "user-visits"): a100("il-lo", "2-00:00:00"),
     ("rel-avito", "user-clicks"): a100("il-lo", "2-00:00:00"),
-    # ampere8 is reserved for us and completely idle -- 8 cards nobody can
-    # take and nothing preempts. `il-lo` only (a high tier there would buy a
-    # card we already have), and the nine shortest runs fit it: all under 4h,
-    # well inside the reservation's 2026-08-13T00:00 end.
     ("rel-trial", "study-adverse"): a100("il", "8:00:00"),
     ("rel-event", "user-attendance"): a100("il-lo", "8:00:00", "ranjanr_deadline"),
     ("rel-event", "user-ignore"): a100("il", "8:00:00"),
@@ -436,45 +293,21 @@ RUN_IDS: dict[tuple[str, str], str] = {}
 
 
 def main() -> None:
-    # The two the schedule is derived from, and the same for every task, so
-    # they are read once here rather than per job: editing `train_splits` moves
-    # every task's `total_steps` with it, because the val rows are part of the
-    # epoch when they are trained on.
-    # The splits and the database cutoff are one choice, not three: a run that
-    # selects on val trains on train alone and must see the database only up to
-    # the val timestamp -- the same rule a test-split run gets one split later.
-    # `("train", "test")` is the arm that reports; `("val", "val")` is the arm
-    # that asks whether val can pick the epoch for it.
-    # train_splits, eval_split, cutoff = ["train"], "val", "val"
+    # The run this experiment is: trained on train and val, scored on test,
+    # with the database cut at the test timestamp -- the same relation to its
+    # labels that inference gets. `steps_for` reads the splits, so the epoch
+    # budget counts the rows actually trained on.
     train_splits, eval_split, cutoff = ["train", "val"], "test", "test"
+    epochs, total_bs, lr, wd = 25, 512, 5e-4, 0.1
 
-    # How long a run is, and the tag that keeps its curves apart from the other
-    # length's in the same project -- the comparison is one panel per task with
-    # a group per epoch budget.
-    # fmt: off
-    epochs, total_bs, lr, opt, ctx, mask, release, delta, wd, lcs, bw, pl, nw, tag = 25, 1024, 1e-3, "muon", 1024, 0.0, "rt-j", True, 0.1, 1024, 128, False, 0, "-bs1024-lr1e-3"  # noqa: E501
-    # epochs, total_bs, lr, opt, ctx, mask, release, delta, wd, lcs, bw, pl, nw, tag = 25, 1024, 5e-4, "muon", 1024, 0.0, "rt-j", True, 0.1, 1024, 128, False, 0, "-bs1024"  # noqa: E501
-    # epochs, total_bs, lr, opt, ctx, mask, release, delta, wd, lcs, bw, pl, nw, tag = 25, 512, 5e-4, "muon", 1024, 0.0, "rt-j", True, 0.1, 1024, 128, False, 0, "-bs512"  # noqa: E501
-    # epochs, total_bs, lr, opt, ctx, mask, release, delta, wd, lcs, bw, pl, nw, tag = 25, 256, 5e-4, "muon", 1024, 0.0, "rt-j", True, 0.1, 1024, 128, False, 0, "-valsel"  # noqa: E501
-    # epochs, total_bs, lr, opt, ctx, mask, release, delta, wd, lcs, bw, pl, nw, tag = 25, 256, 5e-4, "muon", 1024, 0.0, "rt-j", True, 0.1, 1024, 128, False, 0, ""  # noqa: E501
-    # fmt: on
-    # epochs, total_bs, lr, opt, ctx, mask, release, delta, tag = 50, 256, 5e-4, "muon", 1024, 0.0, "rt-p", False, ""
-    # epochs, total_bs, lr, opt, ctx, mask, release, delta, tag = 50, 256, 1e-3, "muon", 1024, 0.0, "rt-p", False, "-bs256-lr1e-3"
-    # epochs, total_bs, lr, opt, ctx, mask, release, delta, tag = 50, 512, 1e-3, "muon", 1024, 0.0, "rt-p", False, "-bs512-lr1e-3"
-    # epochs, total_bs, lr, opt, ctx, mask, release, delta, tag = 50, 256, 5e-4, "muon", 512, 0.0, "rt-p", False, "-ctx512"
     # Shortest run first, so the fastest answers land first. The step budget,
     # not the test split: what a job costs here is overwhelmingly its training.
     for db, task in sorted(
         TASKS, key=lambda p: steps_for(*p, train_splits, total_bs, epochs)
     ):
         resources = RESOURCES[db, task]
-        name = f"{db}/{task}{tag}"
-        steps = steps_for(db, task, train_splits, total_bs, epochs)
-        # The budget is the budget: `epochs` passes over the stream, not a
-        # rounded-up multiple of some cadence. Two arms that ask for the same
-        # epochs at different batch sizes then train the same amount of data,
-        # which rounding to a round number of steps quietly broke.
-        total_steps = steps
+        name = f"{db}/{task}"
+        total_steps = steps_for(db, task, train_splits, total_bs, epochs)
         # Ten evals across the run, wherever that falls, plus the one
         # `rt.train` always does at the last step.
         eval_freq = max(1, total_steps // 10)
@@ -496,23 +329,23 @@ def main() -> None:
                 compile=True,
                 materialize_attn_masks=True,
                 loss_fn=loss_fn_for(db, task),
-                load_ckpt_path=ckpt_for(db, task, release),
+                load_ckpt_path=ckpt_for(db, task, "rt-j"),
                 db_task_list=[(db, task)],
                 train_splits=train_splits,
                 pre_dir="/dfs/user/ranjanr/share/stanford-star/relbench-preprocessed",
                 tokens_per_gpu=2**18 if resources.gpus.startswith("b200") else 2**17,
                 num_workers=resources.cpus_per_task,
                 prefetch_factor=2,
-                ctx_size_list=[ctx],
-                local_ctx_size_list=[lcs],
-                bfs_width_list=[bw],
-                prefer_latest_list=[pl],
-                num_walks=nw,
+                ctx_size_list=[1024],
+                local_ctx_size_list=[1024],
+                bfs_width_list=[128],
+                prefer_latest_list=[False],
+                num_walks=0,
                 walk_length=20,
-                mask_prob_max=mask,
+                mask_prob_max=0.0,
                 items_per_task=1_000_000_000,
-                delta_finetune=delta,
-                optimizer=opt,
+                delta_finetune=True,
+                optimizer="muon",
                 lr=lr,
                 wd=wd,
                 lr_warmup_steps=lr_warmup_steps,
@@ -536,25 +369,25 @@ def main() -> None:
                 eval_tokens_per_gpu=2**18,
                 eval_num_workers=resources.cpus_per_task,
                 eval_prefetch_factor=2,
-                eval_num_walks=nw,
+                eval_num_walks=0,
                 eval_walk_length=20,
                 eval_items_per_task=2**16,
-                eval_ctx_size_list=[ctx],
+                eval_ctx_size_list=[1024],
                 eval_mmap_populate=True,
                 eval_shuffle_seed=0,
                 eval_context_seed=0,
                 eval_ensemble_size=4,
                 eval_vector_db_path=None,
-                eval_lcs_bw_pl_grid=[(lcs, bw, pl)],
+                eval_lcs_bw_pl_grid=[(1024, 128, False)],
                 targets=targets_for(db, task),
-                project="2026-08-11-iteration",
+                project="2026-08-13-fine_tune",
                 entity="rtv2",
                 run_name=name,
                 wandb_disabled=False,
                 out_root="/dfs/user/ranjanr/ckpts",
             ),
             resources=resources,
-            name=f"{db}-{task}{tag}",
+            name=f"{db}-{task}",
             repo_root="/lfs/hyperturing1/0/ranjanr/clones/rishabh-ranjan/relational-transformer",
             log_root="/dfs/user/ranjanr/slurm-logs/rishabh-ranjan/relational-transformer/expts/fine-tune",
             clone_root="/lfs/local/0/roach_clones",

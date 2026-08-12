@@ -27,8 +27,8 @@ from roach.slurm import Resources, submit
 from submit import TASKS, a100, b200, nsplit, targets_for  # noqa: F401
 
 # Where `submit.py`'s runs land, and the wandb project this one logs to.
-CKPT_ROOT = Path("/dfs/user/ranjanr/ckpts/rtv2/2026-08-12-fine_tune")
-PROJECT = "2026-08-12-ens"
+CKPT_ROOT = Path("/dfs/user/ranjanr/ckpts/rtv2/2026-08-13-fine_tune")
+PROJECT = "2026-08-13-ens"
 
 
 @functools.cache
