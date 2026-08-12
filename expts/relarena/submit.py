@@ -35,39 +35,45 @@ SHARE = "/dfs/user/ranjanr/share/relarena"
 # read on every context build.
 CACHE_DIR = "/tmp/ranjanr/relarena-cache"
 
-# rt-norefit over the same 21 tasks: the reporting arm reports the selection
-# arm's checkpoint instead of retraining on train+val, so the pair isolates what
-# the refit is worth. Ordered by what the `rt` sweep measured, minus its refit
-# term, fastest first -- so the answers land in that order and a card freed
-# early takes the next job.
-# rt-hpo on the seven fastest tasks: the trial of whether tuning the context
-# by inference fixes the rankings. Four of our five worst results are in here
-# (driver-dnf aside, which is slower), so it is the sample that answers the
-# question quickest.
-# A promotion: both remaining rt-hpo trials were pending on `il-lo` while
-# `il-interactive` sat empty and blackwell1 had five free b200. These two are
-# the experiment, so they take the fast cards.
-# One promotion: `il` has a slot and its b200 sub-cap has one of two used, so
-# exactly one job can move up. rel-stack/user-badge is the longest of the four
-# pending, which is where a b200 buys the most.
-# One free il-interactive slot, so one promotion: rel-hm/item-sales, the
-# longest of the three pending.
-# Three jobs died on blackwell1 with "No space left on device": our own cache
-# had filled its 438G disk to 99%, 319G of it ours and 162G of it rel-amazon.
-# Reaped 150G of datasets nothing there was still reading; these three go back
-# on amperes rather than compete for what is left.
-# The rt-hpo trial again at 50k selection steps, and onto the reservation:
-# ampere8 was sitting entirely idle -- 8 free a100 that are ours whatever tier
-# asks -- while jobs of mine pended elsewhere. The wall is 8h, inside the
-# reservation's 00:00 end; 50k steps would not fit that if a run ever reached
-# the ceiling, but early stopping has ended every one of these far sooner
-# (driver-position peaked at step 100).
-# Promotion: `il` read 5 of 10 once the rt sweep drained and the rt-hpo trial
-# moved to the reservation, while these three sat on il-lo behind my own jobs.
+#: Wall for the jobs pinned to the `ranjanr_deadline` reservation. Not il-lo's
+#: 21 days: a reservation job is killed when the reservation ends, so asking for
+#: longer than the window that is left is asking for a job that cannot finish.
+#: 7h against a window ending 2026-08-13T00:00, and the eight tasks placed there
+#: are all under 3h even in the worst case.
+RESERVATION_WALL = "7:00:00"
+
+# The full `rt-plurel` sweep: all 21 RelBench entity tasks, one job each.
+#
+# One model now, not three. `rt` and `rt-norefit` are gone -- `rt-hpo`'s
+# configuration won the three-task trial that compared them (rel-event/
+# user-repeat 0.7983 at rank 1/11 against `rt`'s 0.7605 at 5/11;
+# rel-trial/study-outcome 0.7274 at 2/11 against 0.7198 at 4/11), so it is now
+# simply the model, renamed for the checkpoint every arm starts from.
+#
+# Ordered longest-projected-first, which is also the tier order below: the jobs
+# that decide the makespan get the tier with no deadline on it.
 EXPERIMENTS = (
-    ("rt-norefit", "rel-trial", "study-adverse"),
-    ("rt-norefit", "rel-stack", "user-engagement"),
-    ("rt-norefit", "rel-hm", "item-sales"),
+    ("rt-plurel", "rel-amazon", "item-churn"),
+    ("rt-plurel", "rel-amazon", "user-ltv"),
+    ("rt-plurel", "rel-amazon", "item-ltv"),
+    ("rt-plurel", "rel-amazon", "user-churn"),
+    ("rt-plurel", "rel-hm", "item-sales"),
+    ("rt-plurel", "rel-stack", "user-engagement"),
+    ("rt-plurel", "rel-trial", "study-adverse"),
+    ("rt-plurel", "rel-stack", "user-badge"),
+    ("rt-plurel", "rel-hm", "user-churn"),
+    ("rt-plurel", "rel-stack", "post-votes"),
+    ("rt-plurel", "rel-avito", "user-clicks"),
+    ("rt-plurel", "rel-avito", "user-visits"),
+    ("rt-plurel", "rel-trial", "site-success"),
+    ("rt-plurel", "rel-event", "user-ignore"),
+    ("rt-plurel", "rel-f1", "driver-dnf"),
+    ("rt-plurel", "rel-avito", "ad-ctr"),
+    ("rt-plurel", "rel-event", "user-attendance"),
+    ("rt-plurel", "rel-trial", "study-outcome"),
+    ("rt-plurel", "rel-f1", "driver-top3"),
+    ("rt-plurel", "rel-event", "user-repeat"),
+    ("rt-plurel", "rel-f1", "driver-position"),
 )
 
 #: Zero-shot reads: the published checkpoint scored on test with no fine-tuning
@@ -163,24 +169,60 @@ def a100(qos: str, time: str) -> Resources:
     )
 
 
-# One line per experiment, read off the cluster at 14:29.
+# One line per experiment. Placement optimizes **makespan** -- the time at which
+# the last of the 21 results lands -- so every job starts now and the longest
+# ones get the tier that cannot take their card away.
 #
-# The four rel-amazon `rt` jobs were cancelled to make this room -- they were
-# the longest still to run, in their selection arm at 7h26m with a refit and a
-# 350k-row prediction still ahead. The other four `rt` jobs are all in their
-# refit and minutes from done, so killing them would burn 7h each for nothing.
-# All 21 rt-norefit jobs keep running.
+# The three tiers hold 21 concurrent jobs between them:
+#   il-interactive  2 gpus, 12h wall   -- both spent on b200
+#   il             10 gpus (<=2 b200), 7d wall
+#   il-lo          uncapped, 21d, preemptible -- plus the ampere8 reservation,
+#                  whose 8 a100 are ours outright until 2026-08-13T00:00
 #
-# That frees four `il` slots. Eight of my own rt-norefit jobs are pending on
-# `il-lo`, so `il` at priority 1000 is what puts these ahead of them -- which is
-# the intent: this trial answers a question the norefit sweep does not.
-# `il-interactive` is full (the two rel-amazon norefit jobs hold it), ampere8
-# has one free reserved card, and the rest go to the uncapped tier.
+# **rel-amazon goes to b200.** Part of preprocessing is GPU work -- a
+# sentence-transformer over 19.5M distinct strings -- and rel-amazon's is 1h46m
+# of it on an a100 against 1h05m on a b200, on top of a 2.75x train and 2.3x
+# eval speedup. Those four jobs are the makespan, so they take the four b200
+# slots the two capped tiers allow between them: the two *shorter* ones on
+# il-interactive, because its 12h wall is the binding one, and the two whose
+# worst case is ~10h on `il`, where the wall is a week and cannot clip them.
+#
+# The other 17 are a100. The eight longest take `il`'s remaining eight slots;
+# the next eight take the reservation, capped at the reservation's own end
+# rather than il-lo's 21 days -- all eight are under 3h even in the worst case,
+# so the 7h window is not close; and the shortest goes to plain il-lo, where a
+# 44-minute job can afford to queue.
+#
+# Walls are each tier's maximum, per the request, except where the reservation
+# is the tighter bound. The projections they cover are in
+# /tmp/ranjanr/relarena-plan/timings.md -- worst case, and worst case assumes
+# the full 50k steps for the two rel-amazon tasks with no early-stop precedent.
 RESOURCES: dict[tuple[str, str, str], Resources] = {
-    ("rt-norefit", "rel-trial", "study-adverse"): a100("il", "1-00:00:00"),
-    ("rt-norefit", "rel-stack", "user-engagement"): a100("il", "1-00:00:00"),
-    ("rt-norefit", "rel-hm", "item-sales"): a100("il", "1-00:00:00"),
-
+    # -- b200, the four rel-amazon tasks (GPU-heavy preprocessing)
+    ("rt-plurel", "rel-amazon", "item-churn"): b200("il", "7-00:00:00"),
+    ("rt-plurel", "rel-amazon", "user-ltv"): b200("il", "7-00:00:00"),
+    ("rt-plurel", "rel-amazon", "item-ltv"): b200("il-interactive", "12:00:00"),
+    ("rt-plurel", "rel-amazon", "user-churn"): b200("il-interactive", "12:00:00"),
+    # -- a100 on `il`: the eight longest, on the tier with a week of wall
+    ("rt-plurel", "rel-hm", "item-sales"): a100("il", "7-00:00:00"),
+    ("rt-plurel", "rel-stack", "user-engagement"): a100("il", "7-00:00:00"),
+    ("rt-plurel", "rel-trial", "study-adverse"): a100("il", "7-00:00:00"),
+    ("rt-plurel", "rel-stack", "user-badge"): a100("il", "7-00:00:00"),
+    ("rt-plurel", "rel-hm", "user-churn"): a100("il", "7-00:00:00"),
+    ("rt-plurel", "rel-stack", "post-votes"): a100("il", "7-00:00:00"),
+    ("rt-plurel", "rel-avito", "user-clicks"): a100("il", "7-00:00:00"),
+    ("rt-plurel", "rel-avito", "user-visits"): a100("il", "7-00:00:00"),
+    # -- a100 on the reservation: the next eight, all well inside its window
+    ("rt-plurel", "rel-trial", "site-success"): reserved(RESERVATION_WALL),
+    ("rt-plurel", "rel-event", "user-ignore"): reserved(RESERVATION_WALL),
+    ("rt-plurel", "rel-f1", "driver-dnf"): reserved(RESERVATION_WALL),
+    ("rt-plurel", "rel-avito", "ad-ctr"): reserved(RESERVATION_WALL),
+    ("rt-plurel", "rel-event", "user-attendance"): reserved(RESERVATION_WALL),
+    ("rt-plurel", "rel-trial", "study-outcome"): reserved(RESERVATION_WALL),
+    ("rt-plurel", "rel-f1", "driver-top3"): reserved(RESERVATION_WALL),
+    ("rt-plurel", "rel-event", "user-repeat"): reserved(RESERVATION_WALL),
+    # -- and the shortest, which can afford to queue
+    ("rt-plurel", "rel-f1", "driver-position"): a100("il-lo", "21-00:00:00"),
 }
 
 ZERO_SHOT_RESOURCES: dict[tuple[str, str], Resources] = {
