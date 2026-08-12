@@ -8,27 +8,47 @@ version = "1.1.0"
 description = "Relational Transformer (RT): a foundation model for relational data, bundling a native Rust data-processing engine (rt.rustler)."
 readme = "README.md"
 license = { file = "LICENSE" }
-requires-python = ">=3.12"
+# 3.11, not 3.12: nothing in `src/` uses 3.12-only syntax or stdlib, and a
+# consumer that pins 3.11 (relarena does, `~=3.11.0`) cannot resolve this
+# package at all if the floor is 3.12. Development still happens on 3.12 --
+# that is what `[tool.pixi.dependencies]` asks for.
+requires-python = ">=3.11"
+# Runtime only: what an `import rt.<something>` actually reaches for. Anything
+# used by the repo's own tooling, experiments or plots belongs in `dev` below,
+# so installing this package as a *library* (relarena does) does not drag a
+# plotting stack and a pre-commit install into the consumer's environment.
 dependencies = [
+    # roach.slurm ships in this distribution and type-checks its arguments.
     "beartype",
     "einops",
     "huggingface-hub",
-    "matplotlib",
     "ml_dtypes",
     "numpy",
     "orjson",
     "pandas",
     "polars",
-    "pre-commit",
     "pyarrow",
-    "pytest",
     "pyyaml",
     "safetensors",
-    "scikit-learn<1.6",
+    # mean_absolute_error / roc_auc_score in rt.eval only. The former `<1.6`
+    # cap was inherited from a relbench pin, not from anything here.
+    "scikit-learn",
     "sentence-transformers",
     "torch",
-    "tqdm",
+    # Imported at module scope by rt.train._train and rt.eval._eval, so it is a
+    # hard runtime dependency even for a run with `wandb_disabled=True`.
     "wandb",
+]
+
+[project.optional-dependencies]
+# The repo's own tooling and experiments: the test suite, the pre-commit hooks,
+# the wandb workspace builder (expts/fine_tune/workspace.py), and the baselines
+# and plots under expts/. None of it is imported from `src/rt`.
+dev = [
+    "matplotlib",
+    "pre-commit",
+    "pytest",
+    "tqdm",
     "wandb-workspaces",
     "xgboost",
 ]
@@ -73,6 +93,6 @@ maturin = "*"
 uv = "*"
 
 [tool.pixi.pypi-dependencies]
-relational-transformer = { path = ".", editable = true }
+relational-transformer = { path = ".", editable = true, extras = ["dev"] }
 # pinned until manifest-driven Hub data loading lands in a relbench release
 relbench = { git = "https://github.com/rishabh-ranjan/relbench", branch = "main" }
