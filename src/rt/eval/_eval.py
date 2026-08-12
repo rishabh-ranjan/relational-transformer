@@ -84,7 +84,7 @@ def main(
     shuffle_seed: int,
     context_seed: int,
     vector_db_path: str | None,
-    db_cutoff: str | None,
+    db_cutoff: str | int | None,
     lcs_bw_pl_grid: list[tuple[int, int, bool]],
     val_ensemble_size: int,
     test_ensemble_size: int,

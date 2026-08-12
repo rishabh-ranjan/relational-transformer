@@ -279,11 +279,12 @@ def main(
     # One switch for training and in-loop eval alike: they have to see the same
     # database or the validation number is not the training model's.
     # Which split's timestamp the database the contexts are built from is
-    # trimmed to: ``"test"``, ``"val"``, or ``None`` for no trim. A run that
+    # trimmed to: ``"test"``, ``"val"``, an explicit epoch-seconds integer for
+    # data relbench cannot be asked about, or ``None`` for no trim. A run that
     # selects on val has to use ``"val"`` -- the same rule test-time inference
     # gets, one split earlier -- or its val metric is scored against a database
     # that already contains the rows val is meant to predict.
-    db_cutoff: str | None,
+    db_cutoff: str | int | None,
     resume_save_mins: float,
     # in-loop validation
     eval_splits: list[str],

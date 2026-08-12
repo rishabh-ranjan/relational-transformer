@@ -18,6 +18,22 @@ from rt.rustler import Sampler
 MAX_F2P_NBRS = 5  # See fly.rs L32
 
 
+def _resolve_cutoff(db_cutoff, db_name: str, pre_dir: str) -> int | None:
+    """The context cutoff for one database, in seconds since the epoch.
+
+    ``None`` for no cutoff; ``"val"`` / ``"test"`` to look the split's timestamp
+    up in relbench; or an **integer**, which is used as-is. The integer form is
+    for data that relbench cannot be asked about -- a database assembled by a
+    caller rather than loaded from a release, whose splits are the caller's own
+    and whose ``meta.json`` therefore carries no ``source``.
+    """
+    if db_cutoff is None:
+        return None
+    if isinstance(db_cutoff, int):
+        return db_cutoff
+    return _split_timestamps(db_name, pre_dir)[db_cutoff]
+
+
 @cache
 def _split_timestamps(db_name: str, pre_dir: str) -> dict[str, int]:
     """``db_name``'s test timestamp, in rustler's seconds since the epoch.
@@ -106,7 +122,7 @@ class RustlerDataset:
         timeout_per_item,
         vector_db_path: str | None,
         train_only_fallback: bool,
-        db_cutoff: str | None,
+        db_cutoff: str | int | None,
     ):
         pre_dir = resolve_pre_dir(pre_dir)
         if vector_db_path is not None:
@@ -170,11 +186,7 @@ class RustlerDataset:
                 # eval gets; ``"val"`` is the same rule one split earlier, and
                 # is what a val-selected run has to use for val to predict
                 # test rather than to see past it.
-                cutoff_timestamps.append(
-                    None
-                    if db_cutoff is None
-                    else _split_timestamps(db_name, pre_dir)[db_cutoff]
-                )
+                cutoff_timestamps.append(_resolve_cutoff(db_cutoff, db_name, pre_dir))
 
                 dataset_tuples.append((db_name, table_name, node_idx_offset, num_nodes))
             except Exception as e:
@@ -256,7 +268,7 @@ class TrainDataset(RustlerDataset, IterableDataset):
         timeout_per_item,
         vector_db_path: str | None,
         train_only_fallback: bool,
-        db_cutoff: str | None,
+        db_cutoff: str | int | None,
     ):
         # TrainDataset drives both shuffle and context construction from the
         # same seed — this matches prior single-seed behavior.
