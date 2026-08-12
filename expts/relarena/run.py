@@ -26,7 +26,14 @@ def main(
     run_id: str,
 ) -> None:
     """Warm the caches, run one experiment, write `<out_dir>/<run_id>.csv`."""
+    import logging
+
     import pandas as pd
+
+    # relarena logs its decisions at INFO -- which checkpoint the selection arm
+    # chose, which context won the search. Without this they go nowhere, and a
+    # stage that silently did not run looks exactly like one that did.
+    logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s: %(message)s")
 
     import relarena.models  # noqa: F401  -- registers the built-in models
     from relarena.registry import registry
