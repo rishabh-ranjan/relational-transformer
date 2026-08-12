@@ -5,7 +5,7 @@ changes every submission, and a description that lives in another file goes
 stale the moment one of these does:
 
 - warm-started from the release the arm names (`ckpt_for`), one head per task
-  type;
+  type -- or from nothing, when that name is None;
 - **fixed** eval context, not stochastic: the `*_list` knobs are single-valued,
   and `eval_lcs_bw_pl_grid` is the same configuration, so the curve measures
   what the model is trained under;
@@ -173,14 +173,17 @@ def task_type_for(db: str, task: str) -> str:
     return task_type
 
 
-def ckpt_for(db: str, task: str, release: str) -> str:
-    """The published weights this task warm-starts from, RT-P or RT-J.
+def ckpt_for(db: str, task: str, release: str | None) -> str | None:
+    """The published weights this task warm-starts from: RT-P, RT-J, or None
+    for a randomly initialized net.
 
     One head per task type, each in its own subdirectory, so which one a run
     loads follows from the task's `task_type`. A local mirror rather than
     `stanford-star/rt-{p,j}`: a compute node has no Hub access. Refresh either
     with `huggingface_hub.snapshot_download("stanford-star/rt-j", local_dir=...)`.
     """
+    if release is None:
+        return None
     sub = {"BINARY_CLASSIFICATION": "classification", "REGRESSION": "regression"}
     return f"/dfs/user/ranjanr/share/stanford-star/{release}/{sub[task_type_for(db, task)]}"
 
@@ -255,6 +258,9 @@ def a100(
 # A task with no line here stops the submission rather than taking a slot
 # nobody chose for it.
 RESOURCES: dict[tuple[str, str], Resources] = {
+    # 22:05: and the same again from a random init -- `load_ckpt_path` None,
+    # so the only thing the arm changes is what the run starts from.
+    #
     # 22:00: RT-J instead of RT-P, base config, no masking. The mirror is
     # `/dfs/user/ranjanr/share/stanford-star/rt-j`, fetched from the login node.
     #
@@ -379,7 +385,8 @@ def main() -> None:
     # length's in the same project -- the comparison is one panel per task with
     # a group per epoch budget.
     # fmt: off
-    epochs, total_bs, lr, opt, ctx, mask, release, tag = 50, 256, 5e-4, "muon", 1024, 0.0, "rt-j", "-nw0-rtj"  # noqa: E501
+    epochs, total_bs, lr, opt, ctx, mask, release, tag = 50, 256, 5e-4, "muon", 1024, 0.0, None, "-nw0-rand"  # noqa: E501
+    # epochs, total_bs, lr, opt, ctx, mask, release, tag = 50, 256, 5e-4, "muon", 1024, 0.0, "rt-j", "-nw0-rtj"  # noqa: E501
     # epochs, total_bs, lr, opt, ctx, mask, release, tag = 50, 256, 5e-4, "muon", 1024, 0.0, "rt-p", "-nw0"  # noqa: E501
     # epochs, total_bs, lr, opt, ctx, mask, release, tag = 50, 256, 5e-4, "muon", 1024, 0.1, "rt-p", "-nw0-mask0.1"  # noqa: E501
     # fmt: on
