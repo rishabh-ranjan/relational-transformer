@@ -260,6 +260,9 @@ def a100(
 # A task with no line here stops the submission rather than taking a slot
 # nobody chose for it.
 #
+# 22:55: and onto ampere8 -- the reservation is idle, so a variant that would
+# otherwise queue behind the base sweep on `il` runs there straight away.
+#
 # 22:50: wd 0.2 as well, so the pull back to RT-J is sampled at 0.1, 0.2 and
 # 1.0. Six short jobs on whatever `il` has free as the base sweep drains.
 #
@@ -375,14 +378,14 @@ RESOURCES: dict[tuple[str, str], Resources] = {
     # card we already have), and the nine shortest runs fit it: all under 4h,
     # well inside the reservation's 2026-08-13T00:00 end.
     ("rel-trial", "study-adverse"): a100("il", "8:00:00"),
-    ("rel-event", "user-attendance"): a100("il", "8:00:00"),
+    ("rel-event", "user-attendance"): a100("il-lo", "8:00:00", "ranjanr_deadline"),
     ("rel-event", "user-ignore"): a100("il", "8:00:00"),
     ("rel-trial", "study-outcome"): a100("il", "8:00:00"),
-    ("rel-f1", "driver-dnf"): a100("il", "8:00:00"),
-    ("rel-f1", "driver-position"): a100("il", "8:00:00"),
-    ("rel-avito", "ad-ctr"): a100("il", "8:00:00"),
-    ("rel-event", "user-repeat"): a100("il", "8:00:00"),
-    ("rel-f1", "driver-top3"): a100("il", "8:00:00"),
+    ("rel-f1", "driver-dnf"): a100("il-lo", "8:00:00", "ranjanr_deadline"),
+    ("rel-f1", "driver-position"): a100("il-lo", "8:00:00", "ranjanr_deadline"),
+    ("rel-avito", "ad-ctr"): a100("il-lo", "8:00:00", "ranjanr_deadline"),
+    ("rel-event", "user-repeat"): a100("il-lo", "8:00:00", "ranjanr_deadline"),
+    ("rel-f1", "driver-top3"): a100("il-lo", "8:00:00", "ranjanr_deadline"),
 }
 
 
