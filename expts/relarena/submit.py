@@ -56,10 +56,23 @@ CACHE_DIR = "/tmp/ranjanr/relarena-cache"
 # had filled its 438G disk to 99%, 319G of it ours and 162G of it rel-amazon.
 # Reaped 150G of datasets nothing there was still reading; these three go back
 # on amperes rather than compete for what is left.
-EXPERIMENTS = (
-    ("rt-hpo", "rel-event", "user-repeat"),
-    ("rt-hpo", "rel-f1", "driver-top3"),
-    ("rt-norefit", "rel-hm", "item-sales"),
+# The rt-hpo trial again at 50k selection steps, and onto the reservation:
+# ampere8 was sitting entirely idle -- 8 free a100 that are ours whatever tier
+# asks -- while jobs of mine pended elsewhere. The wall is 8h, inside the
+# reservation's 00:00 end; 50k steps would not fit that if a run ever reached
+# the ceiling, but early stopping has ended every one of these far sooner
+# (driver-position peaked at step 100).
+EXPERIMENTS = tuple(
+    ("rt-hpo", db, task)
+    for db, task in (
+        ("rel-avito", "ad-ctr"),
+        ("rel-event", "user-attendance"),
+        ("rel-avito", "user-visits"),
+        ("rel-trial", "study-outcome"),
+        ("rel-f1", "driver-position"),
+        ("rel-event", "user-repeat"),
+        ("rel-f1", "driver-top3"),
+    )
 )
 
 #: Zero-shot reads: the published checkpoint scored on test with no fine-tuning
@@ -169,15 +182,14 @@ def a100(qos: str, time: str) -> Resources:
 # `il-interactive` is full (the two rel-amazon norefit jobs hold it), ampere8
 # has one free reserved card, and the rest go to the uncapped tier.
 RESOURCES: dict[tuple[str, str, str], Resources] = {
-    ("rt-hpo", "rel-avito", "ad-ctr"): a100("il", "8:00:00"),
-    ("rt-hpo", "rel-event", "user-attendance"): a100("il", "8:00:00"),
-    ("rt-hpo", "rel-avito", "user-visits"): a100("il", "8:00:00"),
-    ("rt-hpo", "rel-trial", "study-outcome"): a100("il", "8:00:00"),
+    ("rt-hpo", "rel-avito", "ad-ctr"): reserved("8:00:00"),
+    ("rt-hpo", "rel-event", "user-attendance"): reserved("8:00:00"),
+    ("rt-hpo", "rel-avito", "user-visits"): reserved("8:00:00"),
+    ("rt-hpo", "rel-trial", "study-outcome"): reserved("8:00:00"),
     ("rt-hpo", "rel-f1", "driver-position"): reserved("8:00:00"),
-    ("rt-norefit", "rel-stack", "user-badge"): b200("il", "1-00:00:00"),
-    ("rt-hpo", "rel-event", "user-repeat"): a100("il-lo", "8:00:00"),
-    ("rt-hpo", "rel-f1", "driver-top3"): a100("il-lo", "8:00:00"),
-    ("rt-norefit", "rel-hm", "item-sales"): a100("il-lo", "1-00:00:00"),
+    ("rt-hpo", "rel-event", "user-repeat"): reserved("8:00:00"),
+    ("rt-hpo", "rel-f1", "driver-top3"): reserved("8:00:00"),
+
 }
 
 ZERO_SHOT_RESOURCES: dict[tuple[str, str], Resources] = {
