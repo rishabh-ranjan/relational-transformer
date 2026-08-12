@@ -260,6 +260,10 @@ def a100(
 # A task with no line here stops the submission rather than taking a slot
 # nobody chose for it.
 #
+# 23:15: wd 0.0 on the cosine schedule. With no decay the delta formulation is
+# ordinary fine-tuning from RT-J -- nothing pulls back -- so this is the null
+# arm for the decay sweep. `il` is empty again, so all six go there.
+#
 # 23:05: the cosine schedule at the base wd 0.1 -- `rt.train`'s decay is a
 # cosine from this commit on, so the tag is what separates these from the runs
 # above, which are the same config on a linear one. ampere8 is idle again.
@@ -382,14 +386,14 @@ RESOURCES: dict[tuple[str, str], Resources] = {
     # card we already have), and the nine shortest runs fit it: all under 4h,
     # well inside the reservation's 2026-08-13T00:00 end.
     ("rel-trial", "study-adverse"): a100("il", "8:00:00"),
-    ("rel-event", "user-attendance"): a100("il-lo", "8:00:00", "ranjanr_deadline"),
+    ("rel-event", "user-attendance"): a100("il", "8:00:00"),
     ("rel-event", "user-ignore"): a100("il", "8:00:00"),
     ("rel-trial", "study-outcome"): a100("il", "8:00:00"),
-    ("rel-f1", "driver-dnf"): a100("il-lo", "8:00:00", "ranjanr_deadline"),
-    ("rel-f1", "driver-position"): a100("il-lo", "8:00:00", "ranjanr_deadline"),
-    ("rel-avito", "ad-ctr"): a100("il-lo", "8:00:00", "ranjanr_deadline"),
-    ("rel-event", "user-repeat"): a100("il-lo", "8:00:00", "ranjanr_deadline"),
-    ("rel-f1", "driver-top3"): a100("il-lo", "8:00:00", "ranjanr_deadline"),
+    ("rel-f1", "driver-dnf"): a100("il", "8:00:00"),
+    ("rel-f1", "driver-position"): a100("il", "8:00:00"),
+    ("rel-avito", "ad-ctr"): a100("il", "8:00:00"),
+    ("rel-event", "user-repeat"): a100("il", "8:00:00"),
+    ("rel-f1", "driver-top3"): a100("il", "8:00:00"),
 }
 
 
@@ -409,7 +413,8 @@ def main() -> None:
     # length's in the same project -- the comparison is one panel per task with
     # a group per epoch budget.
     # fmt: off
-    epochs, total_bs, lr, opt, ctx, mask, release, delta, wd, tag = 25, 128, 1e-3, "muon", 1024, 0.0, "rt-j", True, 0.1, "-cos"  # noqa: E501
+    epochs, total_bs, lr, opt, ctx, mask, release, delta, wd, tag = 25, 128, 1e-3, "muon", 1024, 0.0, "rt-j", True, 0.0, "-cos-wd0.0"  # noqa: E501
+    # epochs, total_bs, lr, opt, ctx, mask, release, delta, wd, tag = 25, 128, 1e-3, "muon", 1024, 0.0, "rt-j", True, 0.1, "-cos"  # noqa: E501
     # epochs, total_bs, lr, opt, ctx, mask, release, delta, wd, tag = 25, 128, 1e-3, "muon", 1024, 0.0, "rt-j", True, 0.2, "-wd0.2"  # noqa: E501
     # epochs, total_bs, lr, opt, ctx, mask, release, delta, wd, tag = 25, 128, 1e-3, "muon", 1024, 0.0, "rt-j", True, 1.0, "-wd1.0"  # noqa: E501
     # epochs, total_bs, lr, opt, ctx, mask, release, delta, wd, tag = 25, 128, 1e-3, "muon", 1024, 0.0, "rt-j", True, 0.1, ""  # noqa: E501
