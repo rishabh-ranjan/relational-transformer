@@ -26,24 +26,24 @@ from roach.slurm import Resources, submit
 HERE = Path(__file__).parent
 
 TASKS = (
-    ("rel-event", "user-repeat"),
-    ("rel-f1", "driver-dnf"),
-    ("rel-f1", "driver-top3"),
-    ("rel-f1", "driver-position"),
-    ("rel-trial", "study-outcome"),
-    ("rel-avito", "ad-ctr"),
-    ("rel-event", "user-attendance"),
-    ("rel-event", "user-ignore"),
-    ("rel-trial", "study-adverse"),
-    # ("rel-trial", "site-success"),
-    # ("rel-avito", "user-visits"),
-    # ("rel-avito", "user-clicks"),
-    # ("rel-hm", "user-churn"),
-    # ("rel-stack", "user-engagement"),
-    # ("rel-hm", "item-sales"),
-    # ("rel-stack", "post-votes"),
-    # ("rel-amazon", "item-churn"),
-    # ("rel-amazon", "item-ltv"),
+    # ("rel-event", "user-repeat"),
+    # ("rel-f1", "driver-dnf"),
+    # ("rel-f1", "driver-top3"),
+    # ("rel-f1", "driver-position"),
+    # ("rel-trial", "study-outcome"),
+    # ("rel-avito", "ad-ctr"),
+    # ("rel-event", "user-attendance"),
+    # ("rel-event", "user-ignore"),
+    # ("rel-trial", "study-adverse"),
+    ("rel-trial", "site-success"),
+    ("rel-avito", "user-visits"),
+    ("rel-avito", "user-clicks"),
+    ("rel-hm", "user-churn"),
+    ("rel-stack", "user-engagement"),
+    ("rel-hm", "item-sales"),
+    ("rel-stack", "post-votes"),
+    ("rel-amazon", "item-churn"),
+    ("rel-amazon", "item-ltv"),
     # ("rel-stack", "user-badge"),
     # ("rel-amazon", "user-churn"),
     # ("rel-amazon", "user-ltv"),
@@ -253,6 +253,9 @@ def a100(
 # A task with no line here stops the submission rather than taking a slot
 # nobody chose for it.
 RESOURCES: dict[tuple[str, str], Resources] = {
+    # 19:25: the nine displaced 100-epoch runs, resuming on `il-lo`. They keep
+    # their run ids, so each picks up its own resume.pt where it stopped.
+    #
     # 19:20: the 25-epoch arm, on `il`. Nine of the ten `il` slots were held by
     # the 50k-step 100-epoch runs, which are ~20h from an answer either way, so
     # they step aside and resume on `il-lo`; these nine are under an hour each
@@ -292,15 +295,15 @@ RESOURCES: dict[tuple[str, str], Resources] = {
     # `il`'s nine remaining slots, next-longest first. Every ampere outside
     # the reservation is full, but an `il` job preempts the `il-lo` ones
     # holding them; the longest of these is 11.8h against a 1d wall.
-    ("rel-amazon", "item-ltv"): a100("il", "1-00:00:00"),
-    ("rel-amazon", "item-churn"): a100("il", "1-00:00:00"),
-    ("rel-stack", "post-votes"): a100("il", "1-00:00:00"),
-    ("rel-hm", "item-sales"): a100("il", "1-00:00:00"),
-    ("rel-stack", "user-engagement"): a100("il", "1-00:00:00"),
-    ("rel-hm", "user-churn"): a100("il", "1-00:00:00"),
-    ("rel-trial", "site-success"): a100("il", "1-00:00:00"),
-    ("rel-avito", "user-visits"): a100("il", "1-00:00:00"),
-    ("rel-avito", "user-clicks"): a100("il", "1-00:00:00"),
+    ("rel-amazon", "item-ltv"): a100("il-lo", "2-00:00:00"),
+    ("rel-amazon", "item-churn"): a100("il-lo", "2-00:00:00"),
+    ("rel-stack", "post-votes"): a100("il-lo", "2-00:00:00"),
+    ("rel-hm", "item-sales"): a100("il-lo", "2-00:00:00"),
+    ("rel-stack", "user-engagement"): a100("il-lo", "2-00:00:00"),
+    ("rel-hm", "user-churn"): a100("il-lo", "2-00:00:00"),
+    ("rel-trial", "site-success"): a100("il-lo", "2-00:00:00"),
+    ("rel-avito", "user-visits"): a100("il-lo", "2-00:00:00"),
+    ("rel-avito", "user-clicks"): a100("il-lo", "2-00:00:00"),
     # ampere8 is reserved for us and completely idle -- 8 cards nobody can
     # take and nothing preempts. `il-lo` only (a high tier there would buy a
     # card we already have), and the nine shortest runs fit it: all under 4h,
@@ -319,7 +322,17 @@ RESOURCES: dict[tuple[str, str], Resources] = {
 
 # Resume an existing run instead of starting a new one: the run whose
 # `out_dir` this is picks its `resume.pt` back up. Empty when nothing resumes.
-RUN_IDS: dict[tuple[str, str], str] = {}
+RUN_IDS: dict[tuple[str, str], str] = {
+    ("rel-hm", "item-sales"): "26-08-11_16-57-12_923704997",
+    ("rel-trial", "site-success"): "26-08-11_16-57-10_561779113",
+    ("rel-hm", "user-churn"): "26-08-11_16-57-11_374368956",
+    ("rel-avito", "user-clicks"): "26-08-11_16-57-09_075803928",
+    ("rel-avito", "user-visits"): "26-08-11_16-57-09_831609202",
+    ("rel-stack", "post-votes"): "26-08-11_16-57-13_679986663",
+    ("rel-amazon", "item-churn"): "26-08-11_16-57-14_417394283",
+    ("rel-amazon", "item-ltv"): "26-08-11_16-57-15_214569945",
+    ("rel-stack", "user-engagement"): "26-08-11_16-57-12_151547107",
+}
 
 
 def main() -> None:
@@ -332,9 +345,9 @@ def main() -> None:
     # How long a run is, and the tag that keeps its curves apart from the other
     # length's in the same project -- the comparison is one panel per task with
     # a group per epoch budget.
-    epochs, tag = 25, "-25ep"
+    # epochs, tag = 25, "-25ep"
     # epochs, tag = 50, "-50ep"
-    # epochs, tag = 100, ""
+    epochs, tag = 100, ""
     # Shortest run first, so the fastest answers land first. The step budget,
     # not the test split: what a job costs here is overwhelmingly its training.
     for db, task in sorted(
