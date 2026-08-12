@@ -26,24 +26,24 @@ from roach.slurm import Resources, submit
 HERE = Path(__file__).parent
 
 TASKS = (
-    # ("rel-event", "user-repeat"),
-    # ("rel-f1", "driver-dnf"),
-    # ("rel-f1", "driver-top3"),
-    # ("rel-f1", "driver-position"),
-    # ("rel-trial", "study-outcome"),
-    # ("rel-avito", "ad-ctr"),
-    # ("rel-event", "user-attendance"),
-    # ("rel-event", "user-ignore"),
-    # ("rel-trial", "study-adverse"),
-    ("rel-trial", "site-success"),
-    ("rel-avito", "user-visits"),
-    ("rel-avito", "user-clicks"),
-    ("rel-hm", "user-churn"),
-    ("rel-stack", "user-engagement"),
-    ("rel-hm", "item-sales"),
-    ("rel-stack", "post-votes"),
-    ("rel-amazon", "item-churn"),
-    ("rel-amazon", "item-ltv"),
+    ("rel-event", "user-repeat"),
+    ("rel-f1", "driver-dnf"),
+    ("rel-f1", "driver-top3"),
+    ("rel-f1", "driver-position"),
+    ("rel-trial", "study-outcome"),
+    ("rel-avito", "ad-ctr"),
+    ("rel-event", "user-attendance"),
+    ("rel-event", "user-ignore"),
+    ("rel-trial", "study-adverse"),
+    # ("rel-trial", "site-success"),
+    # ("rel-avito", "user-visits"),
+    # ("rel-avito", "user-clicks"),
+    # ("rel-hm", "user-churn"),
+    # ("rel-stack", "user-engagement"),
+    # ("rel-hm", "item-sales"),
+    # ("rel-stack", "post-votes"),
+    # ("rel-amazon", "item-churn"),
+    # ("rel-amazon", "item-ltv"),
     # ("rel-stack", "user-badge"),
     # ("rel-amazon", "user-churn"),
     # ("rel-amazon", "user-ltv"),
@@ -253,6 +253,11 @@ def a100(
 # A task with no line here stops the submission rather than taking a slot
 # nobody chose for it.
 RESOURCES: dict[tuple[str, str], Resources] = {
+    # 20:00: the bs512 arm -- 50 epochs at twice the batch, so half the steps
+    # over the same data. Above the 100-epoch runs and below the other short
+    # arms: five take the `il` slots those runs give back, four take reserved
+    # cards as the 50-epoch jobs on ampere8 finish.
+    #
     # 19:25: the nine displaced 100-epoch runs, resuming on `il-lo`. They keep
     # their run ids, so each picks up its own resume.pt where it stopped.
     #
@@ -313,26 +318,16 @@ RESOURCES: dict[tuple[str, str], Resources] = {
     ("rel-event", "user-ignore"): a100("il", "8:00:00"),
     ("rel-trial", "study-outcome"): a100("il", "8:00:00"),
     ("rel-f1", "driver-dnf"): a100("il", "8:00:00"),
-    ("rel-f1", "driver-position"): a100("il", "8:00:00"),
-    ("rel-avito", "ad-ctr"): a100("il", "8:00:00"),
-    ("rel-event", "user-repeat"): a100("il", "8:00:00"),
-    ("rel-f1", "driver-top3"): a100("il", "8:00:00"),
+    ("rel-f1", "driver-position"): a100("il-lo", "8:00:00", "ranjanr_deadline"),
+    ("rel-avito", "ad-ctr"): a100("il-lo", "8:00:00", "ranjanr_deadline"),
+    ("rel-event", "user-repeat"): a100("il-lo", "8:00:00", "ranjanr_deadline"),
+    ("rel-f1", "driver-top3"): a100("il-lo", "8:00:00", "ranjanr_deadline"),
 }
 
 
 # Resume an existing run instead of starting a new one: the run whose
 # `out_dir` this is picks its `resume.pt` back up. Empty when nothing resumes.
-RUN_IDS: dict[tuple[str, str], str] = {
-    ("rel-hm", "item-sales"): "26-08-11_16-57-12_923704997",
-    ("rel-trial", "site-success"): "26-08-11_16-57-10_561779113",
-    ("rel-hm", "user-churn"): "26-08-11_16-57-11_374368956",
-    ("rel-avito", "user-clicks"): "26-08-11_16-57-09_075803928",
-    ("rel-avito", "user-visits"): "26-08-11_16-57-09_831609202",
-    ("rel-stack", "post-votes"): "26-08-11_16-57-13_679986663",
-    ("rel-amazon", "item-churn"): "26-08-11_16-57-14_417394283",
-    ("rel-amazon", "item-ltv"): "26-08-11_16-57-15_214569945",
-    ("rel-stack", "user-engagement"): "26-08-11_16-57-12_151547107",
-}
+RUN_IDS: dict[tuple[str, str], str] = {}
 
 
 def main() -> None:
@@ -341,13 +336,14 @@ def main() -> None:
     # every task's `total_steps` with it, because the val rows are part of the
     # epoch when they are trained on.
     train_splits = ["train", "val"]
-    total_bs = 256
+
     # How long a run is, and the tag that keeps its curves apart from the other
     # length's in the same project -- the comparison is one panel per task with
     # a group per epoch budget.
-    # epochs, tag = 25, "-25ep"
-    # epochs, tag = 50, "-50ep"
-    epochs, tag = 100, ""
+    epochs, total_bs, tag = 50, 512, "-50ep-bs512"
+    # epochs, total_bs, tag = 25, 256, "-25ep"
+    # epochs, total_bs, tag = 50, 256, "-50ep"
+    # epochs, total_bs, tag = 100, 256, ""
     # Shortest run first, so the fastest answers land first. The step budget,
     # not the test split: what a job costs here is overwhelmingly its training.
     for db, task in sorted(
