@@ -62,17 +62,12 @@ CACHE_DIR = "/tmp/ranjanr/relarena-cache"
 # reservation's 00:00 end; 50k steps would not fit that if a run ever reached
 # the ceiling, but early stopping has ended every one of these far sooner
 # (driver-position peaked at step 100).
-EXPERIMENTS = tuple(
-    ("rt-hpo", db, task)
-    for db, task in (
-        ("rel-avito", "ad-ctr"),
-        ("rel-event", "user-attendance"),
-        ("rel-avito", "user-visits"),
-        ("rel-trial", "study-outcome"),
-        ("rel-f1", "driver-position"),
-        ("rel-event", "user-repeat"),
-        ("rel-f1", "driver-top3"),
-    )
+# Promotion: `il` read 5 of 10 once the rt sweep drained and the rt-hpo trial
+# moved to the reservation, while these three sat on il-lo behind my own jobs.
+EXPERIMENTS = (
+    ("rt-norefit", "rel-trial", "study-adverse"),
+    ("rt-norefit", "rel-stack", "user-engagement"),
+    ("rt-norefit", "rel-hm", "item-sales"),
 )
 
 #: Zero-shot reads: the published checkpoint scored on test with no fine-tuning
@@ -182,13 +177,9 @@ def a100(qos: str, time: str) -> Resources:
 # `il-interactive` is full (the two rel-amazon norefit jobs hold it), ampere8
 # has one free reserved card, and the rest go to the uncapped tier.
 RESOURCES: dict[tuple[str, str, str], Resources] = {
-    ("rt-hpo", "rel-avito", "ad-ctr"): reserved("8:00:00"),
-    ("rt-hpo", "rel-event", "user-attendance"): reserved("8:00:00"),
-    ("rt-hpo", "rel-avito", "user-visits"): reserved("8:00:00"),
-    ("rt-hpo", "rel-trial", "study-outcome"): reserved("8:00:00"),
-    ("rt-hpo", "rel-f1", "driver-position"): reserved("8:00:00"),
-    ("rt-hpo", "rel-event", "user-repeat"): reserved("8:00:00"),
-    ("rt-hpo", "rel-f1", "driver-top3"): reserved("8:00:00"),
+    ("rt-norefit", "rel-trial", "study-adverse"): a100("il", "1-00:00:00"),
+    ("rt-norefit", "rel-stack", "user-engagement"): a100("il", "1-00:00:00"),
+    ("rt-norefit", "rel-hm", "item-sales"): a100("il", "1-00:00:00"),
 
 }
 
