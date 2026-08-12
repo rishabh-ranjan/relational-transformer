@@ -374,8 +374,8 @@ def main() -> None:
     # length's in the same project -- the comparison is one panel per task with
     # a group per epoch budget.
     # fmt: off
-    epochs, total_bs, lr, opt, ctx, mask, tag = 50, 256, 5e-4, "muon", 1024, 0.1, "-nw0-mask0.1"  # noqa: E501
-    # epochs, total_bs, lr, opt, ctx, mask, tag = 50, 256, 5e-4, "muon", 1024, 0.0, "-nw0"
+    # epochs, total_bs, lr, opt, ctx, mask, tag = 50, 256, 5e-4, "muon", 1024, 0.1, "-nw0-mask0.1"  # noqa: E501
+    epochs, total_bs, lr, opt, ctx, mask, tag = 50, 256, 5e-4, "muon", 1024, 0.0, "-nw0"
     # fmt: on
     # epochs, total_bs, lr, opt, ctx, mask, tag = 50, 256, 5e-4, "muon", 1024, 0.0, ""
     # epochs, total_bs, lr, opt, ctx, mask, tag = 50, 256, 1e-3, "muon", 1024, 0.0, "-bs256-lr1e-3"
