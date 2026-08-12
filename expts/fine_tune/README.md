@@ -41,38 +41,20 @@ which matters most on `il-interactive`'s 12 hours.
 ## Ensembling the fine-tuned checkpoints
 
 ```
-pixi run python expts/fine_tune/submit_eval.py
+pixi run python expts/fine_tune/submit_ens.py
 ```
 
-Two arms over the same weights and the same rows, one job per task per arm,
-both loading the best-on-val checkpoint of that task's most recent fine-tuning
-run:
+One job per task, each waiting `afterok` on that task's fine-tuning job and
+loading the `latest.safetensors` it leaves behind -- `submit.py` trains on val,
+so nothing selects a checkpoint and the last step is the run. A task whose
+training has already finished is submitted with no dependency.
 
-- **ens_only** fixes the context at the `(1024, 256, False)` the fine-tuning runs
-  evaluated with and averages over 8 context seeds. It reads nothing but test
-  and waits on nothing, so it is the arm that answers first, and it takes the
-  better slots;
-- **hpo_ens** ranks 66 context configurations — `ctx_size` in {512, 1024, 2048}
-  x `local_ctx_size` in {128, 256, 512, 1024}, `bfs_width` in {16, 64, 256},
-  `prefer_latest` in {False, True}, minus `local_ctx_size > ctx_size` — each
-  scored over 4 val seeds, then ensembles the winner over 8 seeds on test. It
-  pays only the 24 passes of `lcs_bw_pl_grid`: the three ctx sizes ride along
-  on each pass as prefixes of the contexts it already built.
-
-Both score the whole test split -- nothing subsampled, so the numbers are
-RelBench's own and each run writes a submission directory -- and both score the
-running average after each seed, so a log carries the test metric at every
-ensemble size, not just the last, logged against `ens_size` with the task's
-published target beside the curve.
-
-Preemption costs one pass, not the job: `rt.eval` writes `ensemble_resume.pt`
-beside `eval_out` after every tuning configuration and every ensemble seed, and
-a requeued attempt picks the sums back up. `il-lo` is safe for these.
-
-Rerun it as fine-tuning runs land: a task with no checkpoint yet is skipped,
-and one whose job is already queued is not sent twice. The weights each job
-loads are copied to `fine-tune-pinned` first, out of reach of the training run
-that is still pruning its own checkpoints.
+It sweeps 8 context seeds at the context `submit.py` trains under, scoring the
+running average over the **whole** test split after every seed: one job is the
+metric at every ensemble size up to 8, and the last point is a RelBench-valid
+number rather than the subsample the training curve carries. Preemption costs
+one seed -- `rt.eval` writes `ensemble_resume.pt` beside `eval_out` and a
+requeued attempt picks the sums back up.
 
 ## Workspaces
 

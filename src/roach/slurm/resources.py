@@ -54,6 +54,9 @@ class Resources:
     and lifts it."""
     constraint: str | None
     nodelist: str | None
+    dependency: str | None
+    """An sbatch dependency, e.g. ``afterok:12345``. The job stays pending
+    until it is satisfied, and slurm cancels it if it never can be."""
     reservation: str | None
     """A reservation to run inside, by name (`scontrol show res`). A reserved
     node is taken out of general scheduling, so its cards are reachable only
@@ -117,6 +120,8 @@ class Resources:
             flags.append(f"--nodelist={self.nodelist}")
         if self.reservation:
             flags.append(f"--reservation={self.reservation}")
+        if self.dependency:
+            flags.append(f"--dependency={self.dependency}")
         return flags
 
 
@@ -139,6 +144,7 @@ AMPERE = Resources(
     constraint="ampere",
     nodelist=None,
     reservation=None,
+    dependency=None,
 )
 """8xA100 on the fast queue. `il` caps a100 at 10 per user, so one of these at a time."""
 
@@ -156,6 +162,7 @@ AMPERE_LO = Resources(
     constraint="ampere",
     nodelist=None,
     reservation=None,
+    dependency=None,
 )
 """The same hardware on the low-priority queue: preemptible, but outside the
 10-a100 cap, so it runs alongside an AMPERE job."""
@@ -174,5 +181,6 @@ BLACKWELL = Resources(
     constraint=None,
     nodelist="blackwell1",
     reservation=None,
+    dependency=None,
 )
 """4xB200. Roughly 3x an 8xA100 job's throughput in the runs measured so far."""

@@ -188,7 +188,7 @@ def loss_fn_for(db: str, task: str) -> str:
     return {"BINARY_CLASSIFICATION": "bce", "REGRESSION": "l1"}[task_type_for(db, task)]
 
 
-def b200(qos: str, time: str) -> Resources:
+def b200(qos: str, time: str, dependency: str | None = None) -> Resources:
     """One B200. 36 cpus is blackwell1's 288 cores split eight ways, and the
     memory is that share of the node -- under the site's MaxMemPerCPU of 10700M
     times 36, which is what an explicit --mem is capped at."""
@@ -206,10 +206,13 @@ def b200(qos: str, time: str) -> Resources:
         constraint=None,
         nodelist="blackwell1",
         reservation=None,
+        dependency=dependency,
     )
 
 
-def a100(qos: str, time: str, reservation: str | None = None) -> Resources:
+def a100(
+    qos: str, time: str, reservation: str | None = None, dependency: str | None = None
+) -> Resources:
     """One A100. 14 cpus is what the site allows per gpu on a job that is not
     --exclusive; no --mem, so the partition's DefMemPerGPU (240000M) applies,
     which is more than an explicit request would be given.
@@ -234,6 +237,7 @@ def a100(qos: str, time: str, reservation: str | None = None) -> Resources:
         constraint="ampere",
         nodelist=None,
         reservation=reservation,
+        dependency=dependency,
     )
 
 
