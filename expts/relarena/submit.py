@@ -35,21 +35,20 @@ SHARE = "/dfs/user/ranjanr/share/relarena"
 # read on every context build.
 CACHE_DIR = "/tmp/ranjanr/relarena-cache"
 
-EXPERIMENTS = (
-    # (model, dataset, task)
-    ("rt", "rel-f1", "driver-top3"),
-)
+EXPERIMENTS = ()  # 129999 is already running the protocol on this task
 
 #: Zero-shot reads: the published checkpoint scored on test with no fine-tuning
 #: and no selection arm (see zero_shot.py). Not protocol runs -- a shortcut for
 #: reading a checkpoint's number on a task.
 ZERO_SHOT = (
-    # (dataset, task, split, quote_train_only, mask_labels)
-    # With db_cutoff bounding contexts at the split horizon, val and test are
-    # finally the same measurement: both re-run as the baseline the fine-tune
-    # has to beat.
-    ("rel-f1", "driver-top3", "val", True, True),
-    ("rel-f1", "driver-top3", "test", True, False),
+    # (dataset, task, split, quote_train_only, mask_labels, cutoff_offset)
+    # Does the -1 in context_cutoff matter? rustler's bound is inclusive
+    # (past_bound is `ts > bound`), so a cutoff landing exactly on the split's
+    # first cohort should leave those rows quotable by every later seed --
+    # 21 val rows at 2005-03-02 for this task. If that reading is right, the
+    # offset-0 run scores higher; if it is wrong, the two agree.
+    ("rel-f1", "driver-top3", "val", True, True, 0),
+    ("rel-f1", "driver-top3", "val", True, True, -1),
 )
 
 
@@ -104,7 +103,7 @@ RUN_IDS: dict[tuple[str, str, str], str] = {}
 
 
 def main() -> None:
-    for dataset, task, split, quote_train_only, mask_labels in ZERO_SHOT:
+    for dataset, task, split, quote_train_only, mask_labels, cutoff_offset in ZERO_SHOT:
         resources = ZERO_SHOT_RESOURCES[dataset, task]
         print(
             f"  zero-shot/{dataset}/{task}/{split} "
@@ -118,11 +117,12 @@ def main() -> None:
                 split=split,
                 quote_train_only=quote_train_only,
                 mask_labels=mask_labels,
+                cutoff_offset=cutoff_offset,
                 cache_dir=CACHE_DIR,
                 out_dir=f"{SHARE}/results",
             ),
             resources=resources,
-            name=f"relarena-zero-shot-{dataset}-{task}-{split}-masked{mask_labels}",
+            name=f"relarena-zero-shot-{dataset}-{task}-{split}-off{cutoff_offset}",
             setup=relarena_setup(),
             repo_root=REPO_ROOT,
             log_root=f"{SHARE}/slurm-logs",

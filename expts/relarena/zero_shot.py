@@ -14,6 +14,26 @@ in a results table beside protocol runs.
 from pathlib import Path
 
 
+def _patch_cutoff(cutoff_offset: int) -> None:
+    """Shift the context cutoff by `cutoff_offset` seconds.
+
+    `context_cutoff` subtracts a second from the split's earliest timestamp
+    because rustler's bound is inclusive (`past_bound` is `ts > bound`), so a
+    cutoff landing exactly on the split's first cohort would leave those rows
+    quotable by every later seed. `cutoff_offset=0` removes that subtraction,
+    which is what this measures.
+    """
+    from relarena.models.rt import config as cfg
+
+    original = cfg.context_cutoff
+
+    def patched(eval_table):
+        value = original(eval_table)
+        return None if value is None else value + 1 + cutoff_offset
+
+    cfg.context_cutoff = patched
+
+
 def _patch_quoting(quote_train_only: bool) -> None:
     """Override the context-quoting rule relarena's config asks for.
 
@@ -40,6 +60,7 @@ def main(
     split: str,
     quote_train_only: bool,
     mask_labels: bool,
+    cutoff_offset: int,
     cache_dir: str,
     out_dir: str,
     run_id: str,
@@ -119,10 +140,12 @@ def main(
 
     print(
         f"+ zero-shot {model._checkpoint} on {dataset}/{task} {split} "
-        f"(quote_train_only={quote_train_only}, mask_labels={mask_labels})",
+        f"(quote_train_only={quote_train_only}, mask_labels={mask_labels}, "
+        f"cutoff_offset={cutoff_offset})",
         flush=True,
     )
     _patch_quoting(quote_train_only)
+    _patch_cutoff(cutoff_offset)
     pred = model.predict(source.task, chosen.db_state, eval_table)
 
     metric = primary_metric(source.task)
@@ -140,6 +163,7 @@ def main(
                 "split": split,
                 "quote_train_only": quote_train_only,
                 "mask_labels": mask_labels,
+                "cutoff_offset": cutoff_offset,
                 **scores,
             }
         ]
