@@ -402,6 +402,13 @@ def main(
             return False
         return not name.startswith(("enc_dict.", "dec_dict."))
 
+    # Which parameters `wd` applies to, decided on its own rather than falling
+    # out of the Muon split: every weight matrix, including the encoders' and
+    # decoders', and nothing 0/1-D -- gains and biases are the parameters a
+    # decay would only shrink toward a worse scale.
+    def _is_decayed(name, p):
+        return p.ndim >= 2 and min(p.shape) > 1
+
     # Baseline for the memory breakdown logged on the first step. Taken before
     # the optimizers exist, so it is weights and nothing else -- `swa_net` is
     # built later and lands in the framework term with the rest of the fixed
@@ -412,6 +419,14 @@ def main(
     muon_params = [p for n, p in named if _is_muon(n, p)]
     other_params = [p for n, p in named if not _is_muon(n, p)]
     assert len(muon_params) + len(other_params) == len(named)
+    # The decayed parameters, split the same way the optimizers are: Muon
+    # applies its own decay to the group it holds, so AdamW takes the rest.
+    muon_decayed = [p for n, p in named if _is_muon(n, p) and _is_decayed(n, p)]
+    assert len(muon_decayed) == len(muon_params), (
+        "every parameter Muon takes is a weight matrix and so is decayed"
+    )
+    adamw_decayed = [p for n, p in named if not _is_muon(n, p) and _is_decayed(n, p)]
+    adamw_plain = [p for n, p in named if not _is_muon(n, p) and not _is_decayed(n, p)]
     assert optimizer in ("muon", "adamw"), f"optimizer={optimizer!r}"
     assert not delta_finetune or load_ckpt_path is not None, (
         "delta_finetune has nothing to be a delta of without load_ckpt_path"
@@ -433,17 +448,22 @@ def main(
                 ns_steps=5,
                 compile=compile,
             ),
-            optim.AdamW(other_params, weight_decay=0.0, **adamw_kwargs),
+            optim.AdamW(
+                [
+                    {"params": adamw_decayed, "weight_decay": opt_wd},
+                    {"params": adamw_plain, "weight_decay": 0.0},
+                ],
+                **adamw_kwargs,
+            ),
         ]
     else:
-        # One optimizer, the same decay policy: the matrices Muon would have
-        # taken keep `wd`, the encoders/decoders and the 0/1-D parameters keep
-        # none.
+        # One optimizer, the same decay policy: every weight matrix keeps `wd`,
+        # every gain and bias keeps none.
         opts = [
             optim.AdamW(
                 [
-                    {"params": muon_params, "weight_decay": opt_wd},
-                    {"params": other_params, "weight_decay": 0.0},
+                    {"params": muon_decayed + adamw_decayed, "weight_decay": opt_wd},
+                    {"params": adamw_plain, "weight_decay": 0.0},
                 ],
                 **adamw_kwargs,
             )
@@ -503,7 +523,7 @@ def main(
         delta_base = {
             n: base_sd[n].to(p.device, p.dtype)
             for n, p in raw_net.named_parameters()
-            if _is_muon(n, p)
+            if _is_decayed(n, p)
         }
 
     # ---- resume from preemption (GPU-count flexible: full model+opt per rank) ----

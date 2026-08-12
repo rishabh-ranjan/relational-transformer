@@ -66,6 +66,11 @@ turns SWA off: no second net is built, so there are no `swa_steps=` or
 `best_swa_*` files and nothing is selected on a `swa/` metric. It cannot be
 changed across a resume — the average is part of `resume.pt`.
 
+`wd` decays every weight matrix — the hidden matrices Muon holds and the
+encoders'/decoders' alike — and never a gain or a bias. That choice is made on
+its own, not by which optimizer a parameter went to: Muon takes hidden matrices
+only, but decay is about shape, so the two splits are not the same one.
+
 `delta_finetune` trains a zero-initialized additive delta on frozen pretrained
 weights rather than the weights themselves. The gradient of the delta is the
 gradient of the weight, and Muon's lr scaling depends on shape alone, so the
