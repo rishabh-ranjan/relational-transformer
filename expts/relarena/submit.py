@@ -47,13 +47,10 @@ CACHE_DIR = "/tmp/ranjanr/relarena-cache"
 # A promotion: both remaining rt-hpo trials were pending on `il-lo` while
 # `il-interactive` sat empty and blackwell1 had five free b200. These two are
 # the experiment, so they take the fast cards.
-EXPERIMENTS = tuple(
-    ("rt-hpo", db, task)
-    for db, task in (
-        ("rel-event", "user-repeat"),
-        ("rel-f1", "driver-top3"),
-    )
-)
+# One promotion: `il` has a slot and its b200 sub-cap has one of two used, so
+# exactly one job can move up. rel-stack/user-badge is the longest of the four
+# pending, which is where a b200 buys the most.
+EXPERIMENTS = (("rt-norefit", "rel-stack", "user-badge"),)
 
 #: Zero-shot reads: the published checkpoint scored on test with no fine-tuning
 #: and no selection arm (see zero_shot.py). Not protocol runs -- a shortcut for
