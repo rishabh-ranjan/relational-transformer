@@ -85,8 +85,8 @@ same weight-decay split. It cannot be changed across a resume: the optimizer
 state in `resume.pt` is per optimizer.
 
 `lr_warmup_steps` and `lr_decay_steps` shape the learning rate: linear warmup
-from 0 over the first, linear decay to 0 over the last that many steps of
-`total_steps`, and `0` disables either end. The decay is measured back from
+from 0 over the first, a half period of **cosine** to 0 over the last that many
+steps of `total_steps`, and `0` disables either end. The decay is measured back from
 `total_steps`, so a run that ends before it — early stopping, or a
 `total_steps` set far beyond where the run is meant to stop — never reaches the
 decay at all.

@@ -27,6 +27,7 @@ under ``torchrun`` or ``srun`` -- see docs/train.md for the launch commands.
 import contextlib
 import fnmatch
 import json
+import math
 import os
 import random
 import shutil
@@ -471,8 +472,15 @@ def main(
 
     def lr_lambda(step):
         warm = 1.0 if step >= lr_warmup_steps else (step + 1) / lr_warmup_steps
-        decayed = total_steps - step
-        decay = 1.0 if decayed >= lr_decay_steps else max(0.0, decayed / lr_decay_steps)
+        left = total_steps - step
+        # Cosine over the decay window: full lr until it opens, a half period
+        # of cosine across it, exactly 0 at `total_steps`.
+        if left >= lr_decay_steps:
+            decay = 1.0
+        else:
+            decay = 0.5 * (
+                1.0 + math.cos(math.pi * (1.0 - max(0.0, left) / lr_decay_steps))
+            )
         return warm * decay
 
     scheds = [optim.lr_scheduler.LambdaLR(o, lr_lambda) for o in opts]

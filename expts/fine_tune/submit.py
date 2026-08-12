@@ -12,8 +12,8 @@ stale the moment one of these does:
 - trained on train **and** val, so nothing selects a checkpoint: `eval_splits`
   is test alone, `swa_momentum` is None, and the run keeps its last step
   (`latest.safetensors`, and the one surviving `steps=` file);
-- the lr warmed up over a fifth of the budget and decayed to zero by the end,
-  instead of early stopping.
+- the lr warmed up over a fifth of the budget and cosine-decayed to zero by the
+  end, instead of early stopping.
 
 An arm is this file with one value changed and a `tag` that names it; the base
 carries no tag at all.
@@ -260,6 +260,10 @@ def a100(
 # A task with no line here stops the submission rather than taking a slot
 # nobody chose for it.
 #
+# 23:05: the cosine schedule at the base wd 0.1 -- `rt.train`'s decay is a
+# cosine from this commit on, so the tag is what separates these from the runs
+# above, which are the same config on a linear one. ampere8 is idle again.
+#
 # 22:55: and onto ampere8 -- the reservation is idle, so a variant that would
 # otherwise queue behind the base sweep on `il` runs there straight away.
 #
@@ -405,7 +409,8 @@ def main() -> None:
     # length's in the same project -- the comparison is one panel per task with
     # a group per epoch budget.
     # fmt: off
-    epochs, total_bs, lr, opt, ctx, mask, release, delta, wd, tag = 25, 128, 1e-3, "muon", 1024, 0.0, "rt-j", True, 0.2, "-wd0.2"  # noqa: E501
+    epochs, total_bs, lr, opt, ctx, mask, release, delta, wd, tag = 25, 128, 1e-3, "muon", 1024, 0.0, "rt-j", True, 0.1, "-cos"  # noqa: E501
+    # epochs, total_bs, lr, opt, ctx, mask, release, delta, wd, tag = 25, 128, 1e-3, "muon", 1024, 0.0, "rt-j", True, 0.2, "-wd0.2"  # noqa: E501
     # epochs, total_bs, lr, opt, ctx, mask, release, delta, wd, tag = 25, 128, 1e-3, "muon", 1024, 0.0, "rt-j", True, 1.0, "-wd1.0"  # noqa: E501
     # epochs, total_bs, lr, opt, ctx, mask, release, delta, wd, tag = 25, 128, 1e-3, "muon", 1024, 0.0, "rt-j", True, 0.1, ""  # noqa: E501
     # fmt: on
