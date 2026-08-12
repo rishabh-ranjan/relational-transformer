@@ -253,10 +253,10 @@ def a100(
 # A task with no line here stops the submission rather than taking a slot
 # nobody chose for it.
 RESOURCES: dict[tuple[str, str], Resources] = {
-    # 18:45: blackwell1 freed 2 b200 and `il`'s b200 sub-cap was 1 of 2, so the
-    # longest-remaining ampere run moves there -- 20.9h left at 1.55 s/step
-    # against ~7h at 0.52. Its ensembling job is resubmitted behind it: an
-    # `afterok` dependency on a cancelled job is never satisfied.
+    # 18:50: back on an ampere. blackwell1 reads 2 b200 free and the node is not
+    # flagged RESERVED, but the cards are held for another job all the same --
+    # `AllocTRES` does not show that, and only the pending reason does. A b200
+    # job is not placed until it has been seen to start.
     #
     # 16:56, budget unspent: blackwell1 has 3 free b200 and is not flagged
     # RESERVED, so 2 go to `il-interactive` and the third to `il`'s own 2-b200
@@ -272,7 +272,7 @@ RESOURCES: dict[tuple[str, str], Resources] = {
     ("rel-amazon", "item-churn"): a100("il", "1-00:00:00"),
     ("rel-stack", "post-votes"): a100("il", "1-00:00:00"),
     ("rel-hm", "item-sales"): a100("il", "1-00:00:00"),
-    ("rel-stack", "user-engagement"): b200("il", "1-00:00:00"),
+    ("rel-stack", "user-engagement"): a100("il", "1-00:00:00"),
     ("rel-hm", "user-churn"): a100("il", "1-00:00:00"),
     ("rel-trial", "site-success"): a100("il", "1-00:00:00"),
     ("rel-avito", "user-visits"): a100("il", "1-00:00:00"),
