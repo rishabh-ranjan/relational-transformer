@@ -30,12 +30,12 @@ from roach.slurm import Resources, submit
 HERE = Path(__file__).parent
 
 TASKS = (
-    ("rel-event", "user-repeat"),
-    ("rel-f1", "driver-dnf"),
-    ("rel-f1", "driver-top3"),
-    ("rel-f1", "driver-position"),
+    # ("rel-event", "user-repeat"),
+    # ("rel-f1", "driver-dnf"),
+    # ("rel-f1", "driver-top3"),
+    # ("rel-f1", "driver-position"),
     # ("rel-trial", "study-outcome"),
-    ("rel-avito", "ad-ctr"),
+    # ("rel-avito", "ad-ctr"),
     ("rel-event", "user-attendance"),
     # ("rel-event", "user-ignore"),
     # ("rel-trial", "study-adverse"),
@@ -261,6 +261,11 @@ def a100(
 # A task with no line here stops the submission rather than taking a slot
 # nobody chose for it.
 #
+# 23:20: rel-event/user-attendance moves to a b200. It is 1200 steps at 9.4s
+# on an ampere -- three hours, against about one there -- and `sbatch
+# --test-only` puts a b200 job of mine at 23:34, so the fifteen minutes it
+# waits are bought back many times over. It resumes from its own run id.
+#
 # 23:20: the queue is mine again and empty. blackwell is planned for someone
 # else until 23:26, so no b200: six `il` amperes, which start now. ctx 2048 is
 # four times the attention of the last base, so these are the slowest short
@@ -371,7 +376,7 @@ RESOURCES: dict[tuple[str, str], Resources] = {
     # card we already have), and the nine shortest runs fit it: all under 4h,
     # well inside the reservation's 2026-08-13T00:00 end.
     ("rel-trial", "study-adverse"): a100("il", "8:00:00"),
-    ("rel-event", "user-attendance"): a100("il", "8:00:00"),
+    ("rel-event", "user-attendance"): b200("il-interactive", "8:00:00"),
     ("rel-event", "user-ignore"): a100("il", "8:00:00"),
     ("rel-trial", "study-outcome"): a100("il", "8:00:00"),
     ("rel-f1", "driver-dnf"): a100("il", "8:00:00"),
@@ -384,7 +389,9 @@ RESOURCES: dict[tuple[str, str], Resources] = {
 
 # Resume an existing run instead of starting a new one: the run whose
 # `out_dir` this is picks its `resume.pt` back up. Empty when nothing resumes.
-RUN_IDS: dict[tuple[str, str], str] = {}
+RUN_IDS: dict[tuple[str, str], str] = {
+    ("rel-event", "user-attendance"): "26-08-11_23-06-36_151062040",
+}
 
 
 def main() -> None:
