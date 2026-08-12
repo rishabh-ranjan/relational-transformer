@@ -1,20 +1,22 @@
 """Submit one fine-tuning job per task. See [README.md](README.md).
 
-What this arm is, in the values below rather than in prose elsewhere -- it
+The base config, in the values below rather than in prose elsewhere -- it
 changes every submission, and a description that lives in another file goes
 stale the moment one of these does:
 
-- warm-started from the release the arm names (`ckpt_for`), one head per task
-  type -- or from nothing, when that name is None;
-- **fixed** eval context, not stochastic: the `*_list` knobs are single-valued,
-  and `eval_lcs_bw_pl_grid` is the same configuration, so the curve measures
-  what the model is trained under;
-- token masking as the arm sets it (`mask_prob_max`);
+- **delta fine-tuning from RT-J**: the published weights are what decay pulls
+  back to, and the update is the ordinary one (see `rt.train`'s
+  `delta_finetune`);
+- 25 epochs at batch 128, lr 1e-3, Muon;
+- a **fixed** context of 1024, no walks (`num_walks=0`), no token masking;
 - trained on train **and** val, so nothing selects a checkpoint: `eval_splits`
   is test alone, `swa_momentum` is None, and the run keeps its last step
   (`latest.safetensors`, and the one surviving `steps=` file);
-- a finite budget -- `steps_for` steps, the lr warmed up over a fifth of it
-  and decayed to zero by the end -- instead of early stopping.
+- the lr warmed up over a fifth of the budget and decayed to zero by the end,
+  instead of early stopping.
+
+An arm is this file with one value changed and a `tag` that names it; the base
+carries no tag at all.
 """
 
 import functools
@@ -27,13 +29,13 @@ from roach.slurm import Resources, submit
 HERE = Path(__file__).parent
 
 TASKS = (
-    # ("rel-event", "user-repeat"),
-    # ("rel-f1", "driver-dnf"),
-    # ("rel-f1", "driver-top3"),
+    ("rel-event", "user-repeat"),
+    ("rel-f1", "driver-dnf"),
+    ("rel-f1", "driver-top3"),
     ("rel-f1", "driver-position"),
     # ("rel-trial", "study-outcome"),
-    # ("rel-avito", "ad-ctr"),
-    # ("rel-event", "user-attendance"),
+    ("rel-avito", "ad-ctr"),
+    ("rel-event", "user-attendance"),
     # ("rel-event", "user-ignore"),
     # ("rel-trial", "study-adverse"),
     # ("rel-trial", "site-success"),
@@ -257,6 +259,10 @@ def a100(
 #
 # A task with no line here stops the submission rather than taking a slot
 # nobody chose for it.
+#
+# 22:30: the queue is empty and the whole budget is free. Six short jobs: two on
+# the b200s `il-interactive` can reach, four on `il` amperes. The reservation is
+# idle and stays that way -- these are minutes long and `il` starts them now.
 RESOURCES: dict[tuple[str, str], Resources] = {
     # 22:20: delta fine-tuning -- the pretrained weights frozen as the point
     # decay pulls back to, the update itself unchanged (see `delta_finetune`).
@@ -367,10 +373,10 @@ RESOURCES: dict[tuple[str, str], Resources] = {
     ("rel-event", "user-ignore"): a100("il", "8:00:00"),
     ("rel-trial", "study-outcome"): a100("il", "8:00:00"),
     ("rel-f1", "driver-dnf"): a100("il", "8:00:00"),
-    ("rel-f1", "driver-position"): a100("il-interactive", "8:00:00"),
+    ("rel-f1", "driver-position"): a100("il", "8:00:00"),
     ("rel-avito", "ad-ctr"): a100("il", "8:00:00"),
-    ("rel-event", "user-repeat"): a100("il-lo", "8:00:00", "ranjanr_deadline"),
-    ("rel-f1", "driver-top3"): a100("il", "8:00:00"),
+    ("rel-event", "user-repeat"): b200("il-interactive", "8:00:00"),
+    ("rel-f1", "driver-top3"): b200("il-interactive", "8:00:00"),
 }
 
 
@@ -390,11 +396,7 @@ def main() -> None:
     # length's in the same project -- the comparison is one panel per task with
     # a group per epoch budget.
     # fmt: off
-    # epochs, total_bs, lr, opt, ctx, mask, release, delta, tag = 50, 256, 5e-4, "muon", 1024, 0.0, None, False, "-nw0-rand"  # noqa: E501
-    epochs, total_bs, lr, opt, ctx, mask, release, delta, tag = 50, 256, 5e-4, "muon", 1024, 0.0, "rt-p", True, "-nw0-delta"  # noqa: E501
-    # epochs, total_bs, lr, opt, ctx, mask, release, delta, tag = 50, 256, 5e-4, "muon", 1024, 0.0, "rt-j", False, "-nw0-rtj"  # noqa: E501
-    # epochs, total_bs, lr, opt, ctx, mask, release, delta, tag = 50, 256, 5e-4, "muon", 1024, 0.0, "rt-p", False, "-nw0"  # noqa: E501
-    # epochs, total_bs, lr, opt, ctx, mask, release, delta, tag = 50, 256, 5e-4, "muon", 1024, 0.1, "rt-p", False, "-nw0-mask0.1"  # noqa: E501
+    epochs, total_bs, lr, opt, ctx, mask, release, delta, tag = 25, 128, 1e-3, "muon", 1024, 0.0, "rt-j", True, ""  # noqa: E501
     # fmt: on
     # epochs, total_bs, lr, opt, ctx, mask, release, delta, tag = 50, 256, 5e-4, "muon", 1024, 0.0, "rt-p", False, ""
     # epochs, total_bs, lr, opt, ctx, mask, release, delta, tag = 50, 256, 1e-3, "muon", 1024, 0.0, "rt-p", False, "-bs256-lr1e-3"
