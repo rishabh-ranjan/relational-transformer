@@ -28,10 +28,10 @@ HERE = Path(__file__).parent
 TASKS = (
     # ("rel-event", "user-repeat"),
     # ("rel-f1", "driver-dnf"),
-    ("rel-f1", "driver-top3"),
+    # ("rel-f1", "driver-top3"),
     # ("rel-f1", "driver-position"),
     # ("rel-trial", "study-outcome"),
-    # ("rel-avito", "ad-ctr"),
+    ("rel-avito", "ad-ctr"),
     # ("rel-event", "user-attendance"),
     # ("rel-event", "user-ignore"),
     # ("rel-trial", "study-adverse"),
@@ -253,6 +253,10 @@ def a100(
 # A task with no line here stops the submission rather than taking a slot
 # nobody chose for it.
 RESOURCES: dict[tuple[str, str], Resources] = {
+    # 21:50: `num_walks` is 0 from here on, train and eval alike -- so nothing
+    # submitted before this is comparable, and the masking arm needs its own
+    # unmasked control at the same setting. Both go out together.
+    #
     # 21:40: driver-top3 alone, with 10% token masking. `il-interactive`'s
     # second gpu is free and takes a card of any type, so it starts now.
     #
@@ -427,7 +431,7 @@ def main() -> None:
                 local_ctx_size_list=[ctx],
                 bfs_width_list=[128],
                 prefer_latest_list=[False],
-                num_walks=10_000,
+                num_walks=0,
                 walk_length=20,
                 mask_prob_max=mask,
                 items_per_task=1_000_000_000,
@@ -455,7 +459,7 @@ def main() -> None:
                 eval_tokens_per_gpu=2**18,
                 eval_num_workers=resources.cpus_per_task,
                 eval_prefetch_factor=2,
-                eval_num_walks=10_000,
+                eval_num_walks=0,
                 eval_walk_length=20,
                 eval_items_per_task=2**16,
                 eval_ctx_size_list=[ctx],
