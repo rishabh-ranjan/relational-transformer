@@ -253,6 +253,9 @@ def a100(
 # A task with no line here stops the submission rather than taking a slot
 # nobody chose for it.
 RESOURCES: dict[tuple[str, str], Resources] = {
+    # 19:05: the whole 50-epoch arm onto the reservation -- it is the arm to
+    # answer next, and ampere8's cards are the ones nothing else can take.
+    #
     # 19:00: the 50-epoch arm, nine short tasks. ampere8 is ours and has 3 free
     # cards; `il-lo` on the reservation for those, and the plain pool for the
     # rest -- every one of these is under 2h, well inside the reservation's
@@ -289,12 +292,12 @@ RESOURCES: dict[tuple[str, str], Resources] = {
     ("rel-trial", "study-adverse"): a100("il-lo", "8:00:00", "ranjanr_deadline"),
     ("rel-event", "user-attendance"): a100("il-lo", "8:00:00", "ranjanr_deadline"),
     ("rel-event", "user-ignore"): a100("il-lo", "8:00:00", "ranjanr_deadline"),
-    ("rel-trial", "study-outcome"): a100("il-lo", "8:00:00"),
-    ("rel-f1", "driver-dnf"): a100("il-lo", "8:00:00"),
-    ("rel-f1", "driver-position"): a100("il-lo", "8:00:00"),
-    ("rel-avito", "ad-ctr"): a100("il-lo", "8:00:00"),
-    ("rel-event", "user-repeat"): a100("il-lo", "8:00:00"),
-    ("rel-f1", "driver-top3"): a100("il-lo", "8:00:00"),
+    ("rel-trial", "study-outcome"): a100("il-lo", "8:00:00", "ranjanr_deadline"),
+    ("rel-f1", "driver-dnf"): a100("il-lo", "8:00:00", "ranjanr_deadline"),
+    ("rel-f1", "driver-position"): a100("il-lo", "8:00:00", "ranjanr_deadline"),
+    ("rel-avito", "ad-ctr"): a100("il-lo", "8:00:00", "ranjanr_deadline"),
+    ("rel-event", "user-repeat"): a100("il-lo", "8:00:00", "ranjanr_deadline"),
+    ("rel-f1", "driver-top3"): a100("il-lo", "8:00:00", "ranjanr_deadline"),
 }
 
 

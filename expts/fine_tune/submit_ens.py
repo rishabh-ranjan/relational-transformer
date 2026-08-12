@@ -96,16 +96,17 @@ def dependency_for(db: str, task: str) -> str | None:
 # A task with no line here stops the submission rather than taking a slot
 # nobody chose for it.
 #
-# 18:00: every one of these waits on a fine-tuning job, so it claims its card
-# only when that job hands one back -- the tiers are spent on `submit.py` until
-# then. `il` for the four longest passes, `il-lo` for the rest, which resume
-# from `ensemble_resume.pt` if they are preempted. No reservation: it expires at
-# 2026-08-13T00:00 and most of these start after that.
+# 19:05: `il-lo` for all of them. Ensembling moved the metric by under 1.5
+# points on the four tasks that have finished it, and never a rank, so it is
+# the arm to run last: a high tier here would hold a card the 50-epoch runs and
+# the remaining fine-tuning want. They resume from `ensemble_resume.pt`, so
+# preemption costs one seed. No reservation: it expires at 2026-08-13T00:00 and
+# most of these start after that.
 RESOURCES: dict[tuple[str, str], Resources] = {
-    ("rel-amazon", "user-churn"): a100("il", "1-00:00:00"),
-    ("rel-amazon", "user-ltv"): a100("il", "1-00:00:00"),
-    ("rel-stack", "user-badge"): a100("il", "1-00:00:00"),
-    ("rel-amazon", "item-ltv"): a100("il", "1-00:00:00"),
+    ("rel-amazon", "user-churn"): a100("il-lo", "1-00:00:00"),
+    ("rel-amazon", "user-ltv"): a100("il-lo", "1-00:00:00"),
+    ("rel-stack", "user-badge"): a100("il-lo", "1-00:00:00"),
+    ("rel-amazon", "item-ltv"): a100("il-lo", "1-00:00:00"),
     ("rel-amazon", "item-churn"): a100("il-lo", "1-00:00:00"),
     ("rel-stack", "post-votes"): a100("il-lo", "1-00:00:00"),
     ("rel-hm", "item-sales"): a100("il-lo", "1-00:00:00"),
