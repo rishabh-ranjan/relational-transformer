@@ -8,7 +8,8 @@ stale the moment one of these does:
   back to, and the update is the ordinary one (see `rt.train`'s
   `delta_finetune`);
 - 25 epochs at batch 128, lr 1e-3, weight decay 0.1, Muon;
-- a **fixed** context of 1024, no walks (`num_walks=0`), no token masking;
+- a **fixed** context -- size, local size, bfs width, prefer-latest and walk
+  count all single-valued, and the eval grid the same one -- and no masking;
 - trained on train **and** val, so nothing selects a checkpoint: `eval_splits`
   is test alone, `swa_momentum` is None, and the run keeps its last step
   (`latest.safetensors`, and the one surviving `steps=` file);
@@ -260,6 +261,10 @@ def a100(
 # A task with no line here stops the submission rather than taking a slot
 # nobody chose for it.
 #
+# 23:25: the context knobs as an arm: local ctx 256, bfs width 32,
+# prefer-latest, 10k walks, at wd 0.1. Train and eval move together, so the
+# curve still measures what the run trains under. ampere8 is free.
+#
 # 23:15: wd 0.0 on the cosine schedule. With no decay the delta formulation is
 # ordinary fine-tuning from RT-J -- nothing pulls back -- so this is the null
 # arm for the decay sweep. `il` is empty again, so all six go there.
@@ -386,14 +391,14 @@ RESOURCES: dict[tuple[str, str], Resources] = {
     # card we already have), and the nine shortest runs fit it: all under 4h,
     # well inside the reservation's 2026-08-13T00:00 end.
     ("rel-trial", "study-adverse"): a100("il", "8:00:00"),
-    ("rel-event", "user-attendance"): a100("il", "8:00:00"),
+    ("rel-event", "user-attendance"): a100("il-lo", "8:00:00", "ranjanr_deadline"),
     ("rel-event", "user-ignore"): a100("il", "8:00:00"),
     ("rel-trial", "study-outcome"): a100("il", "8:00:00"),
-    ("rel-f1", "driver-dnf"): a100("il", "8:00:00"),
-    ("rel-f1", "driver-position"): a100("il", "8:00:00"),
-    ("rel-avito", "ad-ctr"): a100("il", "8:00:00"),
-    ("rel-event", "user-repeat"): a100("il", "8:00:00"),
-    ("rel-f1", "driver-top3"): a100("il", "8:00:00"),
+    ("rel-f1", "driver-dnf"): a100("il-lo", "8:00:00", "ranjanr_deadline"),
+    ("rel-f1", "driver-position"): a100("il-lo", "8:00:00", "ranjanr_deadline"),
+    ("rel-avito", "ad-ctr"): a100("il-lo", "8:00:00", "ranjanr_deadline"),
+    ("rel-event", "user-repeat"): a100("il-lo", "8:00:00", "ranjanr_deadline"),
+    ("rel-f1", "driver-top3"): a100("il-lo", "8:00:00", "ranjanr_deadline"),
 }
 
 
@@ -413,11 +418,12 @@ def main() -> None:
     # length's in the same project -- the comparison is one panel per task with
     # a group per epoch budget.
     # fmt: off
-    epochs, total_bs, lr, opt, ctx, mask, release, delta, wd, tag = 25, 128, 1e-3, "muon", 1024, 0.0, "rt-j", True, 0.0, "-cos-wd0.0"  # noqa: E501
-    # epochs, total_bs, lr, opt, ctx, mask, release, delta, wd, tag = 25, 128, 1e-3, "muon", 1024, 0.0, "rt-j", True, 0.1, "-cos"  # noqa: E501
-    # epochs, total_bs, lr, opt, ctx, mask, release, delta, wd, tag = 25, 128, 1e-3, "muon", 1024, 0.0, "rt-j", True, 0.2, "-wd0.2"  # noqa: E501
-    # epochs, total_bs, lr, opt, ctx, mask, release, delta, wd, tag = 25, 128, 1e-3, "muon", 1024, 0.0, "rt-j", True, 1.0, "-wd1.0"  # noqa: E501
-    # epochs, total_bs, lr, opt, ctx, mask, release, delta, wd, tag = 25, 128, 1e-3, "muon", 1024, 0.0, "rt-j", True, 0.1, ""  # noqa: E501
+    epochs, total_bs, lr, opt, ctx, mask, release, delta, wd, lcs, bw, pl, nw, tag = 25, 128, 1e-3, "muon", 1024, 0.0, "rt-j", True, 0.1, 256, 32, True, 10_000, "-lcs256-bw32-pl-nw10k"  # noqa: E501
+    # epochs, total_bs, lr, opt, ctx, mask, release, delta, wd, lcs, bw, pl, nw, tag = 25, 128, 1e-3, "muon", 1024, 0.0, "rt-j", True, 0.0, 1024, 128, False, 0, "-cos-wd0.0"  # noqa: E501
+    # epochs, total_bs, lr, opt, ctx, mask, release, delta, wd, lcs, bw, pl, nw, tag = 25, 128, 1e-3, "muon", 1024, 0.0, "rt-j", True, 0.1, 1024, 128, False, 0, "-cos"  # noqa: E501
+    # epochs, total_bs, lr, opt, ctx, mask, release, delta, wd, lcs, bw, pl, nw, tag = 25, 128, 1e-3, "muon", 1024, 0.0, "rt-j", True, 0.2, 1024, 128, False, 0, "-wd0.2"  # noqa: E501
+    # epochs, total_bs, lr, opt, ctx, mask, release, delta, wd, lcs, bw, pl, nw, tag = 25, 128, 1e-3, "muon", 1024, 0.0, "rt-j", True, 1.0, 1024, 128, False, 0, "-wd1.0"  # noqa: E501
+    # epochs, total_bs, lr, opt, ctx, mask, release, delta, wd, lcs, bw, pl, nw, tag = 25, 128, 1e-3, "muon", 1024, 0.0, "rt-j", True, 0.1, 1024, 128, False, 0, ""  # noqa: E501
     # fmt: on
     # epochs, total_bs, lr, opt, ctx, mask, release, delta, tag = 50, 256, 5e-4, "muon", 1024, 0.0, "rt-p", False, ""
     # epochs, total_bs, lr, opt, ctx, mask, release, delta, tag = 50, 256, 1e-3, "muon", 1024, 0.0, "rt-p", False, "-bs256-lr1e-3"
@@ -465,10 +471,10 @@ def main() -> None:
                 num_workers=resources.cpus_per_task,
                 prefetch_factor=2,
                 ctx_size_list=[ctx],
-                local_ctx_size_list=[ctx],
-                bfs_width_list=[128],
-                prefer_latest_list=[False],
-                num_walks=0,
+                local_ctx_size_list=[lcs],
+                bfs_width_list=[bw],
+                prefer_latest_list=[pl],
+                num_walks=nw,
                 walk_length=20,
                 mask_prob_max=mask,
                 items_per_task=1_000_000_000,
@@ -497,7 +503,7 @@ def main() -> None:
                 eval_tokens_per_gpu=2**18,
                 eval_num_workers=resources.cpus_per_task,
                 eval_prefetch_factor=2,
-                eval_num_walks=0,
+                eval_num_walks=nw,
                 eval_walk_length=20,
                 eval_items_per_task=2**16,
                 eval_ctx_size_list=[ctx],
@@ -505,7 +511,7 @@ def main() -> None:
                 eval_shuffle_seed=0,
                 eval_context_seed=0,
                 eval_vector_db_path=None,
-                eval_lcs_bw_pl_grid=[(ctx, 128, False)],
+                eval_lcs_bw_pl_grid=[(lcs, bw, pl)],
                 targets=targets_for(db, task),
                 project="2026-08-11-iteration",
                 entity="rtv2",
