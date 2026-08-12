@@ -30,11 +30,11 @@ TASKS = (
     ("rel-f1", "driver-dnf"),
     ("rel-f1", "driver-top3"),
     ("rel-f1", "driver-position"),
-    ("rel-trial", "study-outcome"),
+    # ("rel-trial", "study-outcome"),
     ("rel-avito", "ad-ctr"),
     ("rel-event", "user-attendance"),
-    ("rel-event", "user-ignore"),
-    ("rel-trial", "study-adverse"),
+    # ("rel-event", "user-ignore"),
+    # ("rel-trial", "study-adverse"),
     # ("rel-trial", "site-success"),
     # ("rel-avito", "user-visits"),
     # ("rel-avito", "user-clicks"),
@@ -253,6 +253,11 @@ def a100(
 # A task with no line here stops the submission rather than taking a slot
 # nobody chose for it.
 RESOURCES: dict[tuple[str, str], Resources] = {
+    # 21:10: a focused iteration -- six short tasks, three arms, a project of
+    # its own. The queue is empty and the whole budget is free: `il`'s ten take
+    # the first arm and four of the second, ampere8's eight reserved cards the
+    # rest. blackwell is planned for someone else until 21:10, so no b200.
+    #
     # 21:05: plain AdamW at the 50-epoch shape -- the arm that holds the only
     # first place -- so the pair isolates the optimizer and nothing else. Above
     # the 2e-4 arm, whose pending jobs drop to `il-lo` to make room.
@@ -336,8 +341,8 @@ RESOURCES: dict[tuple[str, str], Resources] = {
     ("rel-f1", "driver-dnf"): a100("il", "8:00:00"),
     ("rel-f1", "driver-position"): a100("il", "8:00:00"),
     ("rel-avito", "ad-ctr"): a100("il", "8:00:00"),
-    ("rel-event", "user-repeat"): a100("il-lo", "8:00:00", "ranjanr_deadline"),
-    ("rel-f1", "driver-top3"): a100("il-lo", "8:00:00", "ranjanr_deadline"),
+    ("rel-event", "user-repeat"): a100("il", "8:00:00"),
+    ("rel-f1", "driver-top3"): a100("il", "8:00:00"),
 }
 
 
@@ -356,13 +361,9 @@ def main() -> None:
     # How long a run is, and the tag that keeps its curves apart from the other
     # length's in the same project -- the comparison is one panel per task with
     # a group per epoch budget.
-    epochs, total_bs, lr, opt, tag = 50, 256, 5e-4, "adamw", "-50ep-adamw"
-    # epochs, total_bs, lr, opt, tag = 100, 512, 2e-4, "muon", "-100ep-bs512-lr2e-4"
-    # epochs, total_bs, lr, opt, tag = 100, 512, 1e-4, "muon", "-100ep-bs512-lr1e-4"
-    # epochs, total_bs, lr, opt, tag = 50, 512, 5e-4, "muon", "-50ep-bs512"
-    # epochs, total_bs, lr, opt, tag = 25, 256, 5e-4, "muon", "-25ep"
-    # epochs, total_bs, lr, opt, tag = 50, 256, 5e-4, "muon", "-50ep"
-    # epochs, total_bs, lr, opt, tag = 100, 256, 5e-4, "muon", ""
+    epochs, total_bs, lr, opt, tag = 50, 256, 5e-4, "muon", "-bs256-lr5e-4"
+    # epochs, total_bs, lr, opt, tag = 50, 256, 1e-3, "muon", "-bs256-lr1e-3"
+    # epochs, total_bs, lr, opt, tag = 50, 512, 1e-3, "muon", "-bs512-lr1e-3"
     # Shortest run first, so the fastest answers land first. The step budget,
     # not the test split: what a job costs here is overwhelmingly its training.
     for db, task in sorted(
@@ -446,7 +447,7 @@ def main() -> None:
                 eval_vector_db_path=None,
                 eval_lcs_bw_pl_grid=[(1024, 128, False)],
                 targets=targets_for(db, task),
-                project="2026-08-12-fine_tune",
+                project="2026-08-11-iteration",
                 entity="rtv2",
                 run_name=name,
                 wandb_disabled=False,
