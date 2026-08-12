@@ -44,14 +44,12 @@ CACHE_DIR = "/tmp/ranjanr/relarena-cache"
 # by inference fixes the rankings. Four of our five worst results are in here
 # (driver-dnf aside, which is slower), so it is the sample that answers the
 # question quickest.
+# A promotion: both remaining rt-hpo trials were pending on `il-lo` while
+# `il-interactive` sat empty and blackwell1 had five free b200. These two are
+# the experiment, so they take the fast cards.
 EXPERIMENTS = tuple(
     ("rt-hpo", db, task)
     for db, task in (
-        ("rel-avito", "ad-ctr"),
-        ("rel-event", "user-attendance"),
-        ("rel-avito", "user-visits"),
-        ("rel-trial", "study-outcome"),
-        ("rel-f1", "driver-position"),
         ("rel-event", "user-repeat"),
         ("rel-f1", "driver-top3"),
     )
@@ -169,8 +167,8 @@ RESOURCES: dict[tuple[str, str, str], Resources] = {
     ("rt-hpo", "rel-avito", "user-visits"): a100("il", "8:00:00"),
     ("rt-hpo", "rel-trial", "study-outcome"): a100("il", "8:00:00"),
     ("rt-hpo", "rel-f1", "driver-position"): reserved("8:00:00"),
-    ("rt-hpo", "rel-event", "user-repeat"): a100("il-lo", "8:00:00"),
-    ("rt-hpo", "rel-f1", "driver-top3"): a100("il-lo", "8:00:00"),
+    ("rt-hpo", "rel-event", "user-repeat"): b200("il-interactive", "8:00:00"),
+    ("rt-hpo", "rel-f1", "driver-top3"): b200("il-interactive", "8:00:00"),
 }
 
 ZERO_SHOT_RESOURCES: dict[tuple[str, str], Resources] = {
