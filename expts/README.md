@@ -325,8 +325,14 @@ What to do about it:
   having room does not mean blackwell1 has a b200 free; read `AllocTRES` before
   spending it, and if there is none, re-ask the blackwell question below.
 - **`CfgTRES - AllocTRES > 0` is not a card you can have.** A spare b200 may be
-  held by a reservation, and a job pinned to `blackwell1` then sits on
-  `ReqNodeNotAvail` forever rather than falling back to an ampere. So a
+  held by a reservation, or *planned* by the backfill scheduler for a
+  higher-priority pending job — and that second case shows up in no query at
+  all: not the node state, not `AllocTRES`, not `scontrol show res`. The only
+  thing that finds out is a submission, whose reason then reads
+  `ReqNodeNotAvail, May be reserved for other job`. So treat a free b200 as a
+  candidate to try, never as capacity you can plan around, and a job pinned to
+  `blackwell1` sits on that reason forever rather than falling back to an
+  ampere. So a
   blackwell submission is not done until you have seen it start: check its
   pending reason within a minute of submitting, and move it to an ampere the
   moment it reads `ReqNodeNotAvail`. This is the one move that can leave a
