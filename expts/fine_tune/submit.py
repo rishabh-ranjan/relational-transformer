@@ -260,6 +260,9 @@ def a100(
 # A task with no line here stops the submission rather than taking a slot
 # nobody chose for it.
 #
+# 22:50: wd 0.2 as well, so the pull back to RT-J is sampled at 0.1, 0.2 and
+# 1.0. Six short jobs on whatever `il` has free as the base sweep drains.
+#
 # 22:40: the wd 1.0 variant, six more short jobs. `il` has six free slots as
 # the base sweep's first jobs finish; blackwell is held by the base runs.
 #
@@ -399,7 +402,8 @@ def main() -> None:
     # length's in the same project -- the comparison is one panel per task with
     # a group per epoch budget.
     # fmt: off
-    epochs, total_bs, lr, opt, ctx, mask, release, delta, wd, tag = 25, 128, 1e-3, "muon", 1024, 0.0, "rt-j", True, 1.0, "-wd1.0"  # noqa: E501
+    epochs, total_bs, lr, opt, ctx, mask, release, delta, wd, tag = 25, 128, 1e-3, "muon", 1024, 0.0, "rt-j", True, 0.2, "-wd0.2"  # noqa: E501
+    # epochs, total_bs, lr, opt, ctx, mask, release, delta, wd, tag = 25, 128, 1e-3, "muon", 1024, 0.0, "rt-j", True, 1.0, "-wd1.0"  # noqa: E501
     # epochs, total_bs, lr, opt, ctx, mask, release, delta, wd, tag = 25, 128, 1e-3, "muon", 1024, 0.0, "rt-j", True, 0.1, ""  # noqa: E501
     # fmt: on
     # epochs, total_bs, lr, opt, ctx, mask, release, delta, tag = 50, 256, 5e-4, "muon", 1024, 0.0, "rt-p", False, ""
