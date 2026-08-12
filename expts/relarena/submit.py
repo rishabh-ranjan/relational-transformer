@@ -52,7 +52,15 @@ CACHE_DIR = "/tmp/ranjanr/relarena-cache"
 # pending, which is where a b200 buys the most.
 # One free il-interactive slot, so one promotion: rel-hm/item-sales, the
 # longest of the three pending.
-EXPERIMENTS = (("rt-norefit", "rel-hm", "item-sales"),)
+# Three jobs died on blackwell1 with "No space left on device": our own cache
+# had filled its 438G disk to 99%, 319G of it ours and 162G of it rel-amazon.
+# Reaped 150G of datasets nothing there was still reading; these three go back
+# on amperes rather than compete for what is left.
+EXPERIMENTS = (
+    ("rt-hpo", "rel-event", "user-repeat"),
+    ("rt-hpo", "rel-f1", "driver-top3"),
+    ("rt-norefit", "rel-hm", "item-sales"),
+)
 
 #: Zero-shot reads: the published checkpoint scored on test with no fine-tuning
 #: and no selection arm (see zero_shot.py). Not protocol runs -- a shortcut for
@@ -166,10 +174,10 @@ RESOURCES: dict[tuple[str, str, str], Resources] = {
     ("rt-hpo", "rel-avito", "user-visits"): a100("il", "8:00:00"),
     ("rt-hpo", "rel-trial", "study-outcome"): a100("il", "8:00:00"),
     ("rt-hpo", "rel-f1", "driver-position"): reserved("8:00:00"),
-    ("rt-hpo", "rel-event", "user-repeat"): b200("il-interactive", "8:00:00"),
-    ("rt-hpo", "rel-f1", "driver-top3"): b200("il-interactive", "8:00:00"),
     ("rt-norefit", "rel-stack", "user-badge"): b200("il", "1-00:00:00"),
-    ("rt-norefit", "rel-hm", "item-sales"): b200("il-interactive", "12:00:00"),
+    ("rt-hpo", "rel-event", "user-repeat"): a100("il-lo", "8:00:00"),
+    ("rt-hpo", "rel-f1", "driver-top3"): a100("il-lo", "8:00:00"),
+    ("rt-norefit", "rel-hm", "item-sales"): a100("il-lo", "1-00:00:00"),
 }
 
 ZERO_SHOT_RESOURCES: dict[tuple[str, str], Resources] = {
