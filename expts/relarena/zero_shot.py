@@ -14,15 +14,49 @@ in a results table beside protocol runs.
 from pathlib import Path
 
 
+def _patch_quoting(quote_train_only: bool) -> None:
+    """Override the context-quoting rule relarena's config asks for.
+
+    relarena pins `train_only_fallback=True`; this entry point needs both
+    settings to compare them, and it is a diagnostic, so it reaches in rather
+    than adding a knob to the benchmark's configuration surface.
+    """
+    from relarena.models.rt import config as cfg
+
+    original = cfg.eval_args
+
+    def patched(**kwargs):
+        args = original(**kwargs)
+        args["train_only_fallback"] = quote_train_only
+        return args
+
+    cfg.eval_args = patched
+
+
 def main(
     *,
     dataset: str,
     task: str,
+    split: str,
+    quote_train_only: bool,
     cache_dir: str,
     out_dir: str,
     run_id: str,
 ) -> None:
-    """Score the warm start on `dataset/task`'s test split; write a CSV."""
+    """Score the warm start on `dataset/task`'s `split`; write a CSV.
+
+    `split` is "test" or "val". Scoring **val** is the diagnostic that separates
+    a bad model from a broken pipeline: `rt.train`'s own in-loop evaluator
+    reports a number for the same checkpoint on the same rows, so a val score
+    that agrees with it says the export, the context build, the node-index join
+    and the denormalization are all right, and a test score is then the model's.
+    A val score near chance says the fault is ours.
+
+    `quote_train_only` is `train_only_fallback`: whether a context may quote
+    labelled rows of the split being scored. `rt.train`'s in-loop eval quotes
+    them (it passes `False`), so reproducing its number needs `False` too; a
+    benchmark prediction needs `True`.
+    """
     import pandas as pd
 
     from relarena.cache import resolve_cache_config
@@ -37,12 +71,26 @@ def main(
     Path(cache_dir).mkdir(parents=True, exist_ok=True)
 
     source = RelBenchDatasetTask(dataset, task, download=True)
-    outer = source.outer_split()
-    train_union = concat_tables(outer.train_table, outer.val_table)
+    if split == "test":
+        # The reporting phase: fit on train+val, score the masked test table
+        # against the test-censored database.
+        chosen = source.outer_split()
+        train_table = concat_tables(chosen.train_table, chosen.val_table)
+        eval_table, target_table = chosen.eval_table, None
+    elif split == "val":
+        # The selection phase: train split, val-censored database, and val
+        # labels to score against -- the same rows rt.train evaluates in-loop.
+        chosen = source.inner_split()
+        train_table = chosen.train_table
+        eval_table, target_table = chosen.eval_table, chosen.eval_target
+    else:
+        raise ValueError(f"split must be 'test' or 'val'; got {split!r}")
+    train_union = train_table
 
     # `fill`, not `raise`: this entry point warms what it needs itself.
     cache = resolve_cache_config(cache_dir, on_miss="fill")
-    model = RTModel({}, cache=cache, run_identity=source.run_identity("outer"))
+    phase = "outer" if split == "test" else "inner"
+    model = RTModel({}, cache=cache, run_identity=source.run_identity(phase))
     # Stand in for `fit`. Every one of these is what the reporting arm would
     # have set; the only difference is the checkpoint, which is the published
     # one rather than one this run produced.
@@ -52,18 +100,33 @@ def main(
     model._target_stats = target_stats(train_union, source.task)
     model._checkpoint = cfg.warm_start(source.task.task_type)
 
-    print(f"+ zero-shot {model._checkpoint} on {dataset}/{task}", flush=True)
-    pred = model.predict(source.task, outer.db_state, outer.eval_table)
+    print(
+        f"+ zero-shot {model._checkpoint} on {dataset}/{task} {split} "
+        f"(quote_train_only={quote_train_only})",
+        flush=True,
+    )
+    _patch_quoting(quote_train_only)
+    pred = model.predict(source.task, chosen.db_state, eval_table)
 
     metric = primary_metric(source.task)
     metrics = list(source.task.metrics)
     if metric.__name__ not in {m.__name__ for m in metrics}:
         metrics.append(metric)
-    # `target_table=None`: RelBench loads the held-out test labels itself.
-    scores = source.task.evaluate(pred, None, metrics=metrics)
+    # `target_table=None` on test: RelBench loads the held-out labels itself.
+    scores = source.task.evaluate(pred, target_table, metrics=metrics)
 
-    frame = pd.DataFrame([{"dataset": dataset, "task": task, **scores}])
-    path = out / f"zero-shot-{run_id}.csv"
+    frame = pd.DataFrame(
+        [
+            {
+                "dataset": dataset,
+                "task": task,
+                "split": split,
+                "quote_train_only": quote_train_only,
+                **scores,
+            }
+        ]
+    )
+    path = out / f"zero-shot-{split}-{run_id}.csv"
     frame.to_csv(path, index=False)
     print(f"+ wrote {path}", flush=True)
     print(frame.to_string(index=False), flush=True)

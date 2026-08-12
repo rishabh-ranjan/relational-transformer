@@ -41,7 +41,12 @@ EXPERIMENTS = ()
 #: and no selection arm (see zero_shot.py). Not protocol runs -- a shortcut for
 #: reading a checkpoint's number on a task.
 ZERO_SHOT = (
-    ("rel-f1", "driver-top3"),
+    # (dataset, task, split, quote_train_only)
+    # val at quote_train_only=False is the control: it is what rt.train's own
+    # in-loop evaluator scores, so agreeing with its number says the export,
+    # the context build, the node-index join and the denormalization are right.
+    ("rel-f1", "driver-top3", "val", False),
+    ("rel-f1", "driver-top3", "val", True),
 )
 
 
@@ -96,19 +101,24 @@ RUN_IDS: dict[tuple[str, str, str], str] = {}
 
 
 def main() -> None:
-    for dataset, task in ZERO_SHOT:
+    for dataset, task, split, quote_train_only in ZERO_SHOT:
         resources = ZERO_SHOT_RESOURCES[dataset, task]
-        print(f"  zero-shot/{dataset}/{task:26s} {resources.gpus} {resources.qos}")
+        print(
+            f"  zero-shot/{dataset}/{task}/{split} "
+            f"quote_train_only={quote_train_only}  {resources.gpus} {resources.qos}"
+        )
         submit(
             "expts.relarena.zero_shot:main",
             args=dict(
                 dataset=dataset,
                 task=task,
+                split=split,
+                quote_train_only=quote_train_only,
                 cache_dir=CACHE_DIR,
                 out_dir=f"{SHARE}/results",
             ),
             resources=resources,
-            name=f"relarena-zero-shot-{dataset}-{task}",
+            name=f"relarena-zero-shot-{dataset}-{task}-{split}-{quote_train_only}",
             setup=relarena_setup(),
             repo_root=REPO_ROOT,
             log_root=f"{SHARE}/slurm-logs",
