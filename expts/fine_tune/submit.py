@@ -26,27 +26,27 @@ from roach.slurm import Resources, submit
 HERE = Path(__file__).parent
 
 TASKS = (
-    ("rel-event", "user-repeat"),
-    ("rel-f1", "driver-dnf"),
-    ("rel-f1", "driver-top3"),
-    ("rel-f1", "driver-position"),
-    ("rel-trial", "study-outcome"),
-    ("rel-avito", "ad-ctr"),
-    ("rel-event", "user-attendance"),
-    ("rel-event", "user-ignore"),
-    ("rel-trial", "study-adverse"),
-    ("rel-trial", "site-success"),
-    ("rel-avito", "user-visits"),
-    ("rel-avito", "user-clicks"),
-    ("rel-hm", "user-churn"),
+    # ("rel-event", "user-repeat"),
+    # ("rel-f1", "driver-dnf"),
+    # ("rel-f1", "driver-top3"),
+    # ("rel-f1", "driver-position"),
+    # ("rel-trial", "study-outcome"),
+    # ("rel-avito", "ad-ctr"),
+    # ("rel-event", "user-attendance"),
+    # ("rel-event", "user-ignore"),
+    # ("rel-trial", "study-adverse"),
+    # ("rel-trial", "site-success"),
+    # ("rel-avito", "user-visits"),
+    # ("rel-avito", "user-clicks"),
+    # ("rel-hm", "user-churn"),
     ("rel-stack", "user-engagement"),
-    ("rel-hm", "item-sales"),
-    ("rel-stack", "post-votes"),
-    ("rel-amazon", "item-churn"),
-    ("rel-amazon", "item-ltv"),
-    ("rel-stack", "user-badge"),
-    ("rel-amazon", "user-churn"),
-    ("rel-amazon", "user-ltv"),
+    # ("rel-hm", "item-sales"),
+    # ("rel-stack", "post-votes"),
+    # ("rel-amazon", "item-churn"),
+    # ("rel-amazon", "item-ltv"),
+    # ("rel-stack", "user-badge"),
+    # ("rel-amazon", "user-churn"),
+    # ("rel-amazon", "user-ltv"),
 )
 
 
@@ -253,6 +253,11 @@ def a100(
 # A task with no line here stops the submission rather than taking a slot
 # nobody chose for it.
 RESOURCES: dict[tuple[str, str], Resources] = {
+    # 18:45: blackwell1 freed 2 b200 and `il`'s b200 sub-cap was 1 of 2, so the
+    # longest-remaining ampere run moves there -- 20.9h left at 1.55 s/step
+    # against ~7h at 0.52. Its ensembling job is resubmitted behind it: an
+    # `afterok` dependency on a cancelled job is never satisfied.
+    #
     # 16:56, budget unspent: blackwell1 has 3 free b200 and is not flagged
     # RESERVED, so 2 go to `il-interactive` and the third to `il`'s own 2-b200
     # sub-cap. The three longest runs take them -- 4.4h each there against
@@ -267,7 +272,7 @@ RESOURCES: dict[tuple[str, str], Resources] = {
     ("rel-amazon", "item-churn"): a100("il", "1-00:00:00"),
     ("rel-stack", "post-votes"): a100("il", "1-00:00:00"),
     ("rel-hm", "item-sales"): a100("il", "1-00:00:00"),
-    ("rel-stack", "user-engagement"): a100("il", "1-00:00:00"),
+    ("rel-stack", "user-engagement"): b200("il", "1-00:00:00"),
     ("rel-hm", "user-churn"): a100("il", "1-00:00:00"),
     ("rel-trial", "site-success"): a100("il", "1-00:00:00"),
     ("rel-avito", "user-visits"): a100("il", "1-00:00:00"),
@@ -290,7 +295,9 @@ RESOURCES: dict[tuple[str, str], Resources] = {
 
 # Resume an existing run instead of starting a new one: the run whose
 # `out_dir` this is picks its `resume.pt` back up. Empty when nothing resumes.
-RUN_IDS: dict[tuple[str, str], str] = {}
+RUN_IDS: dict[tuple[str, str], str] = {
+    ("rel-stack", "user-engagement"): "26-08-11_16-57-12_151547107",
+}
 
 
 def main() -> None:
