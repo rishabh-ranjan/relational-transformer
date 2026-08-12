@@ -94,5 +94,17 @@ uv = "*"
 
 [tool.pixi.pypi-dependencies]
 relational-transformer = { path = ".", editable = true, extras = ["dev"] }
-# pinned until manifest-driven Hub data loading lands in a relbench release
-relbench = { git = "https://github.com/rishabh-ranjan/relbench", branch = "main" }
+# snap-stanford's relbench, exactly pinned -- NOT the rishabh-ranjan fork `main`
+# carries. This branch exists to run relarena's experiments (see
+# expts/relarena/), and relarena requires relbench 2.1.2: the package version is
+# the data version there (it ships the dataset checksums), and its Database /
+# get_dataset API is the 2.x one.
+#
+# Nothing in `src/rt` needs the fork for those experiments. `rt.preprocess`
+# mirrors relbench.hf rather than importing it; `rt.data.datasets` imports
+# relbench only to resolve a dataset's test timestamp, which is reached only
+# when `db_cutoff` is set, and relarena passes None because it hands RT a
+# database it has already censored; and `rt.eval.relbench` scores against
+# relbench's own evaluator, which relarena replaces with `task.evaluate`.
+# `main` keeps the fork -- this pin is this branch's, for this purpose.
+relbench = "==2.1.2"

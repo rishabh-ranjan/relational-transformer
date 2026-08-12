@@ -12,6 +12,12 @@ that RT does not carry is listed explicitly.
 
 The `rt` extra is deliberately *not* installed: it would pull
 relational-transformer from git over the editable checkout this job is running.
+
+**relbench is not installed here.** It is pinned to 2.1.2 in this branch's pixi
+environment instead, because `pixi run` restores the environment to its lock
+before the ranks start -- a `uv pip install` of a package the lock also names is
+reverted between `setup` and the job. Anything relarena needs that the lock
+carries has to be in the lock.
 """
 
 from pathlib import Path
@@ -41,10 +47,9 @@ def relarena_setup() -> tuple[str, ...]:
     url = f"git+https://x-access-token:{token}@github.com/rishabh-ranjan/relarena-alpha@main"
     return (
         f'pixi run uv pip install --no-deps "relarena @ {url}"',
-        # relarena's own dependencies, minus the ones RT already pins. relbench
-        # is version-pinned by relarena because the package version *is* the
-        # data version (it ships the dataset checksums).
-        'pixi run uv pip install "relbench==2.1.2" "configspace>=1.0" "jsonschema>=4.0"',
+        # relarena's own dependencies, minus the ones this environment carries
+        # already. relbench is one of those -- see the module docstring.
+        'pixi run uv pip install "configspace>=1.0" "jsonschema>=4.0"',
     )
 
 
@@ -85,7 +90,7 @@ def main() -> None:
     seed = 0
     for model, dataset, task in EXPERIMENTS:
         resources = RESOURCES[model, dataset, task]
-        name = f"{model}/{dataset}/{task}"
+        name = f"relarena/{model}/{dataset}/{task}"
         print(f"  {name:38s} {resources.gpus} {resources.qos:15s} {resources.time}")
         submit(
             "expts.relarena.run:main",
@@ -101,7 +106,7 @@ def main() -> None:
                 out_dir=f"{SHARE}/results",
             ),
             resources=resources,
-            name=f"{model}-{dataset}-{task}",
+            name=f"relarena-{model}-{dataset}-{task}",
             setup=relarena_setup(),
             repo_root=REPO_ROOT,
             log_root=f"{SHARE}/slurm-logs",
