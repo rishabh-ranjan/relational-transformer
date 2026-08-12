@@ -7,14 +7,14 @@ stale the moment one of these does:
 - **delta fine-tuning from RT-J**: the published weights are what decay pulls
   back to, and the update is the ordinary one (see `rt.train`'s
   `delta_finetune`);
-- 25 epochs at batch 128, lr 1e-3, weight decay 0.1, Muon;
-- a **fixed** context -- size, local size, bfs width, prefer-latest and walk
-  count all single-valued, and the eval grid the same one -- and no masking;
+- 25 epochs at batch 512, lr 5e-4, weight decay 0.1, Muon;
+- a **fixed** context -- ctx 2048, local ctx 256, bfs width 32,
+  prefer-latest, 10k walks, the eval grid the same one -- and no masking;
 - trained on train **and** val, so nothing selects a checkpoint: `eval_splits`
   is test alone, `swa_momentum` is None, and the run keeps its last step
   (`latest.safetensors`, and the one surviving `steps=` file);
-- the lr warmed up over a fifth of the budget and cosine-decayed to zero by the
-  end, instead of early stopping.
+- the lr warmed up over a fifth of the budget and linearly decayed to zero by
+  the end, instead of early stopping.
 
 An arm is this file with one value changed and a `tag` that names it; the base
 carries no tag at all.
@@ -261,30 +261,10 @@ def a100(
 # A task with no line here stops the submission rather than taking a slot
 # nobody chose for it.
 #
-# 23:25: the context knobs as an arm: local ctx 256, bfs width 32,
-# prefer-latest, 10k walks, at wd 0.1. Train and eval move together, so the
-# curve still measures what the run trains under. ampere8 is free.
-#
-# 23:15: wd 0.0 on the cosine schedule. With no decay the delta formulation is
-# ordinary fine-tuning from RT-J -- nothing pulls back -- so this is the null
-# arm for the decay sweep. `il` is empty again, so all six go there.
-#
-# 23:05: the cosine schedule at the base wd 0.1 -- `rt.train`'s decay is a
-# cosine from this commit on, so the tag is what separates these from the runs
-# above, which are the same config on a linear one. ampere8 is idle again.
-#
-# 22:55: and onto ampere8 -- the reservation is idle, so a variant that would
-# otherwise queue behind the base sweep on `il` runs there straight away.
-#
-# 22:50: wd 0.2 as well, so the pull back to RT-J is sampled at 0.1, 0.2 and
-# 1.0. Six short jobs on whatever `il` has free as the base sweep drains.
-#
-# 22:40: the wd 1.0 variant, six more short jobs. `il` has six free slots as
-# the base sweep's first jobs finish; blackwell is held by the base runs.
-#
-# 22:30: the queue is empty and the whole budget is free. Six short jobs: two on
-# the b200s `il-interactive` can reach, four on `il` amperes. The reservation is
-# idle and stays that way -- these are minutes long and `il` starts them now.
+# 23:20: the queue is mine again and empty. blackwell is planned for someone
+# else until 23:26, so no b200: six `il` amperes, which start now. ctx 2048 is
+# four times the attention of the last base, so these are the slowest short
+# runs yet.
 RESOURCES: dict[tuple[str, str], Resources] = {
     # 22:20: delta fine-tuning -- the pretrained weights frozen as the point
     # decay pulls back to, the update itself unchanged (see `delta_finetune`).
@@ -391,14 +371,14 @@ RESOURCES: dict[tuple[str, str], Resources] = {
     # card we already have), and the nine shortest runs fit it: all under 4h,
     # well inside the reservation's 2026-08-13T00:00 end.
     ("rel-trial", "study-adverse"): a100("il", "8:00:00"),
-    ("rel-event", "user-attendance"): a100("il-lo", "8:00:00", "ranjanr_deadline"),
+    ("rel-event", "user-attendance"): a100("il", "8:00:00"),
     ("rel-event", "user-ignore"): a100("il", "8:00:00"),
     ("rel-trial", "study-outcome"): a100("il", "8:00:00"),
-    ("rel-f1", "driver-dnf"): a100("il-lo", "8:00:00", "ranjanr_deadline"),
-    ("rel-f1", "driver-position"): a100("il-lo", "8:00:00", "ranjanr_deadline"),
-    ("rel-avito", "ad-ctr"): a100("il-lo", "8:00:00", "ranjanr_deadline"),
-    ("rel-event", "user-repeat"): a100("il-lo", "8:00:00", "ranjanr_deadline"),
-    ("rel-f1", "driver-top3"): a100("il-lo", "8:00:00", "ranjanr_deadline"),
+    ("rel-f1", "driver-dnf"): a100("il", "8:00:00"),
+    ("rel-f1", "driver-position"): a100("il", "8:00:00"),
+    ("rel-avito", "ad-ctr"): a100("il", "8:00:00"),
+    ("rel-event", "user-repeat"): a100("il", "8:00:00"),
+    ("rel-f1", "driver-top3"): a100("il", "8:00:00"),
 }
 
 
@@ -418,12 +398,7 @@ def main() -> None:
     # length's in the same project -- the comparison is one panel per task with
     # a group per epoch budget.
     # fmt: off
-    epochs, total_bs, lr, opt, ctx, mask, release, delta, wd, lcs, bw, pl, nw, tag = 25, 128, 1e-3, "muon", 1024, 0.0, "rt-j", True, 0.1, 256, 32, True, 10_000, "-lcs256-bw32-pl-nw10k"  # noqa: E501
-    # epochs, total_bs, lr, opt, ctx, mask, release, delta, wd, lcs, bw, pl, nw, tag = 25, 128, 1e-3, "muon", 1024, 0.0, "rt-j", True, 0.0, 1024, 128, False, 0, "-cos-wd0.0"  # noqa: E501
-    # epochs, total_bs, lr, opt, ctx, mask, release, delta, wd, lcs, bw, pl, nw, tag = 25, 128, 1e-3, "muon", 1024, 0.0, "rt-j", True, 0.1, 1024, 128, False, 0, "-cos"  # noqa: E501
-    # epochs, total_bs, lr, opt, ctx, mask, release, delta, wd, lcs, bw, pl, nw, tag = 25, 128, 1e-3, "muon", 1024, 0.0, "rt-j", True, 0.2, 1024, 128, False, 0, "-wd0.2"  # noqa: E501
-    # epochs, total_bs, lr, opt, ctx, mask, release, delta, wd, lcs, bw, pl, nw, tag = 25, 128, 1e-3, "muon", 1024, 0.0, "rt-j", True, 1.0, 1024, 128, False, 0, "-wd1.0"  # noqa: E501
-    # epochs, total_bs, lr, opt, ctx, mask, release, delta, wd, lcs, bw, pl, nw, tag = 25, 128, 1e-3, "muon", 1024, 0.0, "rt-j", True, 0.1, 1024, 128, False, 0, ""  # noqa: E501
+    epochs, total_bs, lr, opt, ctx, mask, release, delta, wd, lcs, bw, pl, nw, tag = 25, 512, 5e-4, "muon", 2048, 0.0, "rt-j", True, 0.1, 256, 32, True, 10_000, ""  # noqa: E501
     # fmt: on
     # epochs, total_bs, lr, opt, ctx, mask, release, delta, tag = 50, 256, 5e-4, "muon", 1024, 0.0, "rt-p", False, ""
     # epochs, total_bs, lr, opt, ctx, mask, release, delta, tag = 50, 256, 1e-3, "muon", 1024, 0.0, "rt-p", False, "-bs256-lr1e-3"
