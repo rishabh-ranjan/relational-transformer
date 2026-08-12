@@ -293,22 +293,22 @@ RESOURCES: dict[tuple[str, str], Resources] = {
 RUN_IDS: dict[tuple[str, str], str] = {}
 
 
-# How long a run is. `steps_for` needs them for the sort, and the call below
-# takes them as they are; nothing else in this file is a knob.
-TRAIN_SPLITS = ["train", "val"]
-EPOCHS = 100
-TOTAL_BS = 512
-
-
 def main() -> None:
-    # Shortest run first, so the fastest answers land first. The step budget,
-    # not the test split: what a job costs here is overwhelmingly its training.
+    # Shortest run first, so the fastest answers land first. Every task trains
+    # the same epochs at the same batch, so ordering by the rows those epochs
+    # walk is ordering by step count.
     for db, task in sorted(
-        TASKS, key=lambda p: steps_for(*p, TRAIN_SPLITS, TOTAL_BS, EPOCHS)
+        TASKS,
+        key=lambda p: sum(nsplit()[f"{p[0]}/{p[1]}"][s] for s in ("train", "val")),
     ):
         resources = RESOURCES[db, task]
         name = f"{db}/{task}"
-        total_steps = steps_for(db, task, TRAIN_SPLITS, TOTAL_BS, EPOCHS)
+        # The two values the call below needs twice: the splits decide what an
+        # epoch is, the batch decides how many steps it takes. Everything else
+        # is written where it is passed.
+        train_splits = ["train", "val"]
+        total_bs = 512
+        total_steps = steps_for(db, task, train_splits, total_bs, epochs=100)
         print(f"  {name:38s} {resources.gpus} {resources.qos:15s} {resources.time}")
         submit(
             "rt.train:main",
@@ -326,7 +326,7 @@ def main() -> None:
                 loss_fn=loss_fn_for(db, task),
                 load_ckpt_path=ckpt_for(db, task, "rt-j"),
                 db_task_list=[(db, task)],
-                train_splits=TRAIN_SPLITS,
+                train_splits=train_splits,
                 pre_dir="/dfs/user/ranjanr/share/stanford-star/relbench-preprocessed",
                 tokens_per_gpu=2**18 if resources.gpus.startswith("b200") else 2**17,
                 num_workers=resources.cpus_per_task,
@@ -346,7 +346,7 @@ def main() -> None:
                 lr_warmup_steps=0,
                 lr_decay_steps=0,
                 grad_norm_max=1.0,
-                total_bs=TOTAL_BS,
+                total_bs=total_bs,
                 total_steps=total_steps,
                 early_stop_after_steps=None,
                 swa_momentum=1.0,
