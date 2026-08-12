@@ -390,6 +390,7 @@ def build_evaluator(
     prefetch_factor,
     vector_db_path,
     db_cutoff,
+    train_only_fallback=False,
     global_rank=0,
     local_rank=0,
     world_size=1,
@@ -410,6 +411,13 @@ def build_evaluator(
     frequency); ``shuffle_seed`` fixes the val/test subset selection + item
     shuffle, so an ``items_per_task`` subsample stays the *same* rows across
     configs (context tuning, ensembling).
+
+    ``train_only_fallback`` restricts the task rows a context may quote to the
+    **train** split. It was hard-coded ``False`` here, which lets a context
+    quote labelled rows of the split being scored -- fine for a run whose test
+    labels are real and available, and wrong for a benchmark that hides them:
+    the score then reads other test rows' answers. It is a parameter so a caller
+    that must not do that can say so; the default is unchanged.
     """
     return Evaluator(
         tasks=tasks,
@@ -431,7 +439,7 @@ def build_evaluator(
         shuffle_seed=shuffle_seed,
         context_seed=context_seed,
         vector_db_path=vector_db_path,
-        train_only_fallback=False,
+        train_only_fallback=train_only_fallback,
         db_cutoff=db_cutoff,
         global_rank=global_rank,
         local_rank=local_rank,
