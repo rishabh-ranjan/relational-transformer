@@ -231,10 +231,14 @@ RESOURCES: dict[tuple[str, str], Resources] = {
     # and so cannot hold a 16h job at all. Every task costs the same here (fixed
     # steps, capped eval), so the fast slots go to the tasks tonight's iteration
     # was tracking.
+    #
+    # 04:45: the two b200 on `il`'s sub-cap never started -- blackwell's spare
+    # cards are planned for someone else, which only the pending reason shows.
+    # They move to amperes, where an `il` job starts at once by preempting.
     ("rel-f1", "driver-top3"): b200("il-interactive", "12:00:00"),
     ("rel-f1", "driver-dnf"): b200("il-interactive", "12:00:00"),
-    ("rel-f1", "driver-position"): b200("il", "1-00:00:00"),
-    ("rel-avito", "ad-ctr"): b200("il", "1-00:00:00"),
+    ("rel-f1", "driver-position"): a100("il", "1-00:00:00"),
+    ("rel-avito", "ad-ctr"): a100("il", "1-00:00:00"),
     ("rel-event", "user-repeat"): a100("il", "1-00:00:00"),
     ("rel-trial", "study-outcome"): a100("il", "1-00:00:00"),
     ("rel-event", "user-ignore"): a100("il", "1-00:00:00"),
