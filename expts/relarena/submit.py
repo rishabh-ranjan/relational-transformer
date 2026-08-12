@@ -35,9 +35,13 @@ SHARE = "/dfs/user/ranjanr/share/relarena"
 # read on every context build.
 CACHE_DIR = "/tmp/ranjanr/relarena-cache"
 
-EXPERIMENTS = (
-    # (model, dataset, task)
-    ("rt", "rel-f1", "driver-top3"),
+EXPERIMENTS = ()
+
+#: Zero-shot reads: the published checkpoint scored on test with no fine-tuning
+#: and no selection arm (see zero_shot.py). Not protocol runs -- a shortcut for
+#: reading a checkpoint's number on a task.
+ZERO_SHOT = (
+    ("rel-f1", "driver-top3"),
 )
 
 
@@ -82,11 +86,36 @@ RESOURCES: dict[tuple[str, str, str], Resources] = {
     ("rt", "rel-f1", "driver-top3"): a100("il", "8:00:00"),
 }
 
+ZERO_SHOT_RESOURCES: dict[tuple[str, str], Resources] = {
+    # No training at all -- one 8-seed pass over the test split.
+    ("rel-f1", "driver-top3"): a100("il", "1:00:00"),
+}
+
 #: Relaunch an existing run instead of starting a new one.
 RUN_IDS: dict[tuple[str, str, str], str] = {}
 
 
 def main() -> None:
+    for dataset, task in ZERO_SHOT:
+        resources = ZERO_SHOT_RESOURCES[dataset, task]
+        print(f"  zero-shot/{dataset}/{task:26s} {resources.gpus} {resources.qos}")
+        submit(
+            "expts.relarena.zero_shot:main",
+            args=dict(
+                dataset=dataset,
+                task=task,
+                cache_dir=CACHE_DIR,
+                out_dir=f"{SHARE}/results",
+            ),
+            resources=resources,
+            name=f"relarena-zero-shot-{dataset}-{task}",
+            setup=relarena_setup(),
+            repo_root=REPO_ROOT,
+            log_root=f"{SHARE}/slurm-logs",
+            clone_root="/lfs/local/0/roach_clones",
+            secrets_dir=SECRETS_DIR,
+        )
+
     seed = 0
     for model, dataset, task in EXPERIMENTS:
         resources = RESOURCES[model, dataset, task]
