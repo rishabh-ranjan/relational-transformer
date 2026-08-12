@@ -62,6 +62,17 @@ def main(
 
     best = summary.tuned or summary.default
     print(f"+ wrote {path}", flush=True)
+    # run_experiment catches a refit failure, logs it, and returns a summary
+    # whose test_score is None -- so a job can exit 0 having written a result
+    # row with no result in it. Five rt-norefit jobs did exactly that when
+    # their test export was missing from the cache. Fail here instead: a run
+    # that produced no test number did not succeed.
+    if best is None or best.test_score is None:
+        raise RuntimeError(
+            f"{model} on {dataset}/{task} produced no test score; see the refit "
+            "traceback above. The result frame was still written to "
+            f"{path} for inspection."
+        )
     if best is not None:
         print(
             f"+ {summary.metric_name}: val={best.val_score} test={best.test_score}",
