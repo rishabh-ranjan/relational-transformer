@@ -40,11 +40,12 @@ CACHE_DIR = "/tmp/ranjanr/relarena-cache"
 # the refit is worth. Ordered by what the `rt` sweep measured, minus its refit
 # term, fastest first -- so the answers land in that order and a card freed
 # early takes the next job.
-# The whole rt-norefit sweep again: it now selects across the live and SWA nets
-# rather than fixing SWA, which changes what every one of its jobs reports, so
-# the in-flight ones were cancelled rather than left to produce the old answer.
+# rt-hpo on the seven fastest tasks: the trial of whether tuning the context
+# by inference fixes the rankings. Four of our five worst results are in here
+# (driver-dnf aside, which is slower), so it is the sample that answers the
+# question quickest.
 EXPERIMENTS = tuple(
-    ("rt-norefit", db, task)
+    ("rt-hpo", db, task)
     for db, task in (
         ("rel-avito", "ad-ctr"),
         ("rel-event", "user-attendance"),
@@ -53,20 +54,6 @@ EXPERIMENTS = tuple(
         ("rel-f1", "driver-position"),
         ("rel-event", "user-repeat"),
         ("rel-f1", "driver-top3"),
-        ("rel-trial", "site-success"),
-        ("rel-f1", "driver-dnf"),
-        ("rel-event", "user-ignore"),
-        ("rel-avito", "user-clicks"),
-        ("rel-stack", "post-votes"),
-        ("rel-hm", "user-churn"),
-        ("rel-trial", "study-adverse"),
-        ("rel-hm", "item-sales"),
-        ("rel-stack", "user-engagement"),
-        ("rel-stack", "user-badge"),
-        ("rel-amazon", "item-churn"),
-        ("rel-amazon", "item-ltv"),
-        ("rel-amazon", "user-churn"),
-        ("rel-amazon", "user-ltv"),
     )
 )
 
@@ -163,45 +150,27 @@ def a100(qos: str, time: str) -> Resources:
     )
 
 
-# One line per experiment, read off the cluster at 13:54 -- not reused from the
-# 13:30 plan, which is what put four jobs on QOSMaxGRESPerUser last time: the
-# caps count across all my jobs and my own second sweep had since filled them.
+# One line per experiment, read off the cluster at 14:29.
 #
-# Held by the rt sweep, which keeps running: 7 `il` and 1 `il-lo`. So 3 of
-# `il`'s ten are free, both `il-interactive` slots are, and blackwell1 has 6 of
-# 8 b200 free and is MIXED, not RESERVED.
+# The four rel-amazon `rt` jobs were cancelled to make this room -- they were
+# the longest still to run, in their selection arm at 7h26m with a refit and a
+# 350k-row prediction still ahead. The other four `rt` jobs are all in their
+# refit and minutes from done, so killing them would burn 7h each for nothing.
+# All 21 rt-norefit jobs keep running.
 #
-# `ranjanr_deadline` (ampere8) runs to 2026-08-13T00:00, 10 hours out, and its
-# cards are ours whatever tier asks -- so `il-lo` there, walled inside it.
-#
-# The scarce tiers go to the slowest jobs: a b200 saves hours on rel-amazon's
-# ~5h of preprocessing and minutes on a twenty-minute task.
+# That frees four `il` slots. Eight of my own rt-norefit jobs are pending on
+# `il-lo`, so `il` at priority 1000 is what puts these ahead of them -- which is
+# the intent: this trial answers a question the norefit sweep does not.
+# `il-interactive` is full (the two rel-amazon norefit jobs hold it), ampere8
+# has one free reserved card, and the rest go to the uncapped tier.
 RESOURCES: dict[tuple[str, str, str], Resources] = {
-    # il-interactive (2) + il's b200 sub-cap (2): the four rel-amazon jobs.
-    ("rt-norefit", "rel-amazon", "item-churn"): b200("il-interactive", "12:00:00"),
-    ("rt-norefit", "rel-amazon", "item-ltv"): b200("il-interactive", "12:00:00"),
-    ("rt-norefit", "rel-amazon", "user-churn"): b200("il", "1-00:00:00"),
-    ("rt-norefit", "rel-amazon", "user-ltv"): b200("il", "1-00:00:00"),
-    # il's one remaining slot: the slowest of the rest.
-    ("rt-norefit", "rel-hm", "user-churn"): a100("il", "1-00:00:00"),
-    # The reservation's free cards: the fastest seven, all far inside a 9h wall.
-    ("rt-norefit", "rel-avito", "ad-ctr"): reserved("9:00:00"),
-    ("rt-norefit", "rel-event", "user-attendance"): reserved("9:00:00"),
-    ("rt-norefit", "rel-avito", "user-visits"): reserved("9:00:00"),
-    ("rt-norefit", "rel-trial", "study-outcome"): reserved("9:00:00"),
-    ("rt-norefit", "rel-f1", "driver-position"): reserved("9:00:00"),
-    ("rt-norefit", "rel-event", "user-repeat"): reserved("9:00:00"),
-    ("rt-norefit", "rel-f1", "driver-top3"): reserved("9:00:00"),
-    # Everything else on the uncapped tier.
-    ("rt-norefit", "rel-trial", "site-success"): a100("il-lo", "1-00:00:00"),
-    ("rt-norefit", "rel-f1", "driver-dnf"): a100("il-lo", "1-00:00:00"),
-    ("rt-norefit", "rel-event", "user-ignore"): a100("il-lo", "1-00:00:00"),
-    ("rt-norefit", "rel-avito", "user-clicks"): a100("il-lo", "1-00:00:00"),
-    ("rt-norefit", "rel-stack", "post-votes"): a100("il-lo", "2-00:00:00"),
-    ("rt-norefit", "rel-trial", "study-adverse"): a100("il-lo", "1-00:00:00"),
-    ("rt-norefit", "rel-hm", "item-sales"): a100("il-lo", "2-00:00:00"),
-    ("rt-norefit", "rel-stack", "user-engagement"): a100("il-lo", "2-00:00:00"),
-    ("rt-norefit", "rel-stack", "user-badge"): a100("il-lo", "2-00:00:00"),
+    ("rt-hpo", "rel-avito", "ad-ctr"): a100("il", "8:00:00"),
+    ("rt-hpo", "rel-event", "user-attendance"): a100("il", "8:00:00"),
+    ("rt-hpo", "rel-avito", "user-visits"): a100("il", "8:00:00"),
+    ("rt-hpo", "rel-trial", "study-outcome"): a100("il", "8:00:00"),
+    ("rt-hpo", "rel-f1", "driver-position"): reserved("8:00:00"),
+    ("rt-hpo", "rel-event", "user-repeat"): a100("il-lo", "8:00:00"),
+    ("rt-hpo", "rel-f1", "driver-top3"): a100("il-lo", "8:00:00"),
 }
 
 ZERO_SHOT_RESOURCES: dict[tuple[str, str], Resources] = {
