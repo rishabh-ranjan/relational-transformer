@@ -261,6 +261,10 @@ def a100(
 # A task with no line here stops the submission rather than taking a slot
 # nobody chose for it.
 #
+# 23:35: ctx 1024 at batch 512 -- the same context as the arm above at the
+# same batch as the ctx-2048 base, and the first arm on the un-rounded step
+# budget. `il` has slots as the ctx-2048 runs finish.
+#
 # 23:25: ctx 1024 at batch 1024, alongside the ctx-2048 runs rather than
 # instead of them -- ampere8 is idle, so all six go on the reservation and
 # nothing already running gives up a card.
@@ -380,14 +384,14 @@ RESOURCES: dict[tuple[str, str], Resources] = {
     # card we already have), and the nine shortest runs fit it: all under 4h,
     # well inside the reservation's 2026-08-13T00:00 end.
     ("rel-trial", "study-adverse"): a100("il", "8:00:00"),
-    ("rel-event", "user-attendance"): a100("il-lo", "8:00:00", "ranjanr_deadline"),
+    ("rel-event", "user-attendance"): a100("il", "8:00:00"),
     ("rel-event", "user-ignore"): a100("il", "8:00:00"),
     ("rel-trial", "study-outcome"): a100("il", "8:00:00"),
-    ("rel-f1", "driver-dnf"): a100("il-lo", "8:00:00", "ranjanr_deadline"),
-    ("rel-f1", "driver-position"): a100("il-lo", "8:00:00", "ranjanr_deadline"),
-    ("rel-avito", "ad-ctr"): a100("il-lo", "8:00:00", "ranjanr_deadline"),
-    ("rel-event", "user-repeat"): a100("il-lo", "8:00:00", "ranjanr_deadline"),
-    ("rel-f1", "driver-top3"): a100("il-lo", "8:00:00", "ranjanr_deadline"),
+    ("rel-f1", "driver-dnf"): a100("il", "8:00:00"),
+    ("rel-f1", "driver-position"): a100("il", "8:00:00"),
+    ("rel-avito", "ad-ctr"): a100("il", "8:00:00"),
+    ("rel-event", "user-repeat"): a100("il", "8:00:00"),
+    ("rel-f1", "driver-top3"): a100("il", "8:00:00"),
 }
 
 
@@ -407,7 +411,8 @@ def main() -> None:
     # length's in the same project -- the comparison is one panel per task with
     # a group per epoch budget.
     # fmt: off
-    epochs, total_bs, lr, opt, ctx, mask, release, delta, wd, lcs, bw, pl, nw, tag = 25, 1024, 5e-4, "muon", 1024, 0.0, "rt-j", True, 0.1, 256, 32, True, 10_000, "-ctx1024-bs1024"  # noqa: E501
+    epochs, total_bs, lr, opt, ctx, mask, release, delta, wd, lcs, bw, pl, nw, tag = 25, 512, 5e-4, "muon", 1024, 0.0, "rt-j", True, 0.1, 256, 32, True, 10_000, "-ctx1024-bs512"  # noqa: E501
+    # epochs, total_bs, lr, opt, ctx, mask, release, delta, wd, lcs, bw, pl, nw, tag = 25, 1024, 5e-4, "muon", 1024, 0.0, "rt-j", True, 0.1, 256, 32, True, 10_000, "-ctx1024-bs1024"  # noqa: E501
     # epochs, total_bs, lr, opt, ctx, mask, release, delta, wd, lcs, bw, pl, nw, tag = 25, 512, 5e-4, "muon", 2048, 0.0, "rt-j", True, 0.1, 256, 32, True, 10_000, ""  # noqa: E501
     # fmt: on
     # epochs, total_bs, lr, opt, ctx, mask, release, delta, tag = 50, 256, 5e-4, "muon", 1024, 0.0, "rt-p", False, ""
