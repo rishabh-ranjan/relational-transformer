@@ -26,12 +26,12 @@ from roach.slurm import Resources, submit
 HERE = Path(__file__).parent
 
 TASKS = (
-    # ("rel-event", "user-repeat"),
-    # ("rel-f1", "driver-dnf"),
-    # ("rel-f1", "driver-top3"),
-    # ("rel-f1", "driver-position"),
-    # ("rel-trial", "study-outcome"),
-    # ("rel-avito", "ad-ctr"),
+    ("rel-event", "user-repeat"),
+    ("rel-f1", "driver-dnf"),
+    ("rel-f1", "driver-top3"),
+    ("rel-f1", "driver-position"),
+    ("rel-trial", "study-outcome"),
+    ("rel-avito", "ad-ctr"),
     ("rel-event", "user-attendance"),
     ("rel-event", "user-ignore"),
     ("rel-trial", "study-adverse"),
@@ -42,8 +42,8 @@ TASKS = (
     # ("rel-stack", "user-engagement"),
     # ("rel-hm", "item-sales"),
     # ("rel-stack", "post-votes"),
-    ("rel-amazon", "item-churn"),
-    ("rel-amazon", "item-ltv"),
+    # ("rel-amazon", "item-churn"),
+    # ("rel-amazon", "item-ltv"),
     # ("rel-stack", "user-badge"),
     # ("rel-amazon", "user-churn"),
     # ("rel-amazon", "user-ltv"),
@@ -253,6 +253,11 @@ def a100(
 # A task with no line here stops the submission rather than taking a slot
 # nobody chose for it.
 RESOURCES: dict[tuple[str, str], Resources] = {
+    # 20:35: lr 1e-4 at batch 512 for 100 epochs -- the arm to answer first, so
+    # it takes seven `il` cards from the 100-epoch runs (which resume on
+    # `il-lo`) and the two idle reserved ones. Same step count as 50ep at bs256,
+    # a fifth of the learning rate.
+    #
     # 20:05: the five 100-epoch runs the bs512 arm displaced, resuming on
     # `il-lo` with their own run ids.
     #
@@ -316,13 +321,13 @@ RESOURCES: dict[tuple[str, str], Resources] = {
     # take and nothing preempts. `il-lo` only (a high tier there would buy a
     # card we already have), and the nine shortest runs fit it: all under 4h,
     # well inside the reservation's 2026-08-13T00:00 end.
-    ("rel-trial", "study-adverse"): a100("il-lo", "2-00:00:00"),
-    ("rel-event", "user-attendance"): a100("il-lo", "2-00:00:00"),
-    ("rel-event", "user-ignore"): a100("il-lo", "2-00:00:00"),
+    ("rel-trial", "study-adverse"): a100("il", "8:00:00"),
+    ("rel-event", "user-attendance"): a100("il", "8:00:00"),
+    ("rel-event", "user-ignore"): a100("il", "8:00:00"),
     ("rel-trial", "study-outcome"): a100("il", "8:00:00"),
     ("rel-f1", "driver-dnf"): a100("il", "8:00:00"),
-    ("rel-f1", "driver-position"): a100("il-lo", "8:00:00", "ranjanr_deadline"),
-    ("rel-avito", "ad-ctr"): a100("il-lo", "8:00:00", "ranjanr_deadline"),
+    ("rel-f1", "driver-position"): a100("il", "8:00:00"),
+    ("rel-avito", "ad-ctr"): a100("il", "8:00:00"),
     ("rel-event", "user-repeat"): a100("il-lo", "8:00:00", "ranjanr_deadline"),
     ("rel-f1", "driver-top3"): a100("il-lo", "8:00:00", "ranjanr_deadline"),
 }
@@ -330,13 +335,7 @@ RESOURCES: dict[tuple[str, str], Resources] = {
 
 # Resume an existing run instead of starting a new one: the run whose
 # `out_dir` this is picks its `resume.pt` back up. Empty when nothing resumes.
-RUN_IDS: dict[tuple[str, str], str] = {
-    ("rel-event", "user-ignore"): "26-08-11_16-57-07_588876319",
-    ("rel-trial", "study-adverse"): "26-08-11_16-57-08_326377739",
-    ("rel-event", "user-attendance"): "26-08-11_16-57-06_806140116",
-    ("rel-amazon", "item-churn"): "26-08-11_16-57-14_417394283",
-    ("rel-amazon", "item-ltv"): "26-08-11_16-57-15_214569945",
-}
+RUN_IDS: dict[tuple[str, str], str] = {}
 
 
 def main() -> None:
@@ -349,10 +348,11 @@ def main() -> None:
     # How long a run is, and the tag that keeps its curves apart from the other
     # length's in the same project -- the comparison is one panel per task with
     # a group per epoch budget.
-    # epochs, total_bs, tag = 50, 512, "-50ep-bs512"
-    # epochs, total_bs, tag = 25, 256, "-25ep"
-    # epochs, total_bs, tag = 50, 256, "-50ep"
-    epochs, total_bs, tag = 100, 256, ""
+    epochs, total_bs, lr, tag = 100, 512, 1e-4, "-100ep-bs512-lr1e-4"
+    # epochs, total_bs, lr, tag = 50, 512, 5e-4, "-50ep-bs512"
+    # epochs, total_bs, lr, tag = 25, 256, 5e-4, "-25ep"
+    # epochs, total_bs, lr, tag = 50, 256, 5e-4, "-50ep"
+    # epochs, total_bs, lr, tag = 100, 256, 5e-4, ""
     # Shortest run first, so the fastest answers land first. The step budget,
     # not the test split: what a job costs here is overwhelmingly its training.
     for db, task in sorted(
@@ -402,7 +402,7 @@ def main() -> None:
                 walk_length=20,
                 mask_prob_max=0.0,
                 items_per_task=1_000_000_000,
-                lr=5e-4,
+                lr=lr,
                 wd=0.1,
                 lr_warmup_steps=lr_warmup_steps,
                 lr_decay_steps=total_steps - lr_warmup_steps,
