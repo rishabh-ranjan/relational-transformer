@@ -7,7 +7,7 @@ moment one of these does:
 - **delta fine-tuning from RT-P**: the published weights are what decay pulls
   back to, and the update is the ordinary one (see `rt.train`'s
   `delta_finetune`);
-- 50k steps at batch 256, lr 5e-4 held constant -- no warmup, no decay -- and
+- 25k steps at batch 256, lr 5e-4 held constant -- no warmup, no decay -- and
   weight decay 0.1, Muon;
 - a **fixed** context: ctx and local ctx 1024, bfs width 128, prefer-latest
   off, no walks, and the eval grid the same one. No token masking;
@@ -20,8 +20,9 @@ moment one of these does:
   a decay;
 - every eval is a **4-seed context ensemble** (`eval_ensemble_size`), live net
   and SWA net alike, so the logged test curves are ensembled numbers;
-- an eval every 5k steps -- eleven over the run -- and no early stopping: the
-  budget is the budget.
+- an eval every 100 steps where the whole test split fits under the
+  `eval_items_per_task` cap, every 1k where it does not, and no early stopping:
+  the budget is the budget.
 """
 
 import functools
@@ -106,6 +107,32 @@ def published_best() -> dict[str, float]:
                 out[f"{metric}/{split}/{pair}"] = float(best(x))
             out[f"{metric}/{split}/mean"] = float(best(v.groupby(sub.row).mean()))
     return out
+
+
+@functools.cache
+def ntest() -> dict[str, float]:
+    """Test-set size per `{db}/{task}`, from RelBench's own task stats."""
+    import pandas as pd
+    from huggingface_hub import hf_hub_download
+
+    stats = pd.read_parquet(
+        hf_hub_download(
+            "stanford-star/relbench", "STATS/tasks.parquet", repo_type="dataset"
+        )
+    )
+    return {
+        f"{r.database}/{r.task}": float(r.num_rows_test) for r in stats.itertuples()
+    }
+
+
+def eval_freq_for(db: str, task: str, cap: int, dense: int, sparse: int) -> int:
+    """How often this task evaluates.
+
+    An eval walks `min(cap, test rows)`, so a task whose whole test split fits
+    under the cap is cheap to score and can afford a dense curve; one that hits
+    the cap pays a full pass every time and gets the sparse cadence.
+    """
+    return dense if ntest()[f"{db}/{task}"] < cap else sparse
 
 
 def targets_for(db: str, task: str) -> dict[str, float]:
@@ -296,13 +323,13 @@ def main() -> None:
                 lr_decay_steps=0,
                 grad_norm_max=1.0,
                 total_bs=256,
-                total_steps=50_000,
+                total_steps=25_000,
                 early_stop_after_steps=None,
                 swa_momentum=0.9995,
                 seed=0,
                 mmap_populate=True,
                 timeout_per_item=10.0,
-                eval_freq=5_000,
+                eval_freq=eval_freq_for(db, task, cap=2**16, dense=100, sparse=1_000),
                 keep_all_ckpts=False,
                 vector_db_path=None,
                 db_cutoff="test",
