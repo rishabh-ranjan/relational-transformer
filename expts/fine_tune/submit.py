@@ -8,7 +8,7 @@ stale the moment one of these does:
 - **fixed** eval context, not stochastic: the `*_list` knobs are single-valued,
   and `eval_lcs_bw_pl_grid` is the same configuration, so the curve measures
   what the model is trained under;
-- no token masking (`mask_prob_max=0.0`);
+- token masking as the arm sets it (`mask_prob_max`);
 - trained on train **and** val, so nothing selects a checkpoint: `eval_splits`
   is test alone, `swa_momentum` is None, and the run keeps its last step
   (`latest.safetensors`, and the one surviving `steps=` file);
@@ -26,13 +26,13 @@ from roach.slurm import Resources, submit
 HERE = Path(__file__).parent
 
 TASKS = (
-    ("rel-event", "user-repeat"),
-    ("rel-f1", "driver-dnf"),
+    # ("rel-event", "user-repeat"),
+    # ("rel-f1", "driver-dnf"),
     ("rel-f1", "driver-top3"),
-    ("rel-f1", "driver-position"),
+    # ("rel-f1", "driver-position"),
     # ("rel-trial", "study-outcome"),
-    ("rel-avito", "ad-ctr"),
-    ("rel-event", "user-attendance"),
+    # ("rel-avito", "ad-ctr"),
+    # ("rel-event", "user-attendance"),
     # ("rel-event", "user-ignore"),
     # ("rel-trial", "study-adverse"),
     # ("rel-trial", "site-success"),
@@ -253,6 +253,9 @@ def a100(
 # A task with no line here stops the submission rather than taking a slot
 # nobody chose for it.
 RESOURCES: dict[tuple[str, str], Resources] = {
+    # 21:40: driver-top3 alone, with 10% token masking. `il-interactive`'s
+    # second gpu is free and takes a card of any type, so it starts now.
+    #
     # 21:25: a fourth arm, arm A at half the context -- ctx and local ctx both
     # 512, evaluated at the same 512, so the curve measures what it trains
     # under. `il` has five slots free as the first arms finish; the two
@@ -347,7 +350,7 @@ RESOURCES: dict[tuple[str, str], Resources] = {
     ("rel-f1", "driver-position"): a100("il", "8:00:00"),
     ("rel-avito", "ad-ctr"): a100("il", "8:00:00"),
     ("rel-event", "user-repeat"): a100("il-lo", "8:00:00", "ranjanr_deadline"),
-    ("rel-f1", "driver-top3"): a100("il-lo", "8:00:00", "ranjanr_deadline"),
+    ("rel-f1", "driver-top3"): a100("il-interactive", "8:00:00"),
 }
 
 
@@ -366,17 +369,19 @@ def main() -> None:
     # How long a run is, and the tag that keeps its curves apart from the other
     # length's in the same project -- the comparison is one panel per task with
     # a group per epoch budget.
-    # epochs, total_bs, lr, opt, ctx, tag = 50, 256, 5e-4, "muon", 1024, "-bs256-lr5e-4"
-    # epochs, total_bs, lr, opt, ctx, tag = 50, 256, 1e-3, "muon", 1024, "-bs256-lr1e-3"
-    epochs, total_bs, lr, opt, ctx, tag = (
+    epochs, total_bs, lr, opt, ctx, mask, tag = (
         50,
         256,
         5e-4,
         "muon",
-        512,
-        "-bs256-lr5e-4-ctx512",
+        1024,
+        0.1,
+        "-mask0.1",
     )
-    # epochs, total_bs, lr, opt, ctx, tag = 50, 512, 1e-3, "muon", 1024, "-bs512-lr1e-3"
+    # epochs, total_bs, lr, opt, ctx, mask, tag = 50, 256, 5e-4, "muon", 1024, 0.0, ""
+    # epochs, total_bs, lr, opt, ctx, mask, tag = 50, 256, 1e-3, "muon", 1024, 0.0, "-bs256-lr1e-3"
+    # epochs, total_bs, lr, opt, ctx, mask, tag = 50, 512, 1e-3, "muon", 1024, 0.0, "-bs512-lr1e-3"
+    # epochs, total_bs, lr, opt, ctx, mask, tag = 50, 256, 5e-4, "muon", 512, 0.0, "-ctx512"
     # Shortest run first, so the fastest answers land first. The step budget,
     # not the test split: what a job costs here is overwhelmingly its training.
     for db, task in sorted(
@@ -424,7 +429,7 @@ def main() -> None:
                 prefer_latest_list=[False],
                 num_walks=10_000,
                 walk_length=20,
-                mask_prob_max=0.0,
+                mask_prob_max=mask,
                 items_per_task=1_000_000_000,
                 optimizer=opt,
                 lr=lr,
