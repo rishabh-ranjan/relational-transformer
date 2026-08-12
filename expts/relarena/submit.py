@@ -166,6 +166,7 @@ RESOURCES: dict[tuple[str, str, str], Resources] = {
     ("rt-hpo", "rel-f1", "driver-position"): reserved("8:00:00"),
     ("rt-hpo", "rel-event", "user-repeat"): b200("il-interactive", "8:00:00"),
     ("rt-hpo", "rel-f1", "driver-top3"): b200("il-interactive", "8:00:00"),
+    ("rt-norefit", "rel-stack", "user-badge"): b200("il", "1-00:00:00"),
 }
 
 ZERO_SHOT_RESOURCES: dict[tuple[str, str], Resources] = {
