@@ -225,27 +225,33 @@ def a100(
 # A task with no line here stops the submission rather than taking a slot
 # nobody chose for it.
 RESOURCES: dict[tuple[str, str], Resources] = {
-    ("rel-amazon", "user-churn"): b200("il-interactive", "12:00:00"),
-    ("rel-amazon", "user-ltv"): b200("il-interactive", "12:00:00"),
-    ("rel-stack", "user-badge"): b200("il", "1-00:00:00"),
-    ("rel-amazon", "item-ltv"): a100("il-lo", "2-00:00:00"),
-    ("rel-amazon", "item-churn"): a100("il-lo", "2-00:00:00"),
-    ("rel-stack", "post-votes"): a100("il-lo", "2-00:00:00"),
-    ("rel-hm", "item-sales"): a100("il-lo", "2-00:00:00"),
-    ("rel-stack", "user-engagement"): a100("il-lo", "2-00:00:00"),
+    # 04:40: I hold nothing. `sbatch --test-only` says a b200 on `il-interactive`
+    # starts now, a b200 or an ampere on `il` at 05:48, and anything on `il-lo` not
+    # until 12:28 -- including the reservation, which expires at 2026-08-13T00:00
+    # and so cannot hold a 16h job at all. Every task costs the same here (fixed
+    # steps, capped eval), so the fast slots go to the tasks tonight's iteration
+    # was tracking.
+    ("rel-f1", "driver-top3"): b200("il-interactive", "12:00:00"),
+    ("rel-f1", "driver-dnf"): b200("il-interactive", "12:00:00"),
+    ("rel-f1", "driver-position"): b200("il", "1-00:00:00"),
+    ("rel-avito", "ad-ctr"): b200("il", "1-00:00:00"),
+    ("rel-event", "user-repeat"): a100("il", "1-00:00:00"),
+    ("rel-trial", "study-outcome"): a100("il", "1-00:00:00"),
+    ("rel-event", "user-ignore"): a100("il", "1-00:00:00"),
+    ("rel-event", "user-attendance"): a100("il", "1-00:00:00"),
+    ("rel-trial", "study-adverse"): a100("il", "1-00:00:00"),
+    ("rel-trial", "site-success"): a100("il", "1-00:00:00"),
+    ("rel-avito", "user-visits"): a100("il", "1-00:00:00"),
+    ("rel-avito", "user-clicks"): a100("il", "1-00:00:00"),
     ("rel-hm", "user-churn"): a100("il-lo", "2-00:00:00"),
-    ("rel-trial", "site-success"): a100("il-lo", "2-00:00:00"),
-    ("rel-avito", "user-visits"): a100("il-lo", "2-00:00:00"),
-    ("rel-avito", "user-clicks"): a100("il-lo", "2-00:00:00"),
-    ("rel-trial", "study-adverse"): a100("il", "8:00:00"),
-    ("rel-event", "user-attendance"): a100("il-lo", "8:00:00", "ranjanr_deadline"),
-    ("rel-event", "user-ignore"): a100("il", "8:00:00"),
-    ("rel-trial", "study-outcome"): a100("il", "8:00:00"),
-    ("rel-f1", "driver-dnf"): a100("il-lo", "8:00:00", "ranjanr_deadline"),
-    ("rel-f1", "driver-position"): a100("il-lo", "8:00:00", "ranjanr_deadline"),
-    ("rel-avito", "ad-ctr"): a100("il-lo", "8:00:00", "ranjanr_deadline"),
-    ("rel-event", "user-repeat"): a100("il-lo", "8:00:00", "ranjanr_deadline"),
-    ("rel-f1", "driver-top3"): a100("il-lo", "8:00:00", "ranjanr_deadline"),
+    ("rel-stack", "user-engagement"): a100("il-lo", "2-00:00:00"),
+    ("rel-hm", "item-sales"): a100("il-lo", "2-00:00:00"),
+    ("rel-stack", "post-votes"): a100("il-lo", "2-00:00:00"),
+    ("rel-amazon", "item-churn"): a100("il-lo", "2-00:00:00"),
+    ("rel-amazon", "item-ltv"): a100("il-lo", "2-00:00:00"),
+    ("rel-stack", "user-badge"): a100("il-lo", "2-00:00:00"),
+    ("rel-amazon", "user-churn"): a100("il-lo", "2-00:00:00"),
+    ("rel-amazon", "user-ltv"): a100("il-lo", "2-00:00:00"),
 }
 
 
