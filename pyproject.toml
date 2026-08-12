@@ -87,7 +87,18 @@ platforms = ["linux-64"]
 CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_LINKER = "x86_64-conda-linux-gnu-cc"
 
 [tool.pixi.dependencies]
-python = ">=3.12"
+# 3.12, not ">=3.12": on 3.14 the default multiprocessing start method on Linux
+# is forkserver rather than fork, and a forkserver child is built by *pickling*
+# the work over to it. rustler's Sampler is a pyo3 object and does not pickle,
+# so every DataLoader with workers dies with
+#
+#   TypeError: cannot pickle 'builtins.Sampler' object
+#
+# rt assumes fork throughout (see the comment in rt/_env.py about workers
+# inheriting the thread budget "at fork"). Pinning the interpreter is the
+# smaller change than making every dataset picklable, and it also puts this
+# environment inside relarena's own `requires-python`.
+python = "3.12.*"
 rust = "*"
 maturin = "*"
 uv = "*"
