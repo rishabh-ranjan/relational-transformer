@@ -38,7 +38,14 @@ def main() -> None:
     rep = d[d.get("selected", False) == True] if "selected" in d else d  # noqa: E712
     if rep.empty:
         rep = d
-    cols = [c for c in ("dataset", "task", "task_type", "metric", "val_score",
+    # `val_score` is dropped, not shown. For `rt` it is a placeholder: the
+    # selection arm's `predict` returns zeros, because the checkpoint was
+    # already chosen inside `fit` by rt.train's own in-loop validation and
+    # scoring the whole val split would buy nothing. So the column reads 0.5
+    # for a classification task and "mean |y|" for a regression one -- numbers
+    # that look like results and are not. Test scores are real.
+    rep = rep.drop(columns=[c for c in rep if c.startswith("val_")], errors="ignore")
+    cols = [c for c in ("dataset", "task", "task_type", "metric",
                         "test_score", "fit_time_tuning", "fit_time_refit",
                         "predict_time_refit") if c in rep]
     rep = rep[cols].sort_values(["dataset", "task"])
