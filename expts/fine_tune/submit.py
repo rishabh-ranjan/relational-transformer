@@ -32,9 +32,9 @@ TASKS = (
     # ("rel-f1", "driver-position"),
     # ("rel-trial", "study-outcome"),
     # ("rel-avito", "ad-ctr"),
-    # ("rel-event", "user-attendance"),
-    ("rel-event", "user-ignore"),
-    ("rel-trial", "study-adverse"),
+    ("rel-event", "user-attendance"),
+    # ("rel-event", "user-ignore"),
+    # ("rel-trial", "study-adverse"),
     # ("rel-trial", "site-success"),
     # ("rel-avito", "user-visits"),
     # ("rel-avito", "user-clicks"),
@@ -253,6 +253,11 @@ def a100(
 # A task with no line here stops the submission rather than taking a slot
 # nobody chose for it.
 RESOURCES: dict[tuple[str, str], Resources] = {
+    # 19:15: and rel-event/user-attendance too -- the last reserved card the
+    # 50-epoch arm needs, with rel-f1/driver-dnf finishing on its own within
+    # the minute for the other. A resume costs a restart and a handful of
+    # steps: resume.pt is rewritten at every eval, and these evals are frequent.
+    #
     # 19:10: these two 100-epoch runs give their reserved cards to the pending
     # 50-epoch jobs and resume in the general `il-lo` pool. Chosen for having
     # real time left (99 and 402 min) where rel-f1/driver-dnf and
@@ -296,7 +301,7 @@ RESOURCES: dict[tuple[str, str], Resources] = {
     # card we already have), and the nine shortest runs fit it: all under 4h,
     # well inside the reservation's 2026-08-13T00:00 end.
     ("rel-trial", "study-adverse"): a100("il-lo", "1-00:00:00"),
-    ("rel-event", "user-attendance"): a100("il-lo", "8:00:00", "ranjanr_deadline"),
+    ("rel-event", "user-attendance"): a100("il-lo", "1-00:00:00"),
     ("rel-event", "user-ignore"): a100("il-lo", "1-00:00:00"),
     ("rel-trial", "study-outcome"): a100("il-lo", "8:00:00", "ranjanr_deadline"),
     ("rel-f1", "driver-dnf"): a100("il-lo", "8:00:00", "ranjanr_deadline"),
@@ -310,8 +315,7 @@ RESOURCES: dict[tuple[str, str], Resources] = {
 # Resume an existing run instead of starting a new one: the run whose
 # `out_dir` this is picks its `resume.pt` back up. Empty when nothing resumes.
 RUN_IDS: dict[tuple[str, str], str] = {
-    ("rel-event", "user-ignore"): "26-08-11_16-57-07_588876319",
-    ("rel-trial", "study-adverse"): "26-08-11_16-57-08_326377739",
+    ("rel-event", "user-attendance"): "26-08-11_16-57-06_806140116",
 }
 
 
