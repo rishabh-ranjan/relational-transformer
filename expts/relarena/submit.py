@@ -38,13 +38,10 @@ CACHE_DIR = "/tmp/ranjanr/relarena-cache"
 EXPERIMENTS = tuple(
     ("rt", db, task)
     for db, task in (
-        # A promotion, not a new submission: these two were pending on `il-lo`
-        # while `il` sat at 8 of its 10 (the two cutoff probes had finished and
-        # given their slots back). Cancelled there and resubmitted here --
-        # priority buys the next card that frees, and `il-lo` behind eighteen of
-        # my own jobs was not going to see one.
-        ("rel-stack", "user-engagement"),
-        ("rel-stack", "post-votes"),
+        # A promotion. rel-event/user-attendance finished on its b200 in 23
+        # minutes and gave the card back, so the one job still pending on
+        # `il-lo` takes it rather than waiting behind eighteen of my own.
+        ("rel-avito", "user-visits"),
     )
 )
 
@@ -187,7 +184,7 @@ RESOURCES: dict[tuple[str, str, str], Resources] = {
     ("rt", "rel-trial", "site-success"): reserved("12:00:00"),
     ("rt", "rel-avito", "user-clicks"): reserved("12:00:00"),
     # il-lo in the general pool: preemptible, and these three resume.
-    ("rt", "rel-avito", "user-visits"): a100("il-lo", "2-00:00:00"),
+    ("rt", "rel-avito", "user-visits"): b200("il-interactive", "12:00:00"),
     ("rt", "rel-stack", "user-engagement"): a100("il", "2-00:00:00"),
     ("rt", "rel-stack", "post-votes"): a100("il", "2-00:00:00"),
 }
