@@ -7,7 +7,7 @@ stale the moment one of these does:
 - **delta fine-tuning from RT-J**: the published weights are what decay pulls
   back to, and the update is the ordinary one (see `rt.train`'s
   `delta_finetune`);
-- 25 epochs at batch 128, lr 1e-3 held constant -- no warmup, no decay -- and
+- 25 epochs at batch 256, lr 5e-4 held constant -- no warmup, no decay -- and
   weight decay 0.1, Muon;
 - a **fixed** context -- ctx and local ctx 1024, bfs width 128, prefer-latest
   off, no walks, the eval grid the same one -- and no masking;
@@ -16,6 +16,9 @@ stale the moment one of these does:
 - **equal-weight SWA** (`swa_momentum=1.0`, an fp32 running mean over every
   step) evaluated and saved beside the live net, which is what stands in for a
   decayed learning rate here;
+- every eval is a **4-seed context ensemble** (`eval_ensemble_size`), for the
+  live net and the SWA net alike, so the logged test curves are ensembled
+  numbers rather than single-context ones;
 - no early stopping: the budget is the budget.
 
 An arm is this file with one value changed and a `tag` that names it; the base
@@ -263,6 +266,11 @@ def a100(
 # A task with no line here stops the submission rather than taking a slot
 # nobody chose for it.
 #
+# 00:45: the new base -- lr 5e-4 at batch 256, with a 4-seed ensemble at every
+# eval. The six tasks have test splits of a few hundred to two thousand rows,
+# so four passes over them costs seconds, not the minutes it would on the big
+# tasks. Six `il` amperes; the queue is empty again.
+#
 # 00:20: the fourth corner -- lr 5e-4 at batch 256. Four on `il`, which has
 # room as the base sweep's short tasks finish, two on the reservation.
 #
@@ -396,10 +404,10 @@ RESOURCES: dict[tuple[str, str], Resources] = {
     # card we already have), and the nine shortest runs fit it: all under 4h,
     # well inside the reservation's 2026-08-13T00:00 end.
     ("rel-trial", "study-adverse"): a100("il", "8:00:00"),
-    ("rel-event", "user-attendance"): a100("il-lo", "8:00:00", "ranjanr_deadline"),
+    ("rel-event", "user-attendance"): a100("il", "8:00:00"),
     ("rel-event", "user-ignore"): a100("il", "8:00:00"),
     ("rel-trial", "study-outcome"): a100("il", "8:00:00"),
-    ("rel-f1", "driver-dnf"): a100("il-lo", "8:00:00", "ranjanr_deadline"),
+    ("rel-f1", "driver-dnf"): a100("il", "8:00:00"),
     ("rel-f1", "driver-position"): a100("il", "8:00:00"),
     ("rel-avito", "ad-ctr"): a100("il", "8:00:00"),
     ("rel-event", "user-repeat"): a100("il", "8:00:00"),
@@ -423,10 +431,7 @@ def main() -> None:
     # length's in the same project -- the comparison is one panel per task with
     # a group per epoch budget.
     # fmt: off
-    # epochs, total_bs, lr, opt, ctx, mask, release, delta, wd, lcs, bw, pl, nw, tag = 25, 128, 5e-4, "muon", 1024, 0.0, "rt-j", True, 0.1, 1024, 128, False, 0, "-lr5e-4"  # noqa: E501
-    epochs, total_bs, lr, opt, ctx, mask, release, delta, wd, lcs, bw, pl, nw, tag = 25, 256, 5e-4, "muon", 1024, 0.0, "rt-j", True, 0.1, 1024, 128, False, 0, "-lr5e-4-bs256"  # noqa: E501
-    # epochs, total_bs, lr, opt, ctx, mask, release, delta, wd, lcs, bw, pl, nw, tag = 25, 256, 1e-3, "muon", 1024, 0.0, "rt-j", True, 0.1, 1024, 128, False, 0, "-bs256"  # noqa: E501
-    # epochs, total_bs, lr, opt, ctx, mask, release, delta, wd, lcs, bw, pl, nw, tag = 25, 128, 1e-3, "muon", 1024, 0.0, "rt-j", True, 0.1, 1024, 128, False, 0, ""  # noqa: E501
+    epochs, total_bs, lr, opt, ctx, mask, release, delta, wd, lcs, bw, pl, nw, tag = 25, 256, 5e-4, "muon", 1024, 0.0, "rt-j", True, 0.1, 1024, 128, False, 0, ""  # noqa: E501
     # fmt: on
     # epochs, total_bs, lr, opt, ctx, mask, release, delta, tag = 50, 256, 5e-4, "muon", 1024, 0.0, "rt-p", False, ""
     # epochs, total_bs, lr, opt, ctx, mask, release, delta, tag = 50, 256, 1e-3, "muon", 1024, 0.0, "rt-p", False, "-bs256-lr1e-3"
@@ -513,7 +518,7 @@ def main() -> None:
                 eval_mmap_populate=True,
                 eval_shuffle_seed=0,
                 eval_context_seed=0,
-                eval_ensemble_size=1,
+                eval_ensemble_size=4,
                 eval_vector_db_path=None,
                 eval_lcs_bw_pl_grid=[(lcs, bw, pl)],
                 targets=targets_for(db, task),
