@@ -78,6 +78,15 @@ update is unchanged — what moves is the point weight decay pulls to: the
 pretrained weights instead of zero. It needs a `load_ckpt_path`, and with
 `wd=0` it is exactly ordinary fine-tuning.
 
+`eval_ensemble_size` averages the in-loop eval over that many context seeds
+before scoring — the **predictions** are averaged per item, as
+`rt.eval.run_ensemble` does, not the per-seed scores. `1` is the ordinary
+single-context eval and uses `eval_context_seed` directly; above that the seeds
+are the same mixed family `rt.eval` sweeps, so member *i* matches. Each member
+is one more evaluator, built once and reused at every eval point: one more pass
+over the eval split per eval, and one more set of loader workers resident for
+the run.
+
 `optimizer` selects `"muon"` — hidden weight matrices to Muon, the per-sem-type
 encoders/decoders and every 0/1-D parameter to AdamW, which is what the released
 checkpoints were trained with — or `"adamw"`, one AdamW over all of them with the

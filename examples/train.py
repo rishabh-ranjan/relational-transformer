@@ -77,6 +77,7 @@ def train(pre_dir: str, eval_pre_dir: str, out_root: str, run_id: str) -> None:
         eval_mmap_populate=True,
         eval_shuffle_seed=0,
         eval_context_seed=0,
+        eval_ensemble_size=1,
         eval_vector_db_path=None,
         eval_lcs_bw_pl_grid=[(256, 32, True)],
         # logging: the run id names the output directory and the wandb run, and

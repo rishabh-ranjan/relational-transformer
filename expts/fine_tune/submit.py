@@ -513,6 +513,7 @@ def main() -> None:
                 eval_mmap_populate=True,
                 eval_shuffle_seed=0,
                 eval_context_seed=0,
+                eval_ensemble_size=1,
                 eval_vector_db_path=None,
                 eval_lcs_bw_pl_grid=[(lcs, bw, pl)],
                 targets=targets_for(db, task),

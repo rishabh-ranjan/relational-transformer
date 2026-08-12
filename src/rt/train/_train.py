@@ -52,7 +52,7 @@ from rt.model import (
 )
 from rt.train.muon import Muon
 from rt.train.swa import SwaState
-from rt.eval import metric_for
+from rt.eval import member_context_seed, metric_for
 from rt.eval import Evaluator
 from rt.progress import fmt_bytes, fmt_duration, log
 import wandb
@@ -120,7 +120,7 @@ def move(batch, device):
 
 
 @torch.inference_mode()
-def eval_avg_metrics(evaluator, nets_with_prefix, ctx_size_list):
+def eval_avg_metrics(evaluators, nets_with_prefix, ctx_size_list):
     """Per-task and mean metric, per net prefix, eval split and metric name::
 
         {prefix: {split: {"auroc": {"mean": v, "rel-f1/driver-dnf": v, ...},
@@ -139,33 +139,52 @@ def eval_avg_metrics(evaluator, nets_with_prefix, ctx_size_list):
     Each metric is itself averaged over the requested eval ctx sizes -- one
     evaluate_raw yield is one (task, ctx_size) slice, so a task appears once
     per ctx size and its per-task value spans all of them.
+
+    ``evaluators`` is one evaluator per context seed. Their **predictions** are
+    averaged per item before the metric is taken -- the ensemble ``rt.eval``
+    scores, not a mean of per-seed scores, which is a different and weaker
+    quantity. One evaluator is the ordinary single-context eval.
     """
 
     metric_names = {"clf": "auroc", "reg": "nmae"}
+    # (prefix, split, task_key, ctx) -> [labels, summed preds, task]. The items
+    # are the same rows in the same order in every evaluator -- `shuffle_seed`
+    # fixes the subset and `in_order=True` the sequence -- so the sum is
+    # per-item, as it is in `rt.eval.run_ensemble`.
+    acc = {}
+    for evaluator in evaluators:
+        for task, ctx, labels, preds_by_prefix, _nl in evaluator.evaluate_raw(
+            nets_with_prefix, ctx_size_list
+        ):
+            for _, prefix in nets_with_prefix:
+                key = (prefix, task.split, f"{task.db_name}/{task.table_name}", ctx)
+                p = preds_by_prefix[prefix].astype(np.float64)
+                if key not in acc:
+                    acc[key] = [labels, np.zeros_like(p), task]
+                acc[key][1] += p
+
     # split -> metric_name -> task_key -> [values over ctx sizes]
-    acc = {
-        p: {s: {m: {} for m in metric_names.values()} for s in evaluator.eval_splits}
+    scores = {
+        p: {
+            s: {m: {} for m in metric_names.values()} for s in evaluators[0].eval_splits
+        }
         for _, p in nets_with_prefix
     }
-    for task, _ctx, labels, preds_by_prefix, _nl in evaluator.evaluate_raw(
-        nets_with_prefix, ctx_size_list
-    ):
-        for _, prefix in nets_with_prefix:
-            try:
-                _, v = metric_for(task.task_type, labels, preds_by_prefix[prefix])
-                # Percent, like results.md: a curve and the published target
-                # it is plotted against have to be in the same units.
-                v *= 100.0
-            except ValueError:
-                # e.g. a single-class slice -> ROC AUC undefined; skip this task.
-                continue
-            # setdefault: a task with an empty split is absent from
-            # ``eval_splits`` but still yielded, and still worth a curve.
-            by_metric = acc[prefix].setdefault(
-                task.split, {m: {} for m in metric_names.values()}
-            )
-            per_task = by_metric[metric_names[task.task_type]]
-            per_task.setdefault(f"{task.db_name}/{task.table_name}", []).append(v)
+    for (prefix, split, task_key, _ctx), (labels, summed, task) in acc.items():
+        try:
+            _, v = metric_for(task.task_type, labels, summed / len(evaluators))
+            # Percent, like results.md: a curve and the published target
+            # it is plotted against have to be in the same units.
+            v *= 100.0
+        except ValueError:
+            # e.g. a single-class slice -> ROC AUC undefined; skip this task.
+            continue
+        # setdefault: a task with an empty split is absent from
+        # ``eval_splits`` but still yielded, and still worth a curve.
+        by_metric = scores[prefix].setdefault(
+            split, {m: {} for m in metric_names.values()}
+        )
+        by_metric[metric_names[task.task_type]].setdefault(task_key, []).append(v)
 
     def _reduce(per_task):
         # Per task: mean over ctx sizes. Then "mean": mean over tasks.
@@ -178,7 +197,7 @@ def eval_avg_metrics(evaluator, nets_with_prefix, ctx_size_list):
             s: {m: _reduce(per_task) for m, per_task in by_metric.items()}
             for s, by_metric in by_split.items()
         }
-        for p, by_split in acc.items()
+        for p, by_split in scores.items()
     }
 
 
@@ -275,6 +294,13 @@ def main(
     eval_mmap_populate: bool,
     eval_shuffle_seed: int,
     eval_context_seed: int,
+    # How many context seeds each eval averages its *predictions* over before
+    # scoring -- the ensemble ``rt.eval`` reports, computed in the training
+    # loop. 1 is the ordinary single-context eval. Each seed is one more
+    # evaluator, built once and reused at every eval point, so the cost is one
+    # more pass over the eval split per eval and one more set of loader
+    # workers resident for the run.
+    eval_ensemble_size: int,
     eval_vector_db_path: str | None,
     eval_lcs_bw_pl_grid: list[tuple[int, int, bool]],
     # logging
@@ -687,45 +713,60 @@ def main(
     assert len(set(map(tuple, eval_lcs_bw_pl_grid))) == len(eval_lcs_bw_pl_grid), (
         f"duplicate entries in eval_lcs_bw_pl_grid: {eval_lcs_bw_pl_grid}"
     )
+    assert eval_ensemble_size >= 1, f"eval_ensemble_size={eval_ensemble_size}"
     val_tasks = get_tasks(eval_pre_dir, eval_db_task_list, tuple(eval_splits))
+
+    def _member_seed(member):
+        """The context seed of one ensemble member.
+
+        One member is the plain `eval_context_seed`, as `rt.eval` uses it on
+        its single-config path. Several are the mixed family `rt.eval` sweeps,
+        so the two agree member for member.
+        """
+        if eval_ensemble_size == 1:
+            return eval_context_seed
+        return member_context_seed(eval_context_seed, member)
 
     evaluators = (
         [
             (
                 f"lcs{lcs}-bw{bw}-pl{int(pl)}_" if i else "",
-                Evaluator(
-                    tasks=val_tasks,
-                    pre_dir=eval_pre_dir,
-                    eval_bs=max(1, eval_tokens_per_gpu // max(eval_ctx_size_list)),
-                    ctx_size_list=eval_ctx_size_list,
-                    items_per_task=eval_items_per_task,
-                    num_workers=eval_num_workers,
-                    prefetch_factor=eval_prefetch_factor,
-                    # The workers stay alive between eval passes, so the
-                    # iterator each pass re-creates is already prefetching
-                    # while training runs: an eval starts on data that is
-                    # ready, instead of re-forking every worker and re-mmapping
-                    # the split first.
-                    persistent_workers=eval_num_workers > 0,
-                    local_ctx_size=lcs,
-                    bfs_width=bw,
-                    num_walks=eval_num_walks,
-                    walk_length=eval_walk_length,
-                    prefer_latest=pl,
-                    mmap_populate=eval_mmap_populate,
-                    embedder=embedder,
-                    d_text=d_text,
-                    shuffle_seed=eval_shuffle_seed,
-                    context_seed=eval_context_seed,
-                    vector_db_path=eval_vector_db_path,
-                    train_only_fallback=False,
-                    db_upto_test_timestamp=db_upto_test_timestamp,
-                    global_rank=rank,
-                    local_rank=local_rank,
-                    world_size=world_size,
-                    ddp=ddp,
-                    device=device,
-                ),
+                [
+                    Evaluator(
+                        tasks=val_tasks,
+                        pre_dir=eval_pre_dir,
+                        eval_bs=max(1, eval_tokens_per_gpu // max(eval_ctx_size_list)),
+                        ctx_size_list=eval_ctx_size_list,
+                        items_per_task=eval_items_per_task,
+                        num_workers=eval_num_workers,
+                        prefetch_factor=eval_prefetch_factor,
+                        # The workers stay alive between eval passes, so the
+                        # iterator each pass re-creates is already prefetching
+                        # while training runs: an eval starts on data that is
+                        # ready, instead of re-forking every worker and re-mmapping
+                        # the split first.
+                        persistent_workers=eval_num_workers > 0,
+                        local_ctx_size=lcs,
+                        bfs_width=bw,
+                        num_walks=eval_num_walks,
+                        walk_length=eval_walk_length,
+                        prefer_latest=pl,
+                        mmap_populate=eval_mmap_populate,
+                        embedder=embedder,
+                        d_text=d_text,
+                        shuffle_seed=eval_shuffle_seed,
+                        context_seed=_member_seed(member),
+                        vector_db_path=eval_vector_db_path,
+                        train_only_fallback=False,
+                        db_upto_test_timestamp=db_upto_test_timestamp,
+                        global_rank=rank,
+                        local_rank=local_rank,
+                        world_size=world_size,
+                        ddp=ddp,
+                        device=device,
+                    )
+                    for member in range(eval_ensemble_size)
+                ],
             )
             for i, (lcs, bw, pl) in enumerate(eval_lcs_bw_pl_grid)
         ]
@@ -966,9 +1007,9 @@ def main(
             swa.sync_to(swa_net.named_parameters())
             nets.append((swa_net, "swa/"))
         metrics = {}
-        for tag, evaluator in evaluators:
+        for tag, members in evaluators:
             tagged_nets = [(n, tag + p) for n, p in nets]
-            metrics.update(eval_avg_metrics(evaluator, tagged_nets, eval_ctx_size_list))
+            metrics.update(eval_avg_metrics(members, tagged_nets, eval_ctx_size_list))
         # Best-checkpoint tracking follows the primary (untagged) grid entry.
         # Rank 0 only: ``evaluate_raw`` yields there and nowhere else, so the
         # other ranks hold empty metrics and must not touch ``best``.
@@ -1069,7 +1110,9 @@ def main(
     if evaluators:
         # First grid entry only: the others differ in context-building knobs,
         # not in the shapes the net sees.
-        evaluators[0][1].mem_guard([n for n in (raw_net, swa_net) if n is not None])
+        # One member is enough: every member is the same shapes on the same
+        # split, so they all reach the same peak.
+        evaluators[0][1][0].mem_guard([n for n in (raw_net, swa_net) if n is not None])
         if is_main:
             if is_cuda:
                 torch.cuda.synchronize()
