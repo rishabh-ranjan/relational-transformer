@@ -336,6 +336,11 @@ What to do about it:
   `il-interactive` and a day and a half away on `il-lo`. It ignores your own
   per-user GRES caps, so a start time on a tier you have already filled is not
   a slot you can take.
+
+  This belongs *inside* a monitor, not just in your hands: a free-card counter
+  fires on every idle b200 whether or not you could have it, and the noise
+  trains you to ignore the one time it matters. Gate the alert on a start time
+  within the next few minutes.
 - **A freed slot is worth a card check, not an assumption.** `il-interactive`
   having room does not mean blackwell1 has a b200 free; read `AllocTRES` before
   spending it, and if there is none, re-ask the blackwell question below.
