@@ -37,7 +37,10 @@ def main(
     out.mkdir(parents=True, exist_ok=True)
     Path(cache_dir).mkdir(parents=True, exist_ok=True)
 
-    if model == "rt":
+    # Every rt-family model, not just "rt": the name check was exact, so
+    # `rt-norefit` skipped warming entirely and every one of its jobs died on
+    # the first cache miss (run_experiment reads with on_miss="raise").
+    if model.startswith("rt"):
         from relarena.models.rt.warm_cache import precompute_dataset_task
 
         print(f"+ warming rt tensor cache for {dataset}/{task}", flush=True)

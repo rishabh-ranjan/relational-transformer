@@ -40,14 +40,26 @@ CACHE_DIR = "/tmp/ranjanr/relarena-cache"
 # the refit is worth. Ordered by what the `rt` sweep measured, minus its refit
 # term, fastest first -- so the answers land in that order and a card freed
 # early takes the next job.
-# A promotion. The four rel-amazon norefit jobs went out on `il-lo` and sat on
-# Priority behind my own sweep, while blackwell1 had six free b200 and both
-# `il-interactive` slots were open. rel-amazon is the long pole -- ~5h of
-# preprocessing before a gradient step -- so it is exactly the job a faster
-# card is worth spending a capped tier on.
+# Resubmitting the sixteen rt-norefit jobs that died on a cache miss: run.py
+# warmed only when the model was exactly "rt", and warm_cache knew three of the
+# four exports the two regimes need between them. Both fixed; the five that
+# survived (they landed where the rt sweep had already warmed the shared
+# selection-arm export) keep running and are not resubmitted.
 EXPERIMENTS = tuple(
     ("rt-norefit", db, task)
     for db, task in (
+        ("rel-avito", "ad-ctr"),
+        ("rel-event", "user-attendance"),
+        ("rel-avito", "user-visits"),
+        ("rel-f1", "driver-top3"),
+        ("rel-trial", "site-success"),
+        ("rel-f1", "driver-dnf"),
+        ("rel-event", "user-ignore"),
+        ("rel-avito", "user-clicks"),
+        ("rel-stack", "post-votes"),
+        ("rel-hm", "user-churn"),
+        ("rel-trial", "study-adverse"),
+        ("rel-stack", "user-engagement"),
         ("rel-amazon", "item-churn"),
         ("rel-amazon", "item-ltv"),
         ("rel-amazon", "user-churn"),
