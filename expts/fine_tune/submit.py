@@ -7,14 +7,16 @@ stale the moment one of these does:
 - **delta fine-tuning from RT-J**: the published weights are what decay pulls
   back to, and the update is the ordinary one (see `rt.train`'s
   `delta_finetune`);
-- 25 epochs at batch 512, lr 5e-4, weight decay 0.1, Muon;
-- a **fixed** context -- ctx 2048, local ctx 256, bfs width 32,
-  prefer-latest, 10k walks, the eval grid the same one -- and no masking;
+- 25 epochs at batch 128, lr 1e-3 held constant -- no warmup, no decay -- and
+  weight decay 0.1, Muon;
+- a **fixed** context -- ctx and local ctx 1024, bfs width 128, prefer-latest
+  off, no walks, the eval grid the same one -- and no masking;
 - trained on train **and** val, so nothing selects a checkpoint: `eval_splits`
-  is test alone, `swa_momentum` is None, and the run keeps its last step
-  (`latest.safetensors`, and the one surviving `steps=` file);
-- the lr warmed up over a fifth of the budget and linearly decayed to zero by
-  the end, instead of early stopping.
+  is test alone and the run keeps its last step (`latest.safetensors`);
+- **equal-weight SWA** (`swa_momentum=1.0`, an fp32 running mean over every
+  step) evaluated and saved beside the live net, which is what stands in for a
+  decayed learning rate here;
+- no early stopping: the budget is the budget.
 
 An arm is this file with one value changed and a `tag` that names it; the base
 carries no tag at all.
@@ -261,6 +263,10 @@ def a100(
 # A task with no line here stops the submission rather than taking a slot
 # nobody chose for it.
 #
+# 00:05: constant lr with SWA instead of a decay. The queue is empty again, so
+# six `il` amperes; ctx is back to 1024 and the batch to 128, which is the
+# cheapest step this base has had.
+#
 # 23:35: ctx 1024 at batch 512 -- the same context as the arm above at the
 # same batch as the ctx-2048 base, and the first arm on the un-rounded step
 # budget. `il` has slots as the ctx-2048 runs finish.
@@ -411,9 +417,7 @@ def main() -> None:
     # length's in the same project -- the comparison is one panel per task with
     # a group per epoch budget.
     # fmt: off
-    epochs, total_bs, lr, opt, ctx, mask, release, delta, wd, lcs, bw, pl, nw, tag = 25, 512, 5e-4, "muon", 1024, 0.0, "rt-j", True, 0.1, 256, 32, True, 10_000, "-ctx1024-bs512"  # noqa: E501
-    # epochs, total_bs, lr, opt, ctx, mask, release, delta, wd, lcs, bw, pl, nw, tag = 25, 1024, 5e-4, "muon", 1024, 0.0, "rt-j", True, 0.1, 256, 32, True, 10_000, "-ctx1024-bs1024"  # noqa: E501
-    # epochs, total_bs, lr, opt, ctx, mask, release, delta, wd, lcs, bw, pl, nw, tag = 25, 512, 5e-4, "muon", 2048, 0.0, "rt-j", True, 0.1, 256, 32, True, 10_000, ""  # noqa: E501
+    epochs, total_bs, lr, opt, ctx, mask, release, delta, wd, lcs, bw, pl, nw, tag = 25, 128, 1e-3, "muon", 1024, 0.0, "rt-j", True, 0.1, 1024, 128, False, 0, ""  # noqa: E501
     # fmt: on
     # epochs, total_bs, lr, opt, ctx, mask, release, delta, tag = 50, 256, 5e-4, "muon", 1024, 0.0, "rt-p", False, ""
     # epochs, total_bs, lr, opt, ctx, mask, release, delta, tag = 50, 256, 1e-3, "muon", 1024, 0.0, "rt-p", False, "-bs256-lr1e-3"
@@ -435,9 +439,9 @@ def main() -> None:
         # Ten evals across the run, wherever that falls, plus the one
         # `rt.train` always does at the last step.
         eval_freq = max(1, total_steps // 10)
-        # Long enough to matter, short enough to leave a decay on the shortest
-        # runs -- 50 epochs of rel-f1/driver-top3 is a few hundred steps.
-        lr_warmup_steps = min(1_000, total_steps // 5)
+        # No schedule: `lr` from the first step to the last. SWA is what this
+        # base averages over instead of a decay.
+        lr_warmup_steps = 0
         print(f"  {name:38s} {resources.gpus} {resources.qos:15s} {resources.time}")
         submit(
             "rt.train:main",
@@ -473,12 +477,12 @@ def main() -> None:
                 lr=lr,
                 wd=wd,
                 lr_warmup_steps=lr_warmup_steps,
-                lr_decay_steps=total_steps - lr_warmup_steps,
+                lr_decay_steps=0,
                 grad_norm_max=1.0,
                 total_bs=total_bs,
                 total_steps=total_steps,
                 early_stop_after_steps=None,
-                swa_momentum=None,
+                swa_momentum=1.0,
                 seed=0,
                 mmap_populate=True,
                 timeout_per_item=10.0,
