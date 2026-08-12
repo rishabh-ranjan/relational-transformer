@@ -26,20 +26,20 @@ from roach.slurm import Resources, submit
 HERE = Path(__file__).parent
 
 TASKS = (
-    # ("rel-event", "user-repeat"),
-    # ("rel-f1", "driver-dnf"),
-    # ("rel-f1", "driver-top3"),
-    # ("rel-f1", "driver-position"),
-    # ("rel-trial", "study-outcome"),
-    # ("rel-avito", "ad-ctr"),
-    # ("rel-event", "user-attendance"),
-    # ("rel-event", "user-ignore"),
-    # ("rel-trial", "study-adverse"),
+    ("rel-event", "user-repeat"),
+    ("rel-f1", "driver-dnf"),
+    ("rel-f1", "driver-top3"),
+    ("rel-f1", "driver-position"),
+    ("rel-trial", "study-outcome"),
+    ("rel-avito", "ad-ctr"),
+    ("rel-event", "user-attendance"),
+    ("rel-event", "user-ignore"),
+    ("rel-trial", "study-adverse"),
     # ("rel-trial", "site-success"),
     # ("rel-avito", "user-visits"),
     # ("rel-avito", "user-clicks"),
     # ("rel-hm", "user-churn"),
-    ("rel-stack", "user-engagement"),
+    # ("rel-stack", "user-engagement"),
     # ("rel-hm", "item-sales"),
     # ("rel-stack", "post-votes"),
     # ("rel-amazon", "item-churn"),
@@ -127,8 +127,8 @@ def nsplit() -> dict[str, dict[str, float]]:
     }
 
 
-def steps_for(db: str, task: str, splits: list[str], total_bs: int) -> int:
-    """100 epochs of this task, or 50k steps, whichever comes first.
+def steps_for(db: str, task: str, splits: list[str], total_bs: int, epochs: int) -> int:
+    """`epochs` passes over this task, or 50k steps, whichever comes first.
 
     The two ends of the task-size range want different things: rel-f1 is a few
     thousand rows, where 100 epochs is under a thousand steps, and rel-amazon
@@ -140,7 +140,7 @@ def steps_for(db: str, task: str, splits: list[str], total_bs: int) -> int:
     cadence it picks.
     """
     rows = sum(nsplit()[f"{db}/{task}"][s] for s in splits)
-    return min(math.ceil(100 * rows / total_bs), 50_000)
+    return min(math.ceil(epochs * rows / total_bs), 50_000)
 
 
 def targets_for(db: str, task: str) -> dict[str, float]:
@@ -253,6 +253,11 @@ def a100(
 # A task with no line here stops the submission rather than taking a slot
 # nobody chose for it.
 RESOURCES: dict[tuple[str, str], Resources] = {
+    # 19:00: the 50-epoch arm, nine short tasks. ampere8 is ours and has 3 free
+    # cards; `il-lo` on the reservation for those, and the plain pool for the
+    # rest -- every one of these is under 2h, well inside the reservation's
+    # 2026-08-13T00:00 end, and the high tiers stay on the 100-epoch runs.
+    #
     # 18:50: back on an ampere. blackwell1 reads 2 b200 free and the node is not
     # flagged RESERVED, but the cards are held for another job all the same --
     # `AllocTRES` does not show that, and only the pending reason does. A b200
@@ -281,15 +286,15 @@ RESOURCES: dict[tuple[str, str], Resources] = {
     # take and nothing preempts. `il-lo` only (a high tier there would buy a
     # card we already have), and the nine shortest runs fit it: all under 4h,
     # well inside the reservation's 2026-08-13T00:00 end.
-    ("rel-trial", "study-adverse"): a100("il-lo", "2-00:00:00", "ranjanr_deadline"),
-    ("rel-event", "user-attendance"): a100("il-lo", "2-00:00:00", "ranjanr_deadline"),
-    ("rel-event", "user-ignore"): a100("il-lo", "2-00:00:00", "ranjanr_deadline"),
-    ("rel-trial", "study-outcome"): a100("il-lo", "2-00:00:00", "ranjanr_deadline"),
-    ("rel-f1", "driver-dnf"): a100("il-lo", "2-00:00:00", "ranjanr_deadline"),
-    ("rel-f1", "driver-position"): a100("il-lo", "2-00:00:00", "ranjanr_deadline"),
-    ("rel-avito", "ad-ctr"): a100("il-lo", "2-00:00:00", "ranjanr_deadline"),
-    ("rel-event", "user-repeat"): a100("il-lo", "2-00:00:00", "ranjanr_deadline"),
-    ("rel-f1", "driver-top3"): a100("il-lo", "2-00:00:00", "ranjanr_deadline"),
+    ("rel-trial", "study-adverse"): a100("il-lo", "8:00:00", "ranjanr_deadline"),
+    ("rel-event", "user-attendance"): a100("il-lo", "8:00:00", "ranjanr_deadline"),
+    ("rel-event", "user-ignore"): a100("il-lo", "8:00:00", "ranjanr_deadline"),
+    ("rel-trial", "study-outcome"): a100("il-lo", "8:00:00"),
+    ("rel-f1", "driver-dnf"): a100("il-lo", "8:00:00"),
+    ("rel-f1", "driver-position"): a100("il-lo", "8:00:00"),
+    ("rel-avito", "ad-ctr"): a100("il-lo", "8:00:00"),
+    ("rel-event", "user-repeat"): a100("il-lo", "8:00:00"),
+    ("rel-f1", "driver-top3"): a100("il-lo", "8:00:00"),
 }
 
 
@@ -307,12 +312,19 @@ def main() -> None:
     # epoch when they are trained on.
     train_splits = ["train", "val"]
     total_bs = 256
+    # How long a run is, and the tag that keeps its curves apart from the other
+    # length's in the same project -- the comparison is one panel per task with
+    # a group per epoch budget.
+    epochs, tag = 50, "-50ep"
+    # epochs, tag = 100, ""
     # Shortest run first, so the fastest answers land first. The step budget,
     # not the test split: what a job costs here is overwhelmingly its training.
-    for db, task in sorted(TASKS, key=lambda p: steps_for(*p, train_splits, total_bs)):
+    for db, task in sorted(
+        TASKS, key=lambda p: steps_for(*p, train_splits, total_bs, epochs)
+    ):
         resources = RESOURCES[db, task]
-        name = f"{db}/{task}"
-        steps = steps_for(db, task, train_splits, total_bs)
+        name = f"{db}/{task}{tag}"
+        steps = steps_for(db, task, train_splits, total_bs, epochs)
         # Eleven points of curve on every run, whatever its length, at a round
         # number of steps: an eval reads `eval_items_per_task` rows of the test
         # split, which on the big tasks is minutes, so a fixed cadence either
@@ -322,7 +334,7 @@ def main() -> None:
         eval_freq = math.ceil(steps / 1_000) * 100
         total_steps = math.ceil(steps / eval_freq) * eval_freq
         # Long enough to matter, short enough to leave a decay on the shortest
-        # runs -- 100 epochs of rel-f1/driver-top3 is a few hundred steps.
+        # runs -- 50 epochs of rel-f1/driver-top3 is a few hundred steps.
         lr_warmup_steps = min(1_000, total_steps // 5)
         print(f"  {name:38s} {resources.gpus} {resources.qos:15s} {resources.time}")
         submit(
@@ -394,7 +406,7 @@ def main() -> None:
                 out_root="/dfs/user/ranjanr/ckpts",
             ),
             resources=resources,
-            name=f"{db}-{task}",
+            name=f"{db}-{task}{tag}",
             repo_root="/lfs/hyperturing1/0/ranjanr/clones/rishabh-ranjan/relational-transformer",
             log_root="/dfs/user/ranjanr/slurm-logs/rishabh-ranjan/relational-transformer/expts/fine-tune",
             clone_root="/lfs/local/0/roach_clones",
