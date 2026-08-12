@@ -50,7 +50,9 @@ CACHE_DIR = "/tmp/ranjanr/relarena-cache"
 # One promotion: `il` has a slot and its b200 sub-cap has one of two used, so
 # exactly one job can move up. rel-stack/user-badge is the longest of the four
 # pending, which is where a b200 buys the most.
-EXPERIMENTS = (("rt-norefit", "rel-stack", "user-badge"),)
+# One free il-interactive slot, so one promotion: rel-hm/item-sales, the
+# longest of the three pending.
+EXPERIMENTS = (("rt-norefit", "rel-hm", "item-sales"),)
 
 #: Zero-shot reads: the published checkpoint scored on test with no fine-tuning
 #: and no selection arm (see zero_shot.py). Not protocol runs -- a shortcut for
@@ -167,6 +169,7 @@ RESOURCES: dict[tuple[str, str, str], Resources] = {
     ("rt-hpo", "rel-event", "user-repeat"): b200("il-interactive", "8:00:00"),
     ("rt-hpo", "rel-f1", "driver-top3"): b200("il-interactive", "8:00:00"),
     ("rt-norefit", "rel-stack", "user-badge"): b200("il", "1-00:00:00"),
+    ("rt-norefit", "rel-hm", "item-sales"): b200("il-interactive", "12:00:00"),
 }
 
 ZERO_SHOT_RESOURCES: dict[tuple[str, str], Resources] = {
