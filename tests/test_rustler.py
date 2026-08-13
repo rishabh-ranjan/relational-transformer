@@ -156,3 +156,67 @@ def test_sampler_drops_remove_columns_on_the_targets_horizon(
     seen = {c[0] for c in with_drop}
     assert sibling_idx in seen  # a sibling column of the same table stays
     assert target_idx in seen  # the target itself stays
+
+
+def test_prefer_latest_biases_the_fallback_tier_toward_recent_rows(
+    synthetic_dataset_with_external_task, tmp_path
+):
+    """`prefer_latest` orders Tier 2, not just Tier 1.
+
+    Tier 2 is the same-table fallback: when the target's own BFS and the walk
+    tier leave the context short, it draws other rows of the task table at
+    random and expands a BFS from each. Those draws were uniform regardless of
+    `prefer_latest`, so the flag only ever reordered Tier 1.
+
+    Exact latest-k would mean reading every candidate's timestamp, and the
+    population is the whole task table, so the draw is oversampled and ordered
+    within the pool. This asserts the resulting bias: the context a
+    `prefer_latest=True` sampler builds quotes strictly-past rows that are
+    *later* on average than the ones `False` quotes, from the same seed.
+
+    Strictly-past only -- rows on the target's own horizon are dropped by a
+    different rule, so including them would measure that instead.
+    """
+    out = tmp_path / "out"
+    preprocess(str(synthetic_dataset_with_external_task), str(out))
+    (produced,) = [d for d in out.iterdir() if d.is_dir()]
+    pre_dir, db_name, d_text, embedder = str(out), produced.name, 8, "test-embed"
+    n_text = len(json.loads((produced / "text.json").read_text()))
+    (produced / f"text_emb_{embedder}.bin").write_bytes(
+        np.zeros((n_text, d_text), dtype=ml_dtypes.bfloat16).tobytes()
+    )
+    (task,) = get_tasks(pre_dir, [[db_name, "spend"]], ["train"])
+    info = json.loads((produced / "table_info.json").read_text())
+    span = info[f"{task.table_name}:Train"]
+    target_idx = get_column_index(task.target_column, task.table_name, db_name, pre_dir)
+
+    def past_offsets(prefer_latest):
+        sampler = Sampler(
+            [(db_name, task.table_name, span["node_idx_offset"], span["num_nodes"])],
+            0, 0, 1,
+            [64], [8], 0, 10,
+            [prefer_latest],
+            0.0, embedder, pre_dir, d_text, 0, 0,
+            [target_idx], [[]], [None], -1,
+            True, False, 0, True, 10.0, None,
+        )
+        seq_len = 64
+        gaps = []
+        for batch_idx in range(sampler.num_items):
+            batch = dict(sampler.batch_py(batch_idx, 2, seq_len))
+            times = batch["timestamps"].reshape(-1, seq_len)
+            pads = batch["is_padding"].reshape(-1, seq_len).astype(bool)
+            for row_times, row_pads in zip(times, pads):
+                target_ts = int(row_times[0])
+                for ts, pad in zip(row_times, row_pads):
+                    if not pad and int(ts) < target_ts:
+                        gaps.append(target_ts - int(ts))
+        return gaps
+
+    late, uniform = past_offsets(True), past_offsets(False)
+    assert late and uniform, "fixture never quotes a strictly-past row"
+    # "later on average" == a smaller gap back from the target's horizon.
+    assert sum(late) / len(late) <= sum(uniform) / len(uniform), (
+        f"prefer_latest=True mean gap {sum(late)/len(late):.1f} is not closer to "
+        f"the target than False's {sum(uniform)/len(uniform):.1f}"
+    )

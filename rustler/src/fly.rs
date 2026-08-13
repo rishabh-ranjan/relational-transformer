@@ -1410,12 +1410,64 @@ impl Sampler {
             if fallback_amount == 0 {
                 break 'fill_ctx;
             }
+            // `prefer_latest` orders this tier the way it orders Tier 1: recent
+            // first, with a step_seed-derived priority breaking ties so equal
+            // timestamps do not cluster by sample order. Exact "latest eligible
+            // k" would need every candidate's timestamp, and this population is
+            // the whole task table -- 4.7M rows on rel-amazon -- which is a full
+            // scan per context in a dataloader worker. So the draw is
+            // oversampled and ordered within the pool: strongly recent, at a
+            // bounded cost. `prefer_latest=false` samples and iterates exactly
+            // as before, byte for byte.
+            let pool_size = if prefer_latest {
+                std::cmp::min(
+                    total_table,
+                    fallback_amount.saturating_mul(PREFER_LATEST_OVERSAMPLE),
+                )
+            } else {
+                fallback_amount
+            };
             let mut fallback_rng = StdRng::seed_from_u64(fallback_seed);
-            let fallback_offsets = index::sample(&mut fallback_rng, total_table, fallback_amount);
+            let fallback_offsets = index::sample(&mut fallback_rng, total_table, pool_size);
             check_deadline(deadline);
-            for off in fallback_offsets.iter() {
+            let mut fallback_order: Vec<i32> =
+                fallback_offsets.iter().map(|off| range_start + off as i32).collect();
+            if prefer_latest {
+                let bound =
+                    temporal_bound(target_node.timestamp.as_ref().map(|t| (*t).into()), cutoff);
+                fallback_order.retain(|&n| {
+                    if n == target_node_idx || tier1_seen.contains(&n) {
+                        return false;
+                    }
+                    let node = get_node(dataset, n);
+                    !past_bound(node, bound)
+                        && !same_horizon_task_row(node, target_node)
+                        && !seed_label_missing(node, target_column)
+                });
                 check_deadline(deadline);
-                let seed_node_idx = range_start + off as i32;
+                let ts_of: HashMap<i32, Option<i32>> = fallback_order
+                    .iter()
+                    .map(|&n| {
+                        (n, get_node(dataset, n).timestamp.as_ref().map(|t| (*t).into()))
+                    })
+                    .collect();
+                let prio: HashMap<i32, u64> = fallback_order
+                    .iter()
+                    .map(|&n| {
+                        (
+                            n,
+                            StdRng::seed_from_u64(step_seed.wrapping_add(n as u64))
+                                .random::<u64>(),
+                        )
+                    })
+                    .collect();
+                fallback_order.sort_by(|a, b| {
+                    ts_of[b].cmp(&ts_of[a]).then_with(|| prio[a].cmp(&prio[b]))
+                });
+                fallback_order.truncate(fallback_amount);
+            }
+            for seed_node_idx in fallback_order {
+                check_deadline(deadline);
                 if seed_node_idx == target_node_idx {
                     continue;
                 }
@@ -2131,6 +2183,15 @@ impl<'a> VectorDbStream<'a> {
 /// Applied to database and task rows alike. The target row itself is exempt
 /// simply by never being filtered: it is the BFS root and its cell is emitted
 /// before any traversal.
+/// How many candidates `prefer_latest` draws per seed it will keep in Tier 2.
+///
+/// The pool is sampled uniformly and then ordered by timestamp, so a larger
+/// factor is a closer approximation to the true latest-k at a proportional cost
+/// in node dereferences. Four keeps Tier 2 at ~4k lookups against a table of up
+/// to 4.7M rows -- still negligible beside the walk tier -- while making the
+/// kept seeds strongly recent.
+const PREFER_LATEST_OVERSAMPLE: usize = 4;
+
 fn temporal_bound(target_ts: Option<i32>, cutoff: Option<i32>) -> Option<i32> {
     match (target_ts, cutoff) {
         (Some(a), Some(b)) => Some(a.min(b)),
