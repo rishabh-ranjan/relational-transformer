@@ -638,7 +638,6 @@ def main(
         mmap_populate=mmap_populate,
         timeout_per_item=timeout_per_item,
         vector_db_path=vector_db_path,
-        train_only_fallback=False,
         db_cutoff=db_cutoff,
     )
     # total_bs items enter the model per optimizer step, so the whole run
@@ -780,8 +779,7 @@ def main(
                         shuffle_seed=eval_shuffle_seed,
                         context_seed=_member_seed(member),
                         vector_db_path=eval_vector_db_path,
-                        train_only_fallback=False,
-                        db_cutoff=db_cutoff,
+                                        db_cutoff=db_cutoff,
                         global_rank=rank,
                         local_rank=local_rank,
                         world_size=world_size,

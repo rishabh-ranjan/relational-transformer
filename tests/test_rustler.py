@@ -118,8 +118,7 @@ def test_sampler_drops_remove_columns_on_the_targets_horizon(
             0,  # quiet, ignore_data_errors, num_prev_skipped
             True,  # mmap_populate
             10.0,  # timeout_per_item
-            None,
-            False,  # vector_db_path, train_only_fallback
+            None,  # vector_db_path
         )
         seq_len = 64
         cells = []  # (col_name_idx, timestamp, target_timestamp) per non-padding cell

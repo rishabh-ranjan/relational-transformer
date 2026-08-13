@@ -46,7 +46,6 @@ class Evaluator:
         shuffle_seed,
         context_seed,
         vector_db_path,
-        train_only_fallback,
         db_cutoff,
         global_rank,
         local_rank,
@@ -99,7 +98,6 @@ class Evaluator:
                 mmap_populate=mmap_populate,
                 timeout_per_item=3600.0,
                 vector_db_path=vector_db_path,
-                train_only_fallback=train_only_fallback,
                 db_cutoff=db_cutoff,
             )
             total_items += rustler_dataset.num_items

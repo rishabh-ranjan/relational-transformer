@@ -456,7 +456,6 @@ impl Sampler {
         mmap_populate: bool,
         timeout_per_item: f64,
         vector_db_path: Option<String>,
-        train_only_fallback: bool,
     ) -> Self {
         py.allow_threads(|| {
             Self::new_impl(
@@ -485,7 +484,6 @@ impl Sampler {
                 mmap_populate,
                 timeout_per_item,
                 vector_db_path,
-                train_only_fallback,
             )
         })
     }
@@ -594,7 +592,6 @@ impl Sampler {
         mmap_populate: bool,
         timeout_per_item: f64,
         vector_db_path: Option<String>,
-        train_only_fallback: bool,
     ) -> Self {
         let embedder_ref = embedder;
 
@@ -704,7 +701,6 @@ impl Sampler {
                     for (key, info) in &dataset.table_info {
                         if let Some(colon_pos) = key.rfind(':')
                             && &key[..colon_pos] == table.as_str()
-                            && (!train_only_fallback || &key[colon_pos + 1..] == "Train")
                         {
                             range_start = range_start.min(info.node_idx_offset);
                             range_end = range_end.max(info.node_idx_offset + info.num_nodes);
@@ -799,10 +795,6 @@ impl Sampler {
             timeout_per_item,
             vector_db_path,
         };
-        // train_only_fallback is consumed by the closure that builds
-        // table_ranges above; its effect is baked into the per-task
-        // (range_start, range_end) and not stored on the struct.
-
         sampler.create_items();
         if sampler.local_rank == 0 && !sampler.quiet {
             // dbs that actually loaded, not dbs that were asked for
@@ -2304,7 +2296,6 @@ pub fn main(cli: Cli) {
         true,                                                  // mmap_populate
         1.0,                                                   // timeout_per_item
         None,                                                  // vector_db_path
-        false,                                                 // train_only_fallback
     );
     println!("Sampler loaded in {:?}", tic.elapsed());
 

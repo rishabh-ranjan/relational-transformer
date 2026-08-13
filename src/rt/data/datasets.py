@@ -121,7 +121,6 @@ class RustlerDataset:
         mmap_populate,
         timeout_per_item,
         vector_db_path: str | None,
-        train_only_fallback: bool,
         db_cutoff: str | int | None,
     ):
         pre_dir = resolve_pre_dir(pre_dir)
@@ -232,7 +231,6 @@ class RustlerDataset:
             mmap_populate=mmap_populate,
             timeout_per_item=timeout_per_item,
             vector_db_path=vector_db_path,
-            train_only_fallback=train_only_fallback,
         )
         self.num_items = self.sampler.num_items
 
@@ -267,7 +265,6 @@ class TrainDataset(RustlerDataset, IterableDataset):
         mmap_populate,
         timeout_per_item,
         vector_db_path: str | None,
-        train_only_fallback: bool,
         db_cutoff: str | int | None,
     ):
         # TrainDataset drives both shuffle and context construction from the
@@ -295,7 +292,6 @@ class TrainDataset(RustlerDataset, IterableDataset):
             mmap_populate=mmap_populate,
             timeout_per_item=timeout_per_item,
             vector_db_path=vector_db_path,
-            train_only_fallback=train_only_fallback,
             db_cutoff=db_cutoff,
         )
         self.train_ctx_size_list = train_ctx_size_list

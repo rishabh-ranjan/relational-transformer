@@ -431,7 +431,6 @@ def build_evaluator(
         shuffle_seed=shuffle_seed,
         context_seed=context_seed,
         vector_db_path=vector_db_path,
-        train_only_fallback=False,
         db_cutoff=db_cutoff,
         global_rank=global_rank,
         local_rank=local_rank,
