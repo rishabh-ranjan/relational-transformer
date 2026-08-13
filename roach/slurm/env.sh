@@ -49,7 +49,12 @@ done
 export PIXI_HOME=$HOME/.pixi
 export PATH=$PIXI_HOME/bin:/usr/local/bin:/usr/bin:/bin
 unset PYTHONPATH  # points into a home that is not this job's home
-export TMPDIR=/tmp/$USER
+# The node-local NVMe, not /tmp. /tmp is the root filesystem -- a few hundred
+# GB shared with the OS -- and one relarena export is ~85G, so a handful of them
+# fill it and wedge every job on the node. This is also where a run's resume
+# point lives, so it has to survive a requeue on a disk with room for it.
+export TMPDIR=/lfs/local/0/$USER/tmp
+mkdir -p "$TMPDIR"
 export XDG_CACHE_HOME=$HOME/.cache
 # One cargo target dir for every clone on this node. Clones are per commit, so
 # a per-clone target dir compiles the crate's whole dependency tree for every
