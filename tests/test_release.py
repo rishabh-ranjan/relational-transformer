@@ -66,6 +66,59 @@ def test__packaged_source__has_not_changed_since_the_last_release() -> None:
 @pytest.mark.skipif(
     not (ROOT / ".git").exists(), reason="not a git checkout (installed copy)"
 )
+def test__packaged_source__is_committed() -> None:
+    """An edit that was never committed is invisible to the log check above.
+
+    `git log <tag>..HEAD` sees commits; it cannot see a working tree. Editing
+    `src/rt/foo.py`, running an experiment against it and forgetting to commit
+    is the likeliest way to end up with results that no released artifact --
+    and no commit -- can reproduce.
+    """
+    dirty = _git("status", "--porcelain", "--", *PACKAGED)
+    assert not dirty, (
+        f"uncommitted changes under {PACKAGED}:\n{dirty}\n\n"
+        "Commit them, then cut a release: an experiment run against an "
+        "uncommitted edit is not reproducible from anything."
+    )
+
+
+def test__installed_package__matches_the_source_it_was_built_from() -> None:
+    """The strongest check: compare the *installed artifact* to this checkout.
+
+    Every check above reasons about git. None of them can tell whether the
+    wheel actually attached to the release was built from the code the tag
+    points at -- a wheel built from a dirty tree, or from the wrong commit, or
+    simply never rebuilt, passes all of them. This opens the installed package
+    and diffs it.
+
+    Limitation worth stating: this compares the pure-Python half. The compiled
+    extension cannot be checked without rebuilding it, so a stale
+    `rustler.abi3.so` inside an otherwise-current wheel would still pass. The
+    commit check above is what covers `rustler/`.
+    """
+    rt = pytest.importorskip("rt")
+    installed = Path(rt.__file__).resolve().parent
+    source = (ROOT / "src" / "rt").resolve()
+    if installed == source:
+        pytest.skip("rt is installed from this checkout, not from a wheel")
+
+    stale = []
+    for f in sorted(source.rglob("*.py")):
+        mirror = installed / f.relative_to(source)
+        if not mirror.exists() or mirror.read_bytes() != f.read_bytes():
+            stale.append(str(f.relative_to(ROOT)))
+    assert not stale, (
+        "the installed relational-transformer does not match src/:\n  "
+        + "\n  ".join(stale)
+        + f"\n\ninstalled from {installed}\n"
+        "Rebuild the wheel, re-release, and repoint. Experiments run against "
+        "this environment are running the installed copy, not the checkout."
+    )
+
+
+@pytest.mark.skipif(
+    not (ROOT / ".git").exists(), reason="not a git checkout (installed copy)"
+)
 def test__version__matches_the_latest_release_tag() -> None:
     tag = _latest_release_tag()
     assert tag is not None
