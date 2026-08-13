@@ -285,6 +285,25 @@ def main(
     # gets, one split earlier -- or its val metric is scored against a database
     # that already contains the rows val is meant to predict.
     db_cutoff: str | int | None,
+    # Restrict the task rows a context may quote to the `Train` split, for both
+    # the training stream and the in-loop eval. The evaluator has taken this
+    # since `build_evaluator` exposed it; these two call sites are the last that
+    # could not be told.
+    #
+    # `False` (the default, and what every existing caller gets) leaves the
+    # fallback tier free to *draw* from every split in the export. Those draws
+    # are not leaks -- `db_cutoff` and the per-seed temporal bound reject
+    # anything past the horizon -- but a rejected draw is discarded rather than
+    # replaced: `'fill_ctx` is a labelled block, not a loop, so the tier samples
+    # its offsets once and keeps whatever survives. An export whose later splits
+    # are a third of the task table therefore fills roughly a third fewer
+    # context cells than the same run on an export holding only `Train`.
+    #
+    # `True` spends every draw on a row that can actually be quoted. Where the
+    # cutoff already excludes the later splits the two are semantically
+    # identical and this one is simply denser; where it does not, this is the
+    # stricter of the two.
+    train_only_fallback: bool = False,
     resume_save_mins: float,
     # in-loop validation
     eval_splits: list[str],
@@ -621,7 +640,7 @@ def main(
         mmap_populate=mmap_populate,
         timeout_per_item=timeout_per_item,
         vector_db_path=vector_db_path,
-        train_only_fallback=False,
+        train_only_fallback=train_only_fallback,
         db_cutoff=db_cutoff,
     )
     # total_bs items enter the model per optimizer step, so the whole run
@@ -763,7 +782,7 @@ def main(
                         shuffle_seed=eval_shuffle_seed,
                         context_seed=_member_seed(member),
                         vector_db_path=eval_vector_db_path,
-                        train_only_fallback=False,
+                        train_only_fallback=train_only_fallback,
                         db_cutoff=db_cutoff,
                         global_rank=rank,
                         local_rank=local_rank,
