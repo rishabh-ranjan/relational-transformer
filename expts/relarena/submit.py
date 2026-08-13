@@ -36,11 +36,15 @@ SHARE = "/dfs/user/ranjanr/share/relarena"
 CACHE_DIR = "/tmp/ranjanr/relarena-cache"
 
 #: Wall for the jobs pinned to the `ranjanr_deadline` reservation. Not il-lo's
-#: 21 days: a reservation job is killed when the reservation ends, so asking for
-#: longer than the window that is left is asking for a job that cannot finish.
-#: 7h against a window ending 2026-08-13T00:00, and the eight tasks placed there
-#: are all under 3h even in the worst case.
-RESERVATION_WALL = "7:00:00"
+#: 21 days: a reservation job cannot outlive the reservation, so asking for
+#: longer than the window that is left is asking for a job that cannot finish
+#: -- and slurm rejects the request outright.
+#:
+#: The window ends 2026-08-13T00:00 and it is now ~19:25, so ~4h35m is left. 4h
+#: leaves margin for start latency and still gives the longest task placed here
+#: (rel-event/user-ignore, 2h42m worst case) 1.5x headroom. Anything longer than
+#: that goes to a tier with no deadline instead.
+RESERVATION_WALL = "4:00:00"
 
 # The full `rt-plurel` sweep: all 21 RelBench entity tasks, one job each.
 #
@@ -226,7 +230,7 @@ RESOURCES: dict[tuple[str, str, str], Resources] = {
     ("rt-plurel", "rel-avito", "user-clicks"): a100("il", "7-00:00:00"),
     ("rt-plurel", "rel-avito", "user-visits"): a100("il", "7-00:00:00"),
     # -- a100 on the reservation: the eight shortest, all far inside its window
-    ("rt-plurel", "rel-trial", "site-success"): reserved(RESERVATION_WALL),
+    ("rt-plurel", "rel-f1", "driver-position"): reserved(RESERVATION_WALL),
     ("rt-plurel", "rel-event", "user-ignore"): reserved(RESERVATION_WALL),
     ("rt-plurel", "rel-f1", "driver-dnf"): reserved(RESERVATION_WALL),
     ("rt-plurel", "rel-event", "user-attendance"): reserved(RESERVATION_WALL),
@@ -234,8 +238,8 @@ RESOURCES: dict[tuple[str, str, str], Resources] = {
     ("rt-plurel", "rel-trial", "study-outcome"): reserved(RESERVATION_WALL),
     ("rt-plurel", "rel-f1", "driver-top3"): reserved(RESERVATION_WALL),
     ("rt-plurel", "rel-event", "user-repeat"): reserved(RESERVATION_WALL),
-    # -- and the shortest, on the tier with no deadline of any kind
-    ("rt-plurel", "rel-f1", "driver-position"): a100("il-lo", "21-00:00:00"),
+    # -- too long for the reservation's remaining window; no deadline here
+    ("rt-plurel", "rel-trial", "site-success"): a100("il-lo", "21-00:00:00"),
 }
 
 ZERO_SHOT_RESOURCES: dict[tuple[str, str], Resources] = {
