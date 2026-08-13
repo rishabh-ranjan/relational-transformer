@@ -8,8 +8,22 @@ echo "=== $(date -Is) job $SLURM_JOB_ID on $(hostname), restarts=${SLURM_RESTART
 echo "name=@NAME@ repo=@REPO@ commit=@COMMIT@ run_id=@RUN_ID@ target=@TARGET@"
 
 export USER=${USER:-$(id -un)}
-export TMPDIR=/tmp/$USER
-mkdir -p "@CLONE_ROOT@"
+# Scratch goes on the node-local NVMe, not /tmp. /tmp is the root filesystem --
+# a few hundred GB shared with the OS -- and a job whose exports or scratch fill
+# it wedges itself and every other job on the node. /lfs/local/0 is a
+# multi-terabyte NVMe mounted per node for exactly this.
+export TMPDIR=/lfs/local/0/$USER/tmp
+mkdir -p "$TMPDIR" "@CLONE_ROOT@"
+
+# Segments left by a killed worker are never reclaimed, and a node that fills
+# /dev/shm wedges every job on it. Ours share by descriptor since rt 1.6.0, so
+# this only clears what older runs and other tenants left behind.
+for f in /dev/shm/torch_*; do
+    [ -e "$f" ] && [ -O "$f" ] || continue
+    p=${f#/dev/shm/torch_}; p=${p%%_*}
+    case "$p" in ([0-9]*) kill -0 "$p" 2>/dev/null || rm -f "$f" ;; esac
+done
+echo "prepare: /dev/shm $(df -h /dev/shm | awk 'NR==2{print $4}') free, TMPDIR=$TMPDIR on $(df -h "$TMPDIR" | awk 'NR==2{print $4}') free"
 
 # Node-local home, caches and tokens; sets the node up if it has never been
 # used. Spliced in rather than sourced from a path: this runs before the

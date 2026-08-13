@@ -33,15 +33,18 @@ SHARE = "/dfs/user/ranjanr/share/relarena"
 # Node-local, and written by the job itself: the warm and the run are one job,
 # so nothing has to be shared, and /dfs is slow enough to matter for a cache
 # read on every context build.
-CACHE_DIR = "/tmp/ranjanr/relarena-cache"
+#
+# On the node NVMe, not /tmp. /tmp is the root filesystem -- 438G on blackwell1,
+# shared with the OS -- and one rel-amazon task's exports are ~85G, so four of
+# them fill it and wedge every job on the node. /lfs/local/0 is 42-56T.
+CACHE_DIR = "/lfs/local/0/ranjanr/relarena-cache"
 
 #: Wall for the jobs pinned to the `ranjanr_deadline` reservation. Not il-lo's
 #: 21 days: a reservation job cannot outlive the reservation, so asking for
 #: longer than the window that is left is asking for a job that cannot finish
 #: -- and slurm rejects the request outright.
 #:
-#: The window now ends 2026-08-15T00:00, so ~2d4h is left and the wall is set
-#: just inside it. Effectively no limit: the longest task placed here projects
+#: The window ends 2026-08-15T00:00; the wall is set just inside what is left. Effectively no limit: the longest task placed here projects
 #: at 2h42m, so this binds only if early stopping behaves nothing like it has.
 #: That is the point -- the stop steps we have were all measured under a
 #: different regime, so the safe wall is the one the reservation allows rather
@@ -50,7 +53,7 @@ CACHE_DIR = "/tmp/ranjanr/relarena-cache"
 #: Note slurm will not let a *user* raise TimeLimit on a running job
 #: ("Access/permission denied"), only lower it, so getting this wrong means
 #: resubmitting rather than adjusting.
-RESERVATION_WALL = "2-04:00:00"
+RESERVATION_WALL = "1-20:00:00"
 
 # The full `rt-plurel` sweep: all 21 RelBench entity tasks, one job each.
 #
@@ -100,6 +103,13 @@ _ZERO_SHOT_DONE = (
     ("rel-f1", "driver-top3", "val", True, 0),
     ("rel-f1", "driver-top3", "val", True, -1),
 )
+
+
+#: Nodes to keep off. Slurm calls a node with a full local disk healthy, so a
+#: job placed there starts and then wedges partway through preprocessing.
+#: ampere4's NVMe is at 99% (630G of 42T), and 37T of that is two other users --
+#: nothing we delete wins it back. Every other gpu node has 5-56T free.
+BAD_NODES = "ampere4"
 
 
 def relarena_setup() -> tuple[str, ...]:
@@ -154,6 +164,7 @@ def reserved(time: str) -> Resources:
         nodelist=None,
         reservation="ranjanr_deadline",
         dependency=None,
+        exclude=BAD_NODES,
     )
 
 
@@ -176,6 +187,7 @@ def a100(qos: str, time: str) -> Resources:
         nodelist=None,
         reservation=None,
         dependency=None,
+        exclude=BAD_NODES,
     )
 
 
@@ -218,38 +230,44 @@ def a100(qos: str, time: str) -> Resources:
 # /tmp/ranjanr/relarena-plan/timings.md -- worst case, and worst case assumes
 # the full 50k steps for the two rel-amazon tasks with no early-stop precedent.
 RESOURCES: dict[tuple[str, str, str], Resources] = {
-    # -- b200 (4 slots: il's sub-cap of 2, plus both il-interactive gpus).
-    # The two with no early-stop precedent take `il`, whose week-long wall
-    # cannot clip a worst case of ~11h; the two with a precedent take
-    # il-interactive, where the wall is 12h and the projections are 2-4h.
+    # -- b200 (6 of blackwell1's 8). rel-amazon takes four: part of preprocess
+    # is a sentence-transformer over 19.5M strings, 1h46m of it on an a100
+    # against 1h05m on a b200, on top of the train and eval speedups. The two
+    # with the longer projections take `il`, whose week-long wall cannot clip
+    # them; the two shorter take il-interactive, whose 12h wall is the binding
+    # one and which they clear with room even in the worst case (requeue covers
+    # the rest).
     ("rt-plurel", "rel-amazon", "user-ltv"): b200("il", "7-00:00:00"),
-    ("rt-plurel", "rel-amazon", "item-churn"): b200("il", "7-00:00:00"),
-    ("rt-plurel", "rel-amazon", "user-churn"): b200("il-interactive", "12:00:00"),
-    ("rt-plurel", "rel-stack", "user-badge"): b200("il-interactive", "12:00:00"),
-    # -- a100 on `il`: the eight longest of the rest, on a week-long wall
-    ("rt-plurel", "rel-amazon", "item-ltv"): a100("il", "7-00:00:00"),
-    ("rt-plurel", "rel-hm", "item-sales"): a100("il", "7-00:00:00"),
-    ("rt-plurel", "rel-stack", "user-engagement"): a100("il", "7-00:00:00"),
+    ("rt-plurel", "rel-amazon", "user-churn"): b200("il", "7-00:00:00"),
+    ("rt-plurel", "rel-amazon", "item-churn"): b200("il-interactive", "12:00:00"),
+    ("rt-plurel", "rel-amazon", "item-ltv"): b200("il-interactive", "12:00:00"),
+    # The two longest a100 jobs, moved onto the spare b200 through the only
+    # tier that reaches them. il-lo is preemptible; these are 8h54 and 8h29 on
+    # an a100 against 4h49 and 4h28 here, and taking them off the a100 pool is
+    # what drops the makespan from 8h54 to 8h28.
+    ("rt-plurel", "rel-stack", "post-votes"): b200("il-lo", "21-00:00:00"),
+    ("rt-plurel", "rel-stack", "user-badge"): b200("il-lo", "21-00:00:00"),
+    # -- a100 on `il`: the eight longest of the rest, week-long wall, no
+    # deadline of any kind on them.
     ("rt-plurel", "rel-trial", "study-adverse"): a100("il", "7-00:00:00"),
+    ("rt-plurel", "rel-hm", "item-sales"): a100("il", "7-00:00:00"),
     ("rt-plurel", "rel-hm", "user-churn"): a100("il", "7-00:00:00"),
-    ("rt-plurel", "rel-stack", "post-votes"): a100("il", "7-00:00:00"),
+    ("rt-plurel", "rel-trial", "site-success"): a100("il", "7-00:00:00"),
+    ("rt-plurel", "rel-avito", "user-visits"): a100("il", "7-00:00:00"),
+    ("rt-plurel", "rel-stack", "user-engagement"): a100("il", "7-00:00:00"),
     ("rt-plurel", "rel-avito", "user-clicks"): a100("il", "7-00:00:00"),
-    # -- a100 on the reservation: the eight shortest, all far inside its window
-    ("rt-plurel", "rel-f1", "driver-position"): reserved(RESERVATION_WALL),
-    ("rt-plurel", "rel-event", "user-ignore"): reserved(RESERVATION_WALL),
-    ("rt-plurel", "rel-f1", "driver-dnf"): reserved(RESERVATION_WALL),
+    ("rt-plurel", "rel-event", "user-ignore"): a100("il", "7-00:00:00"),
+    # -- a100 on the reservation: the seven shortest. Its cards are ours
+    # outright, but the window shuts at 2026-08-15T00:00 and cannot be
+    # extended, so what goes here is what clears it by the widest margin --
+    # 4h27 to 5h12 projected against a 1d20h wall.
     ("rt-plurel", "rel-event", "user-attendance"): reserved(RESERVATION_WALL),
     ("rt-plurel", "rel-avito", "ad-ctr"): reserved(RESERVATION_WALL),
     ("rt-plurel", "rel-trial", "study-outcome"): reserved(RESERVATION_WALL),
-    ("rt-plurel", "rel-f1", "driver-top3"): reserved(RESERVATION_WALL),
+    ("rt-plurel", "rel-f1", "driver-dnf"): reserved(RESERVATION_WALL),
     ("rt-plurel", "rel-event", "user-repeat"): reserved(RESERVATION_WALL),
-    # -- the last two, onto b200 through il-lo. `il`'s two-b200 sub-cap and
-    # il-interactive's two gpus are both full, so the three idle b200 are only
-    # reachable from the uncapped tier. il-lo is preemptible and these are the
-    # two shortest jobs left (~1h30m each on a b200), so the exposure is small
-    # and the alternative was queueing behind my own jobs for hours.
-    ("rt-plurel", "rel-avito", "user-visits"): b200("il-lo", "21-00:00:00"),
-    ("rt-plurel", "rel-trial", "site-success"): b200("il-lo", "21-00:00:00"),
+    ("rt-plurel", "rel-f1", "driver-position"): reserved(RESERVATION_WALL),
+    ("rt-plurel", "rel-f1", "driver-top3"): reserved(RESERVATION_WALL),
 }
 
 ZERO_SHOT_RESOURCES: dict[tuple[str, str], Resources] = {
@@ -258,7 +276,7 @@ ZERO_SHOT_RESOURCES: dict[tuple[str, str], Resources] = {
 }
 
 #: One-off measurement jobs, not protocol runs.
-BENCH: tuple[tuple[str, str], ...] = (("rel-f1", "driver-top3"),)
+BENCH: tuple[tuple[str, str], ...] = ()
 
 #: Relaunch an existing run instead of starting a new one.
 RUN_IDS: dict[tuple[str, str, str], str] = {}
