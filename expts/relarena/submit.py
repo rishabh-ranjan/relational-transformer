@@ -187,11 +187,21 @@ def a100(qos: str, time: str) -> Resources:
 # il-interactive, because its 12h wall is the binding one, and the two whose
 # worst case is ~10h on `il`, where the wall is a week and cannot clip them.
 #
-# The other 17 are a100. The eight longest take `il`'s remaining eight slots;
-# the next eight take the reservation, capped at the reservation's own end
-# rather than il-lo's 21 days -- all eight are under 3h even in the worst case,
-# so the 7h window is not close; and the shortest goes to plain il-lo, where a
-# 44-minute job can afford to queue.
+# The other 17 are a100, sorted by projected worst case and cut at the tier
+# boundaries so that **the jobs on the reservation are the ones least able to
+# hit its wall**. The reservation's cards are free and ours, but its 7h window
+# closes at 2026-08-13T00:00 and cannot be extended, so what goes there is the
+# nine shortest -- 0h44m to 2h40m, every one of them with better than 2.5x
+# headroom. The nine longest take `il`'s remaining slots, where the wall is a
+# week and nothing can clip them, and rel-avito/user-clicks goes to plain il-lo,
+# the only tier with no deadline of any kind.
+#
+# Duration is the right proxy for timeout risk here because every a100 task has
+# a measured early-stop precedent -- the two that do not are both rel-amazon and
+# both on b200. The one estimate that is genuinely shaky is the context search,
+# which the model flattens to 1h09m for any task with >=4096 val rows; of the
+# nine reservation jobs only rel-avito/user-visits carries that term, and it
+# still lands at 2h40m against a 7h wall.
 #
 # Walls are each tier's maximum, per the request, except where the reservation
 # is the tighter bound. The projections they cover are in
@@ -210,10 +220,9 @@ RESOURCES: dict[tuple[str, str, str], Resources] = {
     ("rt-plurel", "rel-stack", "user-badge"): a100("il", "7-00:00:00"),
     ("rt-plurel", "rel-hm", "user-churn"): a100("il", "7-00:00:00"),
     ("rt-plurel", "rel-stack", "post-votes"): a100("il", "7-00:00:00"),
-    ("rt-plurel", "rel-avito", "user-clicks"): a100("il", "7-00:00:00"),
-    ("rt-plurel", "rel-avito", "user-visits"): a100("il", "7-00:00:00"),
+    ("rt-plurel", "rel-trial", "site-success"): a100("il", "7-00:00:00"),
     # -- a100 on the reservation: the next eight, all well inside its window
-    ("rt-plurel", "rel-trial", "site-success"): reserved(RESERVATION_WALL),
+    ("rt-plurel", "rel-avito", "user-visits"): reserved(RESERVATION_WALL),
     ("rt-plurel", "rel-event", "user-ignore"): reserved(RESERVATION_WALL),
     ("rt-plurel", "rel-f1", "driver-dnf"): reserved(RESERVATION_WALL),
     ("rt-plurel", "rel-avito", "ad-ctr"): reserved(RESERVATION_WALL),
@@ -221,8 +230,9 @@ RESOURCES: dict[tuple[str, str, str], Resources] = {
     ("rt-plurel", "rel-trial", "study-outcome"): reserved(RESERVATION_WALL),
     ("rt-plurel", "rel-f1", "driver-top3"): reserved(RESERVATION_WALL),
     ("rt-plurel", "rel-event", "user-repeat"): reserved(RESERVATION_WALL),
-    # -- and the shortest, which can afford to queue
-    ("rt-plurel", "rel-f1", "driver-position"): a100("il-lo", "21-00:00:00"),
+    ("rt-plurel", "rel-f1", "driver-position"): reserved(RESERVATION_WALL),
+    # -- and one on plain il-lo, the tier with no deadline of any kind
+    ("rt-plurel", "rel-avito", "user-clicks"): a100("il-lo", "21-00:00:00"),
 }
 
 ZERO_SHOT_RESOURCES: dict[tuple[str, str], Resources] = {
