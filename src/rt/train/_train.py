@@ -285,6 +285,20 @@ def main(
     # gets, one split earlier -- or its val metric is scored against a database
     # that already contains the rows val is meant to predict.
     db_cutoff: str | int | None,
+    # Whether the in-loop eval scores the live net as well as the SWA one.
+    #
+    # `True` (the default, and what every existing caller gets) scores both and
+    # tracks a best for each, publishing `best_live_*`, `best_swa_*` and
+    # `best_*`. Early stopping then follows *either* -- `consider` returns one
+    # improved flag over all `kinds` -- so the live net can hold a run open long
+    # after the SWA net has peaked.
+    #
+    # `False` scores the SWA net alone: half the eval work, and a patience that
+    # tracks the thing being selected. `best_live_*` is not written, and
+    # `best_*` degenerates to `best_swa_*`. Only meaningful with
+    # `swa_momentum is not None`, since otherwise there is nothing left to
+    # score; asserted below.
+    eval_live: bool = True,
     resume_save_mins: float,
     # in-loop validation
     eval_splits: list[str],
@@ -516,7 +530,10 @@ def main(
     # overall best is whichever of the two wins at the end.
     # The nets selection tracks: the live one always, the swa one when it
     # exists. Every structure keyed by kind follows this list.
-    kinds = ["live"] + (["swa"] if swa_momentum is not None else [])
+    kinds = (["live"] if eval_live else []) + (
+        ["swa"] if swa_momentum is not None else []
+    )
+    assert kinds, "eval_live=False needs swa_momentum: nothing would be scored"
     best = {tt: {k: None for k in kinds} for tt, _, _ in BEST_METRICS}
     # Last step at which some (task type, kind) val metric improved on or
     # matched its best. Persisted, so a resume does not restart the patience.
@@ -1005,11 +1022,12 @@ def main(
         nonlocal improved_at
         if not evaluators:
             return False
-        nets = [(raw_net, "")]
+        nets = [(raw_net, "")] if eval_live else []
         if swa is not None:
             # Unconditionally, including at n == 0, where the swa metrics just
-            # duplicate the live ones: every eval must run both nets, so that
-            # each one is also the memory check for the evals after it.
+            # duplicate the live ones. With `eval_live` this is also the memory
+            # check for the evals after it; without it, it is the only net
+            # scored and the only one early stopping follows.
             swa.sync_to(swa_net.named_parameters())
             nets.append((swa_net, "swa/"))
         metrics = {}

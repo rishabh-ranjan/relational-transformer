@@ -182,7 +182,9 @@ layers (`--export=NONE` keeps the submitting shell out of the job;
 
 ## Where it lives
 
-In this repo, under `src/roach/`, installed with it. A queued run therefore
+In this repo, under `roach/` at the root -- beside `expts/`, not under
+`python-source`, so it is *not* part of the published wheel: this is submission
+tooling, and a consumer installing the library wants none of it. A queued run therefore
 cannot be changed by a roach upgrade: the job clones this repo at the submitted
 commit, and roach is inside it.
 

@@ -145,7 +145,7 @@ the (large) data from shared storage per item.
 
 ## On a cluster
 
-Submission lives in [`roach.slurm`](../src/roach/slurm/README.md),
+Submission lives in [`roach.slurm`](../roach/slurm/README.md),
 a pinned dependency; that README is the reference for how a job is built and how
 it survives preemption. In short: it refuses a dirty or unpushed tree, records
 the commit, checks your arguments against the target's signature, and hands
