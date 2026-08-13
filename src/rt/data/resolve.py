@@ -91,13 +91,22 @@ def read_meta(pre_dir: str, db: str) -> dict:
 # rustler's Sampler is an unpicklable Rust object, so any DataLoader over a
 # RustlerDataset must use the 'fork' start method -- Python 3.14 defaults to
 # 'forkserver'/'spawn', which pickle the worker's arguments and would fail with
-# "cannot pickle 'builtins.Sampler'". We also share worker tensors via node-local
-# files instead of /dev/shm (which dense multi-worker eval nodes, plus segments
-# leaked by preempted jobs, exhaust -> "No space left on device"). Set both once,
-# here, at import of the module that introduces the Sampler, so every entry point
-# that touches rt.data (eval / baseline / scaling / training) is covered without
-# each needing its own copy.
+# "cannot pickle 'builtins.Sampler'". Set it once, here, at import of the module
+# that introduces the Sampler, so every entry point that touches rt.data (eval /
+# baseline / scaling / training) is covered without each needing its own copy.
+#
+# Worker tensors are shared by file *descriptor*, not by named file. Both
+# strategies put the pages in /dev/shm; they differ in who cleans up. A named
+# segment (`file_system`) outlives the process that made it unless
+# torch_shm_manager reaps it, so a worker that is killed rather than exited --
+# a preempted job, a torn-down evaluator, an OOM -- leaks its segments
+# permanently. Long runs that rebuild an evaluator many times accumulate them
+# until the node's /dev/shm is full and every job on it wedges on "No space left
+# on device". A descriptor is unlinked at creation, so the kernel frees the
+# pages when the last holder dies, however it dies. The cost is one open fd per
+# shared tensor, so the soft limit is raised to the hard limit below.
 import multiprocessing as _mp  # noqa: E402
+import resource as _resource  # noqa: E402
 
 import torch  # noqa: E402
 
@@ -105,7 +114,10 @@ try:
     _mp.set_start_method("fork")
 except RuntimeError:
     pass
-torch.multiprocessing.set_sharing_strategy("file_system")
+torch.multiprocessing.set_sharing_strategy("file_descriptor")
+_soft, _hard = _resource.getrlimit(_resource.RLIMIT_NOFILE)
+if _soft < _hard:
+    _resource.setrlimit(_resource.RLIMIT_NOFILE, (_hard, _hard))
 
 
 @cache
