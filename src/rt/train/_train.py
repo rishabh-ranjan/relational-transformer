@@ -551,6 +551,12 @@ def main(
     )
     assert kinds, "eval_live=False needs swa_momentum: nothing would be scored"
     best = {tt: {k: None for k in kinds} for tt, _, _ in BEST_METRICS}
+    # Per (kind, metrics key) best, for the *patience* alone. `best` above --
+    # what gets published -- still follows the best across configs; this follows
+    # each config against its own history. A low ctx and a high ctx peak at
+    # different steps, so stopping when only their max stalls cuts the later one
+    # short while it is still improving.
+    per_cfg = {tt: {} for tt, _, _ in BEST_METRICS}
     # Last step at which some (task type, kind) val metric improved on or
     # matched its best. Persisted, so a resume does not restart the patience.
     improved_at = 0
@@ -620,6 +626,11 @@ def main(
         )
         resume_evaled_at = ck.get("evaled_at", start_step)
         improved_at = ck.get("improved_at", start_step)
+        # Carried across the resume: starting empty would make every config's
+        # first eval back read as an improvement, handing the run a free
+        # patience reset per requeue. A checkpoint without the key predates it.
+        if ck.get("per_cfg") is not None:
+            per_cfg = ck["per_cfg"]
         if is_main:
             log(
                 resumed_from=resume_path,
@@ -882,6 +893,7 @@ def main(
                         # the eval having run.
                         "evaled_at": evaled_at,
                         "improved_at": improved_at,
+                        "per_cfg": per_cfg,
                     },
                     f,
                 )
@@ -1028,14 +1040,28 @@ def main(
             is_swa = kind == "swa"
             keys = [k for k in metrics if k.endswith("swa/") == is_swa]
             for tt, metric, better in BEST_METRICS:
-                seen = [
-                    metrics[k]["val"][metric].get("mean")
-                    for k in keys
-                    if "val" in metrics[k] and metric in metrics[k]["val"]
-                ]
-                seen = [x for x in seen if x is not None]
+                seen = []
+                for k in keys:
+                    if "val" not in metrics[k] or metric not in metrics[k]["val"]:
+                        continue
+                    x = metrics[k]["val"][metric].get("mean")
+                    if x is None:
+                        continue
+                    seen.append(x)
+                    # The patience resets when *any* config improves on its own
+                    # best, not when their best-of does. A tie counts, as it
+                    # does for `best` below.
+                    cfg_key = (kind, k)
+                    prev = per_cfg[tt].get(cfg_key)
+                    if prev is None or better(x, prev) == x:
+                        per_cfg[tt][cfg_key] = x
+                        improved = True
                 if not seen:
                     continue
+                # What gets published is still the best across configs. An
+                # improvement here always implies one above -- a new best-of
+                # must come from a config exceeding its own best -- so this
+                # branch does not touch `improved`.
                 v = better(seen)
                 cur = best[tt][kind]
                 if cur is None or better(v, cur["value"]) == v:
@@ -1045,7 +1071,6 @@ def main(
                         "value": v,
                         "metric": metric,
                     }
-                    improved = True
         return improved
 
     def run_eval(step):
