@@ -41,11 +41,20 @@ def plan(model: str) -> list:
     control, so it is the one that can afford to wait or be restarted.
     """
     if model == "rt-j":
+        # blackwell is filled from il-interactive FIRST. Its two gpus are a
+        # pool of their own -- left idle that capacity is simply lost -- while
+        # il's b200 sub-cap of 2 is drawn from the same 10-gpu budget the a100
+        # jobs need. Spending il's b200 slots before il-interactive's costs a
+        # card twice: once on blackwell and once against the a100 allowance.
+        #
+        # The 12h wall binds only on il-interactive, so the longest tasks go to
+        # il (a week) and the ones that clear 12h on a b200 go interactive.
         tiers = (
-            [b200("il", "7-00:00:00")] * 1
+            [b200("il-interactive", "12:00:00")] * 2
+            + [b200("il", "7-00:00:00")] * 1
             + [reserved(RESERVATION_WALL)] * 8
-            + [a100("il", "7-00:00:00")] * 6
-            + [a100("il-lo", "21-00:00:00")] * 6
+            + [a100("il", "7-00:00:00")] * 5
+            + [a100("il-lo", "21-00:00:00")] * 5
         )
     else:
         tiers = [a100("il-lo", "21-00:00:00")] * len(ORDER)
