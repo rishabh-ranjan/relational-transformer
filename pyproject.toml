@@ -4,7 +4,7 @@ build-backend = "maturin"
 
 [project]
 name = "relational-transformer"
-version = "1.2.0"
+version = "1.2.1"
 description = "Relational Transformer (RT): a foundation model for relational data, bundling a native Rust data-processing engine (rt.rustler)."
 readme = "README.md"
 license = { file = "LICENSE" }
@@ -104,7 +104,16 @@ maturin = "*"
 uv = "*"
 
 [tool.pixi.pypi-dependencies]
-relational-transformer = { path = ".", editable = true, extras = ["dev"] }
+# The **released wheel**, not an editable install of this checkout. Experiments
+# must exercise the same artifact a user gets from `uv sync --extra rt`, because
+# that is the path that breaks silently: v1.1.0 shipped without
+# `_resolve_cutoff` and every one of our jobs was fine, running the checkout.
+# Bumping this is now part of changing `src/rt` -- `tests/test_release.py` fails
+# if the two drift apart.
+#
+# `expts/` is not packaged (`python-source = "src"`), so it still comes from the
+# checkout, which is what lets a submit script change without a release.
+relational-transformer = { url = "https://github.com/rishabh-ranjan/relational-transformer/releases/download/v1.2.1/relational_transformer-1.2.1-cp311-abi3-manylinux_2_28_x86_64.whl" }
 # snap-stanford's relbench, exactly pinned -- NOT the rishabh-ranjan fork `main`
 # carries. This branch exists to run relarena's experiments (see
 # expts/relarena/), and relarena requires relbench 2.1.2: the package version is
