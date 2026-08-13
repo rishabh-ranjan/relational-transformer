@@ -4,7 +4,7 @@ build-backend = "maturin"
 
 [project]
 name = "relational-transformer"
-version = "1.2.1"
+version = "1.2.2"
 description = "Relational Transformer (RT): a foundation model for relational data, bundling a native Rust data-processing engine (rt.rustler)."
 readme = "README.md"
 license = { file = "LICENSE" }
@@ -57,6 +57,12 @@ dev = [
 python-source = "src"
 manifest-path = "rustler/Cargo.toml"
 module-name = "rt.rustler"
+# maturin packages the module named above and nothing else under
+# `python-source`, so `roach` -- a sibling package in the same distribution,
+# and what every experiment submits through -- shipped as two loose .sh files
+# and no Python at all. An editable install hid that for as long as the
+# experiments ran off the checkout.
+python-packages = ["rt", "roach"]
 # The whole crate, FAISS aside (`vecdb` needs cmake and a BLAS; see rustler/Cargo.toml).
 features = ["pyo3/extension-module"]
 # roach.slurm ships a batch-script template and the node env setup alongside its .py
@@ -113,7 +119,7 @@ uv = "*"
 #
 # `expts/` is not packaged (`python-source = "src"`), so it still comes from the
 # checkout, which is what lets a submit script change without a release.
-relational-transformer = { url = "https://github.com/rishabh-ranjan/relational-transformer/releases/download/v1.2.1/relational_transformer-1.2.1-cp311-abi3-manylinux_2_28_x86_64.whl", extras = ["dev"] }
+relational-transformer = { url = "https://github.com/rishabh-ranjan/relational-transformer/releases/download/v1.2.2/relational_transformer-1.2.2-cp311-abi3-manylinux_2_28_x86_64.whl", extras = ["dev"] }
 # snap-stanford's relbench, exactly pinned -- NOT the rishabh-ranjan fork `main`
 # carries. This branch exists to run relarena's experiments (see
 # expts/relarena/), and relarena requires relbench 2.1.2: the package version is
