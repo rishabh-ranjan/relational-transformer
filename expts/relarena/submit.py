@@ -208,31 +208,34 @@ def a100(qos: str, time: str) -> Resources:
 # /tmp/ranjanr/relarena-plan/timings.md -- worst case, and worst case assumes
 # the full 50k steps for the two rel-amazon tasks with no early-stop precedent.
 RESOURCES: dict[tuple[str, str, str], Resources] = {
-    # -- b200, the four rel-amazon tasks (GPU-heavy preprocessing)
-    ("rt-plurel", "rel-amazon", "item-churn"): b200("il", "7-00:00:00"),
+    # -- b200 (4 slots: il's sub-cap of 2, plus both il-interactive gpus).
+    # The two with no early-stop precedent take `il`, whose week-long wall
+    # cannot clip a worst case of ~11h; the two with a precedent take
+    # il-interactive, where the wall is 12h and the projections are 2-4h.
     ("rt-plurel", "rel-amazon", "user-ltv"): b200("il", "7-00:00:00"),
-    ("rt-plurel", "rel-amazon", "item-ltv"): b200("il-interactive", "12:00:00"),
+    ("rt-plurel", "rel-amazon", "item-churn"): b200("il", "7-00:00:00"),
     ("rt-plurel", "rel-amazon", "user-churn"): b200("il-interactive", "12:00:00"),
-    # -- a100 on `il`: the eight longest, on the tier with a week of wall
+    ("rt-plurel", "rel-stack", "user-badge"): b200("il-interactive", "12:00:00"),
+    # -- a100 on `il`: the eight longest of the rest, on a week-long wall
+    ("rt-plurel", "rel-amazon", "item-ltv"): a100("il", "7-00:00:00"),
     ("rt-plurel", "rel-hm", "item-sales"): a100("il", "7-00:00:00"),
     ("rt-plurel", "rel-stack", "user-engagement"): a100("il", "7-00:00:00"),
     ("rt-plurel", "rel-trial", "study-adverse"): a100("il", "7-00:00:00"),
-    ("rt-plurel", "rel-stack", "user-badge"): a100("il", "7-00:00:00"),
     ("rt-plurel", "rel-hm", "user-churn"): a100("il", "7-00:00:00"),
     ("rt-plurel", "rel-stack", "post-votes"): a100("il", "7-00:00:00"),
-    ("rt-plurel", "rel-trial", "site-success"): a100("il", "7-00:00:00"),
-    # -- a100 on the reservation: the next eight, all well inside its window
-    ("rt-plurel", "rel-avito", "user-visits"): reserved(RESERVATION_WALL),
+    ("rt-plurel", "rel-avito", "user-clicks"): a100("il", "7-00:00:00"),
+    ("rt-plurel", "rel-avito", "user-visits"): a100("il", "7-00:00:00"),
+    # -- a100 on the reservation: the eight shortest, all far inside its window
+    ("rt-plurel", "rel-trial", "site-success"): reserved(RESERVATION_WALL),
     ("rt-plurel", "rel-event", "user-ignore"): reserved(RESERVATION_WALL),
     ("rt-plurel", "rel-f1", "driver-dnf"): reserved(RESERVATION_WALL),
-    ("rt-plurel", "rel-avito", "ad-ctr"): reserved(RESERVATION_WALL),
     ("rt-plurel", "rel-event", "user-attendance"): reserved(RESERVATION_WALL),
+    ("rt-plurel", "rel-avito", "ad-ctr"): reserved(RESERVATION_WALL),
     ("rt-plurel", "rel-trial", "study-outcome"): reserved(RESERVATION_WALL),
     ("rt-plurel", "rel-f1", "driver-top3"): reserved(RESERVATION_WALL),
     ("rt-plurel", "rel-event", "user-repeat"): reserved(RESERVATION_WALL),
-    ("rt-plurel", "rel-f1", "driver-position"): reserved(RESERVATION_WALL),
-    # -- and one on plain il-lo, the tier with no deadline of any kind
-    ("rt-plurel", "rel-avito", "user-clicks"): a100("il-lo", "21-00:00:00"),
+    # -- and the shortest, on the tier with no deadline of any kind
+    ("rt-plurel", "rel-f1", "driver-position"): a100("il-lo", "21-00:00:00"),
 }
 
 ZERO_SHOT_RESOURCES: dict[tuple[str, str], Resources] = {
