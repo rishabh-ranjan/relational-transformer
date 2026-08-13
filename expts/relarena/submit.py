@@ -228,7 +228,6 @@ RESOURCES: dict[tuple[str, str, str], Resources] = {
     ("rt-plurel", "rel-hm", "user-churn"): a100("il", "7-00:00:00"),
     ("rt-plurel", "rel-stack", "post-votes"): a100("il", "7-00:00:00"),
     ("rt-plurel", "rel-avito", "user-clicks"): a100("il", "7-00:00:00"),
-    ("rt-plurel", "rel-avito", "user-visits"): a100("il", "7-00:00:00"),
     # -- a100 on the reservation: the eight shortest, all far inside its window
     ("rt-plurel", "rel-f1", "driver-position"): reserved(RESERVATION_WALL),
     ("rt-plurel", "rel-event", "user-ignore"): reserved(RESERVATION_WALL),
@@ -238,8 +237,13 @@ RESOURCES: dict[tuple[str, str, str], Resources] = {
     ("rt-plurel", "rel-trial", "study-outcome"): reserved(RESERVATION_WALL),
     ("rt-plurel", "rel-f1", "driver-top3"): reserved(RESERVATION_WALL),
     ("rt-plurel", "rel-event", "user-repeat"): reserved(RESERVATION_WALL),
-    # -- too long for the reservation's remaining window; no deadline here
-    ("rt-plurel", "rel-trial", "site-success"): a100("il-lo", "21-00:00:00"),
+    # -- the last two, onto b200 through il-lo. `il`'s two-b200 sub-cap and
+    # il-interactive's two gpus are both full, so the three idle b200 are only
+    # reachable from the uncapped tier. il-lo is preemptible and these are the
+    # two shortest jobs left (~1h30m each on a b200), so the exposure is small
+    # and the alternative was queueing behind my own jobs for hours.
+    ("rt-plurel", "rel-avito", "user-visits"): b200("il-lo", "21-00:00:00"),
+    ("rt-plurel", "rel-trial", "site-success"): b200("il-lo", "21-00:00:00"),
 }
 
 ZERO_SHOT_RESOURCES: dict[tuple[str, str], Resources] = {
