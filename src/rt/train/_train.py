@@ -15,8 +15,10 @@ Robust to preemption (the default config matches the released RT-J runs):
   cleanly so the job can be requeued.
 * resume is **GPU-count flexible**: data parallelism keeps the full model +
   optimizer on every rank (no sharding), so a run preempted on 16 GPUs across 2
-  nodes can resume on, say, 4 GPUs. The training data stream is re-seeded by the
-  resumed step so no items are replayed, and ops are seeded for determinism.
+  nodes can resume on, say, 4 GPUs. The training data stream *continues*: the
+  loader starts its counters where the interrupted run left them, so a resumed
+  run draws the batches an uninterrupted one would have drawn -- no replay, and
+  no divergence onto a different draw either. Ops are seeded for determinism.
 
 There is no CLI: ``_train`` takes every knob as a required argument, and a run
 is a script that calls it (``examples/train.py`` passes the released values).
@@ -56,9 +58,6 @@ from rt.eval import member_context_seed, metric_for
 from rt.eval import Evaluator
 from rt.progress import fmt_bytes, fmt_duration, log
 import wandb
-
-# Re-seed offset applied per resumed step so a resumed stream does not replay.
-SEED_STRIDE = 1_000_003
 
 # The val metric each task type is selected on, and which direction wins.
 BEST_METRICS = [("clf", "auroc", max), ("reg", "nmae", min)]
@@ -638,8 +637,13 @@ def main(
                 world_size=world_size,
             )
 
-    # ---- data: re-seed by resumed step so the stream does not replay ----
-    data_seed = seed + SEED_STRIDE * start_step
+    # ---- data: the stream continues, it is not re-seeded ----
+    # The seed stays the run's own, and TrainDataset starts its counters where
+    # an uninterrupted run would have them (`start_step`). A resumed run
+    # therefore draws the batches the uninterrupted one would have drawn --
+    # neither replaying what it already trained on, nor diverging onto a
+    # different draw the way a re-seed did.
+    data_seed = seed
     train_init_tic = time.time()
     train_tasks = get_tasks(pre_dir, db_task_list, tuple(train_splits))
     train_ds = TrainDataset(
@@ -657,6 +661,7 @@ def main(
         walk_length=walk_length,
         prefer_latest_list=prefer_latest_list,
         mask_prob_max=mask_prob_max,
+        start_step=start_step,
         embedder=embedder,
         d_text=d_text,
         seed=data_seed,
