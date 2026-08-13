@@ -323,6 +323,22 @@ def main(
     eval_ensemble_size: int,
     eval_vector_db_path: str | None,
     eval_lcs_bw_pl_grid: list[tuple[int, int, bool]],
+    # Full (ctx, local_ctx, bfs_width, prefer_latest) points for the in-loop
+    # eval, one evaluator each, and the best metric *across* them drives
+    # best-checkpoint tracking and the early-stopping patience.
+    #
+    # `eval_lcs_bw_pl_grid` cannot express this: its `eval_ctx_size_list` is
+    # shared by every entry, so N entries at N different ctx sizes give N*N
+    # combinations, and only the first entry is ever selected on.
+    #
+    # Why the best rather than the mean: a low ctx overfits sooner than a high
+    # one, so timing the step on a single high-ctx config reports a checkpoint
+    # already past its peak whenever the tuned context turns out to be small.
+    # Taking the best across configs approximates choosing the (step, context)
+    # pair jointly, which is what the two stages together are trying to do.
+    #
+    # `None` keeps the cross-product behaviour and selects on the first entry.
+    eval_ctx_lcs_bw_pl_grid: list[tuple[int, int, int, bool]] | None = None,
     # logging
     run_id: str,
     targets: dict[str, float],
@@ -749,10 +765,17 @@ def main(
             return eval_context_seed
         return member_context_seed(eval_context_seed, member)
 
+    grid4 = eval_ctx_lcs_bw_pl_grid
+    entries = (
+        [(c, l, b, p) for (c, l, b, p) in grid4]
+        if grid4
+        else [(None, l, b, p) for (l, b, p) in eval_lcs_bw_pl_grid]
+    )
     evaluators = (
         [
             (
                 f"lcs{lcs}-bw{bw}-pl{int(pl)}_" if i else "",
+                [ctx] if ctx is not None else eval_ctx_size_list,
                 [
                     Evaluator(
                         tasks=val_tasks,
@@ -789,7 +812,7 @@ def main(
                     for member in range(eval_ensemble_size)
                 ],
             )
-            for i, (lcs, bw, pl) in enumerate(eval_lcs_bw_pl_grid)
+            for i, (ctx, lcs, bw, pl) in enumerate(entries)
         ]
         if val_tasks
         else []
@@ -997,13 +1020,23 @@ def main(
         # Selection is val-only: a test split may be evaluated alongside for
         # its curves, but must never pick the checkpoint. With no val split
         # configured, nothing is selected.
-        for prefix, kind in [(("" if k == "live" else "swa/"), k) for k in kinds]:
-            if prefix not in metrics or "val" not in metrics[prefix]:
-                continue
+        for kind in kinds:
+            # Every grid entry's metrics land under its own tag; a swa entry's
+            # key ends "swa/" and a live one does not. Selection takes the best
+            # across entries, so a step that peaks under any evaluated context
+            # counts as an improvement.
+            is_swa = kind == "swa"
+            keys = [k for k in metrics if k.endswith("swa/") == is_swa]
             for tt, metric, better in BEST_METRICS:
-                v = metrics[prefix]["val"][metric].get("mean")
-                if v is None:
+                seen = [
+                    metrics[k]["val"][metric].get("mean")
+                    for k in keys
+                    if "val" in metrics[k] and metric in metrics[k]["val"]
+                ]
+                seen = [x for x in seen if x is not None]
+                if not seen:
                     continue
+                v = better(seen)
                 cur = best[tt][kind]
                 if cur is None or better(v, cur["value"]) == v:
                     best[tt][kind] = {
@@ -1029,9 +1062,9 @@ def main(
             swa.sync_to(swa_net.named_parameters())
             nets.append((swa_net, "swa/"))
         metrics = {}
-        for tag, members in evaluators:
+        for tag, ctxs, members in evaluators:
             tagged_nets = [(n, tag + p) for n, p in nets]
-            metrics.update(eval_avg_metrics(members, tagged_nets, eval_ctx_size_list))
+            metrics.update(eval_avg_metrics(members, tagged_nets, ctxs))
         # Best-checkpoint tracking follows the primary (untagged) grid entry.
         # Rank 0 only: ``evaluate_raw`` yields there and nowhere else, so the
         # other ranks hold empty metrics and must not touch ``best``.
