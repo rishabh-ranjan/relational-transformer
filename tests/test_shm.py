@@ -55,3 +55,26 @@ def test__dataloader_rebuilds__leave_no_named_segments() -> None:
         assert sum(int(b.shape[0]) for b in loader) == 64
         del loader
     assert not set(glob.glob("/dev/shm/torch_*")) - before
+
+
+def test__evaluator_entry__members_are_the_third_element() -> None:
+    """The in-loop eval's grid entry is `(tag, ctx_sizes, members)`.
+
+    The memory guard reaches into `evaluators[0]` for a member to run one
+    eval-shaped batch through. Indexing the wrong element hands it an `int` --
+    a ctx size -- and every training run dies with `'int' object has no
+    attribute 'mem_guard'` the moment it reaches its first step, after the whole
+    preprocess has been paid for.
+    """
+    import inspect
+
+    import rt.train._train as t
+
+    src = inspect.getsource(t.main)
+    assert "evaluators[0][2][0].mem_guard" in src, (
+        "the guard must take a member (element 2), not a ctx size (element 1)"
+    )
+    unpack = [l for l in src.splitlines() if "in evaluators:" in l and "for" in l]
+    assert any("tag, ctxs, members" in l for l in unpack), (
+        "the entry shape changed; the guard's index has to change with it"
+    )

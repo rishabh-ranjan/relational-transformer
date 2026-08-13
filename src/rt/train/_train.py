@@ -1192,7 +1192,8 @@ def main(
         # not in the shapes the net sees.
         # One member is enough: every member is the same shapes on the same
         # split, so they all reach the same peak.
-        evaluators[0][1][0].mem_guard([n for n in (raw_net, swa_net) if n is not None])
+        # (tag, ctx_sizes, members) -- the members are the third element.
+        evaluators[0][2][0].mem_guard([n for n in (raw_net, swa_net) if n is not None])
         if is_main:
             if is_cuda:
                 torch.cuda.synchronize()
