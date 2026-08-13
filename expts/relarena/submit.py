@@ -108,8 +108,10 @@ _ZERO_SHOT_DONE = (
 #: Nodes to keep off. Slurm calls a node with a full local disk healthy, so a
 #: job placed there starts and then wedges partway through preprocessing.
 #: ampere4's NVMe is at 99% (630G of 42T), and 37T of that is two other users --
-#: nothing we delete wins it back. Every other gpu node has 5-56T free.
-BAD_NODES = "ampere4"
+#: nothing we delete wins it back. ampere7 hands out cards another tenant is
+#: already holding: a job there died with 46GiB of someone else's process
+#: resident on the same device. Every other gpu node is healthy.
+BAD_NODES = "ampere4,ampere7"
 
 
 def relarena_setup() -> tuple[str, ...]:
