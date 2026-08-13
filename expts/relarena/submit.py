@@ -240,6 +240,9 @@ ZERO_SHOT_RESOURCES: dict[tuple[str, str], Resources] = {
     ("rel-f1", "driver-top3"): a100("il", "1:00:00"),
 }
 
+#: One-off measurement jobs, not protocol runs.
+BENCH: tuple[tuple[str, str], ...] = (("rel-f1", "driver-top3"),)
+
 #: Relaunch an existing run instead of starting a new one.
 RUN_IDS: dict[tuple[str, str, str], str] = {}
 
@@ -270,6 +273,20 @@ def main() -> None:
             clone_root="/lfs/local/0/roach_clones",
             secrets_dir=SECRETS_DIR,
         )
+
+    for dataset, task in BENCH:
+        submit(
+            "expts.relarena.bench_compile:main",
+            args=dict(dataset=dataset, task=task, cache_dir=CACHE_DIR),
+            resources=reserved("2:00:00"),
+            name=f"relarena-bench-compile-{dataset}-{task}",
+            setup=relarena_setup(),
+            repo_root=REPO_ROOT,
+            log_root=f"{SHARE}/slurm-logs",
+            clone_root="/lfs/local/0/roach_clones",
+            secrets_dir=SECRETS_DIR,
+        )
+        print(f"  bench-compile/{dataset}/{task}")
 
     seed = 0
     for model, dataset, task in EXPERIMENTS:
