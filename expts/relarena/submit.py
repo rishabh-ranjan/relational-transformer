@@ -40,11 +40,17 @@ CACHE_DIR = "/tmp/ranjanr/relarena-cache"
 #: longer than the window that is left is asking for a job that cannot finish
 #: -- and slurm rejects the request outright.
 #:
-#: The window ends 2026-08-13T00:00 and it is now ~19:25, so ~4h35m is left. 4h
-#: leaves margin for start latency and still gives the longest task placed here
-#: (rel-event/user-ignore, 2h42m worst case) 1.5x headroom. Anything longer than
-#: that goes to a tier with no deadline instead.
-RESERVATION_WALL = "4:00:00"
+#: The window now ends 2026-08-15T00:00, so ~2d4h is left and the wall is set
+#: just inside it. Effectively no limit: the longest task placed here projects
+#: at 2h42m, so this binds only if early stopping behaves nothing like it has.
+#: That is the point -- the stop steps we have were all measured under a
+#: different regime, so the safe wall is the one the reservation allows rather
+#: than the one the projections suggest.
+#:
+#: Note slurm will not let a *user* raise TimeLimit on a running job
+#: ("Access/permission denied"), only lower it, so getting this wrong means
+#: resubmitting rather than adjusting.
+RESERVATION_WALL = "2-04:00:00"
 
 # The full `rt-plurel` sweep: all 21 RelBench entity tasks, one job each.
 #
