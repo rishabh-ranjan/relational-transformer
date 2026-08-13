@@ -34,31 +34,11 @@ def _patch_cutoff(cutoff_offset: int) -> None:
     cfg.context_cutoff = patched
 
 
-def _patch_quoting(quote_train_only: bool) -> None:
-    """Override the context-quoting rule relarena's config asks for.
-
-    relarena pins `train_only_fallback=True`; this entry point needs both
-    settings to compare them, and it is a diagnostic, so it reaches in rather
-    than adding a knob to the benchmark's configuration surface.
-    """
-    from relarena.models.rt import config as cfg
-
-    original = cfg.eval_args
-
-    def patched(**kwargs):
-        args = original(**kwargs)
-        args["train_only_fallback"] = quote_train_only
-        return args
-
-    cfg.eval_args = patched
-
-
 def main(
     *,
     dataset: str,
     task: str,
     split: str,
-    quote_train_only: bool,
     mask_labels: bool,
     cutoff_offset: int,
     cache_dir: str,
@@ -74,7 +54,7 @@ def main(
     and the denormalization are all right, and a test score is then the model's.
     A val score near chance says the fault is ours.
 
-    `quote_train_only` is `train_only_fallback`: whether a context may quote
+    Context quoting is left entirely to `db_cutoff`, as the benchmark leaves it
     labelled rows of the split being scored. `rt.train`'s in-loop eval quotes
     them (it passes `False`), so reproducing its number needs `False` too; a
     benchmark prediction needs `True`.
@@ -140,11 +120,10 @@ def main(
 
     print(
         f"+ zero-shot {model._checkpoint} on {dataset}/{task} {split} "
-        f"(quote_train_only={quote_train_only}, mask_labels={mask_labels}, "
+        f"(mask_labels={mask_labels}, "
         f"cutoff_offset={cutoff_offset})",
         flush=True,
     )
-    _patch_quoting(quote_train_only)
     _patch_cutoff(cutoff_offset)
     pred = model.predict(source.task, chosen.db_state, eval_table)
 
@@ -161,7 +140,6 @@ def main(
                 "dataset": dataset,
                 "task": task,
                 "split": split,
-                "quote_train_only": quote_train_only,
                 "mask_labels": mask_labels,
                 "cutoff_offset": cutoff_offset,
                 **scores,

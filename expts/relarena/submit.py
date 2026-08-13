@@ -81,14 +81,14 @@ EXPERIMENTS = (
 #: reading a checkpoint's number on a task.
 ZERO_SHOT: tuple = ()
 _ZERO_SHOT_DONE = (
-    # (dataset, task, split, quote_train_only, mask_labels, cutoff_offset)
+    # (dataset, task, split, mask_labels, cutoff_offset)
     # Does the -1 in context_cutoff matter? rustler's bound is inclusive
     # (past_bound is `ts > bound`), so a cutoff landing exactly on the split's
     # first cohort should leave those rows quotable by every later seed --
     # 21 val rows at 2005-03-02 for this task. If that reading is right, the
     # offset-0 run scores higher; if it is wrong, the two agree.
-    ("rel-f1", "driver-top3", "val", True, True, 0),
-    ("rel-f1", "driver-top3", "val", True, True, -1),
+    ("rel-f1", "driver-top3", "val", True, 0),
+    ("rel-f1", "driver-top3", "val", True, -1),
 )
 
 
@@ -245,11 +245,11 @@ RUN_IDS: dict[tuple[str, str, str], str] = {}
 
 
 def main() -> None:
-    for dataset, task, split, quote_train_only, mask_labels, cutoff_offset in ZERO_SHOT:
+    for dataset, task, split, mask_labels, cutoff_offset in ZERO_SHOT:
         resources = ZERO_SHOT_RESOURCES[dataset, task]
         print(
             f"  zero-shot/{dataset}/{task}/{split} "
-            f"quote_train_only={quote_train_only}  {resources.gpus} {resources.qos}"
+            f"{resources.gpus} {resources.qos}"
         )
         submit(
             "expts.relarena.zero_shot:main",
@@ -257,7 +257,6 @@ def main() -> None:
                 dataset=dataset,
                 task=task,
                 split=split,
-                quote_train_only=quote_train_only,
                 mask_labels=mask_labels,
                 cutoff_offset=cutoff_offset,
                 cache_dir=CACHE_DIR,
