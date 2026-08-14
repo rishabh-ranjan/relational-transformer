@@ -119,3 +119,28 @@ def test__resume_is_a_continuation__not_a_replay_and_not_a_jump() -> None:
                 sampler_step += stride * ga
                 ctx_step += stride
             assert (ctx_step, sampler_step) == whole
+
+
+def test__step_zero__is_never_evaluated_or_selected() -> None:
+    """The untrained net must not be a candidate.
+
+    Scoring step 0 makes it selectable, and where the fine-tune's gain is small
+    next to eval noise the warm start wins: the run then trains nothing and
+    reports the published checkpoint. On rel-avito/user-clicks two of five seeds
+    did that -- 0.4897 against 0.6635 for the seeds that trained.
+
+    This also fixes where the patience window starts. `improved_at` stays 0
+    until the first eval, which lands at `eval_freq` and always improves on
+    nothing, so the earliest stop is `eval_freq + early_stop_after_steps`.
+    """
+    import inspect
+
+    import rt.train._train as t
+
+    src = inspect.getsource(t.main)
+    assert "if eval_freq and step > 0 and step % eval_freq == 0" in src, (
+        "the eval trigger must skip step 0"
+    )
+    # ...and a run too short to reach its first eval is rejected, not left to
+    # publish nothing.
+    assert "eval_freq <= total_steps" in src

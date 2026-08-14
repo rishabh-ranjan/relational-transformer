@@ -361,6 +361,12 @@ def main(
         f"train_splits={train_splits} overlaps eval_splits={eval_splits}: an "
         f"evaluated split must not be trained on"
     )
+    # With the step-0 eval gone, a run shorter than one eval period never
+    # evaluates, so nothing is ever published and selection has nothing to read.
+    assert not eval_freq or eval_freq <= total_steps, (
+        f"eval_freq={eval_freq} exceeds total_steps={total_steps}: the run would "
+        "never evaluate, and would publish no checkpoint to select from"
+    )
     assert early_stop_after_steps is None or "val" in eval_splits, (
         f"early_stop_after_steps={early_stop_after_steps} needs a val metric, "
         f"but eval_splits={eval_splits}"
@@ -1186,8 +1192,8 @@ def main(
     #
     # Order is the whole point. The caching allocator's pool grows and is never
     # handed back, so whichever workload allocates first gets the memory and the
-    # other has to fit in what is left. A fresh run evaluates at step 0 on an
-    # empty card; a resumed run skips that eval and would otherwise reach its
+    # other has to fit in what is left. No run evaluates at step 0 any more, so
+    # every run -- fresh or resumed -- would otherwise reach its
     # first eval -- compiling and allocating two nets -- on a card training has
     # already filled. Claiming eval's footprint up front puts both in the same
     # order, and if it cannot fit the job says so in its first minute rather
@@ -1212,7 +1218,19 @@ def main(
     # step to step, so this is one sample of it, not the maximum.
     measure_mem = is_cuda
     while step < total_steps:
-        if eval_freq and step % eval_freq == 0 and step != evaled_at:
+        # `step > 0`: the untrained net is not a candidate. Scoring it makes
+        # step 0 selectable, and on a task where the fine-tune's gain is small
+        # relative to eval noise the warm start wins outright -- the run then
+        # trains nothing and reports the published checkpoint. Two of five seeds
+        # did exactly that on rel-avito/user-clicks, scoring 0.4897 against
+        # 0.6635 for the seeds that trained, a bimodal 0.17 AUC swing decided by
+        # which side of the noise the first eval landed.
+        #
+        # It also sets where the patience window starts: `improved_at` stays 0
+        # until the first eval at `eval_freq`, which always improves on nothing,
+        # so the earliest possible stop is `eval_freq + early_stop_after_steps`.
+        # A run whose val score only ever falls still trains that far.
+        if eval_freq and step > 0 and step % eval_freq == 0 and step != evaled_at:
             stop_early = run_eval(step)
             evaled_at = step  # before save_resume, which persists it
             checkpoint(step)
