@@ -28,7 +28,7 @@ allow_ops_in_compiled_graph()
 flex_attention = torch.compile(flex_attention)
 
 PLUREL_HUB_REPO = "stanford-star/rt-plurel"
-PLUREL_SYNTH_CKPT = "synthetic-pretrain_rdb_1024_size_4b.pt"
+PLUREL_SYNTH_CKPT = "paper/synthetic-pretrain_rdb_1024_size_4b.pt"
 
 
 class MaskedAttention(nn.Module):

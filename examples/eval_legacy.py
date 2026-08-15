@@ -8,7 +8,11 @@ ctx_size), width 256, no random-walk tier and no recency-sorted neighbors.
 """
 
 from rt.eval.legacy import run
-from rt.model.legacy.plurel import PLUREL_HUB_REPO, PluRelTransformer
+from rt.model.legacy.plurel import (
+    PLUREL_HUB_REPO,
+    PLUREL_SYNTH_CKPT,
+    PluRelTransformer,
+)
 from rt.model.legacy.v1 import V1_HUB_REPO, V1Transformer
 
 # Legacy data: RelBench re-preprocessed with the RT-v1-era boolean typing, which
@@ -57,9 +61,9 @@ def eval_plurel(mode: str = "synth", out_dir: str = "eval_plurel_out") -> None:
 
     def model_for_task(task):
         filename = (
-            "synth.pt"
+            PLUREL_SYNTH_CKPT
             if mode == "synth"
-            else f"synth_real_{task.db_name}_{task.table_name}.pt"
+            else f"paper/cntd-pretrain_{task.db_name}_{task.table_name}.pt"
         )
         print(f"loading {PLUREL_HUB_REPO}/{filename}")
         return PluRelTransformer.from_pretrained(filename, repo_id=PLUREL_HUB_REPO)

@@ -78,10 +78,10 @@ pretraining only in what it is trained on:
 - `db_task_list` is one `(db, task)` pair instead of a mixture;
 - `pre_dir` is the *benchmark* data, not the Join -- fine-tuning trains where it
   is evaluated, and train/eval differ only in split;
-- `load_ckpt_path` is RT-P. It is mirrored at
-  `/dfs/user/ranjanr/share/stanford-star/rt-p` (compute nodes have no Hub
+- `load_ckpt_path` is RT-PluRel. It is mirrored at
+  `/dfs/user/ranjanr/share/stanford-star/rt-plurel` (compute nodes have no Hub
   access), one subdirectory per task type; refresh it with
-  `huggingface_hub.snapshot_download("stanford-star/rt-p", local_dir=...)`.
+  `huggingface_hub.snapshot_download("stanford-star/rt-plurel", local_dir=...)`.
 
 `total_steps` is the one number this experiment sets on its own: pretraining's
 100k steps is a mixture's worth of data, not one task's.
