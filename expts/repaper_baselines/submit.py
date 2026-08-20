@@ -173,12 +173,14 @@ def submit_rt(dbs=None) -> None:
         )
 
 
-def submit_vecdb() -> None:
+def submit_vecdb(subdirs) -> None:
     # CPU index build over the finished feature blobs, one job per feature set.
     for subdir, root in [
         ("rdblearn_features", f"{SHARE}/vector_db/rdblearn"),
         ("rt_features", f"{SHARE}/vector_db/rt"),
     ]:
+        if subdir not in subdirs:
+            continue
         submit(
             "expts.repaper_baselines.build_vector_db:build_all",
             args=dict(
@@ -197,9 +199,10 @@ def submit_vecdb() -> None:
 
 
 if __name__ == "__main__":
-    # db_cutoff=None rerun for rel-f1's rt embeddings (the other dbs' queued
-    # jobs carry a "test" arg indistinguishable from None on their data).
-    submit_rt(["rel-f1"])
+    # rdblearn features are complete; build their FAISS indices. The rt set
+    # follows once its embedding jobs finish.
+    submit_vecdb(["rdblearn_features"])
+    # submit_rt(["rel-f1"])
     # submit_rdblearn()
     # submit_sql()
     # submit_vecdb()   # after the feature blobs exist

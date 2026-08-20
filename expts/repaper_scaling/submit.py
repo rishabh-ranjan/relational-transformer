@@ -274,27 +274,16 @@ def submit_nosem_data() -> None:
 REL_F1 = [(db, t) for db, t in TASKS if db == "rel-f1"]
 
 if __name__ == "__main__":
-    # db_cutoff switched to None, which changes results only where the
-    # database extends past the test timestamp -- rel-f1. Its finished JSONs
-    # are deleted and its queued jobs cancelled before this resubmission; the
-    # other tasks' queued jobs carry a db_cutoff="test" arg that is
-    # indistinguishable from None on their databases and stay put.
-    for arm in [
-        "fulltest/rt",
-        "subsampled/rt",
-        "abl/rand",
-        "abl/bfs32",
-        "abl/bfs256",
-        "abl/nosem",
-    ]:
-        submit_arm(arm, REL_F1, lambda db: gpu_resources(db, "il-lo"))
-    for arm in ["fulltest/sql_tabicl", "subsampled/sql_tabicl"]:
+    # The rdblearn feature blobs are complete (21/21): the rdblearn arms go
+    # wide with the same placement as the sql ones. The rel-f1 db_cutoff
+    # rerun and everything else is already in the queue.
+    for arm in ["fulltest/rdblearn_tabicl", "subsampled/rdblearn_tabicl"]:
         submit_arm(
             arm,
-            REL_F1,
+            TASKS,
             lambda db: gpu_resources(
                 db, "il-lo", gpu="rtx8000:1", nodelist="hyperturing2"
             ),
         )
-    for arm in ["fulltest/sql_lgbm", "subsampled/sql_lgbm"]:
-        submit_arm(arm, REL_F1, cpu_resources)
+    for arm in ["fulltest/rdblearn_lgbm", "subsampled/rdblearn_lgbm"]:
+        submit_arm(arm, TASKS, cpu_resources)
