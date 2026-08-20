@@ -197,10 +197,9 @@ def submit_vecdb() -> None:
 
 
 if __name__ == "__main__":
-    # rel-event's rdblearn jobs OOMed at 150G; refill just those at 400G
-    # (finished tables skip on their meta.json).
-    for db, table in [(d, t) for d, t in PAIRS if d == "rel-event"]:
-        pass
+    # Refill the rdblearn tables that OOMed (rel-event now at 400G); finished
+    # tables no-op on their meta.json, but a table already *queued* runs twice
+    # -- dedupe with scancel after submitting.
     submit_rdblearn()
     # submit_rt()
     # submit_sql()
