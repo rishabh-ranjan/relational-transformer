@@ -4,7 +4,9 @@ The two pretraining-ablation figures: multi-cell masking rate and pretraining
 task mix. Five full-scale runs, each differing from the released pretraining
 run (the base arm of both figures, wandb `rtv2/2026-08-07-pretrain` run
 `rt-j`) in exactly the ablated knob, plus 10k-step early-stop patience so an
-arm stops spending nodes once its val curve flattens.
+arm stops spending nodes once its val curve flattens. The base run predates
+the `db_cutoff` knob, so the arms pass `None` -- the behavior it actually ran
+with.
 
 ```bash
 pixi run python -m expts.repaper_pretrain_abl.submit               # all 5 arms

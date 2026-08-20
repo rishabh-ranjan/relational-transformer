@@ -118,7 +118,11 @@ def submit_arm(arm: str, run_id: str | None) -> None:
             eval_freq=1_000,
             keep_all_ckpts=False,
             vector_db_path=None,
-            db_cutoff="test",
+            # The base run predates the db_cutoff knob entirely (its commit's
+            # RustlerDataset had none), so no cutoff is what matches it --
+            # and "test" would resolve 475 Join sources through the Hub and
+            # crash on databases without a test timestamp.
+            db_cutoff=None,
             resume_save_mins=20.0,
             # in-loop validation: identical to the base run
             eval_splits=["val"],
