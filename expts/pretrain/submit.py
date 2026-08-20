@@ -123,7 +123,9 @@ def main() -> None:
             db_task_list="/dfs/user/ranjanr/share/stanford-star/the-join-preprocessed/db-task-lists/rt-j.json",
             train_splits=["train"],
             pre_dir="/dfs/user/ranjanr/share/stanford-star/the-join-preprocessed",
-            tokens_per_gpu=2**17,
+            # A b200 packs twice an a100's tokens (expts/fine_tune uses the same
+            # split).
+            tokens_per_gpu=2**18 if args.gpus.startswith("b200") else 2**17,
             # loader workers are processes, and the job only owns
             # `cpus_per_task` cores per task
             num_workers=16,
@@ -169,7 +171,7 @@ def main() -> None:
             # `eval_tokens_per_gpu * 8192` bytes each (2 GB at 2**18), and an
             # eval that fills the card OOMs the training forward after it. Eval
             # is slower for it, and only runs every `eval_freq` steps.
-            eval_tokens_per_gpu=2**17,
+            eval_tokens_per_gpu=2**17 if args.gpus.startswith("b200") else 2**16,
             eval_num_workers=1,
             eval_prefetch_factor=2,
             eval_num_walks=10_000,
