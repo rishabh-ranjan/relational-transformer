@@ -2,33 +2,66 @@
 
 Stock library defaults (n_estimators=100, num_leaves=31, learning_rate=0.1,
 min_child_samples=20, reg_lambda=0), mirroring the stock-defaults choice the
-paper's tree baseline makes; only ``n_jobs`` is set, to the job's cpu count.
+paper's tree baseline makes. Each fit is tiny (a few hundred rows), so the
+job's cpus are spent across work items -- ``predict_batch`` fans the fits out
+with joblib at one thread per fit -- rather than inside one fit, where
+LightGBM's own threading buys nothing at this size.
 """
 
 import numpy as np
 
 
+def _fit_predict(X_train, y_train, X_test, task_type, params):
+    from lightgbm import LGBMClassifier, LGBMRegressor
+
+    if task_type == "clf":
+        y_int = (y_train > 0).astype(int)
+        if len(np.unique(y_int)) < 2:
+            return float(y_int[0])
+        model = LGBMClassifier(**params)
+        model.fit(X_train, y_int)
+        return float(model.predict_proba(X_test)[0, 1])
+    model = LGBMRegressor(**params)
+    model.fit(X_train, y_train)
+    return float(model.predict(X_test)[0])
+
+
 class LGBMPredictor:
     def __init__(self, n_jobs):
-        self.params = dict(n_jobs=n_jobs, verbose=-1)
+        self.n_jobs = n_jobs
+        self.params = dict(n_jobs=1, verbose=-1)
 
-    def predict(self, train_features, train_labels, test_features, task_type):
-        from lightgbm import LGBMClassifier, LGBMRegressor
-
+    def _prep(self, train_features, train_labels, test_features, task_type):
+        """Return the numpy work tuple, or a trivial prediction."""
         if train_features is None or len(train_labels) < 2:
             return 0.5 if task_type == "clf" else 0.0
+        return (
+            train_features.float().cpu().numpy(),
+            np.nan_to_num(train_labels.float().cpu().numpy(), nan=0.0),
+            test_features.float().cpu().numpy().reshape(1, -1),
+            task_type,
+        )
 
-        X_train = train_features.float().cpu().numpy()
-        y_train = np.nan_to_num(train_labels.float().cpu().numpy(), nan=0.0)
-        X_test = test_features.float().cpu().numpy().reshape(1, -1)
+    def predict(self, train_features, train_labels, test_features, task_type):
+        prepped = self._prep(train_features, train_labels, test_features, task_type)
+        if not isinstance(prepped, tuple):
+            return prepped
+        return _fit_predict(*prepped, self.params)
 
-        if task_type == "clf":
-            y_int = (y_train > 0).astype(int)
-            if len(np.unique(y_int)) < 2:
-                return float(y_int[0])
-            model = LGBMClassifier(**self.params)
-            model.fit(X_train, y_int)
-            return float(model.predict_proba(X_test)[0, 1])
-        model = LGBMRegressor(**self.params)
-        model.fit(X_train, y_train)
-        return float(model.predict(X_test)[0])
+    def predict_batch(self, work_items):
+        from joblib import Parallel, delayed
+
+        results = [None] * len(work_items)
+        jobs = []
+        for i, (tf, tl, xf, tt) in enumerate(work_items):
+            prepped = self._prep(tf, tl, xf, tt)
+            if isinstance(prepped, tuple):
+                jobs.append((i, prepped))
+            else:
+                results[i] = prepped
+        fitted = Parallel(n_jobs=self.n_jobs)(
+            delayed(_fit_predict)(*p, self.params) for _, p in jobs
+        )
+        for (i, _), v in zip(jobs, fitted):
+            results[i] = v
+        return results

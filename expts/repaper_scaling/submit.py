@@ -187,14 +187,15 @@ def gpu_resources(db: str, qos: str, gpu: str = "a100:1", nodelist=None) -> Reso
 
 def cpu_resources(db: str) -> Resources:
     # Zero-GPU slots on the il partition (see repaper_baselines/submit.py for
-    # why the cpu-only partition is unusable): LightGBM fits are the job.
+    # why the cpu-only partition is unusable): LightGBM fits are the job, and
+    # predict_batch fans them across every cpu the job holds.
     return Resources(
         partition="il",
         account="infolab",
         qos="il-lo",
         time="2-00:00:00",
         gpus="0",
-        cpus_per_task=8,
+        cpus_per_task=32,
         ntasks=1,
         exclusive=False,
         mem=MEM[db],
@@ -274,5 +275,36 @@ def submit_nosem_data() -> None:
 REL_F1 = [(db, t) for db, t in TASKS if db == "rel-f1"]
 
 if __name__ == "__main__":
-    # The rt-embedding FAISS indices are complete: the last scaling arm.
-    submit_arm("abl/vdb_rt", TASKS, lambda db: gpu_resources(db, "il-lo"))
+    # The serial LightGBM predictor was ~90h from finishing the biggest
+    # full-test tasks -- past its wall. predict_batch now fans fits across
+    # the job's cpus (32); the six stragglers were cancelled and rerun here
+    # (finished task JSONs skip), with lgbm_n_jobs matched to the cpus.
+    lgbm = {**DEFAULTS, "lgbm_n_jobs": 32}
+    for arm in [
+        "fulltest/sql_lgbm",
+        "fulltest/rdblearn_lgbm",
+        "subsampled/sql_lgbm",
+        "subsampled/rdblearn_lgbm",
+    ]:
+        method, overrides = ARMS[arm]
+        for db, table in TASKS:
+            out_dir = f"{OUT_ROOT}/{arm}"
+            if (Path(out_dir) / f"{db}__{table}.json").exists():
+                continue
+            submit(
+                "expts.repaper_scaling.run:main",
+                args={
+                    **lgbm,
+                    **overrides,
+                    "method": method,
+                    "db": db,
+                    "table": table,
+                    "out_dir": out_dir,
+                },
+                resources=cpu_resources(db),
+                name=f"scal-{arm.replace('/', '-')}-{db}-{table}",
+                repo_root=str(REPO_ROOT),
+                log_root=LOG_ROOT,
+                clone_root="/lfs/local/0/roach_clones",
+                secrets_dir="/dfs/user/ranjanr/.secrets",
+            )
