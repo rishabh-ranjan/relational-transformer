@@ -269,10 +269,22 @@ def submit_nosem_data() -> None:
 
 
 if __name__ == "__main__":
-    # Baseline probes on the finished SQL features: TabICL on an rtx8000
-    # (hyperturing2 -- hyperturing1's cards throw ECC errors) vs an a100, and
-    # LightGBM on cpus, on the two small probe tasks. Timings decide where the
-    # baseline sweeps run.
+    # The SQL feature blobs are complete and the probes pass (TabICL handled
+    # the heaviest 131k-context probe on an rtx8000 in ~40 min; LightGBM on 8
+    # cpus swept it in 8 min): the SQL-featurizer arms go wide. TabICL takes
+    # hyperturing2's ten idle rtx8000s (hyperturing1's cards throw ECC
+    # errors); LightGBM takes zero-gres cpu slots. The rdblearn arms wait for
+    # their features (the amazon DFS jobs run for hours).
+    for arm in ["fulltest/sql_tabicl", "subsampled/sql_tabicl"]:
+        submit_arm(
+            arm,
+            TASKS,
+            lambda db: gpu_resources(
+                db, "il-lo", gpu="rtx8000:1", nodelist="hyperturing2"
+            ),
+        )
+    for arm in ["fulltest/sql_lgbm", "subsampled/sql_lgbm"]:
+        submit_arm(arm, TASKS, cpu_resources)
     # The derived nosem data is in place and verified (bijective derangement,
     # no fixed points, all other rows byte-identical).
     submit_arm("abl/nosem", TASKS, lambda db: gpu_resources(db, "il-lo"))
