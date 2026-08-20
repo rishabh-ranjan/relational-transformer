@@ -50,26 +50,29 @@ MEM = {
 }
 
 
-def resources(db: str, qos: str) -> Resources:
+def resources(db: str, qos: str, gpu: str = "a100:1") -> Resources:
+    b200 = gpu.startswith("b200")
     return Resources(
         partition="il",
         account="infolab",
         qos=qos,
         time="12:00:00" if qos == "il-interactive" else "2-00:00:00",
-        gpus="a100:1",
-        cpus_per_task=8,
+        gpus=gpu,
+        cpus_per_task=36 if b200 else 8,
         ntasks=None,
         exclusive=False,
-        mem=MEM[db],
+        # blackwell's DefMemPerGPU (240G) covers the biggest db; an explicit
+        # --mem on ampere is capped by the per-gpu plugin instead.
+        mem=None if b200 else MEM[db],
         mem_per_gpu=None,
-        constraint="ampere",
-        nodelist=None,
+        constraint=None if b200 else "ampere",
+        nodelist="blackwell1" if b200 else None,
         reservation=None,
         dependency=None,
     )
 
 
-def submit_task(db: str, table: str, qos: str) -> None:
+def submit_task(db: str, table: str, qos: str, gpu: str = "a100:1") -> None:
     run_id = f"tune--{db}--{table}"
     tuning = Path(OUT_ROOT) / "rtv2" / PROJECT / run_id / "tuning.json"
     if tuning.exists():
@@ -120,7 +123,7 @@ def submit_task(db: str, table: str, qos: str) -> None:
                 else "/dfs/user/ranjanr/share/stanford-star/rt-j/regression"
             )
         },
-        resources=resources(db, qos),
+        resources=resources(db, qos, gpu),
         name=f"tune-{db}-{table}",
         run_id=run_id,
         repo_root=str(REPO_ROOT),
@@ -148,15 +151,20 @@ CLF = {
 if __name__ == "__main__":
     # The grid is the critical path (the tuned enscurve arm, the
     # default-vs-tuned table and the leaderboard ensemble all wait on it), so
-    # it gets the high tiers: the two free il slots (rkvs-frozen holds 8 of
-    # the 10-a100 cap) and both il-interactive slots (blackwell is fully
-    # allocated, so they run on amperes) go to the four rel-amazon tasks --
-    # the biggest databases, hence the longest tuning jobs.
+    # it gets the high tiers -- and blackwell1's eight b200s are all held by
+    # il-lo jobs right now, so the high tiers preempt straight onto them:
+    # 2 b200 through il (its b200 sub-cap) + 2 through il-interactive, on the
+    # four rel-amazon tasks, the longest tuning jobs. This round moves those
+    # four off the amperes they started on (a move costs at most one in-flight
+    # grid entry; ensemble_resume.pt carries the finished ones).
     HIGH = {
         ("rel-amazon", "user-churn"): "il",
         ("rel-amazon", "user-ltv"): "il",
         ("rel-amazon", "item-churn"): "il-interactive",
         ("rel-amazon", "item-ltv"): "il-interactive",
     }
-    for db, table in TASKS:
-        submit_task(db, table, HIGH.get((db, table), "il-lo"))
+    for (db, table), qos in HIGH.items():
+        submit_task(db, table, qos, gpu="b200:1")
+    # for db, table in TASKS:
+    #     if (db, table) not in HIGH:
+    #         submit_task(db, table, "il-lo")
