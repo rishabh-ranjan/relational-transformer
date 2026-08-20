@@ -274,7 +274,5 @@ def submit_nosem_data() -> None:
 REL_F1 = [(db, t) for db, t in TASKS if db == "rel-f1"]
 
 if __name__ == "__main__":
-    # The vecdb build fix is in: resubmit the rdblearn-similarity arm (its
-    # first 21 jobs died in the setup compile). The rt-similarity arm waits
-    # on the last rt-embedding tables.
-    submit_arm("abl/vdb_rdblearn", TASKS, lambda db: gpu_resources(db, "il-lo"))
+    # The rt-embedding FAISS indices are complete: the last scaling arm.
+    submit_arm("abl/vdb_rt", TASKS, lambda db: gpu_resources(db, "il-lo"))
