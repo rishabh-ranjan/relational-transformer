@@ -9,9 +9,11 @@ table, z-scored globally:
     <features_root>/<db>/sql_features/<table>_vectors.bin   (row-major f32)
     <features_root>/<db>/sql_features/<table>_meta.json
 
-Rows are ordered train, val, test by node-index offset, so feature row ``r``
-is node ``min_offset + r``; ``check_alignment.py`` proves the classic-relbench
-row order matches the parquets the preprocessed data was built from.
+Task rows are read from the raw HF-format parquets (``raw_dir``) -- the exact
+rows, in the exact order, that the preprocessed data indexes -- so feature row
+``r`` is node ``min_offset + r`` by construction. The classic relbench package
+supplies only the database; ``check_alignment.py`` proves the two sources
+carry the same rows and labels.
 
 Runs in the ``featurize`` pixi environment (classic relbench 2.x API).
 """
@@ -26,6 +28,7 @@ def featurize_db(
     db: str,
     db_task_list: str,
     pre_dir: str,
+    raw_dir: str,
     features_root: str,
     relbench_cache_dir: str,
 ) -> None:
@@ -33,7 +36,6 @@ def featurize_db(
     import duckdb
     import numpy as np
     from relbench.datasets import get_dataset
-    from relbench.tasks import get_task
 
     from expts.repaper_baselines.rel2tab.featurizer import table_offset_and_len
     from expts.repaper_baselines.sql_queries import SQL_REGISTRY
@@ -62,7 +64,6 @@ def featurize_db(
         sql, entity_col, time_col = entry["sql"], entry["entity_col"], entry["time_col"]
 
         min_offset, total_nodes = table_offset_and_len(pre_dir, db, table)
-        rb_task = get_task(db, table, download=True)
         import pandas as pd
 
         from expts.repaper_baselines.rel2tab.featurizer import (
@@ -73,7 +74,12 @@ def featurize_db(
         splits_info = get_table_splits(load_table_info(pre_dir, db), table)
         ordered = sorted(splits_info.items(), key=lambda kv: kv[1]["node_idx_offset"])
         combined = pd.concat(
-            [rb_task.get_table(s).df.reset_index(drop=True) for s, _ in ordered],
+            [
+                pd.read_parquet(
+                    Path(raw_dir) / db / "tasks" / table / f"{s}.parquet"
+                ).reset_index(drop=True)
+                for s, _ in ordered
+            ],
             ignore_index=True,
         )
         assert len(combined) == total_nodes, (

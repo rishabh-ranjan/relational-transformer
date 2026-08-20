@@ -7,10 +7,11 @@ extracts its transformed DFS feature matrix for every row, written as:
     <features_root>/<db>/rdblearn_features/<table>_vectors.bin  (row-major f32)
     <features_root>/<db>/rdblearn_features/<table>_meta.json
 
-Rows are ordered by node-index offset (train, val, test as preprocessed), so
-feature row ``r`` is node ``min_offset + r``; ``check_alignment.py`` proves
-the classic-relbench row order matches the parquets the preprocessed data was
-built from.
+Task rows are read from the raw HF-format parquets (``raw_dir``) -- the exact
+rows, in the exact order, that the preprocessed data indexes -- so feature row
+``r`` is node ``min_offset + r`` by construction. The classic relbench package
+supplies only the database and the task metadata; ``check_alignment.py``
+proves the two sources carry the same rows and labels.
 
 Runs in the ``featurize`` pixi environment plus the ``install-rdblearn`` pixi
 task (rdblearn is installed --no-deps on top of it).
@@ -28,6 +29,7 @@ def featurize_table(
     table: str,
     task_type: str,
     pre_dir: str,
+    raw_dir: str,
     features_root: str,
     relbench_cache_dir: str,
     max_depth: int,
@@ -93,13 +95,14 @@ def featurize_table(
     min_offset, total_nodes = table_offset_and_len(pre_dir, db, table)
     splits_info = get_table_splits(load_table_info(pre_dir, db), table)
     ordered = sorted(splits_info.items(), key=lambda kv: kv[1]["node_idx_offset"])
-    split_dfs = {
-        "train": rdb_task.train_df,
-        "val": rdb_task.val_df,
-        "test": rdb_task.test_df,
-    }
     combined = pd.concat(
-        [split_dfs[s].reset_index(drop=True) for s, _ in ordered], ignore_index=True
+        [
+            pd.read_parquet(
+                Path(raw_dir) / db / "tasks" / table / f"{s}.parquet"
+            ).reset_index(drop=True)
+            for s, _ in ordered
+        ],
+        ignore_index=True,
     )
     assert len(combined) == total_nodes, (
         f"{db}/{table}: {len(combined)} task rows vs {total_nodes} nodes in "

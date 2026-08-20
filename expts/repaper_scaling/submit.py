@@ -234,12 +234,47 @@ def submit_arm(arm: str, tasks, resources_for) -> None:
         )
 
 
-if __name__ == "__main__":
-    # Probe round: the two il slots left under the 10-a100 cap (rkvs-frozen
-    # holds 8) take one small clf and one small reg task; runtime and metrics
-    # get checked before the sweep widens.
-    submit_arm(
-        "fulltest/rt",
-        [("rel-f1", "driver-dnf"), ("rel-avito", "ad-ctr")],
-        lambda db: gpu_resources(db, "il"),
+def submit_nosem_data() -> None:
+    submit(
+        "expts.repaper_scaling.make_nosem_data:main",
+        args=dict(
+            pre_dir=PRE_DIR,
+            out_dir=f"{SHARE}/relbench-preprocessed-nosem",
+            embedder="all-MiniLM-L12-v2",
+            d_text=384,
+            seed=0,
+        ),
+        resources=Resources(
+            partition="il",
+            account="infolab",
+            qos="il-lo",
+            time="4:00:00",
+            gpus="0",
+            cpus_per_task=4,
+            ntasks=1,
+            exclusive=False,
+            mem="32G",
+            mem_per_gpu=None,
+            constraint=None,
+            nodelist=None,
+            reservation=None,
+            dependency=None,
+        ),
+        name="nosem-data",
+        repo_root=str(REPO_ROOT),
+        log_root=LOG_ROOT,
+        clone_root="/lfs/local/0/roach_clones",
+        secrets_dir="/dfs/user/ranjanr/.secrets",
     )
+
+
+if __name__ == "__main__":
+    # Probes (rel-f1/driver-dnf 2:54, rel-avito/ad-ctr 4:06 on one a100,
+    # startup included) passed; the RT arms go wide on il-lo. The high tiers
+    # are spent on the tuning grid (expts/repaper_tune), the longest pole.
+    submit_nosem_data()
+    for arm in ["fulltest/rt", "subsampled/rt", "abl/rand", "abl/bfs32", "abl/bfs256"]:
+        submit_arm(arm, TASKS, lambda db: gpu_resources(db, "il-lo"))
+    # After the nosem-data job finishes: submit_arm("abl/nosem", ...).
+    # After the featurize + vecdb jobs finish: the four baseline arms per
+    # protocol, and abl/vdb_*.

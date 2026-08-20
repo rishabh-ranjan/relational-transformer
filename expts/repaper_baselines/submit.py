@@ -9,6 +9,7 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 PRE_DIR = "/dfs/user/ranjanr/share/stanford-star/relbench-preprocessed"
 SHARE = "/dfs/user/ranjanr/share/relational-transformer/repaper"
 DB_TASK_LIST = f"{PRE_DIR}/db-task-lists/forecast.json"
+RAW_DIR = "/dfs/user/ranjanr/share/stanford-star/relbench"
 LOG_ROOT = (
     "/dfs/user/ranjanr/slurm-logs/rishabh-ranjan/relational-transformer/"
     "expts/repaper_baselines"
@@ -95,6 +96,7 @@ def submit_sql() -> None:
                 db=db,
                 db_task_list=DB_TASK_LIST,
                 pre_dir=PRE_DIR,
+                raw_dir=RAW_DIR,
                 features_root=f"{SHARE}/features",
                 relbench_cache_dir=f"{SHARE}/relbench-cache",
             ),
@@ -113,6 +115,7 @@ def submit_rdblearn() -> None:
                 table=table,
                 task_type="clf" if (db, table) in CLF else "reg",
                 pre_dir=PRE_DIR,
+                raw_dir=RAW_DIR,
                 features_root=f"{SHARE}/features",
                 relbench_cache_dir=f"{SHARE}/relbench-cache",
                 max_depth=2,
