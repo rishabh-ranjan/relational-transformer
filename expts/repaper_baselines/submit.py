@@ -41,7 +41,9 @@ CLF = {
 MEM = {
     "rel-amazon": "250G",
     "rel-avito": "64G",
-    "rel-event": "48G",
+    # rel-event's DFS working set far outgrows its on-disk size (a 48G job
+    # was OOM-killed): wide attendee tables fan out under depth-2 aggregation.
+    "rel-event": "150G",
     "rel-f1": "16G",
     "rel-hm": "150G",
     "rel-stack": "150G",
