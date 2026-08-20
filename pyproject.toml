@@ -4,31 +4,51 @@ build-backend = "maturin"
 
 [project]
 name = "relational-transformer"
-version = "1.1.0"
+version = "1.8.0"
 description = "Relational Transformer (RT): a foundation model for relational data, bundling a native Rust data-processing engine (rt.rustler)."
 readme = "README.md"
 license = { file = "LICENSE" }
-requires-python = ">=3.12"
+# 3.11, not 3.12: nothing in `src/` uses 3.12-only syntax or stdlib, and a
+# consumer that pins 3.11 (relarena does, `~=3.11.0`) cannot resolve this
+# package at all if the floor is 3.12. Development still happens on 3.12 --
+# that is what `[tool.pixi.dependencies]` asks for.
+requires-python = ">=3.11"
+# Runtime only: what an `import rt.<something>` actually reaches for. Anything
+# used by the repo's own tooling, experiments or plots belongs in `dev` below,
+# so installing this package as a *library* (relarena does) does not drag a
+# plotting stack and a pre-commit install into the consumer's environment.
 dependencies = [
+    # roach.slurm ships in this distribution and type-checks its arguments.
     "beartype",
     "einops",
     "huggingface-hub",
-    "matplotlib",
     "ml_dtypes",
     "numpy",
     "orjson",
     "pandas",
     "polars",
-    "pre-commit",
     "pyarrow",
-    "pytest",
     "pyyaml",
     "safetensors",
-    "scikit-learn<1.6",
+    # mean_absolute_error / roc_auc_score in rt.eval only. The former `<1.6`
+    # cap was inherited from a relbench pin, not from anything here.
+    "scikit-learn",
     "sentence-transformers",
     "torch",
-    "tqdm",
+    # Imported at module scope by rt.train._train and rt.eval._eval, so it is a
+    # hard runtime dependency even for a run with `wandb_disabled=True`.
     "wandb",
+]
+
+[project.optional-dependencies]
+# The repo's own tooling and experiments: the test suite, the pre-commit hooks,
+# the wandb workspace builder (expts/fine_tune/workspace.py), and the baselines
+# and plots under expts/. None of it is imported from `src/rt`.
+dev = [
+    "matplotlib",
+    "pre-commit",
+    "pytest",
+    "tqdm",
     "wandb-workspaces",
     "xgboost",
 ]
@@ -39,8 +59,11 @@ manifest-path = "rustler/Cargo.toml"
 module-name = "rt.rustler"
 # The whole crate, FAISS aside (`vecdb` needs cmake and a BLAS; see rustler/Cargo.toml).
 features = ["pyo3/extension-module"]
-# roach.slurm ships a batch-script template and the node env setup alongside its .py
-include = ["src/roach/slurm/*.sh"]
+# Nothing extra. `roach` is slurm submission tooling, not part of RT, and lives
+# at the repo root beside `expts/` rather than under `python-source` -- a
+# consumer who `pip install`s this wants a relational transformer, not a batch
+# submitter. Experiments reach it because the bootstrap `cd`s to the checkout,
+# which is the same way they reach `expts`.
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
@@ -67,12 +90,44 @@ platforms = ["linux-64"]
 CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_LINKER = "x86_64-conda-linux-gnu-cc"
 
 [tool.pixi.dependencies]
-python = ">=3.12"
+# 3.12, not ">=3.12": on 3.14 the default multiprocessing start method on Linux
+# is forkserver rather than fork, and a forkserver child is built by *pickling*
+# the work over to it. rustler's Sampler is a pyo3 object and does not pickle,
+# so every DataLoader with workers dies with
+#
+#   TypeError: cannot pickle 'builtins.Sampler' object
+#
+# rt assumes fork throughout (see the comment in rt/_env.py about workers
+# inheriting the thread budget "at fork"). Pinning the interpreter is the
+# smaller change than making every dataset picklable, and it also puts this
+# environment inside relarena's own `requires-python`.
+python = "3.12.*"
 rust = "*"
 maturin = "*"
 uv = "*"
 
 [tool.pixi.pypi-dependencies]
-relational-transformer = { path = ".", editable = true }
-# pinned until manifest-driven Hub data loading lands in a relbench release
-relbench = { git = "https://github.com/rishabh-ranjan/relbench", branch = "main" }
+# The **released wheel**, not an editable install of this checkout. Experiments
+# must exercise the same artifact a user gets from `uv sync --extra rt`, because
+# that is the path that breaks silently: v1.1.0 shipped without
+# `_resolve_cutoff` and every one of our jobs was fine, running the checkout.
+# Bumping this is now part of changing `src/rt` -- `tests/test_release.py` fails
+# if the two drift apart.
+#
+# `expts/` is not packaged (`python-source = "src"`), so it still comes from the
+# checkout, which is what lets a submit script change without a release.
+relational-transformer = { url = "https://github.com/rishabh-ranjan/relational-transformer/releases/download/v1.8.0/relational_transformer-1.8.0-cp311-abi3-manylinux_2_28_x86_64.whl", extras = ["dev"] }
+# snap-stanford's relbench, exactly pinned -- NOT the rishabh-ranjan fork `main`
+# carries. This branch exists to run relarena's experiments (see
+# expts/relarena/), and relarena requires relbench 2.1.2: the package version is
+# the data version there (it ships the dataset checksums), and its Database /
+# get_dataset API is the 2.x one.
+#
+# Nothing in `src/rt` needs the fork for those experiments. `rt.preprocess`
+# mirrors relbench.hf rather than importing it; `rt.data.datasets` imports
+# relbench only to resolve a dataset's test timestamp, which is reached only
+# when `db_cutoff` is set, and relarena passes None because it hands RT a
+# database it has already censored; and `rt.eval.relbench` scores against
+# relbench's own evaluator, which relarena replaces with `task.evaluate`.
+# `main` keeps the fork -- this pin is this branch's, for this purpose.
+relbench = "==2.1.2"

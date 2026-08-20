@@ -39,7 +39,7 @@ pixi run python expts/pretrain/smoke.py --nodelist ampere3,ampere9
 ```
 
 Neither preemption nor the wall clock needs you: both requeue and resume from
-the run's own checkpoint (see [`roach.slurm`](../../src/roach/slurm/README.md)),
+the run's own checkpoint (see [`roach.slurm`](../../roach/slurm/README.md)),
 and resume is GPU-count flexible, which is what lets the shape change under a
 running experiment without costing work.
 

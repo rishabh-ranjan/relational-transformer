@@ -15,8 +15,10 @@ Robust to preemption (the default config matches the released RT-J runs):
   cleanly so the job can be requeued.
 * resume is **GPU-count flexible**: data parallelism keeps the full model +
   optimizer on every rank (no sharding), so a run preempted on 16 GPUs across 2
-  nodes can resume on, say, 4 GPUs. The training data stream is re-seeded by the
-  resumed step so no items are replayed, and ops are seeded for determinism.
+  nodes can resume on, say, 4 GPUs. The training data stream *continues*: the
+  loader starts its counters where the interrupted run left them, so a resumed
+  run draws the batches an uninterrupted one would have drawn -- no replay, and
+  no divergence onto a different draw either. Ops are seeded for determinism.
 
 There is no CLI: ``_train`` takes every knob as a required argument, and a run
 is a script that calls it (``examples/train.py`` passes the released values).
@@ -56,9 +58,6 @@ from rt.eval import member_context_seed, metric_for
 from rt.eval import Evaluator
 from rt.progress import fmt_bytes, fmt_duration, log
 import wandb
-
-# Re-seed offset applied per resumed step so a resumed stream does not replay.
-SEED_STRIDE = 1_000_003
 
 # The val metric each task type is selected on, and which direction wins.
 BEST_METRICS = [("clf", "auroc", max), ("reg", "nmae", min)]
@@ -279,11 +278,26 @@ def main(
     # One switch for training and in-loop eval alike: they have to see the same
     # database or the validation number is not the training model's.
     # Which split's timestamp the database the contexts are built from is
-    # trimmed to: ``"test"``, ``"val"``, or ``None`` for no trim. A run that
+    # trimmed to: ``"test"``, ``"val"``, an explicit epoch-seconds integer for
+    # data relbench cannot be asked about, or ``None`` for no trim. A run that
     # selects on val has to use ``"val"`` -- the same rule test-time inference
     # gets, one split earlier -- or its val metric is scored against a database
     # that already contains the rows val is meant to predict.
-    db_cutoff: str | None,
+    db_cutoff: str | int | None,
+    # Whether the in-loop eval scores the live net as well as the SWA one.
+    #
+    # `True` (the default, and what every existing caller gets) scores both and
+    # tracks a best for each, publishing `best_live_*`, `best_swa_*` and
+    # `best_*`. Early stopping then follows *either* -- `consider` returns one
+    # improved flag over all `kinds` -- so the live net can hold a run open long
+    # after the SWA net has peaked.
+    #
+    # `False` scores the SWA net alone: half the eval work, and a patience that
+    # tracks the thing being selected. `best_live_*` is not written, and
+    # `best_*` degenerates to `best_swa_*`. Only meaningful with
+    # `swa_momentum is not None`, since otherwise there is nothing left to
+    # score; asserted below.
+    eval_live: bool = True,
     resume_save_mins: float,
     # in-loop validation
     eval_splits: list[str],
@@ -308,6 +322,22 @@ def main(
     eval_ensemble_size: int,
     eval_vector_db_path: str | None,
     eval_lcs_bw_pl_grid: list[tuple[int, int, bool]],
+    # Full (ctx, local_ctx, bfs_width, prefer_latest) points for the in-loop
+    # eval, one evaluator each, and the best metric *across* them drives
+    # best-checkpoint tracking and the early-stopping patience.
+    #
+    # `eval_lcs_bw_pl_grid` cannot express this: its `eval_ctx_size_list` is
+    # shared by every entry, so N entries at N different ctx sizes give N*N
+    # combinations, and only the first entry is ever selected on.
+    #
+    # Why the best rather than the mean: a low ctx overfits sooner than a high
+    # one, so timing the step on a single high-ctx config reports a checkpoint
+    # already past its peak whenever the tuned context turns out to be small.
+    # Taking the best across configs approximates choosing the (step, context)
+    # pair jointly, which is what the two stages together are trying to do.
+    #
+    # `None` keeps the cross-product behaviour and selects on the first entry.
+    eval_ctx_lcs_bw_pl_grid: list[tuple[int, int, int, bool]] | None = None,
     # logging
     run_id: str,
     targets: dict[str, float],
@@ -330,6 +360,12 @@ def main(
     assert not (set(train_splits) & set(eval_splits)), (
         f"train_splits={train_splits} overlaps eval_splits={eval_splits}: an "
         f"evaluated split must not be trained on"
+    )
+    # With the step-0 eval gone, a run shorter than one eval period never
+    # evaluates, so nothing is ever published and selection has nothing to read.
+    assert not eval_freq or eval_freq <= total_steps, (
+        f"eval_freq={eval_freq} exceeds total_steps={total_steps}: the run would "
+        "never evaluate, and would publish no checkpoint to select from"
     )
     assert early_stop_after_steps is None or "val" in eval_splits, (
         f"early_stop_after_steps={early_stop_after_steps} needs a val metric, "
@@ -515,8 +551,17 @@ def main(
     # overall best is whichever of the two wins at the end.
     # The nets selection tracks: the live one always, the swa one when it
     # exists. Every structure keyed by kind follows this list.
-    kinds = ["live"] + (["swa"] if swa_momentum is not None else [])
+    kinds = (["live"] if eval_live else []) + (
+        ["swa"] if swa_momentum is not None else []
+    )
+    assert kinds, "eval_live=False needs swa_momentum: nothing would be scored"
     best = {tt: {k: None for k in kinds} for tt, _, _ in BEST_METRICS}
+    # Per (kind, metrics key) best, for the *patience* alone. `best` above --
+    # what gets published -- still follows the best across configs; this follows
+    # each config against its own history. A low ctx and a high ctx peak at
+    # different steps, so stopping when only their max stalls cuts the later one
+    # short while it is still improving.
+    per_cfg = {tt: {} for tt, _, _ in BEST_METRICS}
     # Last step at which some (task type, kind) val metric improved on or
     # matched its best. Persisted, so a resume does not restart the patience.
     improved_at = 0
@@ -586,6 +631,11 @@ def main(
         )
         resume_evaled_at = ck.get("evaled_at", start_step)
         improved_at = ck.get("improved_at", start_step)
+        # Carried across the resume: starting empty would make every config's
+        # first eval back read as an improvement, handing the run a free
+        # patience reset per requeue. A checkpoint without the key predates it.
+        if ck.get("per_cfg") is not None:
+            per_cfg = ck["per_cfg"]
         if is_main:
             log(
                 resumed_from=resume_path,
@@ -593,8 +643,13 @@ def main(
                 world_size=world_size,
             )
 
-    # ---- data: re-seed by resumed step so the stream does not replay ----
-    data_seed = seed + SEED_STRIDE * start_step
+    # ---- data: the stream continues, it is not re-seeded ----
+    # The seed stays the run's own, and TrainDataset starts its counters where
+    # an uninterrupted run would have them (`start_step`). A resumed run
+    # therefore draws the batches the uninterrupted one would have drawn --
+    # neither replaying what it already trained on, nor diverging onto a
+    # different draw the way a re-seed did.
+    data_seed = seed
     train_init_tic = time.time()
     train_tasks = get_tasks(pre_dir, db_task_list, tuple(train_splits))
     train_ds = TrainDataset(
@@ -612,6 +667,7 @@ def main(
         walk_length=walk_length,
         prefer_latest_list=prefer_latest_list,
         mask_prob_max=mask_prob_max,
+        start_step=start_step,
         embedder=embedder,
         d_text=d_text,
         seed=data_seed,
@@ -620,7 +676,6 @@ def main(
         mmap_populate=mmap_populate,
         timeout_per_item=timeout_per_item,
         vector_db_path=vector_db_path,
-        train_only_fallback=False,
         db_cutoff=db_cutoff,
     )
     # total_bs items enter the model per optimizer step, so the whole run
@@ -732,10 +787,17 @@ def main(
             return eval_context_seed
         return member_context_seed(eval_context_seed, member)
 
+    grid4 = eval_ctx_lcs_bw_pl_grid
+    entries = (
+        [(c, l, b, p) for (c, l, b, p) in grid4]
+        if grid4
+        else [(None, l, b, p) for (l, b, p) in eval_lcs_bw_pl_grid]
+    )
     evaluators = (
         [
             (
                 f"lcs{lcs}-bw{bw}-pl{int(pl)}_" if i else "",
+                [ctx] if ctx is not None else eval_ctx_size_list,
                 [
                     Evaluator(
                         tasks=val_tasks,
@@ -762,8 +824,7 @@ def main(
                         shuffle_seed=eval_shuffle_seed,
                         context_seed=_member_seed(member),
                         vector_db_path=eval_vector_db_path,
-                        train_only_fallback=False,
-                        db_cutoff=db_cutoff,
+                                        db_cutoff=db_cutoff,
                         global_rank=rank,
                         local_rank=local_rank,
                         world_size=world_size,
@@ -773,7 +834,7 @@ def main(
                     for member in range(eval_ensemble_size)
                 ],
             )
-            for i, (lcs, bw, pl) in enumerate(eval_lcs_bw_pl_grid)
+            for i, (ctx, lcs, bw, pl) in enumerate(entries)
         ]
         if val_tasks
         else []
@@ -843,6 +904,7 @@ def main(
                         # the eval having run.
                         "evaled_at": evaled_at,
                         "improved_at": improved_at,
+                        "per_cfg": per_cfg,
                     },
                     f,
                 )
@@ -981,13 +1043,37 @@ def main(
         # Selection is val-only: a test split may be evaluated alongside for
         # its curves, but must never pick the checkpoint. With no val split
         # configured, nothing is selected.
-        for prefix, kind in [(("" if k == "live" else "swa/"), k) for k in kinds]:
-            if prefix not in metrics or "val" not in metrics[prefix]:
-                continue
+        for kind in kinds:
+            # Every grid entry's metrics land under its own tag; a swa entry's
+            # key ends "swa/" and a live one does not. Selection takes the best
+            # across entries, so a step that peaks under any evaluated context
+            # counts as an improvement.
+            is_swa = kind == "swa"
+            keys = [k for k in metrics if k.endswith("swa/") == is_swa]
             for tt, metric, better in BEST_METRICS:
-                v = metrics[prefix]["val"][metric].get("mean")
-                if v is None:
+                seen = []
+                for k in keys:
+                    if "val" not in metrics[k] or metric not in metrics[k]["val"]:
+                        continue
+                    x = metrics[k]["val"][metric].get("mean")
+                    if x is None:
+                        continue
+                    seen.append(x)
+                    # The patience resets when *any* config improves on its own
+                    # best, not when their best-of does. A tie counts, as it
+                    # does for `best` below.
+                    cfg_key = (kind, k)
+                    prev = per_cfg[tt].get(cfg_key)
+                    if prev is None or better(x, prev) == x:
+                        per_cfg[tt][cfg_key] = x
+                        improved = True
+                if not seen:
                     continue
+                # What gets published is still the best across configs. An
+                # improvement here always implies one above -- a new best-of
+                # must come from a config exceeding its own best -- so this
+                # branch does not touch `improved`.
+                v = better(seen)
                 cur = best[tt][kind]
                 if cur is None or better(v, cur["value"]) == v:
                     best[tt][kind] = {
@@ -996,7 +1082,6 @@ def main(
                         "value": v,
                         "metric": metric,
                     }
-                    improved = True
         return improved
 
     def run_eval(step):
@@ -1004,17 +1089,18 @@ def main(
         nonlocal improved_at
         if not evaluators:
             return False
-        nets = [(raw_net, "")]
+        nets = [(raw_net, "")] if eval_live else []
         if swa is not None:
             # Unconditionally, including at n == 0, where the swa metrics just
-            # duplicate the live ones: every eval must run both nets, so that
-            # each one is also the memory check for the evals after it.
+            # duplicate the live ones. With `eval_live` this is also the memory
+            # check for the evals after it; without it, it is the only net
+            # scored and the only one early stopping follows.
             swa.sync_to(swa_net.named_parameters())
             nets.append((swa_net, "swa/"))
         metrics = {}
-        for tag, members in evaluators:
+        for tag, ctxs, members in evaluators:
             tagged_nets = [(n, tag + p) for n, p in nets]
-            metrics.update(eval_avg_metrics(members, tagged_nets, eval_ctx_size_list))
+            metrics.update(eval_avg_metrics(members, tagged_nets, ctxs))
         # Best-checkpoint tracking follows the primary (untagged) grid entry.
         # Rank 0 only: ``evaluate_raw`` yields there and nowhere else, so the
         # other ranks hold empty metrics and must not touch ``best``.
@@ -1106,8 +1192,8 @@ def main(
     #
     # Order is the whole point. The caching allocator's pool grows and is never
     # handed back, so whichever workload allocates first gets the memory and the
-    # other has to fit in what is left. A fresh run evaluates at step 0 on an
-    # empty card; a resumed run skips that eval and would otherwise reach its
+    # other has to fit in what is left. No run evaluates at step 0 any more, so
+    # every run -- fresh or resumed -- would otherwise reach its
     # first eval -- compiling and allocating two nets -- on a card training has
     # already filled. Claiming eval's footprint up front puts both in the same
     # order, and if it cannot fit the job says so in its first minute rather
@@ -1117,7 +1203,8 @@ def main(
         # not in the shapes the net sees.
         # One member is enough: every member is the same shapes on the same
         # split, so they all reach the same peak.
-        evaluators[0][1][0].mem_guard([n for n in (raw_net, swa_net) if n is not None])
+        # (tag, ctx_sizes, members) -- the members are the third element.
+        evaluators[0][2][0].mem_guard([n for n in (raw_net, swa_net) if n is not None])
         if is_main:
             if is_cuda:
                 torch.cuda.synchronize()
@@ -1131,7 +1218,19 @@ def main(
     # step to step, so this is one sample of it, not the maximum.
     measure_mem = is_cuda
     while step < total_steps:
-        if eval_freq and step % eval_freq == 0 and step != evaled_at:
+        # `step > 0`: the untrained net is not a candidate. Scoring it makes
+        # step 0 selectable, and on a task where the fine-tune's gain is small
+        # relative to eval noise the warm start wins outright -- the run then
+        # trains nothing and reports the published checkpoint. Two of five seeds
+        # did exactly that on rel-avito/user-clicks, scoring 0.4897 against
+        # 0.6635 for the seeds that trained, a bimodal 0.17 AUC swing decided by
+        # which side of the noise the first eval landed.
+        #
+        # It also sets where the patience window starts: `improved_at` stays 0
+        # until the first eval at `eval_freq`, which always improves on nothing,
+        # so the earliest possible stop is `eval_freq + early_stop_after_steps`.
+        # A run whose val score only ever falls still trains that far.
+        if eval_freq and step > 0 and step % eval_freq == 0 and step != evaled_at:
             stop_early = run_eval(step)
             evaled_at = step  # before save_resume, which persists it
             checkpoint(step)

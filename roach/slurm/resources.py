@@ -61,6 +61,11 @@ class Resources:
     """A reservation to run inside, by name (`scontrol show res`). A reserved
     node is taken out of general scheduling, so its cards are reachable only
     with this set -- and a job that sets it is confined to them."""
+    exclude: str | None = None
+    """Nodes to keep off, by name or slurm hostlist (`ampere[4,7]`). The
+    scheduler treats a node with a full local disk as healthy, so a job placed
+    there starts and then wedges; this is how a known-bad node is kept out of
+    the running without pinning the job to one specific good node."""
     nodes: int = 1
     """How many nodes to hold. `gpus`, `cpus_per_task` and `ntasks` are all
     per-node, so this multiplies the job: 4 nodes of "a100:8" is 32 ranks. DDP
@@ -118,6 +123,8 @@ class Resources:
             flags.append(f"--constraint={self.constraint}")
         if self.nodelist:
             flags.append(f"--nodelist={self.nodelist}")
+        if self.exclude:
+            flags.append(f"--exclude={self.exclude}")
         if self.reservation:
             flags.append(f"--reservation={self.reservation}")
         if self.dependency:

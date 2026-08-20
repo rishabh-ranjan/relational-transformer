@@ -4,7 +4,7 @@ The config, in the values below rather than in prose elsewhere -- it changes
 every submission, and a description that lives in another file goes stale the
 moment one of these does:
 
-- **delta fine-tuning from RT-P**: the published weights are what decay pulls
+- **delta fine-tuning from RT-PluRel**: the published weights are what decay pulls
   back to, and the update is the ordinary one (see `rt.train`'s
   `delta_finetune`);
 - 25k steps at batch 256, lr 5e-4 held constant -- no warmup, no decay -- and
@@ -140,13 +140,14 @@ def task_type_for(db: str, task: str) -> str:
 
 
 def ckpt_for(db: str, task: str, release: str | None) -> str | None:
-    """The published weights this task warm-starts from: RT-P, RT-J, or None
-    for a randomly initialized net.
+    """The published weights this task warm-starts from: RT-PluRel, RT-J, or
+    None for a randomly initialized net.
 
     One head per task type, each in its own subdirectory, so which one a run
     loads follows from the task's `task_type`. A local mirror rather than
-    `stanford-star/rt-{p,j}`: a compute node has no Hub access. Refresh either
-    with `huggingface_hub.snapshot_download("stanford-star/rt-j", local_dir=...)`.
+    `stanford-star/rt-{plurel,j}`: a compute node has no Hub access. Refresh
+    either with
+    `huggingface_hub.snapshot_download("stanford-star/rt-j", local_dir=...)`.
     """
     if release is None:
         return None
@@ -285,7 +286,7 @@ def main() -> None:
                 compile=True,
                 materialize_attn_masks=True,
                 loss_fn=loss_fn_for(db, task),
-                load_ckpt_path=ckpt_for(db, task, "rt-p"),
+                load_ckpt_path=ckpt_for(db, task, "rt-plurel"),
                 db_task_list=[(db, task)],
                 train_splits=["train", "val"],
                 pre_dir="/dfs/user/ranjanr/share/stanford-star/relbench-preprocessed",

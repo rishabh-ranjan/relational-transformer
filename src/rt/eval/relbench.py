@@ -8,11 +8,18 @@ from functools import cache
 from pathlib import Path
 
 import numpy as np
-import relbench
 import sklearn.metrics as M
-from relbench.submit import evaluate_task
 
 from rt.data import read_meta, resolve_pre_dir
+
+# `relbench` is imported inside the two functions that need it, not here.
+# Scoring a submission is the only thing in `rt` that reaches for the package,
+# and it is reached only by a run that asked for relbench scoring -- while this
+# module is imported unconditionally by `rt.eval._eval`, and so by `rt.train`.
+# At module scope the import made *training* require relbench, and require the
+# fork's API at that: `relbench.submit` does not exist in the 2.x releases a
+# consumer may reasonably have installed (relarena pins 2.1.2). Deferring it
+# keeps a training run working with any relbench, or none.
 
 
 @cache
@@ -30,6 +37,8 @@ def _seed_offset(pre_dir: str, db: str, table: str, split: str, embedder: str) -
 
 @cache
 def _load_relbench_task(source: str, table: str):
+    import relbench
+
     return relbench.load_dataset(source).load_task(table)
 
 
@@ -141,6 +150,8 @@ def _emit_and_score(
             align,
             ret_path,
         )
+
+    from relbench.submit import evaluate_task
 
     metrics = evaluate_task(
         f"{task.db_name}/{task.table_name}", str(score_path), dataset=source

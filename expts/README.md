@@ -151,7 +151,7 @@ been cancelled — not when they have all been seen training once.
 
 ## Submitting
 
-Jobs go through [`roach.slurm`](../src/roach/slurm/README.md) — read that first
+Jobs go through [`roach.slurm`](../roach/slurm/README.md) — read that first
 for `submit()`, resource presets, and how a run survives preemption.
 
 ```python
@@ -170,7 +170,7 @@ submit("expts.<name>.<module>:<function>", args={...}, resources=BLACKWELL,
 - **Write nowhere but the paths you pass the entry point.** The clone is shared
   by every job at that commit on a node and is read-only while jobs run; take an
   output root as an argument and put everything under it. See the
-  [read-only section](../src/roach/slurm/README.md#the-clone-is-read-only).
+  [read-only section](../roach/slurm/README.md#the-clone-is-read-only).
 - **`/tmp` is for a job's own scratch on its node, named after the run** — never
   for code, never for anything to be read afterwards (it is node-local, and a
   `#SBATCH -o /tmp/...` log vanishes).

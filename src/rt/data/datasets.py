@@ -18,6 +18,22 @@ from rt.rustler import Sampler
 MAX_F2P_NBRS = 5  # See fly.rs L32
 
 
+def _resolve_cutoff(db_cutoff, db_name: str, pre_dir: str) -> int | None:
+    """The context cutoff for one database, in seconds since the epoch.
+
+    ``None`` for no cutoff; ``"val"`` / ``"test"`` to look the split's timestamp
+    up in relbench; or an **integer**, which is used as-is. The integer form is
+    for data that relbench cannot be asked about -- a database assembled by a
+    caller rather than loaded from a release, whose splits are the caller's own
+    and whose ``meta.json`` therefore carries no ``source``.
+    """
+    if db_cutoff is None:
+        return None
+    if isinstance(db_cutoff, int):
+        return db_cutoff
+    return _split_timestamps(db_name, pre_dir)[db_cutoff]
+
+
 @cache
 def _split_timestamps(db_name: str, pre_dir: str) -> dict[str, int]:
     """``db_name``'s test timestamp, in rustler's seconds since the epoch.
@@ -105,8 +121,7 @@ class RustlerDataset:
         mmap_populate,
         timeout_per_item,
         vector_db_path: str | None,
-        train_only_fallback: bool,
-        db_cutoff: str | None,
+        db_cutoff: str | int | None,
     ):
         pre_dir = resolve_pre_dir(pre_dir)
         if vector_db_path is not None:
@@ -170,11 +185,7 @@ class RustlerDataset:
                 # eval gets; ``"val"`` is the same rule one split earlier, and
                 # is what a val-selected run has to use for val to predict
                 # test rather than to see past it.
-                cutoff_timestamps.append(
-                    None
-                    if db_cutoff is None
-                    else _split_timestamps(db_name, pre_dir)[db_cutoff]
-                )
+                cutoff_timestamps.append(_resolve_cutoff(db_cutoff, db_name, pre_dir))
 
                 dataset_tuples.append((db_name, table_name, node_idx_offset, num_nodes))
             except Exception as e:
@@ -220,7 +231,6 @@ class RustlerDataset:
             mmap_populate=mmap_populate,
             timeout_per_item=timeout_per_item,
             vector_db_path=vector_db_path,
-            train_only_fallback=train_only_fallback,
         )
         self.num_items = self.sampler.num_items
 
@@ -255,8 +265,8 @@ class TrainDataset(RustlerDataset, IterableDataset):
         mmap_populate,
         timeout_per_item,
         vector_db_path: str | None,
-        train_only_fallback: bool,
-        db_cutoff: str | None,
+        db_cutoff: str | int | None,
+        start_step: int = 0,
     ):
         # TrainDataset drives both shuffle and context construction from the
         # same seed — this matches prior single-seed behavior.
@@ -283,11 +293,15 @@ class TrainDataset(RustlerDataset, IterableDataset):
             mmap_populate=mmap_populate,
             timeout_per_item=timeout_per_item,
             vector_db_path=vector_db_path,
-            train_only_fallback=train_only_fallback,
             db_cutoff=db_cutoff,
         )
         self.train_ctx_size_list = train_ctx_size_list
         self.seed = random.Random(seed).getrandbits(64)
+        #: Optimizer steps already taken by the run this one continues. The
+        #: stream is a function of the counters alone, so starting them where an
+        #: uninterrupted run would have them makes a resume draw the same
+        #: batches -- no re-seeding, and no replay either.
+        self.start_step = start_step
         self.train_tokens_per_gpu = train_tokens_per_gpu
         self.total_bs = total_bs
         self.mask_prob_max_shared = mask_prob_max_shared
@@ -309,14 +323,20 @@ class TrainDataset(RustlerDataset, IterableDataset):
 
     def __iter__(self):
         worker_info = torch.utils.data.get_worker_info()
-        if worker_info is not None:
-            self.sampler.set_step_py(worker_info.id)
-            self.sampler.set_stride_py(worker_info.num_workers)
-            step = worker_info.id
-            stride = worker_info.num_workers
-        else:
-            step = 0
-            stride = 1
+        worker_id = 0 if worker_info is None else worker_info.id
+        stride = 1 if worker_info is None else worker_info.num_workers
+        step, sampler_step = resume_positions(
+            seed=self.seed,
+            train_ctx_size_list=self.train_ctx_size_list,
+            train_tokens_per_gpu=self.train_tokens_per_gpu,
+            total_bs=self.total_bs,
+            world_size=self.world_size,
+            start_step=self.start_step,
+            worker_id=worker_id,
+            stride=stride,
+        )
+        self.sampler.set_step_py(sampler_step)
+        self.sampler.set_stride_py(stride)
         # Single ctx_size: yield individual microbatches so workers prefetch
         # in parallel. List-yielding (multi-ctx case) blocks each worker for
         # grad_accum batches before yielding, which is unnecessary here since
@@ -347,6 +367,61 @@ class TrainDataset(RustlerDataset, IterableDataset):
                     batches.append(self._process_batch(tup))
                 yield batches
             step += stride
+
+
+def resume_positions(
+    *,
+    seed: int,
+    train_ctx_size_list: list[int],
+    train_tokens_per_gpu: int,
+    total_bs: int,
+    world_size: int,
+    start_step: int,
+    worker_id: int,
+    stride: int,
+) -> tuple[int, int]:
+    """Where worker `worker_id` stands after `start_step` optimizer steps.
+
+    Returns `(ctx_step, sampler_step)`: the value the ctx-size selector and the
+    rustler sampler's own counter would hold in a run that was never
+    interrupted. Resuming there reproduces that run's stream exactly, rather
+    than a differently-seeded one.
+
+    Two counters, advancing at different rates. The ctx selector indexes
+    optimizer steps and moves by `stride` per yield; the sampler is a *batch*
+    counter and moves by `stride` per `batch_py`, of which one optimizer step
+    makes `grad_accum` -- and `grad_accum` depends on the ctx size that step
+    drew, so the walk is simulated rather than solved. It is integer work over
+    `start_step / stride` iterations: microseconds, no data touched.
+    """
+    ctx_step = worker_id
+    sampler_step = worker_id
+    if start_step <= 0:
+        return ctx_step, sampler_step
+    single_ctx = len(train_ctx_size_list) == 1
+    if single_ctx:
+        # One yield per microbatch: both counters move by `stride` together, and
+        # an optimizer step consumes `grad_accum` yields.
+        ctx = train_ctx_size_list[0]
+        train_bs = max(1, train_tokens_per_gpu // ctx)
+        grad_accum = (
+            1 if total_bs < world_size * train_bs
+            else total_bs // (world_size * train_bs)
+        )
+        target = start_step * grad_accum
+        while ctx_step < target:
+            ctx_step += stride
+        return ctx_step, ctx_step
+    while ctx_step < start_step:
+        ctx = random.Random(seed + ctx_step).choice(train_ctx_size_list)
+        train_bs = max(1, train_tokens_per_gpu // ctx)
+        if total_bs < world_size * train_bs:
+            grad_accum = 1
+        else:
+            grad_accum = total_bs // (world_size * train_bs)
+        sampler_step += stride * grad_accum
+        ctx_step += stride
+    return ctx_step, sampler_step
 
 
 class EvalDataset(Dataset):
