@@ -274,7 +274,14 @@ def submit_nosem_data() -> None:
 REL_F1 = [(db, t) for db, t in TASKS if db == "rel-f1"]
 
 if __name__ == "__main__":
-    # The rdblearn FAISS indices are complete: the rdblearn-similarity
-    # retriever arm goes out (its setup step rebuilds rustler with the vecdb
-    # feature). The rt-similarity arm waits on the rt embedding jobs.
-    submit_arm("abl/vdb_rdblearn", TASKS, lambda db: gpu_resources(db, "il-lo"))
+    # hyperturing2's future slots are claimed a day out by higher-priority
+    # il-lo work, so the pinned TabICL fleet sat on ReqNodeNotAvail; it moves
+    # to the unpinned ampere pool, which churns steadily (an a100 also runs
+    # TabICL ~2-3x faster than an rtx8000). Finished task JSONs skip.
+    for arm in [
+        "fulltest/sql_tabicl",
+        "subsampled/sql_tabicl",
+        "fulltest/rdblearn_tabicl",
+        "subsampled/rdblearn_tabicl",
+    ]:
+        submit_arm(arm, TASKS, lambda db: gpu_resources(db, "il-lo"))
