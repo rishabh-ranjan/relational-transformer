@@ -110,7 +110,7 @@ def main() -> None:
             seed=0,
             mmap_populate=False,
             timeout_per_item=10.0,
-            eval_freq=1_000_000,  # the final eval at the last step is enough
+            eval_freq=20,  # once, at the last step
             keep_all_ckpts=False,
             vector_db_path=None,
             db_cutoff="test",
