@@ -29,7 +29,11 @@ _ALLOC_CONF = "expandable_segments:True"
 # that goes silent with every rank parked in a collective. The buffer costs a
 # few MB per rank and the dump fires only on failure.
 _FR_BUFFER_SIZE = "20000"
-_FR_DUMP_TEMP_FILE = "/tmp/nccl_trace_rank_"
+# Per job, so two jobs on one node do not overwrite each other's dump.
+_FR_DUMP_TEMP_FILE = (
+    f"{os.environ.get('TMPDIR', '/tmp')}/nccl_trace_"
+    f"job{os.environ.get('SLURM_JOB_ID', os.getpid())}_rank_"
+)
 
 # Inductor cache visibility: hit/miss/bypass lines say whether a restart is
 # reusing the on-disk compile cache or paying full compile cost. Worth having

@@ -384,8 +384,10 @@ def resume_positions(
 
     Returns `(ctx_step, sampler_step)`: the value the ctx-size selector and the
     rustler sampler's own counter would hold in a run that was never
-    interrupted. Resuming there reproduces that run's stream exactly, rather
-    than a differently-seeded one.
+    interrupted. Resuming at the same `world_size` reproduces that run's
+    stream exactly; at a different one the sampler's batch counter lands where
+    a run that had always used the new count would be, so the draw from there
+    on is fresh rather than a replay.
 
     Two counters, advancing at different rates. The ctx selector indexes
     optimizer steps and moves by `stride` per yield; the sampler is a *batch*

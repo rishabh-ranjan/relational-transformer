@@ -583,7 +583,9 @@ class RelationalTransformer(nn.Module):
             yhat_out[t] = yhat
 
         # Normalize by number of masks per sequence, then average across sequences
-        masks_per_seq = masks.sum(dim=1).float()  # (B,)
+        # clamp_min(1): a sequence with no target (eval's phantom rows) has a
+        # zero loss sum, and 0/1 keeps it finite instead of NaN.
+        masks_per_seq = masks.sum(dim=1).float().clamp_min(1.0)  # (B,)
         loss_per_seq = loss_per_seq / masks_per_seq  # (B,)
         loss_out = loss_per_seq.mean()  # scalar
 

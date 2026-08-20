@@ -201,6 +201,11 @@ def main() -> None:
         log_root=f"/dfs/user/{USER}/slurm-logs/rishabh-ranjan/relational-transformer/expts/pretrain",
         clone_root=f"/lfs/local/0/{USER}/roach_clones",
         secrets_dir=f"/dfs/user/{USER}/.secrets",
+        # The stop flag is acted on at a step boundary, after any in-loop eval
+        # in flight (21 tasks at ctx 8192: minutes). Long enough to cover one,
+        # so a wall-clock ending still requeues instead of being killed
+        # mid-eval.
+        timeout_grace_secs=1800,
     )
 
 

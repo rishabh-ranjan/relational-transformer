@@ -182,7 +182,9 @@ def eval_avg_metrics(evaluators, nets_with_prefix, ctx_size_list):
             # it is plotted against have to be in the same units.
             v *= 100.0
         except ValueError:
-            # e.g. a single-class slice -> ROC AUC undefined; skip this task.
+            # e.g. a single-class slice -> ROC AUC undefined. The task drops
+            # out of this round's mean, and the mean is over fewer tasks.
+            log(eval_metric_undefined=f"{prefix}/{split}/{task_key}")
             continue
         # setdefault: a task with an empty split is absent from
         # ``eval_splits`` but still yielded, and still worth a curve.
@@ -404,6 +406,10 @@ def main(
             if job
             else f"{int(time.time())}"
         )
+        # Under the run's own directory: the cwd is the node's clone, shared
+        # by every job at that commit and read-only by contract.
+        wandb_dir = Path(out_root).expanduser() / run_subdir(entity, project, run_id)
+        wandb_dir.mkdir(parents=True, exist_ok=True)
         wandb.init(
             project=project,
             entity=entity,
@@ -412,6 +418,7 @@ def main(
             group=run_id,
             resume="never",
             config=params,
+            dir=str(wandb_dir),
             settings=wandb.Settings(
                 # Downloadable, live console while the attempt is running --
                 # it will not survive to upload an output.log on finish.

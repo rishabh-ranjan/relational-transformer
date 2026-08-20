@@ -44,8 +44,7 @@ for s in wandb huggingface github; do
 done
 
 # pixi lives in the node-local home, and so do the environments it builds
-# (detached-environments is off, so each env sits inside its project, and
-# projects are node-local clones under $TMPDIR).
+# (keyed on the project path; projects are node-local clones).
 export PIXI_HOME=$HOME/.pixi
 export PATH=$PIXI_HOME/bin:/usr/local/bin:/usr/bin:/bin
 unset PYTHONPATH  # points into a home that is not this job's home
