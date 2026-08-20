@@ -46,14 +46,14 @@ dependencies = [
 # and plots under expts/. None of it is imported from `src/rt`.
 dev = [
     # Builds the FAISS indices the sampler's opt-in vecdb feature reads
-    # (expts/repaper_baselines/build_vector_db.py).
+    # (expts/repaper/baselines/build_vector_db.py).
     "faiss-cpu",
     "lightgbm",
     "matplotlib",
     "pre-commit",
     "pytest",
     # TabICL v2, the in-context tabular predictor of the rel2tab baselines
-    # (expts/repaper_baselines).
+    # (expts/repaper/baselines).
     "tabicl>=2.1.1,<3",
     "tqdm",
     "wandb-workspaces",
@@ -140,12 +140,12 @@ relational-transformer = { path = ".", editable = true, extras = ["dev"] }
 # rerunning it from its branch.
 relbench = { git = "https://github.com/rishabh-ranjan/relbench", branch = "main" }
 
-# Baseline featurization (expts/repaper_baselines) runs against the classic
+# Baseline featurization (expts/repaper/baselines) runs against the classic
 # relbench 2.x API (`relbench.datasets` / `relbench.tasks`), which the fork
 # above does not carry, so it gets its own environment and the two pins never
 # meet. `rdblearn` itself cannot be solved here -- its pins conflict with
 # autogluon's -- and is fetched by the experiment's setup step
-# (`uv pip install --no-deps ...`; see expts/repaper_baselines/README.md).
+# (`uv pip install --no-deps ...`; see expts/repaper/baselines/README.md).
 [tool.pixi.feature.featurize.dependencies]
 python = "3.12.*"
 uv = "*"
