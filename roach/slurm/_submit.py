@@ -105,7 +105,7 @@ def _git(*args: str) -> str:
     ).stdout.strip()
 
 
-def launch(resources: Resources, target: str, args_path: str) -> str:
+def launch(resources: Resources, target: str, args_path: str, pixi_env: str) -> str:
     """The srun line that starts the ranks, spliced into the batch script.
 
     `--export=ALL`. There is one rule, applied at two layers: **nothing from the
@@ -126,7 +126,10 @@ def launch(resources: Resources, target: str, args_path: str) -> str:
     does not exist on any other node. `$REPO_DIR` is the unresolved one, and
     each node resolves it to its own disk.
     """
-    run = f'pixi run --frozen python -m roach.slurm.run "{target}" "{args_path}"'
+    run = (
+        f"pixi run --frozen -e {pixi_env} python -m roach.slurm.run "
+        f'"{target}" "{args_path}"'
+    )
     return (
         "srun --export=ALL --chdir=$REPO_DIR --label --kill-on-bad-exit=1 \\\n"
         f"    {run}"
@@ -147,6 +150,7 @@ def submit(
     run_id: str | None = None,
     after: str | None = None,
     timeout_grace_secs: int = 300,
+    pixi_env: str = "default",
 ) -> Job:
     """Run ``target(**args)`` on ``resources``, one rank per GPU.
 
@@ -200,7 +204,7 @@ def submit(
         "@SECRETS_DIR@": str(secrets_dir),
         "@SETUP@": "\n".join(setup),
         "@ENV@": env_sh,
-        "@LAUNCH@": launch(resources, target, str(args_path)),
+        "@LAUNCH@": launch(resources, target, str(args_path), pixi_env),
         "@REQUEUE_ON_TIMEOUT@": "1" if timeout_grace_secs else "0",
     }.items():
         script = script.replace(key, value)

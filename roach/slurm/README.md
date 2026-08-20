@@ -12,6 +12,9 @@ submit(
     resources=BLACKWELL,           # or Resources(...) for another shape
     name="lr-1e-3",
     setup=(),                      # extra build/fetch commands, run in the clone
+    pixi_env="default",            # pixi environment the ranks run under; an
+                                   # env pixi does not build by default needs a
+                                   # `pixi install -e <env>` in `setup`
     repo_root=..., log_root=..., clone_root=..., secrets_dir=...,
 )
 ```

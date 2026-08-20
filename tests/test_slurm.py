@@ -185,7 +185,7 @@ def test_the_launcher_lets_srun_inherit_the_job_environment():
     """--export=NONE (which keeps the submit shell out of the job) also stops
     srun from passing the job's own environment to its tasks, so `pixi` is not
     on their PATH; SLURM_EXPORT_ENV=ALL puts it back."""
-    assert "--export=ALL" in launch(ampere(), "pkg:main", "/args.json")
+    assert "--export=ALL" in launch(ampere(), "pkg:main", "/args.json", "default")
 
 
 def test_presets_are_one_rank_per_gpu():
