@@ -12,13 +12,19 @@ from pathlib import Path
 
 from roach.slurm import Resources, submit
 
-REPO_ROOT = Path(__file__).resolve().parents[2]
-PRE_DIR = "/dfs/user/ranjanr/share/stanford-star/relbench-preprocessed"
-OUT_DIR = "/dfs/user/ranjanr/ckpts/rtv2/repaper-valtest/tuned"
-LOG_ROOT = (
-    "/dfs/user/ranjanr/slurm-logs/rishabh-ranjan/relational-transformer/"
-    "expts/repaper_valtest"
+from expts.repaper_config import (
+    CKPT_CLF,
+    CKPT_REG,
+    CLONE_ROOT,
+    LOG_ROOT,
+    OUT_ROOT,
+    PRE_DIR,
+    SECRETS_DIR,
 )
+
+REPO_ROOT = Path(__file__).resolve().parents[2]
+OUT_DIR = f"{OUT_ROOT}/repaper-valtest/tuned"
+LOG_ROOT = f"{LOG_ROOT}/repaper_valtest"
 
 MEM = {
     "rel-amazon": "120G",
@@ -64,8 +70,8 @@ if __name__ == "__main__":
                 mmap_populate=True,
                 db_cutoff=None,
                 vector_db_path=None,
-                ckpt_clf="/dfs/user/ranjanr/share/stanford-star/rt-j/classification",
-                ckpt_reg="/dfs/user/ranjanr/share/stanford-star/rt-j/regression",
+                ckpt_clf=CKPT_CLF,
+                ckpt_reg=CKPT_REG,
                 tabicl_dir=None,
                 tabicl_max_batch_size=1024,
                 tabicl_min_bin_size=48,
@@ -91,6 +97,6 @@ if __name__ == "__main__":
             name=f"valtest-{db}-{table}",
             repo_root=str(REPO_ROOT),
             log_root=LOG_ROOT,
-            clone_root="/lfs/local/0/roach_clones",
-            secrets_dir="/dfs/user/ranjanr/.secrets",
+            clone_root=CLONE_ROOT,
+            secrets_dir=SECRETS_DIR,
         )

@@ -19,8 +19,7 @@ from pathlib import Path
 
 import pandas as pd
 
-RAW_DIR = "/dfs/user/ranjanr/share/stanford-star/relbench"
-PRE_DIR = "/dfs/user/ranjanr/share/stanford-star/relbench-preprocessed"
+from expts.repaper_config import PRE_DIR, RAW_DIR
 
 
 def main() -> None:

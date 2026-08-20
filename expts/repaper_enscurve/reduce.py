@@ -12,9 +12,11 @@ from pathlib import Path
 import numpy as np
 import wandb
 
+from expts.repaper_config import OUT_ROOT, project
+
 ENTITY = "rtv2"
-PROJECT = "2026-08-19-repaper-enscurve"
-OUT_ROOT = "/dfs/user/ranjanr/ckpts/rtv2/repaper-enscurve"
+PROJECT = project("enscurve")
+OUT_ROOT = f"{OUT_ROOT}/repaper-enscurve"
 N_TASKS = 21
 N_SEEDS = 16
 

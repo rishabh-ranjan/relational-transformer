@@ -19,11 +19,10 @@ from pathlib import Path
 
 import numpy as np
 
-PRE_DIR = "/dfs/user/ranjanr/share/stanford-star/relbench-preprocessed"
-OUT_ROOT = Path("/dfs/user/ranjanr/ckpts/rtv2/repaper-submit")
-CSV_DIR = Path(
-    "/dfs/user/ranjanr/share/relational-transformer/repaper/leaderboard/preds"
-)
+from expts.repaper_config import OUT_ROOT, PRE_DIR, SHARE, project
+
+OUT_ROOT = Path(OUT_ROOT) / "repaper-submit"
+CSV_DIR = Path(SHARE) / "leaderboard" / "preds"
 EMBEDDER = "all-MiniLM-L12-v2"
 N_CFGS = 4
 N_SEEDS = 4
@@ -84,7 +83,7 @@ def main() -> None:
 
     run = wandb.init(
         entity="rtv2",
-        project="2026-08-19-repaper-submit",
+        project=project("submit"),
         name="rtj-top4x4",
         reinit="finish_previous",
     )

@@ -12,13 +12,19 @@ from pathlib import Path
 
 from roach.slurm import Resources, submit
 
-REPO_ROOT = Path(__file__).resolve().parents[2]
-PRE_DIR = "/dfs/user/ranjanr/share/stanford-star/relbench-preprocessed"
-OUT_ROOT = "/dfs/user/ranjanr/ckpts/rtv2/repaper-submit"
-LOG_ROOT = (
-    "/dfs/user/ranjanr/slurm-logs/rishabh-ranjan/relational-transformer/"
-    "expts/repaper_submit"
+from expts.repaper_config import (
+    CKPT_CLF,
+    CKPT_REG,
+    CLONE_ROOT,
+    LOG_ROOT,
+    OUT_ROOT,
+    PRE_DIR,
+    SECRETS_DIR,
 )
+
+REPO_ROOT = Path(__file__).resolve().parents[2]
+OUT_ROOT = f"{OUT_ROOT}/repaper-submit"
+LOG_ROOT = f"{LOG_ROOT}/repaper_submit"
 
 MEM = {
     "rel-amazon": "120G",
@@ -84,13 +90,13 @@ if __name__ == "__main__":
                     prefetch_factor=2,
                     mmap_populate=True,
                     db_cutoff=None,
-                    ckpt_clf="/dfs/user/ranjanr/share/stanford-star/rt-j/classification",
-                    ckpt_reg="/dfs/user/ranjanr/share/stanford-star/rt-j/regression",
+                    ckpt_clf=CKPT_CLF,
+                    ckpt_reg=CKPT_REG,
                 ),
                 resources=resources(db, "il-lo"),
                 name=f"sub-cfg{rank}-{db}-{table}",
                 repo_root=str(REPO_ROOT),
                 log_root=LOG_ROOT,
-                clone_root="/lfs/local/0/roach_clones",
-                secrets_dir="/dfs/user/ranjanr/.secrets",
+                clone_root=CLONE_ROOT,
+                secrets_dir=SECRETS_DIR,
             )

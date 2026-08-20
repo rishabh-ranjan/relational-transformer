@@ -18,14 +18,20 @@ from pathlib import Path
 
 from roach.slurm import Resources, submit
 
-REPO_ROOT = Path(__file__).resolve().parents[2]
-PRE_DIR = "/dfs/user/ranjanr/share/stanford-star/relbench-preprocessed"
-OUT_ROOT = "/dfs/user/ranjanr/ckpts"
-PROJECT = "2026-08-19-repaper-tune"
-LOG_ROOT = (
-    "/dfs/user/ranjanr/slurm-logs/rishabh-ranjan/relational-transformer/"
-    "expts/repaper_tune"
+from expts.repaper_config import (
+    CKPT_CLF,
+    CKPT_REG,
+    CLONE_ROOT,
+    LOG_ROOT,
+    OUT_ROOT,
+    PRE_DIR,
+    SECRETS_DIR,
+    project,
 )
+
+REPO_ROOT = Path(__file__).resolve().parents[2]
+PROJECT = project("tune")
+LOG_ROOT = f"{LOG_ROOT}/repaper_tune"
 
 TASKS = [
     tuple(p)
@@ -117,20 +123,14 @@ def submit_task(db: str, table: str, qos: str, gpu: str = "a100:1") -> None:
             out_root=OUT_ROOT,
             wandb_disabled=True,
         )
-        | {
-            "load_ckpt_path": (
-                "/dfs/user/ranjanr/share/stanford-star/rt-j/classification"
-                if (db, table) in CLF
-                else "/dfs/user/ranjanr/share/stanford-star/rt-j/regression"
-            )
-        },
+        | {"load_ckpt_path": (CKPT_CLF if (db, table) in CLF else CKPT_REG)},
         resources=resources(db, qos, gpu),
         name=f"tune-{db}-{table}",
         run_id=run_id,
         repo_root=str(REPO_ROOT),
         log_root=LOG_ROOT,
-        clone_root="/lfs/local/0/roach_clones",
-        secrets_dir="/dfs/user/ranjanr/.secrets",
+        clone_root=CLONE_ROOT,
+        secrets_dir=SECRETS_DIR,
     )
 
 
@@ -150,31 +150,11 @@ CLF = {
 }
 
 if __name__ == "__main__":
-    # The grid is the critical path (the tuned enscurve arm, the
-    # default-vs-tuned table and the leaderboard ensemble all wait on it), so
-    # it gets the high tiers -- and blackwell1's eight b200s are all held by
-    # il-lo jobs right now, so the high tiers preempt straight onto them:
-    # 2 b200 through il (its b200 sub-cap) + 2 through il-interactive, on the
-    # four rel-amazon tasks, the longest tuning jobs. This round moves those
-    # four off the amperes they started on (a move costs at most one in-flight
-    # grid entry; ensemble_resume.pt carries the finished ones).
-    HIGH = {
-        ("rel-amazon", "user-churn"): "il",
-        ("rel-amazon", "user-ltv"): "il",
-        ("rel-amazon", "item-churn"): "il-interactive",
-        ("rel-amazon", "item-ltv"): "il-interactive",
-    }
-    # The amazon grids finished and handed the high tiers back; the four
-    # biggest still-pending jobs take their b200 slots (yanay's refill is
-    # il-lo again, so the tiers preempt straight on).
-    PROMOTE = {
-        ("rel-hm", "item-sales"): "il",
-        ("rel-hm", "user-churn"): "il",
-        ("rel-stack", "post-votes"): "il-interactive",
-        ("rel-stack", "user-badge"): "il-interactive",
-    }
-    for (db, table), qos in PROMOTE.items():
-        submit_task(db, table, qos, gpu="b200:1")
-    # for db, table in TASKS:
-    #     if (db, table) not in HIGH:
-    #         submit_task(db, table, "il-lo")
+    # One job per task, resumable; the grid is the critical path for the tuned
+    # ensemble curve, the default-vs-tuned table and the leaderboard ensemble,
+    # so give it the high tiers: e.g. submit_task(db, table, "il-interactive",
+    # gpu="b200:1") for the biggest databases (rel-amazon, then rel-hm /
+    # rel-stack), il-lo for the rest. A job moved between tiers keeps its
+    # run_id and resumes from ensemble_resume.pt.
+    for db, table in TASKS:
+        submit_task(db, table, "il-lo")

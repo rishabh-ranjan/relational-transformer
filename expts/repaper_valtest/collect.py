@@ -15,8 +15,10 @@ from pathlib import Path
 import numpy as np
 import wandb
 
-DEFAULT_DIR = Path("/dfs/user/ranjanr/ckpts/rtv2/repaper-scaling/subsampled/rt")
-TUNED_DIR = Path("/dfs/user/ranjanr/ckpts/rtv2/repaper-valtest/tuned")
+from expts.repaper_config import OUT_ROOT, project
+
+DEFAULT_DIR = Path(OUT_ROOT) / "repaper-scaling" / "subsampled" / "rt"
+TUNED_DIR = Path(OUT_ROOT) / "repaper-valtest" / "tuned"
 N_TASKS = 21
 
 
@@ -59,7 +61,7 @@ def main() -> None:
 
     run = wandb.init(
         entity="rtv2",
-        project="2026-08-19-repaper-valtest",
+        project=project("valtest"),
         name="valtest",
         reinit="finish_previous",
     )

@@ -5,15 +5,20 @@ from pathlib import Path
 
 from roach.slurm import Resources, submit
 
-REPO_ROOT = Path(__file__).resolve().parents[2]
-PRE_DIR = "/dfs/user/ranjanr/share/stanford-star/relbench-preprocessed"
-SHARE = "/dfs/user/ranjanr/share/relational-transformer/repaper"
-DB_TASK_LIST = f"{PRE_DIR}/db-task-lists/forecast.json"
-RAW_DIR = "/dfs/user/ranjanr/share/stanford-star/relbench"
-LOG_ROOT = (
-    "/dfs/user/ranjanr/slurm-logs/rishabh-ranjan/relational-transformer/"
-    "expts/repaper_baselines"
+from expts.repaper_config import (
+    CKPT_CLF,
+    CKPT_REG,
+    CLONE_ROOT,
+    LOG_ROOT,
+    PRE_DIR,
+    RAW_DIR,
+    SECRETS_DIR,
+    SHARE,
 )
+
+REPO_ROOT = Path(__file__).resolve().parents[2]
+DB_TASK_LIST = f"{PRE_DIR}/db-task-lists/forecast.json"
+LOG_ROOT = f"{LOG_ROOT}/repaper_baselines"
 
 PAIRS = [tuple(p) for p in json.loads(Path(DB_TASK_LIST).read_text())]
 DBS = sorted({db for db, _ in PAIRS})
@@ -85,8 +90,8 @@ SETUP = (
 COMMON = dict(
     repo_root=str(REPO_ROOT),
     log_root=LOG_ROOT,
-    clone_root="/lfs/local/0/roach_clones",
-    secrets_dir="/dfs/user/ranjanr/.secrets",
+    clone_root=CLONE_ROOT,
+    secrets_dir=SECRETS_DIR,
     pixi_env="featurize",
     setup=SETUP,
 )
@@ -142,8 +147,8 @@ def submit_rt(dbs=None) -> None:
                 db_task_list=DB_TASK_LIST,
                 pre_dir=PRE_DIR,
                 features_root=f"{SHARE}/features",
-                ckpt_clf="/dfs/user/ranjanr/share/stanford-star/rt-j/classification",
-                ckpt_reg="/dfs/user/ranjanr/share/stanford-star/rt-j/regression",
+                ckpt_clf=CKPT_CLF,
+                ckpt_reg=CKPT_REG,
                 local_ctx_size=256,
                 bfs_width=32,
                 shuffle_seed=0,
@@ -199,9 +204,14 @@ def submit_vecdb(subdirs) -> None:
 
 
 if __name__ == "__main__":
-    # All 21 rt-embedding tables are on disk: build their FAISS indices.
-    submit_vecdb(["rt_features"])
-    # submit_rt()
-    # submit_rdblearn()
-    # submit_sql()
-    # submit_vecdb()   # after the feature blobs exist
+    # Stage 1 (featurize env, cpu jobs): the two classic-relbench featurizers.
+    # Stage 2 (default env, one a100 per db): RT row embeddings -- needs only
+    # the checkpoint, so it runs alongside stage 1. Every job no-ops on a table
+    # whose blob exists, so resubmitting fills gaps (and a new checkpoint
+    # means deleting the rt_features / vector_db/rt trees first; REPAPER.md).
+    submit_sql()
+    submit_rdblearn()
+    submit_rt()
+    # Stage 3, once a feature set has all 21 *_meta.json files:
+    # submit_vecdb(["rdblearn_features"])
+    # submit_vecdb(["rt_features"])

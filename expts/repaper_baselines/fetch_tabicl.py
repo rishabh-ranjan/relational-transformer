@@ -10,13 +10,14 @@ node:
 import shutil
 from pathlib import Path
 
+from expts.repaper_config import SHARE
 from expts.repaper_baselines.rel2tab.tabicl_batched import (
     CLF_CHECKPOINT,
     HF_REPO,
     REG_CHECKPOINT,
 )
 
-DEST = Path("/dfs/user/ranjanr/share/relational-transformer/repaper/tabicl")
+DEST = Path(SHARE) / "tabicl"
 
 
 def main() -> None:

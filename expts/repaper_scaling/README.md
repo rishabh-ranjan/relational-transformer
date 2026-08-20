@@ -68,6 +68,16 @@ ctx size under the `ctx_scaling/steps=0/test/*` keys (aggregates) and
 | `rtv2/2026-08-19-repaper-subsampled` | the five subsampled arms |
 | `rtv2/2026-08-19-repaper-abl` | the six ablation arms + `abl/rw`,`abl/sem` re-logged from `subsampled/rt` |
 
+## Placement
+
+One a100 per RT or TabICL job through `il-lo` (TabICL also runs on an rtx8000
+at about a third of the speed, but do not pin a sweep to hyperturing2: its
+future slots get back-fill-claimed a day out and pinned jobs park on
+`ReqNodeNotAvail`); 32-cpu zero-gres slots for LightGBM, whose per-row fits
+`predict_batch` fans across the job's cpus. Spend the high tiers on the
+longest poles -- blackwell1's b200s are usually held by preemptible `il-lo`
+jobs, which `il` / `il-interactive` preempt straight away.
+
 ## Measured runtimes
 
 One a100, startup (clone build + compile) included, full-test RT arm:

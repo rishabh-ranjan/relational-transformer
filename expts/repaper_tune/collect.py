@@ -11,9 +11,9 @@ import ast
 import json
 from pathlib import Path
 
-PRE_DIR = "/dfs/user/ranjanr/share/stanford-star/relbench-preprocessed"
-OUT_ROOT = "/dfs/user/ranjanr/ckpts"
-PROJECT = "2026-08-19-repaper-tune"
+from expts.repaper_config import OUT_ROOT, PRE_DIR, project
+
+PROJECT = project("tune")
 N_TOP = 4  # configs the leaderboard ensemble keeps per task
 N_CFGS = 120  # every job must have scored the whole grid
 

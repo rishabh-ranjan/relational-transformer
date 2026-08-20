@@ -27,13 +27,19 @@ from pathlib import Path
 
 from roach.slurm import AMPERE_LO, submit
 
-REPO_ROOT = Path(__file__).resolve().parents[2]
-PRE_DIR = "/dfs/user/ranjanr/share/stanford-star/the-join-preprocessed"
-SHARE = "/dfs/user/ranjanr/share/relational-transformer/repaper"
-LOG_ROOT = (
-    "/dfs/user/ranjanr/slurm-logs/rishabh-ranjan/relational-transformer/"
-    "expts/repaper_pretrain_abl"
+from expts.repaper_config import (
+    CLONE_ROOT,
+    JOIN_PRE_DIR,
+    LOG_ROOT,
+    PRE_DIR,
+    SECRETS_DIR,
+    SHARE,
+    project,
 )
+
+REPO_ROOT = Path(__file__).resolve().parents[2]
+PRE_DIR_JOIN = JOIN_PRE_DIR
+LOG_ROOT = f"{LOG_ROOT}/repaper_pretrain_abl"
 
 EVAL_TASKS = [
     (db, task)
@@ -48,7 +54,7 @@ def mix_list(kind: str) -> str:
     task family."""
     out = Path(SHARE) / "db-task-lists" / f"rt-j-{kind}.json"
     if not out.exists():
-        base = Path(PRE_DIR) / "db-task-lists"
+        base = Path(PRE_DIR_JOIN) / "db-task-lists"
         rtj = {tuple(p) for p in json.loads((base / "rt-j.json").read_text())}
         fam = {tuple(p) for p in json.loads((base / f"{kind}.json").read_text())}
         pairs = sorted(rtj & fam)
@@ -84,9 +90,9 @@ def submit_arm(arm: str, run_id: str | None) -> None:
             loss_fn="huber",
             load_ckpt_path=None,
             # data: the Join's mixture
-            db_task_list=f"{PRE_DIR}/db-task-lists/rt-j.json",
+            db_task_list=f"{PRE_DIR_JOIN}/db-task-lists/rt-j.json",
             train_splits=["train"],
-            pre_dir=PRE_DIR,
+            pre_dir=PRE_DIR_JOIN,
             tokens_per_gpu=2**17,
             num_workers=16,
             prefetch_factor=2,
@@ -127,7 +133,7 @@ def submit_arm(arm: str, run_id: str | None) -> None:
             # in-loop validation: identical to the base run
             eval_splits=["val"],
             eval_db_task_list=EVAL_TASKS,
-            eval_pre_dir="/dfs/user/ranjanr/share/stanford-star/relbench-preprocessed",
+            eval_pre_dir=PRE_DIR,
             eval_tokens_per_gpu=2**17,
             eval_num_workers=1,
             eval_prefetch_factor=2,
@@ -143,7 +149,7 @@ def submit_arm(arm: str, run_id: str | None) -> None:
             eval_lcs_bw_pl_grid=[(256, 32, True)],
             # logging
             targets={},
-            project="2026-08-19-repaper-pretrain-abl",
+            project=project("pretrain-abl"),
             entity="rtv2",
             run_name=arm,
             wandb_disabled=False,
@@ -161,8 +167,8 @@ def submit_arm(arm: str, run_id: str | None) -> None:
         run_id=run_id,
         repo_root=str(REPO_ROOT),
         log_root=LOG_ROOT,
-        clone_root="/lfs/local/0/roach_clones",
-        secrets_dir="/dfs/user/ranjanr/.secrets",
+        clone_root=CLONE_ROOT,
+        secrets_dir=SECRETS_DIR,
     )
 
 

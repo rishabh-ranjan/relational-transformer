@@ -15,7 +15,7 @@ import json
 import os
 from pathlib import Path
 
-PRE_DIR = "/dfs/user/ranjanr/share/stanford-star/relbench-preprocessed"
+from expts.repaper_config import PRE_DIR
 
 
 def main() -> None:

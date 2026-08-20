@@ -12,16 +12,20 @@ from pathlib import Path
 
 from roach.slurm import Resources, submit
 
-REPO_ROOT = Path(__file__).resolve().parents[2]
-PRE_DIR = "/dfs/user/ranjanr/share/stanford-star/relbench-preprocessed"
-SHARE = "/dfs/user/ranjanr/share/relational-transformer/repaper"
-OUT_ROOT = "/dfs/user/ranjanr/ckpts/rtv2/repaper-scaling"
-LOG_ROOT = (
-    "/dfs/user/ranjanr/slurm-logs/rishabh-ranjan/relational-transformer/"
-    "expts/repaper_scaling"
+from expts.repaper_config import (
+    CKPT_CLF,
+    CKPT_REG,
+    CLONE_ROOT,
+    LOG_ROOT,
+    OUT_ROOT,
+    PRE_DIR,
+    SECRETS_DIR,
+    SHARE,
 )
-CKPT_CLF = "/dfs/user/ranjanr/share/stanford-star/rt-j/classification"
-CKPT_REG = "/dfs/user/ranjanr/share/stanford-star/rt-j/regression"
+
+REPO_ROOT = Path(__file__).resolve().parents[2]
+OUT_ROOT = f"{OUT_ROOT}/repaper-scaling"
+LOG_ROOT = f"{LOG_ROOT}/repaper_scaling"
 
 TASKS = [
     tuple(p)
@@ -56,7 +60,7 @@ DEFAULTS = dict(
     tabicl_max_batch_size=1024,
     tabicl_min_bin_size=48,
     tabicl_softmax_temperature=0.9,
-    lgbm_n_jobs=8,
+    lgbm_n_jobs=32,  # matches cpu_resources; predict_batch fans fits across them
 )
 
 RT_CTX = [256, 512, 1024, 2048, 4096, 8192]
@@ -232,8 +236,8 @@ def submit_arm(arm: str, tasks, resources_for) -> None:
             name=f"scal-{arm.replace('/', '-')}-{db}-{table}",
             repo_root=str(REPO_ROOT),
             log_root=LOG_ROOT,
-            clone_root="/lfs/local/0/roach_clones",
-            secrets_dir="/dfs/user/ranjanr/.secrets",
+            clone_root=CLONE_ROOT,
+            secrets_dir=SECRETS_DIR,
             setup=setup,
         )
 
@@ -267,44 +271,36 @@ def submit_nosem_data() -> None:
         name="nosem-data",
         repo_root=str(REPO_ROOT),
         log_root=LOG_ROOT,
-        clone_root="/lfs/local/0/roach_clones",
-        secrets_dir="/dfs/user/ranjanr/.secrets",
+        clone_root=CLONE_ROOT,
+        secrets_dir=SECRETS_DIR,
     )
 
 
-REL_F1 = [(db, t) for db, t in TASKS if db == "rel-f1"]
-
 if __name__ == "__main__":
-    # The serial LightGBM predictor was ~90h from finishing the biggest
-    # full-test tasks -- past its wall. predict_batch now fans fits across
-    # the job's cpus (32); the six stragglers were cancelled and rerun here
-    # (finished task JSONs skip), with lgbm_n_jobs matched to the cpus.
-    lgbm = {**DEFAULTS, "lgbm_n_jobs": 32}
-    for arm in [
-        "fulltest/sql_lgbm",
-        "fulltest/rdblearn_lgbm",
-        "subsampled/sql_lgbm",
-        "subsampled/rdblearn_lgbm",
-    ]:
-        method, overrides = ARMS[arm]
-        for db, table in TASKS:
-            out_dir = f"{OUT_ROOT}/{arm}"
-            if (Path(out_dir) / f"{db}__{table}.json").exists():
-                continue
-            submit(
-                "expts.repaper_scaling.run:main",
-                args={
-                    **lgbm,
-                    **overrides,
-                    "method": method,
-                    "db": db,
-                    "table": table,
-                    "out_dir": out_dir,
-                },
-                resources=cpu_resources(db),
-                name=f"scal-{arm.replace('/', '-')}-{db}-{table}",
-                repo_root=str(REPO_ROOT),
-                log_root=LOG_ROOT,
-                clone_root="/lfs/local/0/roach_clones",
-                secrets_dir="/dfs/user/ranjanr/.secrets",
-            )
+    # Resource plan: work it out against the live cluster at submission
+    # (expts/README.md). RT and TabICL arms take one a100 each; LightGBM arms
+    # take 32-cpu zero-gres slots. Never pin a sweep to hyperturing2 -- its
+    # future slots get back-fill-claimed a day out and pinned jobs park on
+    # ReqNodeNotAvail. blackwell1's b200s are usually held by preemptible
+    # il-lo jobs, so the il / il-interactive tiers preempt straight onto them:
+    # spend those four slots on the longest poles.
+
+    def rt(db):
+        return gpu_resources(db, "il-lo")
+
+    # 1. RT arms need only the checkpoint and the data.
+    submit_nosem_data()  # ~5 min, once; the nosem arm waits for it
+    for arm in ["fulltest/rt", "subsampled/rt", "abl/rand", "abl/bfs32", "abl/bfs256"]:
+        submit_arm(arm, TASKS, rt)
+    # 2. After nosem-data finishes:
+    # submit_arm("abl/nosem", TASKS, rt)
+    # 3. After the sql / rdblearn feature blobs exist (repaper_baselines):
+    # for arm in ["fulltest/sql_tabicl", "subsampled/sql_tabicl",
+    #             "fulltest/rdblearn_tabicl", "subsampled/rdblearn_tabicl"]:
+    #     submit_arm(arm, TASKS, rt)
+    # for arm in ["fulltest/sql_lgbm", "subsampled/sql_lgbm",
+    #             "fulltest/rdblearn_lgbm", "subsampled/rdblearn_lgbm"]:
+    #     submit_arm(arm, TASKS, cpu_resources)
+    # 4. After both FAISS index sets exist:
+    # submit_arm("abl/vdb_rdblearn", TASKS, rt)
+    # submit_arm("abl/vdb_rt", TASKS, rt)
