@@ -199,10 +199,9 @@ def submit_vecdb(subdirs) -> None:
 
 
 if __name__ == "__main__":
-    # rdblearn features are complete; build their FAISS indices. The rt set
-    # follows once its embedding jobs finish.
-    submit_vecdb(["rdblearn_features"])
-    # submit_rt(["rel-f1"])
+    # All 21 rt-embedding tables are on disk: build their FAISS indices.
+    submit_vecdb(["rt_features"])
+    # submit_rt()
     # submit_rdblearn()
     # submit_sql()
     # submit_vecdb()   # after the feature blobs exist
