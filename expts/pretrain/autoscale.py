@@ -1,7 +1,7 @@
 """Keep the pretraining run on the largest shape the cluster will give it now.
 
-    pixi run python expts/pretrain/autoscale.py <run_id>          # act
-    pixi run python expts/pretrain/autoscale.py <run_id> --dry-run
+    pixi run python -m expts.pretrain.autoscale <run_id>          # act
+    pixi run python -m expts.pretrain.autoscale <run_id> --dry-run
 
 Run it on a timer. One pass reads what is free, decides the shape, and gets
 there; it is idempotent, so a pass that has nothing to do prints one line and
@@ -38,7 +38,7 @@ import time
 from pathlib import Path
 
 HERE = Path(__file__).parent
-SUBMIT = HERE / "submit.py"
+REPO_ROOT = HERE.parents[1]
 JOB_NAME = "pretrain"
 # `il` caps a100 at 10 per user. A whole node is 8, so the run fits there only
 # when the rest of this user's jobs are holding 2 or fewer.
@@ -167,8 +167,11 @@ def plan(available: list[str], held_il_a100: int) -> tuple[int, str, list[str]]:
 def submit(run_id: str, nodes: int, qos: str, hosts: list[str], dry: bool) -> None:
     cmd = [
         sys.executable,
-        str(SUBMIT),
+        "-m",
+        "expts.pretrain.submit",
         run_id,
+        "--gpus",
+        "a100:8",
         "--nodes",
         str(nodes),
         "--qos",
@@ -188,7 +191,7 @@ def submit(run_id: str, nodes: int, qos: str, hosts: list[str], dry: bool) -> No
     # other sessions, so one pass can fail on a working tree that is clean again
     # a minute later. Retry once before giving up.
     for attempt in (1, 2):
-        out = subprocess.run(cmd, text=True, capture_output=True)
+        out = subprocess.run(cmd, text=True, capture_output=True, cwd=REPO_ROOT)
         if out.returncode == 0 and out.stdout.strip():
             print(out.stdout.strip())
             return

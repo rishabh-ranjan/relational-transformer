@@ -13,8 +13,8 @@ multi-node shape after touching anything about distributed setup, or on nodes a
 run has just hung on:
 
 ```
-pixi run python expts/pretrain/smoke.py                          # 2 nodes, wherever
-pixi run python expts/pretrain/smoke.py --nodelist ampere3,ampere9
+pixi run python -m expts.pretrain.smoke                          # 2 nodes, wherever
+pixi run python -m expts.pretrain.smoke --nodelist ampere3,ampere9
 ```
 
 A pass is `time_to_first_step` in the log within a minute or so of the ranks

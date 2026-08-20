@@ -30,7 +30,7 @@ the step count has reached `total_steps` -- not because the queue is empty.
 Then, for the life of the run, every ~10 minutes:
 
 ```
-pixi run python expts/pretrain/autoscale.py <run_id>
+pixi run python -m expts.pretrain.autoscale <run_id>
 ```
 
 and keep the two watches of [Watching it](#watching-it) armed. Everything else
@@ -44,8 +44,8 @@ in this file is what to do when one of them fires.
 step, best-so-far -- instead of starting at step 0.
 
 ```
-pixi run python expts/pretrain/submit.py                    # new run, prints its run_id
-pixi run python expts/pretrain/submit.py <run_id>           # resume that run
+pixi run python -m expts.pretrain.submit                    # new run, prints its run_id
+pixi run python -m expts.pretrain.submit <run_id>           # resume that run
 ```
 
 Resume is **GPU-count flexible**: a run stopped on 32 GPUs comes back on 8, or
@@ -59,8 +59,8 @@ before you submit.
 ## Keeping it on the best shape: `autoscale.py`
 
 ```
-pixi run python expts/pretrain/autoscale.py <run_id> --dry-run   # decide, print
-pixi run python expts/pretrain/autoscale.py <run_id>             # decide, act
+pixi run python -m expts.pretrain.autoscale <run_id> --dry-run   # decide, print
+pixi run python -m expts.pretrain.autoscale <run_id>             # decide, act
 ```
 
 One pass reads the cluster, picks the shape, and gets there. Idempotent: a pass

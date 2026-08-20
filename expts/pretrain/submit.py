@@ -6,7 +6,7 @@ import getpass
 import json
 from pathlib import Path
 
-from roach.slurm import AMPERE_LO, Resources, submit
+from roach.slurm import AMPERE_LO, BLACKWELL, Resources, submit
 
 # The checkout this script belongs to, whatever that is, rather than one named
 # clone. `submit` refuses a dirty or unpushed tree, and the usual clone is
@@ -35,23 +35,42 @@ EVAL_TASKS = [
 
 
 # The pretraining shape, as a function of what the cluster will give right now.
-# `nodes` x 8xA100, exclusive: the mixture is populated into each node's page
-# cache, which wants the node's whole memory, and cpus_per_task is 128/8 with
-# it. See [autoscale.py](autoscale.py), which picks the shape and resubmits.
 #
-# il-lo is preemptible and effectively uncapped, which is the only way to hold
-# more than 10 a100s; `il` is not preemptible but caps a100 at 10 per user, so
-# it fits a single node and nothing larger. The run checkpoints and resumes
-# either way, so a preemption costs wall clock rather than work.
-def resources(nodes: int, qos: str, nodelist: str) -> Resources:
+# `a100:8`: `nodes` x 8xA100, exclusive: the mixture is populated into each
+# node's page cache, which wants the node's whole memory, and cpus_per_task is
+# 128/8 with it. See [autoscale.py](autoscale.py), which picks the shape and
+# resubmits. il-lo is preemptible and effectively uncapped, which is the only
+# way to hold more than 10 a100s; `il` is not preemptible but caps a100 at 10
+# per user, so it fits a single node and nothing larger.
+#
+# `b200:N`: N cards of blackwell1, not exclusive (the node is shared, and its
+# 3T of memory holds the mixture beside other jobs). `il-interactive` gives 2
+# of them at the top priority for 12h at a time, `il` gives 2 for 7d, `il-lo`
+# up to 4 preemptibly. The run checkpoints and resumes through preemption and
+# the wall clock alike, so either costs wall clock rather than work.
+def resources(gpus: str, nodes: int, qos: str, nodelist: str) -> Resources:
+    time = {"il-lo": "21-00:00:00", "il": "7-00:00:00", "il-interactive": "12:00:00"}[qos]
+    kind, count = gpus.split(":")
+    if kind == "a100":
+        assert count == "8", gpus
+        return dataclasses.replace(
+            AMPERE_LO,
+            nodes=nodes,
+            qos=qos,
+            time=time,
+            exclusive=True,
+            cpus_per_task=16,
+            nodelist=nodelist,
+        )
+    assert kind == "b200" and nodes == 1 and nodelist == "blackwell1", (gpus, nodes, nodelist)
+    # 36 cpus and 375G per card: MaxMemPerCPU is 10700M, so this is as much
+    # memory as the cpus can carry.
     return dataclasses.replace(
-        AMPERE_LO,
-        nodes=nodes,
+        BLACKWELL,
+        gpus=gpus,
         qos=qos,
-        time="21-00:00:00" if qos == "il-lo" else "7-00:00:00",
-        exclusive=True,
-        cpus_per_task=16,
-        nodelist=nodelist,
+        time=time,
+        mem=f"{375_000 * int(count)}M",
     )
 
 
@@ -63,6 +82,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         help="relaunch this run instead of starting a new one; the run id names "
         "the checkpoint directory, so the job resumes where it left off",
     )
+    p.add_argument("--gpus", required=True, choices=("a100:8", "b200:2", "b200:4"))
     p.add_argument("--nodes", type=int, default=1)
     # No default: the tier is chosen against the cluster at the moment of
     # submission, following
@@ -70,7 +90,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     # subtract what your own jobs already hold, spend the tiers top down.
     # Whatever the last submission used is a record of a different cluster.
     # `autoscale.py` computes it live and always passes it.
-    p.add_argument("--qos", required=True, choices=("il-lo", "il"))
+    p.add_argument("--qos", required=True, choices=("il-lo", "il", "il-interactive"))
     p.add_argument(
         "--nodelist",
         default="ampere1,ampere2,ampere3,ampere4,ampere5,ampere6,ampere7,ampere8,ampere9",
@@ -95,7 +115,10 @@ def main() -> None:
             compile=True,
             materialize_attn_masks=True,
             loss_fn="huber",
-            load_ckpt_path=None,
+            # Warm start (weights only) from RT-PluRel's classifier checkpoint;
+            # the local copy of stanford-star/rt-plurel, since the node does
+            # not fetch from the Hub. Same dims as the model above.
+            load_ckpt_path="/dfs/user/ranjanr/share/stanford-star/rt-plurel/classification",
             # data: the Join's mixture
             db_task_list="/dfs/user/ranjanr/share/stanford-star/the-join-preprocessed/db-task-lists/rt-j.json",
             train_splits=["train"],
@@ -161,11 +184,11 @@ def main() -> None:
             targets={},
             project="2026-08-07-pretrain",
             entity="rtv2",
-            run_name="rt-j",
+            run_name="rt-j-from-rt-plurel",
             wandb_disabled=False,
             out_root=f"/dfs/user/{USER}/ckpts",
         ),
-        resources=resources(args.nodes, args.qos, args.nodelist),
+        resources=resources(args.gpus, args.nodes, args.qos, args.nodelist),
         name="pretrain",
         run_id=args.run_id,
         repo_root=str(REPO_ROOT),

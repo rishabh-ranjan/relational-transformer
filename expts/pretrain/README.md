@@ -26,11 +26,17 @@ node up (see `roach/slurm/env.sh`). Inputs are shared and read-only under
 ## Running it
 
 ```
-pixi run python expts/pretrain/submit.py            # new run; prints its run_id
-pixi run python expts/pretrain/submit.py <run_id>   # resume that run
+pixi run python -m expts.pretrain.submit --gpus a100:8 --qos il            # new run; prints its run_id
+pixi run python -m expts.pretrain.submit <run_id> --gpus a100:8 --qos il   # resume that run
+pixi run python -m expts.pretrain.submit --gpus b200:2 --qos il-interactive --nodelist blackwell1
 ```
 
-8xA100 per node, `--exclusive`. A single node goes on `il` -- not preemptible,
+`--gpus b200:2` on `il-interactive` is 2 cards of blackwell1 at the top
+priority for 12h at a time; the run requeues and resumes across the wall clock
+(each restart costs a cold start, see [MONITOR.md](MONITOR.md)). `autoscale.py`
+only knows the ampere shape.
+
+With `--gpus a100:8`: 8xA100 per node, `--exclusive`. A single node goes on `il` -- not preemptible,
 7d wall, but capped at 10 a100 per user, so it fits one node and nothing wider;
 everything wider goes on the preemptible `il-lo` (21d wall). Prefer `il`
 whenever the cap allows, *including for a job that will sit in the queue*: a
@@ -39,7 +45,7 @@ costs no more. How many nodes, and which queue, is not a constant -- it is
 whatever the cluster will hand over right now:
 
 ```
-pixi run python expts/pretrain/autoscale.py <run_id>   # take the widest free shape
+pixi run python -m expts.pretrain.autoscale <run_id>   # take the widest free shape
 ```
 
 Run that on a timer for the life of the run. It takes 4 whole nodes when 4 are
@@ -54,7 +60,7 @@ nodes a run has just hung on -- [`smoke.py`](smoke.py) runs the same launch
 path on rel-f1 for 20 steps, which takes about a minute:
 
 ```
-pixi run python expts/pretrain/smoke.py --nodelist ampere3,ampere9
+pixi run python -m expts.pretrain.smoke --nodelist ampere3,ampere9
 ```
 
 Neither preemption nor the wall clock needs you: both requeue and resume from
