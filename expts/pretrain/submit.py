@@ -123,7 +123,10 @@ def main() -> None:
             eval_freq=1_000,
             keep_all_ckpts=True,
             vector_db_path=None,
-            db_cutoff="test",
+            # The released run predates the db_cutoff knob (no cutoff existed);
+            # "test" would also resolve every Join source through the Hub at
+            # init and crash on databases without a test timestamp.
+            db_cutoff=None,
             resume_save_mins=20.0,
             # in-loop validation: the benchmark's forecast tasks, val split
             eval_splits=["val"],
