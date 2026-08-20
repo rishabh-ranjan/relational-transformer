@@ -86,6 +86,12 @@ platforms = ["linux-64"]
 # name -- the same binary, resolved through PATH, which puts this environment's
 # bin first -- makes the fingerprint independent of where the environment lives.
 # Measured: a second checkout of the same commit went from 3m39s to 15s.
+[tool.pixi.activation]
+# Sourced on every activation (`pixi run`, `pixi shell`): rebuilds rt.rustler
+# in place whenever anything under rustler/ changed since the last build, so
+# the imported extension can never be stale.
+scripts = ["rustler/develop.sh"]
+
 [tool.pixi.activation.env]
 CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_LINKER = "x86_64-conda-linux-gnu-cc"
 
@@ -107,16 +113,10 @@ maturin = "*"
 uv = "*"
 
 [tool.pixi.pypi-dependencies]
-# The **released wheel**, not an editable install of this checkout. Experiments
-# must exercise the same artifact a user gets from `uv sync --extra rt`, because
-# that is the path that breaks silently: v1.1.0 shipped without
-# `_resolve_cutoff` and every one of our jobs was fine, running the checkout.
-# Bumping this is now part of changing `src/rt` -- `tests/test_release.py` fails
-# if the two drift apart.
-#
-# `expts/` is not packaged (`python-source = "src"`), so it still comes from the
-# checkout, which is what lets a submit script change without a release.
-relational-transformer = { url = "https://github.com/rishabh-ranjan/relational-transformer/releases/download/v1.8.0/relational_transformer-1.8.0-cp311-abi3-manylinux_2_28_x86_64.whl", extras = ["dev"] }
+# This checkout, editable: `pixi install` builds the compiled extension
+# (rt.rustler) into `src/rt/`, and rustler/develop.sh (see
+# [tool.pixi.activation]) rebuilds it on activation whenever rustler/ changed.
+relational-transformer = { path = ".", editable = true, extras = ["dev"] }
 # snap-stanford's relbench, exactly pinned -- NOT the rishabh-ranjan fork `main`
 # carries. This branch exists to run relarena's experiments (see
 # expts/relarena/), and relarena requires relbench 2.1.2: the package version is

@@ -1,8 +1,8 @@
 """Shared fixtures for the relational-transformer test suite.
 
-These tests exercise the *installed wheel* (the public `rt` API + the compiled
-`rt.rustler` engine), so run them against a built + installed package -- e.g.
-`local/test.sh`, or the CI `test` job.
+These tests exercise the installed package (the public `rt` API + the compiled
+`rt.rustler` engine) -- the checkout's own editable install, so `pixi run
+pytest` is all it takes; activation rebuilds `rt.rustler` if rustler/ changed.
 
 Every dependency these tests touch is declared -- torch is a hard dependency of
 the package, polars and pytest come from the `test` extra -- so they import
