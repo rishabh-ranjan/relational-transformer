@@ -20,6 +20,8 @@ PRE_DIR = "/dfs/user/ranjanr/share/stanford-star/relbench-preprocessed"
 
 def main() -> None:
     assert os.environ.get("RELBENCH_CACHE_DIR"), "set RELBENCH_CACHE_DIR"
+    import relbench.base
+    from rdblearn.datasets import RDBDataset
     from relbench.datasets import get_dataset
     from relbench.tasks import get_task
 
@@ -28,6 +30,22 @@ def main() -> None:
         ds = get_dataset(db, download=True)
         rb_db = ds.get_db(upto_test_timestamp=False)
         print(f"{db}: {len(rb_db.table_dict)} tables materialized", flush=True)
+        # rdblearn walks the db's WHOLE task registry (recommendation and
+        # autocomplete tasks included), extracting each into the cache; doing
+        # it here once is what keeps concurrent jobs from racing the same
+        # extraction. Same get_db patch as featurize_rdblearn.
+        _orig_get_db = relbench.base.Dataset.get_db
+
+        def _full_get_db(self, *a, **kw):
+            return _orig_get_db(self, upto_test_timestamp=False)
+
+        _full_get_db.cache_clear = lambda: None
+        relbench.base.Dataset.get_db = _full_get_db
+        try:
+            dataset = RDBDataset.from_relbench(db)
+        finally:
+            relbench.base.Dataset.get_db = _orig_get_db
+        print(f"{db}: rdblearn tasks {sorted(dataset.tasks)}", flush=True)
     for db, task_name in pairs:
         task = get_task(db, task_name, download=True)
         for split in ("train", "val", "test"):

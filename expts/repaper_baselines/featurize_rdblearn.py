@@ -77,10 +77,15 @@ def featurize_table(
     # fastdfs's RelBenchAdapter calls get_db() with no args; the full db (not
     # truncated at the test timestamp) is what allows up-to-date rows in the
     # context window, which matters for rel-f1 -- patch it for this call only.
+    # relbench's autocomplete tasks call ``get_db.cache_clear()`` (the original
+    # is lru_cached); the patch carries a no-op one, since it caches nothing.
     _orig_get_db = relbench.base.Dataset.get_db
-    relbench.base.Dataset.get_db = lambda self, *a, **kw: _orig_get_db(
-        self, upto_test_timestamp=False
-    )
+
+    def _full_get_db(self, *a, **kw):
+        return _orig_get_db(self, upto_test_timestamp=False)
+
+    _full_get_db.cache_clear = lambda: None
+    relbench.base.Dataset.get_db = _full_get_db
     try:
         dataset = RDBDataset.from_relbench(db)
     finally:
