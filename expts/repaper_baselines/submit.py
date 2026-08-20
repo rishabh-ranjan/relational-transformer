@@ -194,7 +194,9 @@ def submit_vecdb() -> None:
 
 
 if __name__ == "__main__":
-    submit_sql()
-    submit_rdblearn()
-    # submit_rt()      # after the sql/rdblearn probes look right
+    # sql features are complete; rdblearn refills are in the queue. The RT
+    # embedding jobs need only the checkpoints and the preprocessed data.
+    submit_rt()
+    # submit_sql()
+    # submit_rdblearn()
     # submit_vecdb()   # after the feature blobs exist
