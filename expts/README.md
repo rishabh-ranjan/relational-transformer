@@ -125,7 +125,8 @@ or gets preempted long after it started training fine. Every time:
   better slot appeared — see
   [Rebalance while it runs](#rebalance-while-it-runs). A round that only looked
   at your own logs missed half of what changed;
-- cancel what is broken, delete what it wrote, fix the cause, resubmit.
+- cancel what is broken, delete its logs and scratch, fix the cause, resubmit
+  -- **never its checkpoints** (see below).
 
 **A pending job is a job to diagnose, not a job to wait for.** `squeue -u
 $USER -o "%.8i %.30j %.14q %.9T %R"` prints a reason beside every one, and only
@@ -433,9 +434,14 @@ again.
 
 - **Commit what a future re-run would want**: the submit script, a list that
   cannot be recomputed, a measurement that cost a sweep.
-- **Delete everything else, wherever it landed** — scratch clones, probe logs
-  and checkpoints, throwaway scripts, half-finished output. Nothing sweeps the
-  shared filesystem, the node-local disks or `/tmp` for you.
+- **Delete everything else, wherever it landed** — scratch clones, probe logs,
+  throwaway scripts, half-finished output. Nothing sweeps the shared
+  filesystem, the node-local disks or `/tmp` for you.
+- **Never delete checkpoints.** Not a cancelled run's, not a superseded run's,
+  not a "broken" run's: `resume.pt` is the only way to continue a run, and
+  the released weights of one run are the warm start of the next. No
+  instruction in this repo authorises `rm` of anything under an `out_root`;
+  only the user does, explicitly, naming the run.
 - **The test is "would I read this next time, or write it again?"** Keep it only
   when re-deriving it is the expensive part.
 - **Clean up when the question is answered**, not later.
@@ -451,8 +457,9 @@ which parts:
   any derived input only it reads. Deleted, not commented out; git holds it.
 - **Take X out of everything that mentions it**: the experiment's README, a
   shared workspace or results script, a sweep list that still names it.
-- **Delete X's scratch**: clones, logs and checkpoints under
-  `/lfs`, `/tmp` and `/dfs/user/<you>` alike.
+- **Delete X's scratch**: clones and logs under `/lfs`, `/tmp` and
+  `/dfs/user/<you>` alike. Its checkpoints stay (never delete checkpoints);
+  say in the README where they are.
 - **Keep the finding, not the machinery** -- a decision X settled belongs in
   the experiment's README, in a sentence.
 - **Commit and push it as one change.** A half-torn-down experiment reads as a
