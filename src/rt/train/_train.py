@@ -271,6 +271,13 @@ def main(
     # ``None`` runs the full `total_steps`. Needs a val split in `eval_splits`;
     # with nothing selected there is nothing to stop on.
     early_stop_after_steps: int | None,
+    # Every run evaluates at step 0, so the starting point is on the curve.
+    # Whether that eval may also pick the best checkpoint: ``False`` logs it
+    # and keeps it out of `best` and the patience window. On a task where the
+    # fine-tune's gain is small relative to eval noise a warm start otherwise
+    # wins outright, and the run trains nothing and republishes the weights it
+    # started from.
+    can_select_init_model: bool,
     # Momentum of the running weight average evaluated and checkpointed beside
     # the live net. ``None`` turns SWA off: no second net is built, evaluated
     # or saved, and nothing is selected on a ``swa/`` metric.
@@ -1145,7 +1152,7 @@ def main(
         # Best-checkpoint tracking follows the primary (untagged) grid entry.
         # Rank 0 only: ``evaluate_raw`` yields there and nowhere else, so the
         # other ranks hold empty metrics and must not touch ``best``.
-        if is_main:
+        if is_main and (step > 0 or can_select_init_model):
             if consider(metrics, step):
                 improved_at = step
         if is_main:
@@ -1233,12 +1240,11 @@ def main(
     #
     # Order is the whole point. The caching allocator's pool grows and is never
     # handed back, so whichever workload allocates first gets the memory and the
-    # other has to fit in what is left. No run evaluates at step 0 any more, so
-    # every run -- fresh or resumed -- would otherwise reach its
-    # first eval -- compiling and allocating two nets -- on a card training has
-    # already filled. Claiming eval's footprint up front puts both in the same
-    # order, and if it cannot fit the job says so in its first minute rather
-    # than an hour in.
+    # other has to fit in what is left. A resumed run reaches its first eval
+    # -- compiling and allocating two nets -- on a card training has already
+    # filled. Claiming eval's footprint up front puts both in the same order,
+    # and if it cannot fit the job says so in its first minute rather than an
+    # hour in.
     if evaluators:
         # First grid entry only: the others differ in context-building knobs,
         # not in the shapes the net sees.
@@ -1259,26 +1265,23 @@ def main(
     # step to step, so this is one sample of it, not the maximum.
     measure_mem = is_cuda
     while step < total_steps:
-        # `step > 0`: the untrained net is not a candidate. Scoring it makes
-        # step 0 selectable, and on a task where the fine-tune's gain is small
-        # relative to eval noise the warm start wins outright -- the run then
-        # trains nothing and reports the published checkpoint. Two of five seeds
-        # did exactly that on rel-avito/user-clicks, scoring 0.4897 against
-        # 0.6635 for the seeds that trained, a bimodal 0.17 AUC swing decided by
-        # which side of the noise the first eval landed.
-        #
-        # It also sets where the patience window starts: `improved_at` stays 0
-        # until the first eval at `eval_freq`, which always improves on nothing,
-        # so the earliest possible stop is `eval_freq + early_stop_after_steps`.
-        # A run whose val score only ever falls still trains that far.
-        if eval_freq and step > 0 and step % eval_freq == 0 and step != evaled_at:
+        # Step 0 included: the starting point is scored and checkpointed like
+        # any other eval point; `can_select_init_model` decides whether it can
+        # also be the winner. The patience window starts at the last eval that
+        # improved (`improved_at`), which the step-0 eval only sets when it is
+        # selectable, so the earliest possible stop is otherwise
+        # `eval_freq + early_stop_after_steps`.
+        if eval_freq and step % eval_freq == 0 and step != evaled_at:
             stop_early = run_eval(step)
             evaled_at = step  # before save_resume, which persists it
             checkpoint(step)
             # After checkpoint(): a winner at this very step has no file until
             # it is written. Before prune_ckpts(): both read `best`, and the
-            # copy has to happen while its source is still there.
-            if improved_at == step:
+            # copy has to happen while its source is still there. `best` is
+            # empty at a step-0 eval that was not allowed to select.
+            if improved_at == step and any(
+                b is not None for by_kind in best.values() for b in by_kind.values()
+            ):
                 publish_best()
             prune_ckpts(step)
             save_resume(step)

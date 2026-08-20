@@ -111,6 +111,12 @@ val metric has improved on — or matched again — its best for that many steps
 checked at each eval. `None` runs the full `total_steps`. It needs `"val"` in
 `eval_splits`; with nothing selected there is nothing to stop on.
 
+Every run evaluates at step 0 as well, so the starting point is on the curve.
+`can_select_init_model` says whether that eval may also pick the best
+checkpoint; `False` logs it and leaves it out of the selection and the
+early-stopping patience — the usual choice for a warm start, where eval noise
+could otherwise hand the win to the weights the run began with.
+
 ## Running a training script
 
 There is no CLI. `rt.train._train` is a function that takes every knob as a

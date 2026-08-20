@@ -60,6 +60,7 @@ def smoke(
         total_bs=2,
         total_steps=total_steps,
         early_stop_after_steps=None,
+        can_select_init_model=False,
         swa_momentum=0.9,
         seed=0,
         mmap_populate=False,

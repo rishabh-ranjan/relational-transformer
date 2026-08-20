@@ -118,6 +118,7 @@ def submit_arm(arm: str, run_id: str | None) -> None:
             # the one thing every arm adds over the base run: stop once the
             # in-loop val metric has not improved for 10k steps.
             early_stop_after_steps=10_000,
+            can_select_init_model=False,
             swa_momentum=0.9995,
             seed=0,
             mmap_populate=True,

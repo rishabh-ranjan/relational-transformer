@@ -51,6 +51,7 @@ def main(dataset: str, task: str, cache_dir: str, steps: int = 300) -> None:
             run_id=label, seed=0,
         )
         args["early_stop_after_steps"] = None   # never stop; every config runs `steps`
+        args["can_select_init_model"] = False
         args.update(over)
         tic = time.perf_counter()
         train_main(**args)

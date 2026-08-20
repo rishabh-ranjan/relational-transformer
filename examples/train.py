@@ -54,6 +54,7 @@ def train(pre_dir: str, eval_pre_dir: str, out_root: str, run_id: str) -> None:
         total_bs=1024,
         total_steps=100_001,
         early_stop_after_steps=None,
+        can_select_init_model=False,
         swa_momentum=0.9995,
         seed=0,
         mmap_populate=True,

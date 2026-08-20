@@ -311,6 +311,7 @@ def main() -> None:
                 total_bs=256,
                 total_steps=25_000,
                 early_stop_after_steps=None,
+                can_select_init_model=False,
                 swa_momentum=0.9995,
                 seed=0,
                 mmap_populate=True,
