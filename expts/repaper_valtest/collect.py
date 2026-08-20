@@ -63,6 +63,14 @@ def main() -> None:
         name="valtest",
         reinit="finish_previous",
     )
+    flat = {}
+    for task_key, rec in out.items():
+        if task_key.startswith("mean_"):
+            continue
+        flat[f"default/{task_key}"] = rec["default"]
+        flat[f"tuned/{task_key}"] = rec["tuned"]
+        flat[f"cfg/{task_key}"] = json.dumps(rec["tuned_cfg"])
+        flat[f"task_type/{task_key}"] = rec["task_type"]
     wandb.log(
         {
             "table": wandb.Table(
@@ -83,6 +91,7 @@ def main() -> None:
             "mean/clf/tuned": out["mean_clf"]["tuned"],
             "mean/reg/default": out["mean_reg"]["default"],
             "mean/reg/tuned": out["mean_reg"]["tuned"],
+            **flat,
         }
     )
     run.finish()

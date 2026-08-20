@@ -78,6 +78,26 @@ def main() -> None:
     }
     out = CSV_DIR.parent / "results.json"
     out.write_text(json.dumps(summary, indent=1, sort_keys=True) + "\n")
+
+    # The paper's tuned+ensembled table fetches these flat keys.
+    import wandb
+
+    run = wandb.init(
+        entity="rtv2",
+        project="2026-08-19-repaper-submit",
+        name="rtj-top4x4",
+        reinit="finish_previous",
+    )
+    wandb.log(
+        {
+            "mean/clf": summary["mean_clf"],
+            "mean/reg": summary["mean_reg"],
+            **{f"value/{k}": r["value"] for k, r in results.items()},
+            **{f"task_type/{k}": r["task_type"] for k, r in results.items()},
+        }
+    )
+    run.finish()
+
     print(
         f"\nmean clf: {summary['mean_clf']:.4f}  mean reg: {summary['mean_reg']:.4f}"
         f"\nwrote {out}"
