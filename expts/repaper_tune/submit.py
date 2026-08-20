@@ -164,8 +164,11 @@ if __name__ == "__main__":
         ("rel-amazon", "item-churn"): "il-interactive",
         ("rel-amazon", "item-ltv"): "il-interactive",
     }
-    for (db, table), qos in HIGH.items():
-        submit_task(db, table, qos, gpu="b200:1")
-    # for db, table in TASKS:
-    #     if (db, table) not in HIGH:
-    #         submit_task(db, table, "il-lo")
+    # The four rel-amazon jobs run on b200s (one already finished); this round
+    # fills in the seventeen the db_cutoff resubmission missed while the loop
+    # below sat commented out for the b200 promotion.
+    for db, table in TASKS:
+        if (db, table) not in HIGH:
+            submit_task(db, table, "il-lo")
+    # for (db, table), qos in HIGH.items():
+    #     submit_task(db, table, qos, gpu="b200:1")
