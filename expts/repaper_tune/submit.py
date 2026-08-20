@@ -164,11 +164,17 @@ if __name__ == "__main__":
         ("rel-amazon", "item-churn"): "il-interactive",
         ("rel-amazon", "item-ltv"): "il-interactive",
     }
-    # The four rel-amazon jobs run on b200s (one already finished); this round
-    # fills in the seventeen the db_cutoff resubmission missed while the loop
-    # below sat commented out for the b200 promotion.
-    for db, table in TASKS:
-        if (db, table) not in HIGH:
-            submit_task(db, table, "il-lo")
-    # for (db, table), qos in HIGH.items():
-    #     submit_task(db, table, qos, gpu="b200:1")
+    # The amazon grids finished and handed the high tiers back; the four
+    # biggest still-pending jobs take their b200 slots (yanay's refill is
+    # il-lo again, so the tiers preempt straight on).
+    PROMOTE = {
+        ("rel-hm", "item-sales"): "il",
+        ("rel-hm", "user-churn"): "il",
+        ("rel-stack", "post-votes"): "il-interactive",
+        ("rel-stack", "user-badge"): "il-interactive",
+    }
+    for (db, table), qos in PROMOTE.items():
+        submit_task(db, table, qos, gpu="b200:1")
+    # for db, table in TASKS:
+    #     if (db, table) not in HIGH:
+    #         submit_task(db, table, "il-lo")
