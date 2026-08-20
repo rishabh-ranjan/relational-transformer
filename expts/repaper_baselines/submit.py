@@ -158,7 +158,8 @@ def submit_rt() -> None:
                 cpus_per_task=8,
                 ntasks=None,
                 exclusive=False,
-                mem=MEM[db],
+                # the ampere job_submit plugin caps a 1-gpu job at 252154M
+                mem=min(MEM[db], "240G", key=lambda m: int(m.rstrip("G"))),
                 mem_per_gpu=None,
                 constraint="ampere",
                 nodelist=None,
