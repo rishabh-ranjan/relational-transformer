@@ -1342,6 +1342,7 @@ impl Sampler {
                             target_node,
                             target_column,
                             columns_to_drop,
+                            cutoff,
                             local_ctx_size,
                             bfs_width,
                             ctx_len,
@@ -1430,8 +1431,10 @@ impl Sampler {
             let mut fallback_rng = StdRng::seed_from_u64(fallback_seed);
             let fallback_offsets = index::sample(&mut fallback_rng, total_table, pool_size);
             check_deadline(deadline);
-            let mut fallback_order: Vec<i32> =
-                fallback_offsets.iter().map(|off| range_start + off as i32).collect();
+            let mut fallback_order: Vec<i32> = fallback_offsets
+                .iter()
+                .map(|off| range_start + off as i32)
+                .collect();
             if prefer_latest {
                 let bound =
                     temporal_bound(target_node.timestamp.as_ref().map(|t| (*t).into()), cutoff);
@@ -1448,7 +1451,10 @@ impl Sampler {
                 let ts_of: HashMap<i32, Option<i32>> = fallback_order
                     .iter()
                     .map(|&n| {
-                        (n, get_node(dataset, n).timestamp.as_ref().map(|t| (*t).into()))
+                        (
+                            n,
+                            get_node(dataset, n).timestamp.as_ref().map(|t| (*t).into()),
+                        )
                     })
                     .collect();
                 let prio: HashMap<i32, u64> = fallback_order
@@ -1456,14 +1462,12 @@ impl Sampler {
                     .map(|&n| {
                         (
                             n,
-                            StdRng::seed_from_u64(step_seed.wrapping_add(n as u64))
-                                .random::<u64>(),
+                            StdRng::seed_from_u64(step_seed.wrapping_add(n as u64)).random::<u64>(),
                         )
                     })
                     .collect();
-                fallback_order.sort_by(|a, b| {
-                    ts_of[b].cmp(&ts_of[a]).then_with(|| prio[a].cmp(&prio[b]))
-                });
+                fallback_order
+                    .sort_by(|a, b| ts_of[b].cmp(&ts_of[a]).then_with(|| prio[a].cmp(&prio[b])));
                 fallback_order.truncate(fallback_amount);
             }
             for seed_node_idx in fallback_order {

@@ -274,14 +274,7 @@ def submit_nosem_data() -> None:
 REL_F1 = [(db, t) for db, t in TASKS if db == "rel-f1"]
 
 if __name__ == "__main__":
-    # hyperturing2's future slots are claimed a day out by higher-priority
-    # il-lo work, so the pinned TabICL fleet sat on ReqNodeNotAvail; it moves
-    # to the unpinned ampere pool, which churns steadily (an a100 also runs
-    # TabICL ~2-3x faster than an rtx8000). Finished task JSONs skip.
-    for arm in [
-        "fulltest/sql_tabicl",
-        "subsampled/sql_tabicl",
-        "fulltest/rdblearn_tabicl",
-        "subsampled/rdblearn_tabicl",
-    ]:
-        submit_arm(arm, TASKS, lambda db: gpu_resources(db, "il-lo"))
+    # The vecdb build fix is in: resubmit the rdblearn-similarity arm (its
+    # first 21 jobs died in the setup compile). The rt-similarity arm waits
+    # on the last rt-embedding tables.
+    submit_arm("abl/vdb_rdblearn", TASKS, lambda db: gpu_resources(db, "il-lo"))
