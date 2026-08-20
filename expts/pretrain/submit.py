@@ -2,6 +2,7 @@
 
 import argparse
 import dataclasses
+import getpass
 import json
 from pathlib import Path
 
@@ -14,6 +15,13 @@ from roach.slurm import AMPERE_LO, Resources, submit
 # failed on someone else's uncommitted files. From a `git worktree` (or any
 # other clean checkout of the same commit) submitting still works.
 REPO_ROOT = Path(__file__).resolve().parents[2]
+
+# Everything the run writes, and the secrets it reads, are the submitting
+# user's own: logs and checkpoints under their /dfs home, clones under their
+# node-local home (a shared clone root is unwritable to its second user -- the
+# first user's lock files are 644). Shared inputs below stay under
+# /dfs/user/ranjanr/share, which is world-readable.
+USER = getpass.getuser()
 
 # The in-loop validation tasks, listed here rather than by path: RelBench's
 # published `forecast.json` also carries recommendation tasks, which
@@ -155,15 +163,15 @@ def main() -> None:
             entity="rtv2",
             run_name="rt-j",
             wandb_disabled=False,
-            out_root="/dfs/user/ranjanr/ckpts",
+            out_root=f"/dfs/user/{USER}/ckpts",
         ),
         resources=resources(args.nodes, args.qos, args.nodelist),
         name="pretrain",
         run_id=args.run_id,
         repo_root=str(REPO_ROOT),
-        log_root="/dfs/user/ranjanr/slurm-logs/rishabh-ranjan/relational-transformer/expts/pretrain",
-        clone_root="/lfs/local/0/roach_clones",
-        secrets_dir="/dfs/user/ranjanr/.secrets",
+        log_root=f"/dfs/user/{USER}/slurm-logs/rishabh-ranjan/relational-transformer/expts/pretrain",
+        clone_root=f"/lfs/local/0/{USER}/roach_clones",
+        secrets_dir=f"/dfs/user/{USER}/.secrets",
     )
 
 

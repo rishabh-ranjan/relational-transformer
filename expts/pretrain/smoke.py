@@ -30,6 +30,8 @@ Checkpoints are throwaway and go to `/tmp`; nothing is logged to wandb.
 
 import argparse
 import dataclasses
+import getpass
+from pathlib import Path
 
 from roach.slurm import AMPERE_LO, submit
 
@@ -37,6 +39,9 @@ from roach.slurm import AMPERE_LO, submit
 # tasks rather than one so the eval path builds a real task list.
 TASKS = [("rel-f1", "driver-dnf"), ("rel-f1", "driver-top3")]
 PRE_DIR = "/dfs/user/ranjanr/share/stanford-star/relbench-preprocessed"
+# Same per-user roots as [submit.py](submit.py).
+REPO_ROOT = Path(__file__).resolve().parents[2]
+USER = getpass.getuser()
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
@@ -125,7 +130,7 @@ def main() -> None:
             entity="rtv2",
             run_name="smoke",
             wandb_disabled=True,
-            out_root="/tmp/ranjanr/pretrain-smoke/ckpts",
+            out_root=f"/lfs/local/0/{USER}/tmp/pretrain-smoke/ckpts",
         ),
         resources=dataclasses.replace(
             AMPERE_LO,
@@ -137,13 +142,13 @@ def main() -> None:
             nodelist=args.nodelist,
         ),
         name="pretrain-smoke",
-        repo_root="/lfs/hyperturing1/0/ranjanr/clones/rishabh-ranjan/relational-transformer",
+        repo_root=str(REPO_ROOT),
         # Its own log directory: MONITOR.md identifies the live run by the
         # newest log under the run's log_root, and a smoke test landing there
         # would answer with its own run_id.
-        log_root="/dfs/user/ranjanr/slurm-logs/rishabh-ranjan/relational-transformer/expts/pretrain/smoke",
-        clone_root="/lfs/local/0/roach_clones",
-        secrets_dir="/dfs/user/ranjanr/.secrets",
+        log_root=f"/dfs/user/{USER}/slurm-logs/rishabh-ranjan/relational-transformer/expts/pretrain/smoke",
+        clone_root=f"/lfs/local/0/{USER}/roach_clones",
+        secrets_dir=f"/dfs/user/{USER}/.secrets",
     )
 
 

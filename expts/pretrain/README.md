@@ -4,6 +4,25 @@ One pretraining run of the Relational Transformer on the Join, with the
 benchmark's forecast tasks as in-loop validation. The checkpoint it produces is
 what `expts/fine_tune` loads as its pretrained arm.
 
+## Before the first submission
+
+Anyone on the cluster can run this from their own checkout; nothing is tied to
+one account. What the submitting user has to have:
+
+- A slurm association on account `infolab` with the `il` and `il-lo` QOS
+  (`sacctmgr show assoc user=$USER format=account,qos`).
+- `/dfs/user/$USER/.secrets/{wandb,huggingface,github}`, each holding one
+  token (`chmod 700` the directory). The job reads them on the node; the wandb
+  key must belong to a member of the `rtv2` team, the entity the run logs to.
+- `pixi` on the login host and `pixi install` run once in the checkout.
+- Push access to `origin`: `submit` refuses a commit that is not on
+  `origin/<branch>`, because the job clones that commit. A fork works the same.
+
+Logs, checkpoints and per-node clones all land under the submitting user's own
+`/dfs/user/$USER` and `/lfs/local/0/$USER`; the first job on a node sets that
+node up (see `roach/slurm/env.sh`). Inputs are shared and read-only under
+`/dfs/user/ranjanr/share`.
+
 ## Running it
 
 ```
@@ -44,8 +63,8 @@ and resume is GPU-count flexible, which is what lets the shape change under a
 running experiment without costing work.
 
 Logs and `args.json` land in
-`/dfs/user/ranjanr/slurm-logs/rishabh-ranjan/relational-transformer/expts/pretrain`,
-checkpoints and `params.json` under `/dfs/user/ranjanr/ckpts/rtv2/<project>/<run_id>`.
+`/dfs/user/$USER/slurm-logs/rishabh-ranjan/relational-transformer/expts/pretrain`,
+checkpoints and `params.json` under `/dfs/user/$USER/ckpts/rtv2/<project>/<run_id>`.
 
 ## Inputs
 
