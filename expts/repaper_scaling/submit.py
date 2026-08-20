@@ -269,12 +269,13 @@ def submit_nosem_data() -> None:
 
 
 if __name__ == "__main__":
-    # Probes (rel-f1/driver-dnf 2:54, rel-avito/ad-ctr 4:06 on one a100,
-    # startup included) passed; the RT arms go wide on il-lo. The high tiers
-    # are spent on the tuning grid (expts/repaper_tune), the longest pole.
+    # The five RT arms (105 jobs) are in the queue from the previous
+    # submission; do not resubmit while they are pending -- the idempotence
+    # check reads finished JSONs, not the queue. This round only relaunches
+    # nosem-data, whose first attempt loaded the whole embedding file and OOMed.
     submit_nosem_data()
-    for arm in ["fulltest/rt", "subsampled/rt", "abl/rand", "abl/bfs32", "abl/bfs256"]:
-        submit_arm(arm, TASKS, lambda db: gpu_resources(db, "il-lo"))
+    # for arm in ["fulltest/rt", "subsampled/rt", "abl/rand", "abl/bfs32", "abl/bfs256"]:
+    #     submit_arm(arm, TASKS, lambda db: gpu_resources(db, "il-lo"))
     # After the nosem-data job finishes: submit_arm("abl/nosem", ...).
     # After the featurize + vecdb jobs finish: the four baseline arms per
     # protocol, and abl/vdb_*.

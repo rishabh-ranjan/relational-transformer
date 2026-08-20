@@ -150,6 +150,9 @@ uv = "*"
 setuptools = "<81"
 
 [tool.pixi.feature.featurize.pypi-dependencies]
+# roach.slurm's package init type-checks with beartype, and jobs enter through
+# `python -m roach.slurm.run` whatever environment they run in.
+beartype = "*"
 relbench = "==2.1.2"
 fastdfs = "*"
 duckdb = "*"

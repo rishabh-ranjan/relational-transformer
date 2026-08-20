@@ -14,6 +14,7 @@ not touched (their rows are not in ``column_index.json``).
 
 import hashlib
 import json
+import shutil
 from pathlib import Path
 
 
@@ -60,10 +61,17 @@ def main(*, pre_dir: str, out_dir: str, embedder: str, d_text: int, seed: int) -
         col_index = json.loads((src / "column_index.json").read_text())
         perm = derange(sorted(col_index.values()), f"{db}:{seed}")
 
-        emb = np.fromfile(src / emb_name, dtype=np.uint16).reshape(-1, d_text)
-        assert max(col_index.values()) < emb.shape[0]
-        deranged = emb.copy()
+        # The embedding file can be tens of GB (it holds every cell text), so
+        # copy it and patch only the column-name rows through memmaps.
+        shutil.copyfile(src / emb_name, dst / emb_name)
+        src_mm = np.memmap(src / emb_name, dtype=np.uint16, mode="r").reshape(
+            -1, d_text
+        )
+        dst_mm = np.memmap(dst / emb_name, dtype=np.uint16, mode="r+").reshape(
+            -1, d_text
+        )
+        assert max(col_index.values()) < src_mm.shape[0]
         for orig, repl in perm.items():
-            deranged[orig] = emb[repl]
-        deranged.tofile(dst / emb_name)
+            dst_mm[orig] = src_mm[repl]
+        dst_mm.flush()
         print(f"{db}: deranged {len(perm)} column-name embeddings", flush=True)
