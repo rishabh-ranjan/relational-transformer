@@ -134,10 +134,12 @@ def warm_nodes(within_hours: int = WARM_HOURS) -> list[str]:
 
 def current_job() -> dict | None:
     """The pretraining job, as ``{id, state, nodes, nodelist, qos}``."""
-    fmt = "%i|%T|%D|%N|%q"
+    fmt = "%i|%T|%D|%N|%q|%b"
     out = sh("squeue", "-u", sh("whoami").strip(), "-h", "-n", JOB_NAME, "-o", fmt)
     for line in out.splitlines():
-        job_id, state, nodes, nodelist, qos = line.split("|")
+        job_id, state, nodes, nodelist, qos, tres = line.split("|")
+        # This policy is the ampere one; a b200 run is placed by hand.
+        assert "a100" in tres, f"job {job_id} holds {tres}, not an a100 shape"
         hosts = (
             sh("scontrol", "show", "hostnames", nodelist).split() if nodelist else []
         )
