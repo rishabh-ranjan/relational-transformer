@@ -139,8 +139,10 @@ def main() -> None:
             mask_prob_max=0.5,
             items_per_task=100_000,
             # optimization
-            # Decay pulls toward the warm-start weights rather than zero
-            # (wd below keeps it active).
+            # Decay pulls toward the warm-start weights rather than zero. The
+            # net is bf16 with no fp32 master copy, so at lr*wd = 5e-5 the
+            # decay step (delta or plain) rounds away to nothing; `wd` is inert
+            # until rt.train keeps fp32 master weights.
             delta_finetune=True,
             optimizer="muon",
             lr=5e-4,
