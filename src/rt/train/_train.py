@@ -79,6 +79,12 @@ def setup_dist(num_workers: int = 0):
         # starting it. Must be set before init_process_group.
         if fnmatch.fnmatch(socket.getfqdn(), "ampere*.stanford.edu"):
             os.environ["NCCL_NET_GDR_LEVEL"] = "0"
+        # NVLS (NVLink SHARP) communicator setup hangs on blackwell1:
+        # init_process_group never returns, every rank spinning in the driver.
+        # Plain P2P over NVLink is unaffected. Must be set before
+        # init_process_group.
+        if fnmatch.fnmatch(socket.getfqdn(), "blackwell*.stanford.edu"):
+            os.environ["NCCL_NVLS_ENABLE"] = "0"
         # Long timeout: the first eval/compile keeps non-participating ranks idle
         # at a collective for many minutes; the default 10-min NCCL watchdog would
         # otherwise abort the job. (Slow first-step compile + full validation pass.)
