@@ -104,9 +104,12 @@ CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_LINKER = "x86_64-conda-linux-gnu-cc"
 
 [tool.pixi.dependencies]
 # Only the sampler's opt-in `vecdb` cargo feature needs these (faiss-rs builds
-# FAISS from source): `maturin develop --release --features vecdb`.
+# FAISS from source and links -lblas -llapack by their netlib names):
+# `maturin develop --release --features vecdb`.
 cmake = "*"
 gxx = "*"
+libblas = "*"
+liblapack = "*"
 openblas = "*"
 # 3.12, not ">=3.12": on 3.14 the default multiprocessing start method on Linux
 # is forkserver rather than fork, and a forkserver child is built by *pickling*
