@@ -137,7 +137,9 @@ def main() -> None:
             mask_prob_max=0.5,
             items_per_task=100_000,
             # optimization
-            delta_finetune=False,
+            # Decay pulls toward the warm-start weights rather than zero
+            # (wd=0.1 above keeps it active).
+            delta_finetune=True,
             optimizer="muon",
             lr=5e-4,
             wd=0.1,
