@@ -464,6 +464,27 @@ def main(
     if is_main:
         log(params=f"{sum(p.numel() for p in net.parameters()):_}")
 
+    # fp32 master weights. The net trains in bf16, whose ~3 significant digits
+    # swallow an update or a decay of order lr * |p| outright: at lr 5e-4 most
+    # elements round back to where they were. So the optimizers, the delta
+    # decay and SWA all work on these fp32 copies; each step the bf16 grads
+    # are cast into them, they are stepped, and the result is rounded back
+    # into the net. The net's own parameters are never stepped directly.
+    master = {
+        n: p.detach().float().clone().requires_grad_(True)
+        for n, p in raw_net.named_parameters()
+    }
+
+    @torch.no_grad()
+    def net_to_master():
+        for n, p in raw_net.named_parameters():
+            master[n].copy_(p)
+
+    @torch.no_grad()
+    def master_to_net():
+        for n, p in raw_net.named_parameters():
+            p.copy_(master[n])
+
     # Muon orthogonalizes a 2-D update, which only means anything for a
     # hidden weight *matrix*. The per-sem-type encoders/decoders are the
     # model's embedding and output layers -- and the number/datetime/boolean
@@ -488,7 +509,7 @@ def main(
     # overhead.
     mem_params = torch.cuda.memory_allocated() if device.startswith("cuda") else 0
 
-    named = list(net.named_parameters())
+    named = list(master.items())
     muon_params = [p for n, p in named if _is_muon(n, p)]
     other_params = [p for n, p in named if not _is_muon(n, p)]
     assert len(muon_params) + len(other_params) == len(named)
@@ -581,6 +602,7 @@ def main(
     if load_ckpt_path is not None and not resume_path.exists():
         _, ckpt_path = resolve_checkpoint(load_ckpt_path)
         raw_net.load_state_dict(load_model(ckpt_path))
+        net_to_master()
         if is_main:
             log(warm_started_from=load_ckpt_path)
 
@@ -591,7 +613,7 @@ def main(
     swa = (
         None
         if swa_momentum is None
-        else SwaState(raw_net.named_parameters(), momentum=swa_momentum)
+        else SwaState(master.items(), momentum=swa_momentum)
     )
     swa_net = None if swa is None else build_net()
 
@@ -605,15 +627,21 @@ def main(
         _, base_path = resolve_checkpoint(load_ckpt_path)
         base_sd = load_model(base_path)
         delta_base = {
-            n: base_sd[n].to(p.device, p.dtype)
-            for n, p in raw_net.named_parameters()
+            n: base_sd[n].to(p.device, torch.float32)
+            for n, p in master.items()
             if _is_decayed(n, p)
         }
 
     # ---- resume from preemption (GPU-count flexible: full model+opt per rank) ----
     if resume_path.exists():
         ck = torch.load(resume_path, map_location="cpu", weights_only=True)
-        raw_net.load_state_dict(ck["model"])
+        assert "master" in ck, (
+            f"{resume_path} carries no fp32 master weights; it predates them "
+            "and cannot be resumed"
+        )
+        for n, t in master.items():
+            t.data.copy_(ck["master"][n])
+        master_to_net()
         for o, sd in zip(opts, ck["optimizers"], strict=True):
             o.load_state_dict(sd)
         for s, sd in zip(scheds, ck["schedulers"], strict=True):
@@ -898,7 +926,7 @@ def main(
             with open(tmp, "wb") as f:
                 torch.save(
                     {
-                        "model": raw_net.state_dict(),
+                        "master": {n: t.detach().cpu() for n, t in master.items()},
                         "optimizers": [o.state_dict() for o in opts],
                         "schedulers": [s.state_dict() for s in scheds],
                         "swa": None if swa is None else swa.state_dict(),
@@ -1291,10 +1319,13 @@ def main(
             torch.cuda.synchronize()
             mem_post_bwd = torch.cuda.memory_allocated()
 
+        # Clip and step in fp32, on the master copies.
+        for n, p in raw_net.named_parameters():
+            master[n].grad = None if p.grad is None else p.grad.float()
         norm = torch.nn.utils.get_total_norm(
-            [p.grad for p in raw_net.parameters() if p.grad is not None]
+            [t.grad for t in master.values() if t.grad is not None]
         )
-        torch.nn.utils.clip_grads_with_norm_(raw_net.parameters(), grad_norm_max, norm)
+        torch.nn.utils.clip_grads_with_norm_(master.values(), grad_norm_max, norm)
         for o in opts:
             o.step()
         if delta_base is not None and wd:
@@ -1302,15 +1333,17 @@ def main(
             # optimizer would apply it -- but toward the pretrained weights.
             factor = scheds[0].get_last_lr()[0] * wd
             with torch.no_grad():
-                for n, p in raw_net.named_parameters():
+                for n, t in master.items():
                     if n in delta_base:
-                        p.add_(delta_base[n] - p, alpha=factor)
+                        t.add_(delta_base[n] - t, alpha=factor)
+        master_to_net()
         if measure_mem:
             torch.cuda.synchronize()
             peak_step = torch.cuda.max_memory_allocated()
             mem_pre_zero = torch.cuda.memory_allocated()
         for o in opts:
             o.zero_grad(set_to_none=True)
+        raw_net.zero_grad(set_to_none=True)
         if measure_mem:
             # Grads and optimizer state are measured exactly, by what freeing
             # or allocating them moved. Activations are the remainder of the
@@ -1340,7 +1373,7 @@ def main(
         for s in scheds:
             s.step()
         if swa is not None:
-            swa.update(raw_net.named_parameters())
+            swa.update(master.items())
         step += 1
 
         total_loss, stop = reduce_step_stats(total_loss)

@@ -33,7 +33,7 @@ import dataclasses
 import getpass
 from pathlib import Path
 
-from roach.slurm import AMPERE_LO, submit
+from roach.slurm import AMPERE_LO, BLACKWELL, submit
 
 # rel-f1 is the smallest preprocessed database, so loading it is seconds. Two
 # tasks rather than one so the eval path builds a real task list.
@@ -46,8 +46,13 @@ USER = getpass.getuser()
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     p = argparse.ArgumentParser(description=__doc__)
+    # `b200:1` is a single card of blackwell1: no broadcast under test, but the
+    # rest of the loop -- warm start, master weights, delta decay, resume --
+    # on the card the pretraining run uses.
+    p.add_argument("--gpus", default="a100:8", choices=("a100:8", "b200:1"))
     p.add_argument("--nodes", type=int, default=2)
-    p.add_argument("--qos", default="il-lo", choices=("il-lo", "il"))
+    p.add_argument("--qos", default="il-lo", choices=("il-lo", "il", "il-interactive"))
+    p.add_argument("run_id", nargs="?", help="resume this smoke run instead")
     p.add_argument(
         "--nodelist",
         default="ampere1,ampere2,ampere3,ampere4,ampere5,ampere6,ampere7,ampere8,ampere9",
@@ -72,7 +77,9 @@ def main() -> None:
             compile=False,
             materialize_attn_masks=True,
             loss_fn="huber",
-            load_ckpt_path=None,
+            # The pretraining run's warm start, so the fp32-master path is
+            # exercised against real weights.
+            load_ckpt_path="/dfs/user/ranjanr/share/stanford-star/rt-plurel/classification",
             # data: one small database, no page-cache population
             db_task_list=TASKS,
             train_splits=["train"],
@@ -89,7 +96,7 @@ def main() -> None:
             mask_prob_max=0.5,
             items_per_task=1_000,
             # optimization: enough steps to prove the loop turns over
-            delta_finetune=False,
+            delta_finetune=True,
             optimizer="muon",
             lr=5e-4,
             wd=0.1,
@@ -107,7 +114,8 @@ def main() -> None:
             keep_all_ckpts=False,
             vector_db_path=None,
             db_cutoff="test",
-            resume_save_mins=1e9,
+            # Every step, so relaunching with the run_id resumes from it.
+            resume_save_mins=0.0,
             eval_splits=["val"],
             eval_db_task_list=TASKS,
             eval_pre_dir=PRE_DIR,
@@ -132,7 +140,17 @@ def main() -> None:
             wandb_disabled=True,
             out_root=f"/lfs/local/0/{USER}/tmp/pretrain-smoke/ckpts",
         ),
+        run_id=args.run_id,
         resources=dataclasses.replace(
+            BLACKWELL,
+            gpus="b200:1",
+            qos=args.qos,
+            time="0-01:00:00",
+            cpus_per_task=4,
+            mem="40000M",
+        )
+        if args.gpus == "b200:1"
+        else dataclasses.replace(
             AMPERE_LO,
             nodes=args.nodes,
             qos=args.qos,
