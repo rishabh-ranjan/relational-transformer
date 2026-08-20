@@ -138,7 +138,7 @@ def main() -> None:
             items_per_task=100_000,
             # optimization
             # Decay pulls toward the warm-start weights rather than zero
-            # (wd=0.1 above keeps it active).
+            # (wd below keeps it active).
             delta_finetune=True,
             optimizer="muon",
             lr=5e-4,

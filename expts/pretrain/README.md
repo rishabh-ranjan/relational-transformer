@@ -28,12 +28,14 @@ node up (see `roach/slurm/env.sh`). Inputs are shared and read-only under
 ```
 pixi run python -m expts.pretrain.submit --gpus a100:8 --qos il            # new run; prints its run_id
 pixi run python -m expts.pretrain.submit <run_id> --gpus a100:8 --qos il   # resume that run
-pixi run python -m expts.pretrain.submit --gpus b200:2 --qos il-interactive --nodelist blackwell1
+pixi run python -m expts.pretrain.submit --gpus b200:2 --qos il --nodelist blackwell1
 ```
 
-`--gpus b200:2` on `il-interactive` is 2 cards of blackwell1 at the top
-priority for 12h at a time; the run requeues and resumes across the wall clock
-(each restart costs a cold start, see [MONITOR.md](MONITOR.md)). `autoscale.py`
+`--gpus b200:2` on `il` is 2 cards of blackwell1 (the `il` b200 sub-cap),
+non-preemptible, 7d at a time; `il-interactive` gives the same 2 cards at a
+higher priority but for 12h at a time. The run requeues and resumes across the
+wall clock either way (each restart costs a cold start, see
+[MONITOR.md](MONITOR.md)). `autoscale.py`
 only knows the ampere shape.
 
 With `--gpus a100:8`: 8xA100 per node, `--exclusive`. A single node goes on `il` -- not preemptible,
