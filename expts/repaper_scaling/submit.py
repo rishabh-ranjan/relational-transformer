@@ -274,16 +274,7 @@ def submit_nosem_data() -> None:
 REL_F1 = [(db, t) for db, t in TASKS if db == "rel-f1"]
 
 if __name__ == "__main__":
-    # The rdblearn feature blobs are complete (21/21): the rdblearn arms go
-    # wide with the same placement as the sql ones. The rel-f1 db_cutoff
-    # rerun and everything else is already in the queue.
-    for arm in ["fulltest/rdblearn_tabicl", "subsampled/rdblearn_tabicl"]:
-        submit_arm(
-            arm,
-            TASKS,
-            lambda db: gpu_resources(
-                db, "il-lo", gpu="rtx8000:1", nodelist="hyperturing2"
-            ),
-        )
-    for arm in ["fulltest/rdblearn_lgbm", "subsampled/rdblearn_lgbm"]:
-        submit_arm(arm, TASKS, cpu_resources)
+    # The rdblearn FAISS indices are complete: the rdblearn-similarity
+    # retriever arm goes out (its setup step rebuilds rustler with the vecdb
+    # feature). The rt-similarity arm waits on the rt embedding jobs.
+    submit_arm("abl/vdb_rdblearn", TASKS, lambda db: gpu_resources(db, "il-lo"))
