@@ -41,9 +41,11 @@ CLF = {
 MEM = {
     "rel-amazon": "250G",
     "rel-avito": "64G",
-    # rel-event's DFS working set far outgrows its on-disk size (a 48G job
-    # was OOM-killed): wide attendee tables fan out under depth-2 aggregation.
-    "rel-event": "150G",
+    # rel-event's DFS working set far outgrows its on-disk size (48G and 150G
+    # jobs were OOM-killed): wide attendee tables fan out under depth-2
+    # aggregation. 400G fits only the big-memory nodes (hyperturing/rambo
+    # class), which zero-gres jobs reach.
+    "rel-event": "400G",
     "rel-f1": "16G",
     "rel-hm": "150G",
     "rel-stack": "150G",
@@ -195,9 +197,11 @@ def submit_vecdb() -> None:
 
 
 if __name__ == "__main__":
-    # sql features are complete; rdblearn refills are in the queue. The RT
-    # embedding jobs need only the checkpoints and the preprocessed data.
-    submit_rt()
+    # rel-event's rdblearn jobs OOMed at 150G; refill just those at 400G
+    # (finished tables skip on their meta.json).
+    for db, table in [(d, t) for d, t in PAIRS if d == "rel-event"]:
+        pass
+    submit_rdblearn()
+    # submit_rt()
     # submit_sql()
-    # submit_rdblearn()
     # submit_vecdb()   # after the feature blobs exist

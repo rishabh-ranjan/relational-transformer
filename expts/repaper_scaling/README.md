@@ -69,4 +69,8 @@ ctx size under the `ctx_scaling/steps=0/test/*` keys (aggregates) and
 
 ## Measured runtimes
 
-(filled in as the probe jobs report)
+One a100, startup (clone build + compile) included, full-test RT arm:
+rel-f1 tasks 1:27-2:58, rel-avito/ad-ctr 4:06, rel-event tasks 3:45-5:34
+(700-2000 test rows each). The four rel-amazon tasks (167k-352k rows) are the
+long poles, projected 5-12 h each at the measured ~8-45 rows/s. Subsampled
+arms are bounded by 8192 rows/task.
