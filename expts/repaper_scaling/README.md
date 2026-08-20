@@ -49,8 +49,9 @@ under
   the `vecdb` feature), and `nosem` (the derived
   `repaper/relbench-preprocessed-nosem` data whose column-name embeddings are
   deranged; `make_nosem_data.py`).
-- Everything is evaluated with `db_cutoff="test"`, context_seed=0, a single
-  context seed, and no tuning or ensembling.
+- Everything is evaluated with `db_cutoff=None` (per-row temporal masking
+  is the only trim), context_seed=0, a single context seed, and no tuning or
+  ensembling.
 
 Metrics are computed on rustler's normalized target scale, which for
 regression equals RelBench's NMAE (rustler normalizes by the same train std)

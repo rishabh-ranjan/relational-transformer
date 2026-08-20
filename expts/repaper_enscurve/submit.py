@@ -56,8 +56,8 @@ def resources(db: str, qos: str) -> Resources:
     )
 
 
-def submit_variant(variant: str, qos: str) -> None:
-    for db, table in TASKS:
+def submit_variant(variant: str, qos: str, tasks=None) -> None:
+    for db, table in tasks or TASKS:
         if variant == "default":
             ctx, lcs, bw, pl = 8192, 256, 32, True
         else:
@@ -88,7 +88,7 @@ def submit_variant(variant: str, qos: str) -> None:
                 num_workers=8,
                 prefetch_factor=2,
                 mmap_populate=True,
-                db_cutoff="test",
+                db_cutoff=None,
                 ckpt_clf="/dfs/user/ranjanr/share/stanford-star/rt-j/classification",
                 ckpt_reg="/dfs/user/ranjanr/share/stanford-star/rt-j/regression",
             ),
@@ -102,5 +102,7 @@ def submit_variant(variant: str, qos: str) -> None:
 
 
 if __name__ == "__main__":
-    submit_variant("default", "il-lo")
+    # db_cutoff=None rerun: only rel-f1 differs; its queued jobs were
+    # cancelled, the rest stay put.
+    submit_variant("default", "il-lo", [(d, t) for d, t in TASKS if d == "rel-f1"])
     # submit_variant("tuned", "il-lo")   # after repaper_tune/tuned_configs.json lands

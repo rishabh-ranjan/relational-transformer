@@ -19,7 +19,7 @@ variant runs any time.
 
 Per (variant, task): 16 independent context seeds (the `rt.eval` ensemble seed
 family off base seed 0) at the variant's fixed configuration, on the fixed
-8192-row test subsample (shuffle_seed=0), db_cutoff="test". Raw per-row
+8192-row test subsample (shuffle_seed=0), db_cutoff=None. Raw per-row
 predictions are averaged over the first k seeds and scored on the normalized
 scale at every k=1..16 -- the same quantity `rt.eval`'s ensembling scores, not
 a mean of per-seed scores. Jobs resume per seed

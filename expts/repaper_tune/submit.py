@@ -102,10 +102,11 @@ def submit_task(db: str, table: str, qos: str, gpu: str = "a100:1") -> None:
             shuffle_seed=0,
             context_seed=0,
             vector_db_path=None,
-            # The val split under its own cutoff: contexts built from a
-            # database trimmed at the val timestamp, so the tuning choice
-            # predicts test instead of seeing past it.
-            db_cutoff="val",
+            # No db-level cutoff: per-row temporal masking is the only trim
+            # (a val target sees history up to its own timestamp; future task
+            # labels stay out via the sampler's timestamp and same-horizon
+            # filters).
+            db_cutoff=None,
             lcs_bw_pl_grid=GRID,
             val_ensemble_size=4,
             test_ensemble_size=1,

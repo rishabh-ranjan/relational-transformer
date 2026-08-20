@@ -45,7 +45,10 @@ DEFAULTS = dict(
     num_workers=8,
     prefetch_factor=2,
     mmap_populate=True,
-    db_cutoff="test",
+    # No db-level cutoff: per-row temporal masking is the only trim, so a
+    # target sees history up to its own timestamp (bites only on rel-f1,
+    # whose database extends past the test timestamp).
+    db_cutoff=None,
     vector_db_path=None,
     ckpt_clf=CKPT_CLF,
     ckpt_reg=CKPT_REG,
@@ -268,30 +271,30 @@ def submit_nosem_data() -> None:
     )
 
 
+REL_F1 = [(db, t) for db, t in TASKS if db == "rel-f1"]
+
 if __name__ == "__main__":
-    # The SQL feature blobs are complete and the probes pass (TabICL handled
-    # the heaviest 131k-context probe on an rtx8000 in ~40 min; LightGBM on 8
-    # cpus swept it in 8 min): the SQL-featurizer arms go wide. TabICL takes
-    # hyperturing2's ten idle rtx8000s (hyperturing1's cards throw ECC
-    # errors); LightGBM takes zero-gres cpu slots. The rdblearn arms wait for
-    # their features (the amazon DFS jobs run for hours).
+    # db_cutoff switched to None, which changes results only where the
+    # database extends past the test timestamp -- rel-f1. Its finished JSONs
+    # are deleted and its queued jobs cancelled before this resubmission; the
+    # other tasks' queued jobs carry a db_cutoff="test" arg that is
+    # indistinguishable from None on their databases and stay put.
+    for arm in [
+        "fulltest/rt",
+        "subsampled/rt",
+        "abl/rand",
+        "abl/bfs32",
+        "abl/bfs256",
+        "abl/nosem",
+    ]:
+        submit_arm(arm, REL_F1, lambda db: gpu_resources(db, "il-lo"))
     for arm in ["fulltest/sql_tabicl", "subsampled/sql_tabicl"]:
         submit_arm(
             arm,
-            TASKS,
+            REL_F1,
             lambda db: gpu_resources(
                 db, "il-lo", gpu="rtx8000:1", nodelist="hyperturing2"
             ),
         )
     for arm in ["fulltest/sql_lgbm", "subsampled/sql_lgbm"]:
-        submit_arm(arm, TASKS, cpu_resources)
-    # The derived nosem data is in place and verified (bijective derangement,
-    # no fixed points, all other rows byte-identical).
-    submit_arm("abl/nosem", TASKS, lambda db: gpu_resources(db, "il-lo"))
-    # The five RT arms (105 jobs) are in the queue from the first submission;
-    # do not resubmit while they are pending -- the idempotence check reads
-    # finished JSONs, not the queue.
-    # for arm in ["fulltest/rt", "subsampled/rt", "abl/rand", "abl/bfs32", "abl/bfs256"]:
-    #     submit_arm(arm, TASKS, lambda db: gpu_resources(db, "il-lo"))
-    # After the featurize + vecdb jobs finish: the four baseline arms per
-    # protocol, and abl/vdb_*.
+        submit_arm(arm, REL_F1, cpu_resources)

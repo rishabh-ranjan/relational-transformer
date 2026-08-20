@@ -583,6 +583,8 @@ def run_ensemble(
         test_ensemble_size,
         tune_only,
         sorted(f"{t.db_name}/{t.table_name}" for t in (test_tasks or [])),
+        eval_kwargs["shuffle_seed"],
+        eval_kwargs["db_cutoff"],
     ]
     state = {}
     if resume_path.exists():

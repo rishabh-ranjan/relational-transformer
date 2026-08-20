@@ -131,10 +131,10 @@ def submit_rdblearn() -> None:
         )
 
 
-def submit_rt() -> None:
+def submit_rt(dbs=None) -> None:
     # One GPU per db; needs the default environment (the RT model), not the
     # featurize one.
-    for db in DBS:
+    for db in dbs or DBS:
         submit(
             "expts.repaper_baselines.featurize_rt:featurize_db",
             args=dict(
@@ -148,7 +148,7 @@ def submit_rt() -> None:
                 bfs_width=32,
                 shuffle_seed=0,
                 context_seed=0,
-                db_cutoff="test",
+                db_cutoff=None,
                 batch_size=1024,
             ),
             resources=Resources(
@@ -197,10 +197,9 @@ def submit_vecdb() -> None:
 
 
 if __name__ == "__main__":
-    # Refill the rdblearn tables that OOMed (rel-event now at 400G); finished
-    # tables no-op on their meta.json, but a table already *queued* runs twice
-    # -- dedupe with scancel after submitting.
-    submit_rdblearn()
-    # submit_rt()
+    # db_cutoff=None rerun for rel-f1's rt embeddings (the other dbs' queued
+    # jobs carry a "test" arg indistinguishable from None on their data).
+    submit_rt(["rel-f1"])
+    # submit_rdblearn()
     # submit_sql()
     # submit_vecdb()   # after the feature blobs exist

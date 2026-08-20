@@ -19,9 +19,8 @@ Grid: ctx {512, 1024, 2048, 4096, 8192} x lcs {256, 512, 1024, 2048, 4096,
 8192 | lcs <= ctx} x bw {16, 64, 256} x pl {True, False} = **120 configurations
 per task** (2520 total). Each configuration is scored on the task's validation
 split -- 4096 rows (shuffle_seed=0), the prediction averaged over 4 context
-seeds (`val_ensemble_size=4`), the val split evaluated under `db_cutoff="val"`
-so tuning predicts test rather than seeing past it. AUROC ranks clf
-configurations, normalized MAE ranks reg.
+seeds (`val_ensemble_size=4`), `db_cutoff=None`. AUROC ranks clf configurations,
+normalized MAE ranks reg.
 
 A job is `rt.eval:main` in tune-only mode (`splits=["val"]`), one per task,
 resumable per grid entry (`ensemble_resume.pt`); a preemption costs at most

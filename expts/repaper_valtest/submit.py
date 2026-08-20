@@ -62,7 +62,7 @@ if __name__ == "__main__":
                 num_workers=8,
                 prefetch_factor=2,
                 mmap_populate=True,
-                db_cutoff="test",
+                db_cutoff=None,
                 vector_db_path=None,
                 ckpt_clf="/dfs/user/ranjanr/share/stanford-star/rt-j/classification",
                 ckpt_reg="/dfs/user/ranjanr/share/stanford-star/rt-j/regression",
