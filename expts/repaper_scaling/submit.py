@@ -273,26 +273,13 @@ if __name__ == "__main__":
     # (hyperturing2 -- hyperturing1's cards throw ECC errors) vs an a100, and
     # LightGBM on cpus, on the two small probe tasks. Timings decide where the
     # baseline sweeps run.
-    submit_arm(
-        "subsampled/sql_tabicl",
-        [("rel-f1", "driver-dnf")],
-        lambda db: gpu_resources(db, "il-lo", gpu="rtx8000:1", nodelist="hyperturing2"),
-    )
-    submit_arm(
-        "subsampled/sql_tabicl",
-        [("rel-avito", "ad-ctr")],
-        lambda db: gpu_resources(db, "il-lo"),
-    )
-    submit_arm(
-        "subsampled/sql_lgbm",
-        [("rel-f1", "driver-dnf"), ("rel-avito", "ad-ctr")],
-        cpu_resources,
-    )
+    # The derived nosem data is in place and verified (bijective derangement,
+    # no fixed points, all other rows byte-identical).
+    submit_arm("abl/nosem", TASKS, lambda db: gpu_resources(db, "il-lo"))
     # The five RT arms (105 jobs) are in the queue from the first submission;
     # do not resubmit while they are pending -- the idempotence check reads
     # finished JSONs, not the queue.
     # for arm in ["fulltest/rt", "subsampled/rt", "abl/rand", "abl/bfs32", "abl/bfs256"]:
     #     submit_arm(arm, TASKS, lambda db: gpu_resources(db, "il-lo"))
-    # After the nosem-data job finishes: submit_arm("abl/nosem", ...).
     # After the featurize + vecdb jobs finish: the four baseline arms per
     # protocol, and abl/vdb_*.
