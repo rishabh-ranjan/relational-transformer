@@ -1,0 +1,92 @@
+"""Collect the default-vs-tuned table into results.json + one wandb run.
+
+Default column: the ``subsampled/rt`` arm of ../repaper_scaling at ctx 8192.
+Tuned column: the tuned single-seed runs this experiment submitted. The wandb
+run (project ``2026-08-19-repaper-valtest``, run ``valtest``) carries the
+whole table as a wandb.Table, which is what the paper's table generator
+fetches; ``results.json`` is committed beside this file.
+
+    pixi run python -m expts.repaper_valtest.collect
+"""
+
+import json
+from pathlib import Path
+
+import numpy as np
+import wandb
+
+DEFAULT_DIR = Path("/dfs/user/ranjanr/ckpts/rtv2/repaper-scaling/subsampled/rt")
+TUNED_DIR = Path("/dfs/user/ranjanr/ckpts/rtv2/repaper-valtest/tuned")
+N_TASKS = 21
+
+
+def main() -> None:
+    cfgs = json.loads(
+        (Path(__file__).parents[1] / "repaper_tune" / "tuned_configs.json").read_text()
+    )
+    assert len(cfgs) == N_TASKS
+    rows = []
+    out = {}
+    for task_key, rec in sorted(cfgs.items()):
+        db, table = task_key.split("/")
+        default = json.loads((DEFAULT_DIR / f"{db}__{table}.json").read_text())
+        tuned = json.loads((TUNED_DIR / f"{db}__{table}.json").read_text())
+        ctx, lcs, bw, pl = rec["best_cfg"]
+        d_val = default["per_ctx"]["8192"]["metric_value"]
+        t_val = tuned["per_ctx"][str(ctx)]["metric_value"]
+        out[task_key] = {
+            "task_type": rec["task_type"],
+            "tuned_cfg": rec["best_cfg"],
+            "default": d_val,
+            "tuned": t_val,
+        }
+        rows.append([db, table, rec["task_type"], ctx, lcs, bw, bool(pl), d_val, t_val])
+        print(
+            f"{task_key}: default={d_val:.4f} tuned={t_val:.4f} "
+            f"cfg=({ctx},{lcs},{bw},{'T' if pl else 'F'})",
+            flush=True,
+        )
+
+    for tt in ("clf", "reg"):
+        d = float(np.mean([r["default"] for r in out.values() if r["task_type"] == tt]))
+        t = float(np.mean([r["tuned"] for r in out.values() if r["task_type"] == tt]))
+        out[f"mean_{tt}"] = {"default": d, "tuned": t}
+        print(f"mean {tt}: default={d:.4f} tuned={t:.4f}", flush=True)
+
+    dest = Path(__file__).with_name("results.json")
+    dest.write_text(json.dumps(out, indent=1, sort_keys=True) + "\n")
+    print(f"wrote {dest}")
+
+    run = wandb.init(
+        entity="rtv2",
+        project="2026-08-19-repaper-valtest",
+        name="valtest",
+        reinit="finish_previous",
+    )
+    wandb.log(
+        {
+            "table": wandb.Table(
+                columns=[
+                    "db",
+                    "table",
+                    "task_type",
+                    "ctx",
+                    "lcs",
+                    "bw",
+                    "pl",
+                    "default",
+                    "tuned",
+                ],
+                data=rows,
+            ),
+            "mean/clf/default": out["mean_clf"]["default"],
+            "mean/clf/tuned": out["mean_clf"]["tuned"],
+            "mean/reg/default": out["mean_reg"]["default"],
+            "mean/reg/tuned": out["mean_reg"]["tuned"],
+        }
+    )
+    run.finish()
+
+
+if __name__ == "__main__":
+    main()
