@@ -75,47 +75,42 @@ def reduce_arm(*, project: str, run_name: str, arm_dir: str, n_tasks: int) -> No
 ROOT = "/dfs/user/ranjanr/ckpts/rtv2/repaper-scaling"
 
 if __name__ == "__main__":
-    # (project, run name the gen script fetches, arm dir, expected #tasks)
+    # (project, run name the gen script fetches, arm dir, expected #tasks).
+    # One line per finished arm; a line for an unfinished arm fails its count
+    # assert, so enable them as they complete.
     for project, run_name, arm, n_tasks in [
-        ("2026-08-19-repaper-fulltest", "rt-j", f"{ROOT}/fulltest/rt", 21),
+        ("2026-08-19-repaper-abl", "abl/rw", f"{ROOT}/subsampled/rt", 21),
+        ("2026-08-19-repaper-abl", "abl/sem", f"{ROOT}/subsampled/rt", 21),
+        ("2026-08-19-repaper-abl", "abl/nosem", f"{ROOT}/abl/nosem", 21),
+        ("2026-08-19-repaper-abl", "abl/rand", f"{ROOT}/abl/rand", 21),
+        ("2026-08-19-repaper-abl", "abl/bfs32", f"{ROOT}/abl/bfs32", 21),
+        ("2026-08-19-repaper-abl", "abl/bfs256", f"{ROOT}/abl/bfs256", 21),
+        ("2026-08-19-repaper-abl", "abl/vdb_rdblearn", f"{ROOT}/abl/vdb_rdblearn", 21),
+        ("2026-08-19-repaper-abl", "abl/vdb_rt", f"{ROOT}/abl/vdb_rt", 21),
+        ("2026-08-19-repaper-subsampled", "rt-j", f"{ROOT}/subsampled/rt", 21),
         (
-            "2026-08-19-repaper-fulltest",
+            "2026-08-19-repaper-subsampled",
             "precomputed_rdblearn_tabicl_batched",
-            f"{ROOT}/fulltest/rdblearn_tabicl",
+            f"{ROOT}/subsampled/rdblearn_tabicl",
             21,
         ),
         (
-            "2026-08-19-repaper-fulltest",
+            "2026-08-19-repaper-subsampled",
             "precomputed_sql_tabicl_batched",
-            f"{ROOT}/fulltest/sql_tabicl",
+            f"{ROOT}/subsampled/sql_tabicl",
             21,
         ),
         (
-            "2026-08-19-repaper-fulltest",
-            "precomputed_rdblearn_lightgbm",
-            f"{ROOT}/fulltest/rdblearn_lgbm",
-            21,
-        ),
-        (
-            "2026-08-19-repaper-fulltest",
+            "2026-08-19-repaper-subsampled",
             "precomputed_sql_lightgbm",
-            f"{ROOT}/fulltest/sql_lgbm",
+            f"{ROOT}/subsampled/sql_lgbm",
             21,
         ),
-        # ("2026-08-19-repaper-subsampled", "rt-j", f"{ROOT}/subsampled/rt", 21),
-        # ("2026-08-19-repaper-subsampled", "precomputed_rdblearn_tabicl_batched", f"{ROOT}/subsampled/rdblearn_tabicl", 21),
-        # ("2026-08-19-repaper-subsampled", "precomputed_sql_tabicl_batched", f"{ROOT}/subsampled/sql_tabicl", 21),
         # ("2026-08-19-repaper-subsampled", "precomputed_rdblearn_lightgbm", f"{ROOT}/subsampled/rdblearn_lgbm", 21),
-        # ("2026-08-19-repaper-subsampled", "precomputed_sql_lightgbm", f"{ROOT}/subsampled/sql_lgbm", 21),
-        # The ablation project reads the default subsampled RT arm twice (it is
-        # both the random-walk retriever arm and the semantics-on arm).
-        # ("2026-08-19-repaper-abl", "abl/rw", f"{ROOT}/subsampled/rt", 21),
-        # ("2026-08-19-repaper-abl", "abl/sem", f"{ROOT}/subsampled/rt", 21),
-        # ("2026-08-19-repaper-abl", "abl/nosem", f"{ROOT}/abl/nosem", 21),
-        # ("2026-08-19-repaper-abl", "abl/rand", f"{ROOT}/abl/rand", 21),
-        # ("2026-08-19-repaper-abl", "abl/bfs32", f"{ROOT}/abl/bfs32", 21),
-        # ("2026-08-19-repaper-abl", "abl/bfs256", f"{ROOT}/abl/bfs256", 21),
-        # ("2026-08-19-repaper-abl", "abl/vdb_rdblearn", f"{ROOT}/abl/vdb_rdblearn", 21),
-        # ("2026-08-19-repaper-abl", "abl/vdb_rt", f"{ROOT}/abl/vdb_rt", 21),
+        # ("2026-08-19-repaper-fulltest", "rt-j", f"{ROOT}/fulltest/rt", 21),
+        # ("2026-08-19-repaper-fulltest", "precomputed_rdblearn_tabicl_batched", f"{ROOT}/fulltest/rdblearn_tabicl", 21),
+        # ("2026-08-19-repaper-fulltest", "precomputed_sql_tabicl_batched", f"{ROOT}/fulltest/sql_tabicl", 21),
+        # ("2026-08-19-repaper-fulltest", "precomputed_rdblearn_lightgbm", f"{ROOT}/fulltest/rdblearn_lgbm", 21),
+        # ("2026-08-19-repaper-fulltest", "precomputed_sql_lightgbm", f"{ROOT}/fulltest/sql_lgbm", 21),
     ]:
         reduce_arm(project=project, run_name=run_name, arm_dir=arm, n_tasks=n_tasks)
