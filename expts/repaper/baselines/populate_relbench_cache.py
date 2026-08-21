@@ -7,7 +7,7 @@ will touch -- every db (full, ``upto_test_timestamp=False``) and every task
 split -- is materialized here first. Jobs then read the cache; nothing writes
 to it concurrently. Run on the login node:
 
-    RELBENCH_CACHE_DIR=/dfs/user/ranjanr/share/relational-transformer/repaper/relbench-cache \
+    RELBENCH_CACHE_DIR=~/scratch/share/relational-transformer/repaper/relbench-cache \
         pixi run -e featurize python -m expts.repaper.baselines.populate_relbench_cache
 """
 
@@ -23,9 +23,7 @@ def main() -> None:
     import relbench.base
     from rdblearn.datasets import RDBDataset
     from relbench.datasets import get_dataset
-    from relbench.tasks import get_task
-
-    from relbench.tasks import get_task_names
+    from relbench.tasks import get_task, get_task_names
 
     pairs = json.loads((Path(PRE_DIR) / "db-task-lists" / "forecast.json").read_text())
     for db in sorted({db for db, _ in pairs}):

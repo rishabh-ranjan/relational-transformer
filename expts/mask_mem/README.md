@@ -21,7 +21,7 @@ getting the same three block masks:
   the predicate at block granularity and no dense mask exists at all. The floor.
 
 Results go to the job's log under
-`/dfs/user/ranjanr/slurm-logs/.../expts/mask-mem`.
+`~/scratch/slurm-logs/.../expts/mask-mem`.
 
 Delete this directory once the question is settled and the answer is in
 `net.py`.

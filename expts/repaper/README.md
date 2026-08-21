@@ -29,7 +29,7 @@ are submitted, allocated and watched here, and it applies to every job below.
    `rt.model.RelationalTransformer.from_pretrained` loads, on a path every
    node can read (compute nodes have no Hub access). A Hub release is mirrored
    once with `huggingface_hub.snapshot_download("<org>/<repo>",
-   local_dir="/dfs/user/ranjanr/share/<org>/<repo>")`; for `stanford-star/rt-j`
+   local_dir="~/scratch/share/<org>/<repo>")`; for `stanford-star/rt-j`
    the two directories are its `classification/` and `regression/`.
 3. **Config.** Edit [`config.py`](config.py): `CKPT_CLF` / `CKPT_REG` to that
    pair, `RUN_TAG` to today's date. Set the same `RUN_TAG` in the paper repo's
@@ -40,11 +40,11 @@ are submitted, allocated and watched here, and it applies to every job below.
    count as finished:
 
    ```bash
-   R=/dfs/user/ranjanr/ckpts/rtv2
+   R=~/scratch/ckpts/rtv2
    rm -rf $R/repaper-scaling/fulltest/rt $R/repaper-scaling/subsampled/rt \
           $R/repaper-scaling/abl $R/repaper-enscurve $R/repaper-valtest \
           $R/repaper-submit $R/*-repaper-tune
-   S=/dfs/user/ranjanr/share/relational-transformer/repaper
+   S=~/scratch/share/relational-transformer/repaper
    rm -rf $S/features/*/rt_features $S/vector_db/rt $S/leaderboard
    ```
 

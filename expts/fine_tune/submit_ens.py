@@ -19,16 +19,17 @@ finished is submitted with no dependency at all.
 import dataclasses
 import functools
 import json
+import os
 import subprocess
 from pathlib import Path
 
-from roach.slurm import Resources, submit
 from roach.slurm.clusters.ilc import ILC
-
 from submit import TASKS, a100, b200, targets_for  # noqa: F401
 
+from roach.slurm import Resources, submit
+
 # Where `submit.py`'s runs land, and the wandb project this one logs to.
-CKPT_ROOT = Path("/dfs/user/ranjanr/ckpts/rtv2/2026-08-13-fine_tune")
+CKPT_ROOT = Path("~/scratch/ckpts/rtv2/2026-08-13-fine_tune").expanduser()
 PROJECT = "2026-08-13-ens"
 
 
@@ -155,7 +156,9 @@ def main() -> None:
                 d_ff=2048,
                 splits=["test"],
                 db_task_list=[(db, task)],
-                pre_dir="/dfs/user/ranjanr/share/stanford-star/relbench-preprocessed",
+                pre_dir=os.path.expanduser(
+                    "~/scratch/share/stanford-star/relbench-preprocessed"
+                ),
                 tokens_per_gpu=2**18,
                 num_workers=resources.cpus_per_task,
                 prefetch_factor=2,
@@ -176,7 +179,7 @@ def main() -> None:
                 targets=targets_for(db, task),
                 project=PROJECT,
                 entity="rtv2",
-                out_root="/dfs/user/ranjanr/ckpts",
+                out_root=os.path.expanduser("~/scratch/ckpts"),
                 wandb_disabled=False,
             ),
             resources=resources,
@@ -184,9 +187,11 @@ def main() -> None:
             repo_root="/lfs/hyperturing1/0/ranjanr/clones/rishabh-ranjan/relational-transformer",
             cluster=ILC,
             job_env="expts/job_env.sh",
-            log_root="/dfs/user/ranjanr/slurm-logs/rishabh-ranjan/relational-transformer/expts/fine-tune-ens",
+            log_root=os.path.expanduser(
+                "~/scratch/slurm-logs/rishabh-ranjan/relational-transformer/expts/fine-tune-ens"
+            ),
             clone_root="/lfs/local/0/roach_clones",
-            secrets_dir="/dfs/user/ranjanr/.secrets",
+            secrets_dir=os.path.expanduser("~/scratch/.secrets"),
             run_id=None,
         )
 

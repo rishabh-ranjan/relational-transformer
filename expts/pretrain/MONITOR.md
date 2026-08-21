@@ -14,7 +14,7 @@ Nothing needs to be told to you. Find the run, then start the loop:
 
 ```
 squeue -u $USER -h -n pretrain -o "%i|%T|%D|%N|%q"   # job id | state | nodes | hosts | qos
-ls -t /dfs/user/$USER/slurm-logs/rishabh-ranjan/relational-transformer/expts/pretrain/*.out | head -1
+ls -t ~/scratch/slurm-logs/rishabh-ranjan/relational-transformer/expts/pretrain/*.out | head -1
 ```
 
 The log file is `<run_id>_<jobid>.out`, so its name gives you the run_id -- the
@@ -39,7 +39,7 @@ in this file is what to do when one of them fires.
 ## The one thing to know first
 
 **A run is its `run_id`.** It names the checkpoint directory under
-`/dfs/user/$USER/ckpts/rtv2/<project>/<run_id>`, and passing it back to
+`~/scratch/ckpts/rtv2/<project>/<run_id>`, and passing it back to
 `submit.py` resumes from `resume.pt` -- model, optimizers, schedulers, SWA,
 step, best-so-far -- instead of starting at step 0.
 
@@ -120,7 +120,7 @@ Two cheap watches, both worth having:
    crashloop. Filter out `task_skipped`-style bulk lines or the watch drowns.
 
 Logs and `args.json` are under
-`/dfs/user/$USER/slurm-logs/rishabh-ranjan/relational-transformer/expts/pretrain`,
+`~/scratch/slurm-logs/rishabh-ranjan/relational-transformer/expts/pretrain`,
 named `<run_id>_<jobid>.out`. A requeued job appends to a new file for the new
 job id, same run_id.
 

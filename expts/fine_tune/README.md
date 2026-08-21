@@ -17,8 +17,8 @@ work it out again against the live cluster every submission, and write the
 reasoning into the comment above it.
 
 Logs and `args.json` land under
-`/dfs/user/ranjanr/slurm-logs/rishabh-ranjan/relational-transformer/expts/fine-tune`,
-checkpoints and `params.json` under `/dfs/user/ranjanr/ckpts/rtv2/fine-tune/<run_id>`.
+`~/scratch/slurm-logs/rishabh-ranjan/relational-transformer/expts/fine-tune`,
+checkpoints and `params.json` under `~/scratch/ckpts/rtv2/fine-tune/<run_id>`.
 
 **Progress is in wandb, not in the log.** After `time_to_first_step` a run's
 stdout only prints `resume_saved_at_step` every `resume_save_mins`, so a quiet
@@ -79,7 +79,7 @@ pretraining only in what it is trained on:
 - `pre_dir` is the *benchmark* data, not the Join -- fine-tuning trains where it
   is evaluated, and train/eval differ only in split;
 - `load_ckpt_path` is RT-PluRel. It is mirrored at
-  `/dfs/user/ranjanr/share/stanford-star/rt-plurel` (compute nodes have no Hub
+  `~/scratch/share/stanford-star/rt-plurel` (compute nodes have no Hub
   access), one subdirectory per task type; refresh it with
   `huggingface_hub.snapshot_download("stanford-star/rt-plurel", local_dir=...)`.
 

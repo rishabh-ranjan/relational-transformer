@@ -11,7 +11,7 @@ ablates exactly that.
 Prerequisites: the feature blobs, FAISS indices, and TabICL checkpoints from
 [`../baselines`](../baselines) (baseline and vdb arms only;
 the RT arms need nothing but the released checkpoints mirrored under
-`/dfs/user/ranjanr/share/stanford-star/rt-j`).
+`~/scratch/share/stanford-star/rt-j`).
 
 ## Running it
 
@@ -28,10 +28,10 @@ pixi run python -m expts.repaper.scaling.reduce
 ```
 
 Per-task results land under
-`/dfs/user/ranjanr/ckpts/rtv2/repaper-scaling/<arm>/<db>__<table>.json`
+`~/scratch/ckpts/rtv2/repaper-scaling/<arm>/<db>__<table>.json`
 (metric on the normalized scale + mean in-context labels per ctx size); logs
 under
-`/dfs/user/ranjanr/slurm-logs/rishabh-ranjan/relational-transformer/expts/repaper/scaling`.
+`~/scratch/slurm-logs/rishabh-ranjan/relational-transformer/expts/repaper/scaling`.
 
 ## Protocol
 

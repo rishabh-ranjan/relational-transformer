@@ -29,7 +29,7 @@ from submit_ens_only import TASKS, items_for, ntest
 
 ENTITY = "rtv2"
 PROJECT = "2026-08-10-fine_tune_hpo_ens"
-OUT_ROOT = Path("/dfs/user/ranjanr/ckpts")
+OUT_ROOT = Path("~/scratch/ckpts").expanduser()
 
 # The row label our numbers get in the published comparison.
 OURS = "Ours"

@@ -26,7 +26,7 @@ a mean of per-seed scores. Jobs resume per seed
 (`<db>__<table>.state.npz`), so preemption costs one seed.
 
 Curves land under
-`/dfs/user/ranjanr/ckpts/rtv2/repaper-enscurve/<variant>/<db>__<table>.json`;
+`~/scratch/ckpts/rtv2/repaper-enscurve/<variant>/<db>__<table>.json`;
 `reduce.py` aggregates them into `rtv2/2026-08-19-repaper-enscurve` runs
 `default` / `tuned` (keys `ens_size`, `test/avg_mae`, `test/avg_auc`,
 `per_task/relbench/<db>/<table>/test/{mae,auc}`).

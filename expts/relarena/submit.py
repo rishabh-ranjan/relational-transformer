@@ -20,18 +20,20 @@ reverted between `setup` and the job. Anything relarena needs that the lock
 carries has to be in the lock.
 """
 
+import os
 from pathlib import Path
 
-from roach.slurm import Resources, submit
 from roach.slurm.clusters.ilc import ILC
+
+from roach.slurm import Resources, submit
 
 HERE = Path(__file__).parent
 
 REPO_ROOT = (
     "/lfs/hyperturing1/0/ranjanr/clones/rishabh-ranjan/relational-transformer-relarena"
 )
-SECRETS_DIR = "/dfs/user/ranjanr/.secrets"
-SHARE = "/dfs/user/ranjanr/share/relarena"
+SECRETS_DIR = os.path.expanduser("~/scratch/.secrets")
+SHARE = os.path.expanduser("~/scratch/share/relarena")
 
 # Node-local, and written by the job itself: the warm and the run are one job,
 # so nothing has to be shared, and /dfs is slow enough to matter for a cache

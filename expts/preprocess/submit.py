@@ -10,18 +10,20 @@ is not duplicated. Why one job per database, and why two stages, is in
 """
 
 import json
+import os
 import subprocess
 import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
-from roach.slurm import Resources, submit  # noqa: E402
+from collections import defaultdict
+
+from huggingface_hub import HfApi
 from roach.slurm.clusters.ilc import ILC  # noqa: E402
 
 from expts.preprocess.preprocess import is_done, is_rustler_done  # noqa: E402
-from collections import defaultdict
-from huggingface_hub import HfApi
+from roach.slurm import Resources, submit  # noqa: E402
 
 # The two values every stage has to agree on, and the only ones kept out of
 # their call sites: the embedder names the directory `is_done` looks for, so a
@@ -68,7 +70,7 @@ KEEP = ("db-task-lists", "legacy")
 # rebuild can be staged beside the live one (`-preprocessed-new`) and promoted
 # into place once it verifies.
 OUT_NAME = f"{NAME}-preprocessed"
-LEGACY_DIR = f"/dfs/user/ranjanr/share/stanford-star/{OUT_NAME}/legacy"
+LEGACY_DIR = os.path.expanduser(f"~/scratch/share/stanford-star/{OUT_NAME}/legacy")
 
 # NAME = "the-join"
 # SOURCE_REPO = "stanford-star/the-join"
@@ -82,13 +84,13 @@ LEGACY_DIR = f"/dfs/user/ranjanr/share/stanford-star/{OUT_NAME}/legacy"
 # OUT_NAME = f"{NAME}-preprocessed"
 # LEGACY_DIR = None
 
-RAW_DIR = f"/dfs/user/ranjanr/share/stanford-star/{NAME}"
-OUT_DIR = f"/dfs/user/ranjanr/share/stanford-star/{OUT_NAME}"
-LOG_ROOT = f"/dfs/user/ranjanr/slurm-logs/preprocess-{NAME}"
+RAW_DIR = os.path.expanduser(f"~/scratch/share/stanford-star/{NAME}")
+OUT_DIR = os.path.expanduser(f"~/scratch/share/stanford-star/{OUT_NAME}")
+LOG_ROOT = os.path.expanduser(f"~/scratch/slurm-logs/preprocess-{NAME}")
 SIZES = Path(__file__).with_name(f"sizes-{NAME}.json")
 REPO_ROOT = "/lfs/hyperturing1/0/ranjanr/clones/rishabh-ranjan/relational-transformer"
 CLONE_ROOT = "/lfs/local/0/roach_clones"
-SECRETS_DIR = "/dfs/user/ranjanr/.secrets"
+SECRETS_DIR = os.path.expanduser("~/scratch/.secrets")
 BATCH_SIZE = 1024
 
 
@@ -300,7 +302,9 @@ def datasets() -> list[str]:
     the tail rather than behind it.
     """
     sizes = load_sizes()
-    names = sorted(p.parent.name for p in Path(RAW_DIR).glob("*/manifest.yaml"))
+    names = sorted(
+        p.parent.name for p in Path(RAW_DIR).expanduser().glob("*/manifest.yaml")
+    )
     return sorted(names, key=lambda n: -out_bytes(sizes, n, 0))
 
 
@@ -330,7 +334,7 @@ def fully_downloaded(names: list[str]) -> set[str]:
 
     ready = set()
     for name in names:
-        d = Path(RAW_DIR) / name
+        d = Path(RAW_DIR).expanduser() / name
         want = remote.get(name)
         if not want:
             continue
@@ -403,7 +407,7 @@ def submit_embed(
         # are shared per commit and hold the pixi env, which pixi hardlinks from
         # the package cache only when the two are on the same filesystem
         clone_root="/lfs/local/0/roach_clones",
-        secrets_dir="/dfs/user/ranjanr/.secrets",
+        secrets_dir=os.path.expanduser("~/scratch/.secrets"),
         after=after,
     )
 
@@ -443,14 +447,14 @@ def main() -> None:
         "../README.md#allocating-a-sweep and write it in"
     )
     check_tree_is_submittable()
-    sizes, out = load_sizes(), Path(OUT_DIR)
+    sizes, out = load_sizes(), Path(OUT_DIR).expanduser()
     names = datasets()
     ready = fully_downloaded(names)
     pre_running, emb_running = queued_names("pre-"), queued_names("emb-")
     print(f"{len(names)} databases in {RAW_DIR}, {len(ready)} fully downloaded")
 
     lpre_running, lemb_running = queued_names("lpre-"), queued_names("lemb-")
-    legacy_out = Path(LEGACY_DIR) if LEGACY_DIR else None
+    legacy_out = Path(LEGACY_DIR).expanduser() if LEGACY_DIR else None
     to_rustle, to_embed, done, busy, waiting = [], [], 0, 0, 0
     to_legacy_rustle, to_legacy_embed = [], []
     for name in names:
@@ -530,7 +534,7 @@ def main() -> None:
             job_env="expts/job_env.sh",
             log_root=LOG_ROOT,
             clone_root="/lfs/local/0/roach_clones",
-            secrets_dir="/dfs/user/ranjanr/.secrets",
+            secrets_dir=os.path.expanduser("~/scratch/.secrets"),
         )
         # Queued now, held by slurm until its rustler stage succeeds: the GPU
         # queue fills itself behind the cpu one, with nothing to poll and no

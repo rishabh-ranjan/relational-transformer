@@ -14,7 +14,7 @@ the directory afterwards and is safe to run while the sweep is still going.
 
 from pathlib import Path
 
-SHARE = Path("/dfs/user/ranjanr/share/relarena")
+SHARE = Path("~/scratch/share/relarena").expanduser()
 BASELINES = Path(__file__).parent.parent / "fine_tune" / "results.csv"
 
 
@@ -45,9 +45,20 @@ def main() -> None:
     # for a classification task and "mean |y|" for a regression one -- numbers
     # that look like results and are not. Test scores are real.
     rep = rep.drop(columns=[c for c in rep if c.startswith("val_")], errors="ignore")
-    cols = [c for c in ("dataset", "task", "task_type", "metric",
-                        "test_score", "fit_time_tuning", "fit_time_refit",
-                        "predict_time_refit") if c in rep]
+    cols = [
+        c
+        for c in (
+            "dataset",
+            "task",
+            "task_type",
+            "metric",
+            "test_score",
+            "fit_time_tuning",
+            "fit_time_refit",
+            "predict_time_refit",
+        )
+        if c in rep
+    ]
     rep = rep[cols].sort_values(["dataset", "task"])
     print(f"\n=== rt: {len(rep)} of 21 tasks ===")
     print(rep.to_string(index=False))

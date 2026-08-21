@@ -12,8 +12,8 @@ Four commands, in order. Which collection they act on is the block of constants
 at the top of `submit.py` — edit it; the other sits below it commented out.
 
 ```bash
-# 0. make room under /dfs/user/$USER: ~1.5 TiB for the-join, ~250 GiB for relbench
-df -h /dfs/user/$USER
+# 0. make room under ~/scratch: ~1.5 TiB for the-join, ~250 GiB for relbench
+df -h ~/scratch
 
 # 1. fetch the raw collection once
 pixi run python expts/preprocess/download.py
@@ -119,7 +119,7 @@ upload if any is missing or empty; `upload` runs `verify` itself.
 Jobs run under `il-lo`, which is preemptible. Slurm requeues them and both
 targets are idempotent, so preemption costs the work in flight and nothing else.
 
-Logs are `/dfs/user/ranjanr/slurm-logs/preprocess/<run_id>_<jobid>.out`.
+Logs are `~/scratch/slurm-logs/preprocess/<run_id>_<jobid>.out`.
 
 ## What the code cannot handle
 

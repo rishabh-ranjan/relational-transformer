@@ -11,14 +11,14 @@ arms. The evals themselves live in [`../scaling`](../scaling).
 ```bash
 # 0. one-time fetches, on the login node (compute nodes have no internet)
 pixi run python -m expts.repaper.baselines.fetch_tabicl
-RELBENCH_CACHE_DIR=/dfs/user/ranjanr/share/relational-transformer/repaper/relbench-cache \
+RELBENCH_CACHE_DIR=~/scratch/share/relational-transformer/repaper/relbench-cache \
     pixi run -e featurize python -m expts.repaper.baselines.populate_relbench_cache
 
 # 1. one-time install into the featurize env (jobs repeat it via setup=)
 pixi run install-rdblearn
 
 # 2. prove classic-relbench row order matches the preprocessed data
-RELBENCH_CACHE_DIR=/dfs/user/ranjanr/share/relational-transformer/repaper/relbench-cache \
+RELBENCH_CACHE_DIR=~/scratch/share/relational-transformer/repaper/relbench-cache \
     pixi run -e featurize python -m expts.repaper.baselines.check_alignment
 
 # 3. featurize (edit the __main__ block to pick stages), then the indices
@@ -26,11 +26,11 @@ pixi run python -m expts.repaper.baselines.submit
 ```
 
 Feature blobs land under
-`/dfs/user/ranjanr/share/relational-transformer/repaper/features/<db>/{sql,rdblearn,rt}_features/`,
+`~/scratch/share/relational-transformer/repaper/features/<db>/{sql,rdblearn,rt}_features/`,
 FAISS indices under `.../repaper/vector_db/{rdblearn,rt}/`, one
 `<table>_vectors.bin` + `<table>_meta.json` (and `.index`) per task table.
 Logs land under
-`/dfs/user/ranjanr/slurm-logs/rishabh-ranjan/relational-transformer/expts/repaper/baselines`.
+`~/scratch/slurm-logs/rishabh-ranjan/relational-transformer/expts/repaper/baselines`.
 
 ## What each featurizer is
 

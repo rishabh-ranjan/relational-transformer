@@ -4,10 +4,12 @@ import argparse
 import dataclasses
 import getpass
 import json
+import os
 from pathlib import Path
 
-from roach.slurm import Resources, submit
 from roach.slurm.clusters.ilc import AMPERE_LO, BLACKWELL, ILC
+
+from roach.slurm import Resources, submit
 
 # The checkout this script belongs to, whatever that is, rather than one named
 # clone. `submit` refuses a dirty or unpushed tree, and the usual clone is
@@ -21,7 +23,7 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 # user's own: logs and checkpoints under their /dfs home, clones under their
 # node-local home (a shared clone root is unwritable to its second user -- the
 # first user's lock files are 644). Shared inputs below stay under
-# /dfs/user/ranjanr/share, which is world-readable.
+# ~/scratch/share, which is world-readable.
 USER = getpass.getuser()
 
 # The in-loop validation tasks, listed here rather than by path: RelBench's
@@ -125,11 +127,17 @@ def main() -> None:
             # Warm start (weights only) from RT-PluRel's classifier checkpoint;
             # the local copy of stanford-star/rt-plurel, since the node does
             # not fetch from the Hub. Same dims as the model above.
-            load_ckpt_path="/dfs/user/ranjanr/share/stanford-star/rt-plurel/classification",
+            load_ckpt_path=os.path.expanduser(
+                "~/scratch/share/stanford-star/rt-plurel/classification"
+            ),
             # data: the Join's mixture
-            db_task_list="/dfs/user/ranjanr/share/stanford-star/the-join-preprocessed/db-task-lists/rt-j.json",
+            db_task_list=os.path.expanduser(
+                "~/scratch/share/stanford-star/the-join-preprocessed/db-task-lists/rt-j.json"
+            ),
             train_splits=["train"],
-            pre_dir="/dfs/user/ranjanr/share/stanford-star/the-join-preprocessed",
+            pre_dir=os.path.expanduser(
+                "~/scratch/share/stanford-star/the-join-preprocessed"
+            ),
             # A b200 packs twice an a100's tokens (expts/fine_tune uses the same
             # split).
             tokens_per_gpu=2**18 if args.gpus.startswith("b200") else 2**17,
@@ -176,7 +184,9 @@ def main() -> None:
             # in-loop validation: the benchmark's forecast tasks, val split
             eval_splits=["val"],
             eval_db_task_list=EVAL_TASKS,
-            eval_pre_dir="/dfs/user/ranjanr/share/stanford-star/relbench-preprocessed",
+            eval_pre_dir=os.path.expanduser(
+                "~/scratch/share/stanford-star/relbench-preprocessed"
+            ),
             # Half of training's: the eval masks are
             # `eval_tokens_per_gpu * 8192` bytes each (2 GB at 2**18), and an
             # eval that fills the card OOMs the training forward after it. Eval
@@ -200,7 +210,7 @@ def main() -> None:
             entity="rtv2",
             run_name="rt-j-from-rt-plurel",
             wandb_disabled=False,
-            out_root=f"/dfs/user/{USER}/ckpts",
+            out_root=os.path.expanduser("~/scratch/ckpts"),
         ),
         resources=resources(args.gpus, args.nodes, args.qos, args.nodelist),
         name="pretrain",
@@ -208,9 +218,11 @@ def main() -> None:
         repo_root=str(REPO_ROOT),
         cluster=ILC,
         job_env="expts/job_env.sh",
-        log_root=f"/dfs/user/{USER}/slurm-logs/rishabh-ranjan/relational-transformer/expts/pretrain",
+        log_root=os.path.expanduser(
+            "~/scratch/slurm-logs/rishabh-ranjan/relational-transformer/expts/pretrain"
+        ),
         clone_root=f"/lfs/local/0/{USER}/roach_clones",
-        secrets_dir=f"/dfs/user/{USER}/.secrets",
+        secrets_dir=os.path.expanduser("~/scratch/.secrets"),
         # The stop flag is acted on at a step boundary, after any in-loop eval
         # in flight (21 tasks at ctx 8192: minutes). Long enough to cover one,
         # so a wall-clock ending still requeues instead of being killed
