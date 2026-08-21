@@ -104,7 +104,7 @@ which parts:
   any derived input only it reads. Deleted, not commented out; git holds it.
 - **Take X out of everything that mentions it**: the experiment's README, a
   shared workspace or results script, a sweep list that still names it.
-- **Delete X's scratch**: clones and logs under `/lfs`, `/tmp` and
+- **Delete X's scratch**: clones and logs under `~`, `/tmp` and
   `~/scratch` alike. Its checkpoints stay (never delete checkpoints);
   say in the README where they are.
 - **Keep the finding, not the machinery** -- a decision X settled belongs in

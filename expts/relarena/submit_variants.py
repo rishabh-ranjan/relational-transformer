@@ -18,10 +18,13 @@ costs its whole elapsed time, not a 20-minute window -- which is why the
 reservation and `il` are spent first and `il-lo` is the last resort.
 """
 
+import os
 import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+
+from roach.slurm.clusters.ilc import ILC  # noqa: E402
 
 from expts.relarena.submit import (  # noqa: E402
     CACHE_DIR,
@@ -36,7 +39,6 @@ from expts.relarena.submit import (  # noqa: E402
     reserved,
 )
 from roach.slurm import submit  # noqa: E402
-from roach.slurm.clusters.ilc import ILC  # noqa: E402
 
 #: Tasks longest-first, so the ones that decide the makespan start earliest.
 ORDER = [(d, t) for _m, d, t in EXPERIMENTS]
@@ -93,7 +95,7 @@ def main() -> None:
                 cluster=ILC,
                 job_env="expts/job_env.sh",
                 log_root=f"{SHARE}/slurm-logs",
-                clone_root="/lfs/local/0/roach_clones",
+                clone_root=os.path.expanduser("~/roach_clones"),
                 secrets_dir=SECRETS_DIR,
             )
             print(f"  {model}/{dataset}/{task:22s} {resources.qos:15s} {job.id}")

@@ -34,7 +34,7 @@ OUT_ROOT = f"{CKPT_ROOT}/rtv2"
 LOG_ROOT = os.path.expanduser(
     "~/scratch/slurm-logs/rishabh-ranjan/relational-transformer/expts"
 )
-CLONE_ROOT = "/lfs/local/0/roach_clones"
+CLONE_ROOT = os.path.expanduser("~/roach_clones")
 SECRETS_DIR = os.path.expanduser("~/scratch/.secrets")
 
 

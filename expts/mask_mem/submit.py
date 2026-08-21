@@ -46,13 +46,13 @@ def main() -> None:
         ),
         resources=RESOURCES,
         name="mask-mem",
-        repo_root="/lfs/hyperturing1/0/ranjanr/clones/rishabh-ranjan/relational-transformer",
+        repo_root=os.path.expanduser("~/clones/rishabh-ranjan/relational-transformer"),
         cluster=ILC,
         job_env="expts/job_env.sh",
         log_root=os.path.expanduser(
             "~/scratch/slurm-logs/rishabh-ranjan/relational-transformer/expts/mask-mem"
         ),
-        clone_root="/lfs/local/0/roach_clones",
+        clone_root=os.path.expanduser("~/roach_clones"),
         secrets_dir=os.path.expanduser("~/scratch/.secrets"),
     )
 

@@ -29,8 +29,8 @@ from roach.slurm import Resources, submit
 
 HERE = Path(__file__).parent
 
-REPO_ROOT = (
-    "/lfs/hyperturing1/0/ranjanr/clones/rishabh-ranjan/relational-transformer-relarena"
+REPO_ROOT = os.path.expanduser(
+    "~/clones/rishabh-ranjan/relational-transformer-relarena"
 )
 SECRETS_DIR = os.path.expanduser("~/scratch/.secrets")
 SHARE = os.path.expanduser("~/scratch/share/relarena")
@@ -41,8 +41,8 @@ SHARE = os.path.expanduser("~/scratch/share/relarena")
 #
 # On the node NVMe, not /tmp. /tmp is the root filesystem -- 438G on blackwell1,
 # shared with the OS -- and one rel-amazon task's exports are ~85G, so four of
-# them fill it and wedge every job on the node. /lfs/local/0 is 42-56T.
-CACHE_DIR = "/lfs/local/0/ranjanr/relarena-cache"
+# them fill it and wedge every job on the node. The node-local home is 42-56T.
+CACHE_DIR = os.path.expanduser("~/relarena-cache")
 
 #: Wall for the jobs pinned to the `ranjanr_deadline` reservation. Not il-lo's
 #: 21 days: a reservation job cannot outlive the reservation, so asking for
@@ -311,7 +311,7 @@ def main() -> None:
             cluster=ILC,
             job_env="expts/job_env.sh",
             log_root=f"{SHARE}/slurm-logs",
-            clone_root="/lfs/local/0/roach_clones",
+            clone_root=os.path.expanduser("~/roach_clones"),
             secrets_dir=SECRETS_DIR,
         )
 
@@ -326,7 +326,7 @@ def main() -> None:
             cluster=ILC,
             job_env="expts/job_env.sh",
             log_root=f"{SHARE}/slurm-logs",
-            clone_root="/lfs/local/0/roach_clones",
+            clone_root=os.path.expanduser("~/roach_clones"),
             secrets_dir=SECRETS_DIR,
         )
         print(f"  bench-compile/{dataset}/{task}")
@@ -356,7 +356,7 @@ def main() -> None:
             cluster=ILC,
             job_env="expts/job_env.sh",
             log_root=f"{SHARE}/slurm-logs",
-            clone_root="/lfs/local/0/roach_clones",
+            clone_root=os.path.expanduser("~/roach_clones"),
             secrets_dir=SECRETS_DIR,
             run_id=RUN_IDS.get((model, dataset, task)),
         )

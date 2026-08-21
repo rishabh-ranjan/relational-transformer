@@ -88,8 +88,8 @@ RAW_DIR = os.path.expanduser(f"~/scratch/share/stanford-star/{NAME}")
 OUT_DIR = os.path.expanduser(f"~/scratch/share/stanford-star/{OUT_NAME}")
 LOG_ROOT = os.path.expanduser(f"~/scratch/slurm-logs/preprocess-{NAME}")
 SIZES = Path(__file__).with_name(f"sizes-{NAME}.json")
-REPO_ROOT = "/lfs/hyperturing1/0/ranjanr/clones/rishabh-ranjan/relational-transformer"
-CLONE_ROOT = "/lfs/local/0/roach_clones"
+REPO_ROOT = os.path.expanduser("~/clones/rishabh-ranjan/relational-transformer")
+CLONE_ROOT = os.path.expanduser("~/roach_clones")
 SECRETS_DIR = os.path.expanduser("~/scratch/.secrets")
 BATCH_SIZE = 1024
 
@@ -399,14 +399,14 @@ def submit_embed(
         resources=embed_resources(expected_bytes),
         name=f"{prefix}-{name}",
         setup=SETUP,
-        repo_root="/lfs/hyperturing1/0/ranjanr/clones/rishabh-ranjan/relational-transformer",
+        repo_root=os.path.expanduser("~/clones/rishabh-ranjan/relational-transformer"),
         cluster=ILC,
         job_env="expts/job_env.sh",
         log_root=LOG_ROOT,
         # the node's own big disk, not /tmp (the 280G root filesystem): clones
         # are shared per commit and hold the pixi env, which pixi hardlinks from
         # the package cache only when the two are on the same filesystem
-        clone_root="/lfs/local/0/roach_clones",
+        clone_root=os.path.expanduser("~/roach_clones"),
         secrets_dir=os.path.expanduser("~/scratch/.secrets"),
         after=after,
     )
@@ -422,7 +422,7 @@ def check_tree_is_submittable() -> None:
     """
     dirty = subprocess.run(
         ["git", "status", "--porcelain"],
-        cwd="/lfs/hyperturing1/0/ranjanr/clones/rishabh-ranjan/relational-transformer",
+        cwd=os.path.expanduser("~/clones/rishabh-ranjan/relational-transformer"),
         capture_output=True,
         text=True,
     ).stdout.strip()
@@ -529,11 +529,13 @@ def main() -> None:
             resources=resources,
             name=f"pre-{name}",
             setup=SETUP,
-            repo_root="/lfs/hyperturing1/0/ranjanr/clones/rishabh-ranjan/relational-transformer",
+            repo_root=os.path.expanduser(
+                "~/clones/rishabh-ranjan/relational-transformer"
+            ),
             cluster=ILC,
             job_env="expts/job_env.sh",
             log_root=LOG_ROOT,
-            clone_root="/lfs/local/0/roach_clones",
+            clone_root=os.path.expanduser("~/roach_clones"),
             secrets_dir=os.path.expanduser("~/scratch/.secrets"),
         )
         # Queued now, held by slurm until its rustler stage succeeds: the GPU

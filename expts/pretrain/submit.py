@@ -221,7 +221,7 @@ def main() -> None:
         log_root=os.path.expanduser(
             "~/scratch/slurm-logs/rishabh-ranjan/relational-transformer/expts/pretrain"
         ),
-        clone_root=f"/lfs/local/0/{USER}/roach_clones",
+        clone_root=os.path.expanduser("~/roach_clones"),
         secrets_dir=os.path.expanduser("~/scratch/.secrets"),
         # The stop flag is acted on at a step boundary, after any in-loop eval
         # in flight (21 tasks at ctx 8192: minutes). Long enough to cover one,

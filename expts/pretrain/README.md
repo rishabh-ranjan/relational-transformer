@@ -19,7 +19,7 @@ one account. What the submitting user has to have:
   `origin/<branch>`, because the job clones that commit. A fork works the same.
 
 Logs, checkpoints and per-node clones all land under the submitting user's own
-`~/scratch` and `/lfs/local/0/$USER`; the first job on a node sets that
+`~/scratch` and `~/`; the first job on a node sets that
 node up (roach's ILC cluster env). Inputs are shared and read-only under
 `~/scratch/share`.
 

@@ -175,7 +175,7 @@ Escalate to a human:
 
 ## Gotchas that have actually bitten
 
-- **`/lfs/local/0` is a per-node symlink** to `/lfs/<host>/0`. Anything that
+- **The node-local home is a per-node symlink** to a per-host directory. Anything that
   resolves a path on one node and uses it on another breaks; multi-node jobs
   pass `--chdir=$REPO_DIR` (the unresolved path) for exactly this reason.
 - **Every node of a multi-node job needs setting up**, not just the batch node:

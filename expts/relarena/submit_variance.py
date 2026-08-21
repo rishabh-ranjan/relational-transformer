@@ -15,10 +15,13 @@ preemption now costs the checkpoint interval and this is the first real exercise
 of that path.
 """
 
+import os
 import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+
+from roach.slurm.clusters.ilc import ILC  # noqa: E402
 
 from expts.relarena.submit import (  # noqa: E402
     CACHE_DIR,
@@ -29,7 +32,6 @@ from expts.relarena.submit import (  # noqa: E402
     relarena_setup,
 )
 from roach.slurm import submit  # noqa: E402
-from roach.slurm.clusters.ilc import ILC  # noqa: E402
 
 DATASET, TASK, SEEDS = "rel-avito", "user-clicks", range(1, 6)
 
@@ -54,7 +56,7 @@ def main() -> None:
             cluster=ILC,
             job_env="expts/job_env.sh",
             log_root=f"{SHARE}/slurm-logs",
-            clone_root="/lfs/local/0/roach_clones",
+            clone_root=os.path.expanduser("~/roach_clones"),
             secrets_dir=SECRETS_DIR,
         )
         print(f"  seed {seed}: job {job.id}")

@@ -144,7 +144,7 @@ def main() -> None:
             entity="rtv2",
             run_name="smoke",
             wandb_disabled=True,
-            out_root=f"/lfs/local/0/{USER}/tmp/pretrain-smoke/ckpts",
+            out_root=os.path.expanduser("~/tmp/pretrain-smoke/ckpts"),
         ),
         run_id=args.run_id,
         resources=dataclasses.replace(
@@ -175,7 +175,7 @@ def main() -> None:
         log_root=os.path.expanduser(
             "~/scratch/slurm-logs/rishabh-ranjan/relational-transformer/expts/pretrain/smoke"
         ),
-        clone_root=f"/lfs/local/0/{USER}/roach_clones",
+        clone_root=os.path.expanduser("~/roach_clones"),
         secrets_dir=os.path.expanduser("~/scratch/.secrets"),
     )
 
