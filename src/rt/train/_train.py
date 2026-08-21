@@ -288,16 +288,6 @@ def main(
     eval_freq: int | None,
     keep_all_ckpts: bool,
     vector_db_path: str | None,
-    # Trim the database the contexts are built from to each dataset's test
-    # timestamp, as relbench's `Dataset.get_db(upto_test_timestamp=True)` does.
-    # One switch for training and in-loop eval alike: they have to see the same
-    # database or the validation number is not the training model's.
-    # Which split's timestamp the database the contexts are built from is
-    # trimmed to: ``"test"``, ``"val"``, an explicit epoch-seconds integer for
-    # data relbench cannot be asked about, or ``None`` for no trim. A run that
-    # selects on val has to use ``"val"`` -- the same rule test-time inference
-    # gets, one split earlier -- or its val metric is scored against a database
-    # that already contains the rows val is meant to predict.
     db_cutoff: str | int | None,
     # Whether the in-loop eval scores the live net as well as the SWA one.
     #
@@ -837,9 +827,9 @@ def main(
 
     grid4 = eval_ctx_lcs_bw_pl_grid
     entries = (
-        [(c, l, b, p) for (c, l, b, p) in grid4]
+        [(c, lcs, b, p) for (c, lcs, b, p) in grid4]
         if grid4
-        else [(None, l, b, p) for (l, b, p) in eval_lcs_bw_pl_grid]
+        else [(None, lcs, b, p) for (lcs, b, p) in eval_lcs_bw_pl_grid]
     )
     evaluators = (
         [
@@ -872,7 +862,7 @@ def main(
                         shuffle_seed=eval_shuffle_seed,
                         context_seed=_member_seed(member),
                         vector_db_path=eval_vector_db_path,
-                                        db_cutoff=db_cutoff,
+                        db_cutoff=db_cutoff,
                         global_rank=rank,
                         local_rank=local_rank,
                         world_size=world_size,
