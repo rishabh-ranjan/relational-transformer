@@ -1,8 +1,6 @@
 """Submit the pretraining run. See [README.md](README.md)."""
 
-import argparse
 import dataclasses
-import getpass
 import json
 from pathlib import Path
 
@@ -10,46 +8,7 @@ from roach.slurm.clusters.ilc import AMPERE_LO, BLACKWELL, ILC
 
 from roach.slurm import Resources, submit
 
-# The checkout this script belongs to, whatever that is, rather than one named
-# clone. `submit` refuses a dirty or unpushed tree, and the usual clone is
-# shared with other sessions: one of them mid-edit used to take the run down,
-# because an autoscale pass cancels before it submits and the submit then
-# failed on someone else's uncommitted files. From a `git worktree` (or any
-# other clean checkout of the same commit) submitting still works.
-REPO_ROOT = Path(__file__).resolve().parents[2]
 
-# Everything the run writes, and the secrets it reads, are the submitting
-# user's own: logs and checkpoints under their ~/scratch, clones under their
-# node-local home (a shared clone root is unwritable to its second user -- the
-# first user's lock files are 644). Shared inputs below stay under
-# ~/scratch/share, which is world-readable.
-USER = getpass.getuser()
-
-# The in-loop validation tasks, listed here rather than by path: RelBench's
-# published `forecast.json` also carries recommendation tasks, which
-# rt.train cannot build a Task from. Read at submit
-# time and passed inline -- this repo lives on the submitting host's local
-# disk, so a path into it does not resolve on the compute node.
-EVAL_TASKS = [
-    (db, task)
-    for db, task in json.loads(Path(__file__).with_name("eval-tasks.json").read_text())
-]
-
-
-# The pretraining shape, as a function of what the cluster will give right now.
-#
-# `a100:8`: `nodes` x 8xA100, exclusive: the mixture is populated into each
-# node's page cache, which wants the node's whole memory, and cpus_per_task is
-# 128/8 with it. See [autoscale.py](autoscale.py), which picks the shape and
-# resubmits. il-lo is preemptible and effectively uncapped, which is the only
-# way to hold more than 10 a100s; `il` is not preemptible but caps a100 at 10
-# per user, so it fits a single node and nothing larger.
-#
-# `b200:N`: N cards of blackwell1, not exclusive (the node is shared, and its
-# 3T of memory holds the mixture beside other jobs). `il-interactive` gives 2
-# of them at the top priority for 12h at a time, `il` gives 2 for 7d, `il-lo`
-# up to 4 preemptibly. The run checkpoints and resumes through preemption and
-# the wall clock alike, so either costs wall clock rather than work.
 def resources(gpus: str, nodes: int, qos: str, nodelist: str) -> Resources:
     time = {"il-lo": "21-00:00:00", "il": "7-00:00:00", "il-interactive": "12:00:00"}[
         qos
@@ -71,8 +30,6 @@ def resources(gpus: str, nodes: int, qos: str, nodelist: str) -> Resources:
         nodes,
         nodelist,
     )
-    # 36 cpus and 375G per card: MaxMemPerCPU is 10700M, so this is as much
-    # memory as the cpus can carry.
     return dataclasses.replace(
         BLACKWELL,
         gpus=gpus,
@@ -82,38 +39,10 @@ def resources(gpus: str, nodes: int, qos: str, nodelist: str) -> Resources:
     )
 
 
-def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
-    p = argparse.ArgumentParser(description=__doc__)
-    p.add_argument(
-        "run_id",
-        nargs="?",
-        help="relaunch this run instead of starting a new one; the run id names "
-        "the checkpoint directory, so the job resumes where it left off",
-    )
-    p.add_argument("--gpus", required=True, choices=("a100:8", "b200:2", "b200:4"))
-    p.add_argument("--nodes", type=int, default=1)
-    # No default: the tier is chosen against the cluster at the moment of
-    # submission, following
-    # [Allocating a sweep](../README.md#allocating-a-sweep) -- read the cluster,
-    # subtract what your own jobs already hold, spend the tiers top down.
-    # Whatever the last submission used is a record of a different cluster.
-    # `autoscale.py` computes it live and always passes it.
-    p.add_argument("--qos", required=True, choices=("il-lo", "il", "il-interactive"))
-    p.add_argument(
-        "--nodelist",
-        default="ampere1,ampere2,ampere3,ampere4,ampere5,ampere6,ampere7,ampere8,ampere9",
-        help="nodes to run on. Naming exactly the free ones is how a job starts "
-        "immediately rather than queueing behind whatever else wants them.",
-    )
-    return p.parse_args(argv)
-
-
-def main() -> None:
-    args = parse_args()
+def main(run_id: str | None, gpus: str, nodes: int, qos: str, nodelist: str) -> None:
     submit(
         "rt.train:main",
         args=dict(
-            # model: RT-J's dims
             embedder="all-MiniLM-L12-v2",
             d_text=384,
             num_blocks=12,
@@ -123,19 +52,11 @@ def main() -> None:
             compile=True,
             materialize_attn_masks=True,
             loss_fn="huber",
-            # Warm start (weights only) from RT-PluRel's classifier checkpoint;
-            # the local copy of stanford-star/rt-plurel, since the node does
-            # not fetch from the Hub. Same dims as the model above.
             load_ckpt_path="~/scratch/share/stanford-star/rt-plurel/classification",
-            # data: the Join's mixture
             db_task_list="~/scratch/share/stanford-star/the-join-preprocessed/db-task-lists/rt-j.json",
             train_splits=["train"],
             pre_dir="~/scratch/share/stanford-star/the-join-preprocessed",
-            # A b200 packs twice an a100's tokens (expts/fine_tune uses the same
-            # split).
-            tokens_per_gpu=2**18 if args.gpus.startswith("b200") else 2**17,
-            # loader workers are processes, and the job only owns
-            # `cpus_per_task` cores per task
+            tokens_per_gpu=2**18 if gpus.startswith("b200") else 2**17,
             num_workers=16,
             prefetch_factor=2,
             ctx_size_list=[512, 1024, 2048, 4096, 8192],
@@ -146,11 +67,6 @@ def main() -> None:
             walk_length=20,
             mask_prob_max=0.5,
             items_per_task=100_000,
-            # optimization
-            # Decay pulls toward the warm-start weights rather than zero. The
-            # net is bf16 with no fp32 master copy, so at lr*wd = 5e-5 the
-            # decay step (delta or plain) rounds away to nothing; `wd` is inert
-            # until rt.train keeps fp32 master weights.
             delta_finetune=True,
             optimizer="muon",
             lr=5e-4,
@@ -169,20 +85,14 @@ def main() -> None:
             eval_freq=1_000,
             keep_all_ckpts=True,
             vector_db_path=None,
-            # The released run predates the db_cutoff knob (no cutoff existed);
-            # "test" would also resolve every Join source through the Hub at
-            # init and crash on databases without a test timestamp.
             db_cutoff=None,
             resume_save_mins=20.0,
-            # in-loop validation: the benchmark's forecast tasks, val split
             eval_splits=["val"],
-            eval_db_task_list=EVAL_TASKS,
+            eval_db_task_list=json.loads(
+                Path(__file__).with_name("eval-tasks.json").read_text()
+            ),
             eval_pre_dir="~/scratch/share/stanford-star/relbench-preprocessed",
-            # Half of training's: the eval masks are
-            # `eval_tokens_per_gpu * 8192` bytes each (2 GB at 2**18), and an
-            # eval that fills the card OOMs the training forward after it. Eval
-            # is slower for it, and only runs every `eval_freq` steps.
-            eval_tokens_per_gpu=2**17 if args.gpus.startswith("b200") else 2**16,
+            eval_tokens_per_gpu=2**17 if gpus.startswith("b200") else 2**16,
             eval_num_workers=1,
             eval_prefetch_factor=2,
             eval_num_walks=10_000,
@@ -195,7 +105,6 @@ def main() -> None:
             eval_ensemble_size=1,
             eval_vector_db_path=None,
             eval_lcs_bw_pl_grid=[(256, 32, True)],
-            # logging
             targets={},
             project="2026-08-07-pretrain",
             entity="rtv2",
@@ -203,22 +112,25 @@ def main() -> None:
             wandb_disabled=False,
             out_root="~/scratch/ckpts",
         ),
-        resources=resources(args.gpus, args.nodes, args.qos, args.nodelist),
+        resources=resources(gpus, nodes, qos, nodelist),
         name="pretrain",
-        run_id=args.run_id,
-        repo_root=str(REPO_ROOT),
+        run_id=run_id,
+        repo_root=str(Path(__file__).resolve().parents[2]),
         cluster=ILC,
         job_env="expts/job_env.sh",
         log_root="~/scratch/slurm-logs/rishabh-ranjan/relational-transformer/expts/pretrain",
         clone_root="~/roach_clones",
         secrets_dir="~/scratch/.secrets",
-        # The stop flag is acted on at a step boundary, after any in-loop eval
-        # in flight (21 tasks at ctx 8192: minutes). Long enough to cover one,
-        # so a wall-clock ending still requeues instead of being killed
-        # mid-eval.
         timeout_grace_secs=1800,
     )
 
 
 if __name__ == "__main__":
-    main()
+    main(
+        run_id=None,
+        gpus="a100:8",
+        nodes=1,
+        qos="il",
+        nodelist="ampere1,ampere2,ampere3,ampere4,ampere5,ampere6,ampere7,ampere8,ampere9",
+    )
+    # main(run_id=None, gpus="b200:2", nodes=1, qos="il", nodelist="blackwell1")

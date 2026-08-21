@@ -1,89 +1,130 @@
 # Pretraining
 
 One pretraining run of the Relational Transformer on the Join, with the
-benchmark's forecast tasks as in-loop validation. The checkpoint it produces is
-what `expts/fine_tune` loads as its pretrained arm.
+benchmark's forecast tasks as in-loop validation on `val`. The checkpoint it
+produces is what `expts/fine_tune` loads as its pretrained arm.
 
 ## Before the first submission
 
-Anyone on the cluster can run this from their own checkout; nothing is tied to
-one account. What the submitting user has to have:
-
 - A slurm association on account `infolab` with the `il` and `il-lo` QOS
   (`sacctmgr show assoc user=$USER format=account,qos`).
-- `~/scratch/.secrets/{wandb,huggingface,github}`, each holding one
-  token (`chmod 700` the directory). The job reads them on the node; the wandb
-  key must belong to a member of the `rtv2` team, the entity the run logs to.
-- `pixi` on the login host and `pixi install` run once in the checkout.
-- Push access to `origin`: `submit` refuses a commit that is not on
-  `origin/<branch>`, because the job clones that commit. A fork works the same.
+- `~/scratch/.secrets/{wandb,huggingface,github}`, one token each, directory
+  `chmod 700`. The wandb key must belong to a member of the `rtv2` team.
+- `pixi install` run once in the checkout, and push access to `origin`.
+- Inputs, produced by [`expts/preprocess`](../preprocess/README.md):
+  `pre_dir` (the Join; `db_task_list` is its `rt-j.json`) and `eval_pre_dir`
+  (RelBench; the validation tasks are [`eval-tasks.json`](eval-tasks.json)
+  beside this file, passed inline because a compute node cannot read this
+  repo). If startup reports `tasks_skipped` or `ignored`, regenerate the lists
+  with `expts/preprocess/finalize.py task-lists`.
 
-Logs, checkpoints and per-node clones all land under the submitting user's own
-`~/scratch` and `~/`; the first job on a node sets that
-node up (roach's ILC cluster env). Inputs are shared and read-only under
-`~/scratch/share`.
+Logs, checkpoints and per-node clones land under the submitting user's own
+`~/scratch` and `~/`; inputs are read-only under `~/scratch/share`.
 
 ## Running it
 
-```
-pixi run python -m expts.pretrain.submit --gpus a100:8 --qos il            # new run; prints its run_id
-pixi run python -m expts.pretrain.submit <run_id> --gpus a100:8 --qos il   # resume that run
-pixi run python -m expts.pretrain.submit --gpus b200:2 --qos il --nodelist blackwell1
-```
-
-`--gpus b200:2` on `il` is 2 cards of blackwell1 (the `il` b200 sub-cap),
-non-preemptible, 7d at a time; `il-interactive` gives the same 2 cards at a
-higher priority but for 12h at a time. The run requeues and resumes across the
-wall clock either way (each restart costs a cold start, see
-[MONITOR.md](MONITOR.md)). `autoscale.py`
-only knows the ampere shape.
-
-With `--gpus a100:8`: 8xA100 per node, `--exclusive`. A single node goes on `il` -- not preemptible,
-7d wall, but capped at 10 a100 per user, so it fits one node and nothing wider;
-everything wider goes on the preemptible `il-lo` (21d wall). Prefer `il`
-whenever the cap allows, *including for a job that will sit in the queue*: a
-pending `il-lo` job is preemptible the moment it starts, and queueing on `il`
-costs no more. How many nodes, and which queue, is not a constant -- it is
-whatever the cluster will hand over right now:
+Write `run_id`, `gpus`, `nodes`, `qos` and `nodelist` into the `__main__`
+block of [`submit.py`](submit.py), commit, push, then
 
 ```
-pixi run python -m expts.pretrain.autoscale <run_id>   # take the widest free shape
+pixi run python -m expts.pretrain.submit    # prints the run_id
 ```
 
-Run that on a timer for the life of the run. It takes 4 whole nodes when 4 are
-free, else 2, else 1, only ever moving to a shape slurm starts immediately, and
-puts a single-node run on the non-preemptible `il` queue when that QOS's
-10-a100 cap allows. **[MONITOR.md](MONITOR.md) is the operating manual** -- the
-policy, what to watch, what is routine, and the failure modes that have
-actually happened. Read it before babysitting this run.
+- `run_id=None` starts a new run; a run_id resumes that run from its
+  `resume.pt`. Resume works at any GPU count.
+- `gpus="a100:8"`: `nodes` whole ampere nodes, `--exclusive`. One node fits
+  under `il` (not preemptible, 7d wall, 10 a100 per user); wider goes on
+  `il-lo` (preemptible, 21d wall). Name exactly the idle nodes in `nodelist`
+  to start immediately instead of queueing.
+- `gpus="b200:2"` / `"b200:4"`: cards of blackwell1, shared. `il` gives 2 for
+  7d, `il-interactive` 2 for 12h at top priority, `il-lo` up to 4.
 
-Before trusting a multi-node shape -- after touching distributed setup, or on
-nodes a run has just hung on -- [`smoke.py`](smoke.py) runs the same launch
-path on rel-f1 for 20 steps, which takes about a minute:
+Preemption and the wall clock both requeue and resume from the run's own
+checkpoint; no action is needed.
+
+Logs and `args.json`: `~/scratch/slurm-logs/rishabh-ranjan/relational-transformer/expts/pretrain/<run_id>_<jobid>.out`
+(a new file per requeue, same run_id). Checkpoints and `params.json`:
+`~/scratch/ckpts/rtv2/<project>/<run_id>`.
+
+### Autoscaling an a100 run
+
+For the life of the run, every ~10 minutes and after every preemption:
 
 ```
-pixi run python -m expts.pretrain.smoke --nodelist ampere3,ampere9
+pixi run python -m expts.pretrain.autoscale <run_id>
 ```
 
-Neither preemption nor the wall clock needs you: both requeue and resume from
-the run's own checkpoint (see [`roach.slurm`](https://github.com/rishabh-ranjan/roach)),
-and resume is GPU-count flexible, which is what lets the shape change under a
-running experiment without costing work.
+What a pass does:
 
-Logs and `args.json` land in
-`~/scratch/slurm-logs/rishabh-ranjan/relational-transformer/expts/pretrain`,
-checkpoints and `params.json` under `~/scratch/ckpts/rtv2/<project>/<run_id>`.
+- Takes 4 whole idle ampere nodes, else 2, else 1. A node counts as idle when
+  its allocated cpus are 0 (`sinfo -o %C`), not when its GPUs are free.
+- Only ever submits a shape that starts now, by naming the idle nodes. A
+  running job is replaced only by a strictly wider one; a pending job is
+  replaced by anything that starts.
+- Orders idle nodes by the run's most recent use of them in the last 12 hours
+  (`sacct --name pretrain`), since a node still holding the mixture in its
+  page cache reaches the first step in minutes rather than tens of minutes.
+- Puts a single node on `il` when this user's other `il` jobs hold 2 or fewer
+  a100s, else on `il-lo`; wider shapes always on `il-lo`.
+- With nothing free and no job, queues one node.
 
-## Inputs
+It cancels before it submits, so a non-zero exit means the run has no job:
+fix the cause it printed and resubmit with the run_id.
 
-Both directories are produced by [`expts/preprocess`](../preprocess/README.md)
-and have to exist before submitting:
+A b200 run is placed by hand; `autoscale.py` asserts the job holds a100s.
 
-- `pre_dir` -- the Join, preprocessed. `db_task_list` is its `rt-j.json`, the
-  mixture the run trains on.
-- `eval_pre_dir` -- RelBench, preprocessed. The validation tasks are
-  [`eval-tasks.json`](eval-tasks.json) beside this file, passed inline and
-  evaluated on `val` every `eval_freq` steps, which is what makes transfer
-  visible during the run rather than after it. They are listed here rather than
-  read from the published `forecast.json` by path because this repo lives on
-  the submitting host's local disk, which a compute node cannot see.
+## Watching it
+
+1. `squeue -j <id> -h -o "%T %R %N"` every 60s, emit on change. Preemption
+   reappears as PENDING under the same job id. When the job leaves the queue:
+   `sacct -j <id> -X -n -o State,ExitCode`.
+2. `tail -F` the `.out`, grepping
+   `Traceback|Error|FAILED|Killed|OOM|out of memory|PREEMPT|requeu|restarts=|CANCELLED`
+   plus a progress line. Filter out `task_skipped` bulk lines.
+
+To find a run already in flight:
+
+```
+squeue -u $USER -h -n pretrain -o "%i|%T|%D|%N|%q"
+ls -t ~/scratch/slurm-logs/rishabh-ranjan/relational-transformer/expts/pretrain/*.out | head -1
+```
+
+The log name gives the run_id; `grep -c resume_saved_at_step` and `tail` give
+the step. The run is finished when the log says so at `total_steps`
+(100_001), not when the queue is empty.
+
+On wandb, each attempt is its own run, id `<run_id>-<jobid>.<restart>`,
+grouped under the run_id: group by `Group` and the attempts draw one curve on
+the `step` axis.
+
+Routine:
+
+- `preempted_at_step: N` followed by a requeue; a `restarts=N` bump followed
+  by `resumed_from`. The log says "wall clock is near" on preemption too.
+- `time_to_first_step` of 25-45m on a node the run has not used recently, ~4m
+  on one it has (page-cache population; compile is ~1m of it).
+- Allocator OOM *warnings*.
+- `ReqNodeNotAvail` for a few minutes after cancelling a hung job: the node is
+  draining, wait.
+
+Escalate:
+
+- A crash that repeats across restarts, or an OOM error.
+- The job leaving the queue with a non-zero exit.
+- Time-to-first-step longer than the interval between preemptions: move to a
+  non-preemptible queue or a smaller shape.
+- A multi-node job with no log line well past the expected first step and
+  every rank holding ~2 GB at 100% util is hung in a collective. Cancel it and
+  run [`smoke.py`](smoke.py) on those nodes before putting the run back there.
+
+## Smoke test
+
+Write the shape into the `__main__` block of [`smoke.py`](smoke.py), commit,
+push, then
+
+```
+pixi run python -m expts.pretrain.smoke
+```
+
+Run it after touching distributed setup and on nodes a run has just hung on.
+Pass/fail is in its docstring. Its logs go under `.../expts/pretrain/smoke`.
