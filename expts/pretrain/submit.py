@@ -4,133 +4,101 @@ import dataclasses
 import json
 from pathlib import Path
 
-from roach.slurm.clusters.ilc import AMPERE_LO, BLACKWELL, ILC
+from roach.slurm.clusters import ilc
 
-from roach.slurm import Resources, submit
+from roach.slurm import submit
 
-
-def resources(gpus: str, nodes: int, qos: str, nodelist: str) -> Resources:
-    time = {"il-lo": "21-00:00:00", "il": "7-00:00:00", "il-interactive": "12:00:00"}[
-        qos
-    ]
-    kind, count = gpus.split(":")
-    if kind == "a100":
-        assert count == "8", gpus
-        return dataclasses.replace(
-            AMPERE_LO,
-            nodes=nodes,
-            qos=qos,
-            time=time,
-            exclusive=True,
-            cpus_per_task=16,
-            nodelist=nodelist,
-        )
-    assert kind == "b200" and nodes == 1 and nodelist == "blackwell1", (
-        gpus,
-        nodes,
-        nodelist,
-    )
-    return dataclasses.replace(
-        BLACKWELL,
-        gpus=gpus,
-        qos=qos,
-        time=time,
-        mem=f"{375_000 * int(count)}M",
-    )
-
-
-def main(run_id: str | None, gpus: str, nodes: int, qos: str, nodelist: str) -> None:
-    submit(
-        "rt.train:main",
-        args=dict(
-            embedder="all-MiniLM-L12-v2",
-            d_text=384,
-            num_blocks=12,
-            d_model=512,
-            num_heads=8,
-            d_ff=2048,
-            compile=True,
-            materialize_attn_masks=True,
-            loss_fn="huber",
-            load_ckpt_path="~/scratch/share/stanford-star/rt-plurel/classification",
-            db_task_list="~/scratch/share/stanford-star/the-join-preprocessed/db-task-lists/rt-j.json",
-            train_splits=["train"],
-            pre_dir="~/scratch/share/stanford-star/the-join-preprocessed",
-            tokens_per_gpu=2**18 if gpus.startswith("b200") else 2**17,
-            num_workers=16,
-            prefetch_factor=2,
-            ctx_size_list=[512, 1024, 2048, 4096, 8192],
-            local_ctx_size_list=[256, 512, 1024, 2048, 4096, 8192],
-            bfs_width_list=[8, 16, 32, 64, 128, 256],
-            prefer_latest_list=[False, True],
-            num_walks=10_000,
-            walk_length=20,
-            mask_prob_max=0.5,
-            items_per_task=100_000,
-            delta_finetune=True,
-            optimizer="muon",
-            lr=5e-4,
-            wd=0.1,
-            lr_warmup_steps=2_000,
-            lr_decay_steps=0,
-            grad_norm_max=1.0,
-            total_bs=1024,
-            total_steps=100_001,
-            early_stop_after_steps=None,
-            can_select_init_model=False,
-            swa_momentum=0.9995,
-            seed=0,
-            mmap_populate=True,
-            timeout_per_item=10.0,
-            eval_freq=1_000,
-            keep_all_ckpts=True,
-            vector_db_path=None,
-            db_cutoff=None,
-            resume_save_mins=20.0,
-            eval_splits=["val"],
-            eval_db_task_list=json.loads(
-                Path(__file__).with_name("eval-tasks.json").read_text()
-            ),
-            eval_pre_dir="~/scratch/share/stanford-star/relbench-preprocessed",
-            eval_tokens_per_gpu=2**17 if gpus.startswith("b200") else 2**16,
-            eval_num_workers=1,
-            eval_prefetch_factor=2,
-            eval_num_walks=10_000,
-            eval_walk_length=20,
-            eval_items_per_task=1024,
-            eval_ctx_size_list=[8192],
-            eval_mmap_populate=True,
-            eval_shuffle_seed=0,
-            eval_context_seed=0,
-            eval_ensemble_size=1,
-            eval_vector_db_path=None,
-            eval_lcs_bw_pl_grid=[(256, 32, True)],
-            targets={},
-            project="2026-08-07-pretrain",
-            entity="rtv2",
-            run_name="rt-j-from-rt-plurel",
-            wandb_disabled=False,
-            out_root="~/scratch/ckpts",
+submit(
+    "rt.train:main",
+    args=dict(
+        embedder="all-MiniLM-L12-v2",
+        d_text=384,
+        num_blocks=12,
+        d_model=512,
+        num_heads=8,
+        d_ff=2048,
+        compile=True,
+        materialize_attn_masks=True,
+        loss_fn="huber",
+        load_ckpt_path="~/scratch/share/stanford-star/rt-plurel/classification",
+        db_task_list="~/scratch/share/stanford-star/the-join-preprocessed/db-task-lists/rt-j.json",
+        train_splits=["train"],
+        pre_dir="~/scratch/share/stanford-star/the-join-preprocessed",
+        tokens_per_gpu=2**17,  # b200: 2**18
+        num_workers=16,
+        prefetch_factor=2,
+        ctx_size_list=[512, 1024, 2048, 4096, 8192],
+        local_ctx_size_list=[256, 512, 1024, 2048, 4096, 8192],
+        bfs_width_list=[8, 16, 32, 64, 128, 256],
+        prefer_latest_list=[False, True],
+        num_walks=10_000,
+        walk_length=20,
+        mask_prob_max=0.5,
+        items_per_task=100_000,
+        delta_finetune=True,
+        optimizer="muon",
+        lr=5e-4,
+        wd=0.1,
+        lr_warmup_steps=2_000,
+        lr_decay_steps=0,
+        grad_norm_max=1.0,
+        total_bs=1024,
+        total_steps=100_001,
+        early_stop_after_steps=None,
+        can_select_init_model=False,
+        swa_momentum=0.9995,
+        seed=0,
+        mmap_populate=True,
+        timeout_per_item=10.0,
+        eval_freq=1_000,
+        keep_all_ckpts=True,
+        vector_db_path=None,
+        db_cutoff=None,
+        resume_save_mins=20.0,
+        eval_splits=["val"],
+        eval_db_task_list=json.loads(
+            Path(__file__).with_name("eval-tasks.json").read_text()
         ),
-        resources=resources(gpus, nodes, qos, nodelist),
-        name="pretrain",
-        run_id=run_id,
-        repo_root=str(Path(__file__).resolve().parents[2]),
-        cluster=ILC,
-        job_env="expts/job_env.sh",
-        log_root="~/scratch/slurm-logs/rishabh-ranjan/relational-transformer/expts/pretrain",
-        clone_root="~/roach_clones",
-        secrets_dir="~/scratch/.secrets",
-        timeout_grace_secs=1800,
-    )
-
-
-if __name__ == "__main__":
-    main(
-        run_id=None,
-        gpus="a100:8",
+        eval_pre_dir="~/scratch/share/stanford-star/relbench-preprocessed",
+        eval_tokens_per_gpu=2**16,  # b200: 2**17
+        eval_num_workers=1,
+        eval_prefetch_factor=2,
+        eval_num_walks=10_000,
+        eval_walk_length=20,
+        eval_items_per_task=1024,
+        eval_ctx_size_list=[8192],
+        eval_mmap_populate=True,
+        eval_shuffle_seed=0,
+        eval_context_seed=0,
+        eval_ensemble_size=1,
+        eval_vector_db_path=None,
+        eval_lcs_bw_pl_grid=[(256, 32, True)],
+        targets={},
+        project="2026-08-07-pretrain",
+        entity="rtv2",
+        run_name="rt-j-from-rt-plurel",
+        wandb_disabled=False,
+        out_root="~/scratch/ckpts",
+    ),
+    resources=dataclasses.replace(
+        ilc.AMPERE_LO,
         nodes=1,
         qos="il",
+        time="7-00:00:00",
+        exclusive=True,
+        cpus_per_task=16,
         nodelist="ampere1,ampere2,ampere3,ampere4,ampere5,ampere6,ampere7,ampere8,ampere9",
-    )
-    # main(run_id=None, gpus="b200:2", nodes=1, qos="il", nodelist="blackwell1")
+    ),
+    # resources=dataclasses.replace(
+    #     ilc.BLACKWELL, gpus="b200:2", qos="il", time="7-00:00:00", mem="750000M"
+    # ),
+    name="pretrain",
+    run_id=None,
+    repo_root=str(Path(__file__).resolve().parents[2]),
+    cluster=ilc.ILC,
+    job_env="expts/job_env.sh",
+    log_root="~/scratch/slurm-logs/rishabh-ranjan/relational-transformer/expts/pretrain",
+    clone_root="~/roach_clones",
+    secrets_dir="~/scratch/.secrets",
+    timeout_grace_secs=1800,
+)

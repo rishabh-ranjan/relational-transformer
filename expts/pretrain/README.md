@@ -23,8 +23,8 @@ Logs, checkpoints and per-node clones land under the submitting user's own
 
 ## Running it
 
-Write `run_id`, `gpus`, `nodes`, `qos` and `nodelist` into the `__main__`
-block of [`submit.py`](submit.py), commit, push, then
+Write `run_id` and `resources` into [`submit.py`](submit.py), commit, push,
+then
 
 ```
 pixi run python -m expts.pretrain.submit    # prints the run_id
@@ -32,12 +32,15 @@ pixi run python -m expts.pretrain.submit    # prints the run_id
 
 - `run_id=None` starts a new run; a run_id resumes that run from its
   `resume.pt`. Resume works at any GPU count.
-- `gpus="a100:8"`: `nodes` whole ampere nodes, `--exclusive`. One node fits
-  under `il` (not preemptible, 7d wall, 10 a100 per user); wider goes on
-  `il-lo` (preemptible, 21d wall). Name exactly the idle nodes in `nodelist`
-  to start immediately instead of queueing.
-- `gpus="b200:2"` / `"b200:4"`: cards of blackwell1, shared. `il` gives 2 for
-  7d, `il-interactive` 2 for 12h at top priority, `il-lo` up to 4.
+- Ampere: whole nodes, `--exclusive`. One node fits under `il` (not
+  preemptible, 7d wall, 10 a100 per user); wider goes on `il-lo` (preemptible,
+  21d wall). Name exactly the idle nodes (`sinfo -p il -o "%n %t %C"`, 0
+  allocated cpus) in `nodelist` to start immediately instead of queueing. A
+  node the run used in the last few hours reaches the first step in minutes
+  rather than tens of minutes.
+- Blackwell: cards of blackwell1, shared; set `tokens_per_gpu` and
+  `eval_tokens_per_gpu` to the b200 values noted beside them. `il` gives 2
+  cards for 7d, `il-interactive` 2 for 12h at top priority, `il-lo` up to 4.
 
 Preemption and the wall clock both requeue and resume from the run's own
 checkpoint; no action is needed.
@@ -45,33 +48,6 @@ checkpoint; no action is needed.
 Logs and `args.json`: `~/scratch/slurm-logs/rishabh-ranjan/relational-transformer/expts/pretrain/<run_id>_<jobid>.out`
 (a new file per requeue, same run_id). Checkpoints and `params.json`:
 `~/scratch/ckpts/rtv2/<project>/<run_id>`.
-
-### Autoscaling an a100 run
-
-For the life of the run, every ~10 minutes and after every preemption:
-
-```
-pixi run python -m expts.pretrain.autoscale <run_id>
-```
-
-What a pass does:
-
-- Takes 4 whole idle ampere nodes, else 2, else 1. A node counts as idle when
-  its allocated cpus are 0 (`sinfo -o %C`), not when its GPUs are free.
-- Only ever submits a shape that starts now, by naming the idle nodes. A
-  running job is replaced only by a strictly wider one; a pending job is
-  replaced by anything that starts.
-- Orders idle nodes by the run's most recent use of them in the last 12 hours
-  (`sacct --name pretrain`), since a node still holding the mixture in its
-  page cache reaches the first step in minutes rather than tens of minutes.
-- Puts a single node on `il` when this user's other `il` jobs hold 2 or fewer
-  a100s, else on `il-lo`; wider shapes always on `il-lo`.
-- With nothing free and no job, queues one node.
-
-It cancels before it submits, so a non-zero exit means the run has no job:
-fix the cause it printed and resubmit with the run_id.
-
-A b200 run is placed by hand; `autoscale.py` asserts the job holds a100s.
 
 ## Watching it
 
@@ -119,8 +95,7 @@ Escalate:
 
 ## Smoke test
 
-Write the shape into the `__main__` block of [`smoke.py`](smoke.py), commit,
-push, then
+Write the shape into [`smoke.py`](smoke.py), commit, push, then
 
 ```
 pixi run python -m expts.pretrain.smoke
