@@ -21,8 +21,8 @@ import numpy as np
 
 from expts.repaper.config import OUT_ROOT, PRE_DIR, SHARE, project
 
-OUT_ROOT = Path(OUT_ROOT) / "repaper-submit"
-CSV_DIR = Path(SHARE) / "leaderboard" / "preds"
+OUT_ROOT = Path(OUT_ROOT).expanduser() / "repaper-submit"
+CSV_DIR = Path(SHARE).expanduser() / "leaderboard" / "preds"
 EMBEDDER = "all-MiniLM-L12-v2"
 N_CFGS = 4
 N_SEEDS = 4

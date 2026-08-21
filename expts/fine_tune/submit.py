@@ -28,7 +28,6 @@ moment one of these does:
 
 import functools
 import json
-import os
 from pathlib import Path
 
 from roach.slurm.clusters.ilc import ILC
@@ -156,7 +155,7 @@ def ckpt_for(db: str, task: str, release: str | None) -> str | None:
         return None
     sub = {"BINARY_CLASSIFICATION": "classification", "REGRESSION": "regression"}
     head = sub[task_type_for(db, task)]
-    return os.path.expanduser(f"~/scratch/share/stanford-star/{release}/{head}")
+    return f"~/scratch/share/stanford-star/{release}/{head}"
 
 
 def loss_fn_for(db: str, task: str) -> str:
@@ -292,9 +291,7 @@ def main() -> None:
                 load_ckpt_path=ckpt_for(db, task, "rt-plurel"),
                 db_task_list=[(db, task)],
                 train_splits=["train", "val"],
-                pre_dir=os.path.expanduser(
-                    "~/scratch/share/stanford-star/relbench-preprocessed"
-                ),
+                pre_dir="~/scratch/share/stanford-star/relbench-preprocessed",
                 tokens_per_gpu=2**18 if resources.gpus.startswith("b200") else 2**17,
                 num_workers=resources.cpus_per_task,
                 prefetch_factor=2,
@@ -328,9 +325,7 @@ def main() -> None:
                 resume_save_mins=20.0,
                 eval_splits=["test"],
                 eval_db_task_list=[(db, task)],
-                eval_pre_dir=os.path.expanduser(
-                    "~/scratch/share/stanford-star/relbench-preprocessed"
-                ),
+                eval_pre_dir="~/scratch/share/stanford-star/relbench-preprocessed",
                 eval_tokens_per_gpu=2**18,
                 eval_num_workers=resources.cpus_per_task,
                 eval_prefetch_factor=2,
@@ -349,20 +344,16 @@ def main() -> None:
                 entity="rtv2",
                 run_name=name,
                 wandb_disabled=False,
-                out_root=os.path.expanduser("~/scratch/ckpts"),
+                out_root="~/scratch/ckpts",
             ),
             resources=resources,
             name=f"{db}-{task}",
-            repo_root=os.path.expanduser(
-                "~/clones/rishabh-ranjan/relational-transformer"
-            ),
+            repo_root="~/clones/rishabh-ranjan/relational-transformer",
             cluster=ILC,
             job_env="expts/job_env.sh",
-            log_root=os.path.expanduser(
-                "~/scratch/slurm-logs/rishabh-ranjan/relational-transformer/expts/fine-tune"
-            ),
-            clone_root=os.path.expanduser("~/roach_clones"),
-            secrets_dir=os.path.expanduser("~/scratch/.secrets"),
+            log_root="~/scratch/slurm-logs/rishabh-ranjan/relational-transformer/expts/fine-tune",
+            clone_root="~/roach_clones",
+            secrets_dir="~/scratch/.secrets",
             run_id=RUN_IDS.get((db, task)),
         )
 

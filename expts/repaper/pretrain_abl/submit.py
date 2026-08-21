@@ -25,7 +25,6 @@ import json
 import sys
 from pathlib import Path
 
-from roach.slurm import submit
 from roach.slurm.clusters.ilc import AMPERE_LO, ILC
 
 from expts.repaper.config import (
@@ -38,6 +37,7 @@ from expts.repaper.config import (
     SHARE,
     project,
 )
+from roach.slurm import submit
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 PRE_DIR_JOIN = JOIN_PRE_DIR
@@ -54,7 +54,7 @@ EVAL_TASKS = [
 def mix_list(kind: str) -> str:
     """Write (once) and return the path of the rt-j mixture filtered to one
     task family."""
-    out = Path(SHARE) / "db-task-lists" / f"rt-j-{kind}.json"
+    out = Path(SHARE).expanduser() / "db-task-lists" / f"rt-j-{kind}.json"
     if not out.exists():
         base = Path(PRE_DIR_JOIN) / "db-task-lists"
         rtj = {tuple(p) for p in json.loads((base / "rt-j.json").read_text())}

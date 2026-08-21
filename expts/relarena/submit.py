@@ -20,7 +20,6 @@ reverted between `setup` and the job. Anything relarena needs that the lock
 carries has to be in the lock.
 """
 
-import os
 from pathlib import Path
 
 from roach.slurm.clusters.ilc import ILC
@@ -29,11 +28,9 @@ from roach.slurm import Resources, submit
 
 HERE = Path(__file__).parent
 
-REPO_ROOT = os.path.expanduser(
-    "~/clones/rishabh-ranjan/relational-transformer-relarena"
-)
-SECRETS_DIR = os.path.expanduser("~/scratch/.secrets")
-SHARE = os.path.expanduser("~/scratch/share/relarena")
+REPO_ROOT = "~/clones/rishabh-ranjan/relational-transformer-relarena"
+SECRETS_DIR = "~/scratch/.secrets"
+SHARE = "~/scratch/share/relarena"
 
 # Node-local, and written by the job itself: the warm and the run are one job,
 # so nothing has to be shared, and ~/scratch is slow enough to matter for a cache
@@ -42,7 +39,7 @@ SHARE = os.path.expanduser("~/scratch/share/relarena")
 # On the node NVMe, not /tmp. /tmp is the root filesystem -- 438G on blackwell1,
 # shared with the OS -- and one rel-amazon task's exports are ~85G, so four of
 # them fill it and wedge every job on the node. The node-local home is 42-56T.
-CACHE_DIR = os.path.expanduser("~/relarena-cache")
+CACHE_DIR = "~/.cache/relarena"
 
 #: Wall for the jobs pinned to the `ranjanr_deadline` reservation. Not il-lo's
 #: 21 days: a reservation job cannot outlive the reservation, so asking for
@@ -311,7 +308,7 @@ def main() -> None:
             cluster=ILC,
             job_env="expts/job_env.sh",
             log_root=f"{SHARE}/slurm-logs",
-            clone_root=os.path.expanduser("~/roach_clones"),
+            clone_root="~/roach_clones",
             secrets_dir=SECRETS_DIR,
         )
 
@@ -326,7 +323,7 @@ def main() -> None:
             cluster=ILC,
             job_env="expts/job_env.sh",
             log_root=f"{SHARE}/slurm-logs",
-            clone_root=os.path.expanduser("~/roach_clones"),
+            clone_root="~/roach_clones",
             secrets_dir=SECRETS_DIR,
         )
         print(f"  bench-compile/{dataset}/{task}")
@@ -356,7 +353,7 @@ def main() -> None:
             cluster=ILC,
             job_env="expts/job_env.sh",
             log_root=f"{SHARE}/slurm-logs",
-            clone_root=os.path.expanduser("~/roach_clones"),
+            clone_root="~/roach_clones",
             secrets_dir=SECRETS_DIR,
             run_id=RUN_IDS.get((model, dataset, task)),
         )

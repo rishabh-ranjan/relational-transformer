@@ -10,7 +10,6 @@ tuned+ensembled table.
 import json
 from pathlib import Path
 
-from roach.slurm import Resources, submit
 from roach.slurm.clusters.ilc import ILC
 
 from expts.repaper.config import (
@@ -22,6 +21,7 @@ from expts.repaper.config import (
     PRE_DIR,
     SECRETS_DIR,
 )
+from roach.slurm import Resources, submit
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 OUT_ROOT = f"{OUT_ROOT}/repaper-submit"
@@ -65,7 +65,7 @@ if __name__ == "__main__":
         db, table = task_key.split("/")
         for rank, (ctx, lcs, bw, pl) in enumerate(rec["top_cfgs"]):
             out_dir = f"{OUT_ROOT}/cfg{rank}"
-            if (Path(out_dir) / f"{db}__{table}.json").exists():
+            if (Path(out_dir).expanduser() / f"{db}__{table}.json").exists():
                 continue
             submit(
                 "expts.repaper.enscurve.run:main",

@@ -15,7 +15,6 @@ preemption now costs the checkpoint interval and this is the first real exercise
 of that path.
 """
 
-import os
 import sys
 from pathlib import Path
 
@@ -56,7 +55,7 @@ def main() -> None:
             cluster=ILC,
             job_env="expts/job_env.sh",
             log_root=f"{SHARE}/slurm-logs",
-            clone_root=os.path.expanduser("~/roach_clones"),
+            clone_root="~/roach_clones",
             secrets_dir=SECRETS_DIR,
         )
         print(f"  seed {seed}: job {job.id}")

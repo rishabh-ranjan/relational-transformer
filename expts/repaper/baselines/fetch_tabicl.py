@@ -10,14 +10,14 @@ node:
 import shutil
 from pathlib import Path
 
-from expts.repaper.config import SHARE
 from expts.repaper.baselines.rel2tab.tabicl_batched import (
     CLF_CHECKPOINT,
     HF_REPO,
     REG_CHECKPOINT,
 )
+from expts.repaper.config import SHARE
 
-DEST = Path(SHARE) / "tabicl"
+DEST = Path(SHARE).expanduser() / "tabicl"
 
 
 def main() -> None:

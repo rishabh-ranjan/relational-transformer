@@ -18,7 +18,6 @@ costs its whole elapsed time, not a 20-minute window -- which is why the
 reservation and `il` are spent first and `il-lo` is the last resort.
 """
 
-import os
 import sys
 from pathlib import Path
 
@@ -95,7 +94,7 @@ def main() -> None:
                 cluster=ILC,
                 job_env="expts/job_env.sh",
                 log_root=f"{SHARE}/slurm-logs",
-                clone_root=os.path.expanduser("~/roach_clones"),
+                clone_root="~/roach_clones",
                 secrets_dir=SECRETS_DIR,
             )
             print(f"  {model}/{dataset}/{task:22s} {resources.qos:15s} {job.id}")

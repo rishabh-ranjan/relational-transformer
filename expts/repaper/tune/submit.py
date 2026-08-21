@@ -16,7 +16,6 @@ bw {16,64,256} x pl {T,F} = 120 configurations per task, evaluated as
 import json
 from pathlib import Path
 
-from roach.slurm import Resources, submit
 from roach.slurm.clusters.ilc import ILC
 
 from expts.repaper.config import (
@@ -29,6 +28,7 @@ from expts.repaper.config import (
     SECRETS_DIR,
     project,
 )
+from roach.slurm import Resources, submit
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 PROJECT = project("tune")
@@ -36,7 +36,9 @@ LOG_ROOT = f"{LOG_ROOT}/repaper/tune"
 
 TASKS = [
     tuple(p)
-    for p in json.loads((Path(PRE_DIR) / "db-task-lists" / "forecast.json").read_text())
+    for p in json.loads(
+        (Path(PRE_DIR).expanduser() / "db-task-lists" / "forecast.json").read_text()
+    )
 ]
 
 GRID = [
@@ -81,7 +83,7 @@ def resources(db: str, qos: str, gpu: str = "a100:1") -> Resources:
 
 def submit_task(db: str, table: str, qos: str, gpu: str = "a100:1") -> None:
     run_id = f"tune--{db}--{table}"
-    tuning = Path(CKPT_ROOT) / "rtv2" / PROJECT / run_id / "tuning.json"
+    tuning = Path(CKPT_ROOT).expanduser() / "rtv2" / PROJECT / run_id / "tuning.json"
     if tuning.exists():
         return
     submit(

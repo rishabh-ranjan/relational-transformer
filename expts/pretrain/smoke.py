@@ -31,7 +31,6 @@ Checkpoints are throwaway and go to `/tmp`; nothing is logged to wandb.
 import argparse
 import dataclasses
 import getpass
-import os
 from pathlib import Path
 
 from roach.slurm.clusters.ilc import AMPERE_LO, BLACKWELL, ILC
@@ -41,7 +40,7 @@ from roach.slurm import submit
 # rel-f1 is the smallest preprocessed database, so loading it is seconds. Two
 # tasks rather than one so the eval path builds a real task list.
 TASKS = [("rel-f1", "driver-dnf"), ("rel-f1", "driver-top3")]
-PRE_DIR = os.path.expanduser("~/scratch/share/stanford-star/relbench-preprocessed")
+PRE_DIR = "~/scratch/share/stanford-star/relbench-preprocessed"
 # Same per-user roots as [submit.py](submit.py).
 REPO_ROOT = Path(__file__).resolve().parents[2]
 USER = getpass.getuser()
@@ -82,9 +81,7 @@ def main() -> None:
             loss_fn="huber",
             # The pretraining run's warm start, so the fp32-master path is
             # exercised against real weights.
-            load_ckpt_path=os.path.expanduser(
-                "~/scratch/share/stanford-star/rt-plurel/classification"
-            ),
+            load_ckpt_path="~/scratch/share/stanford-star/rt-plurel/classification",
             # data: one small database, no page-cache population
             db_task_list=TASKS,
             train_splits=["train"],
@@ -144,7 +141,7 @@ def main() -> None:
             entity="rtv2",
             run_name="smoke",
             wandb_disabled=True,
-            out_root=os.path.expanduser("~/tmp/pretrain-smoke/ckpts"),
+            out_root="~/tmp/pretrain-smoke/ckpts",
         ),
         run_id=args.run_id,
         resources=dataclasses.replace(
@@ -172,11 +169,9 @@ def main() -> None:
         # Its own log directory: MONITOR.md identifies the live run by the
         # newest log under the run's log_root, and a smoke test landing there
         # would answer with its own run_id.
-        log_root=os.path.expanduser(
-            "~/scratch/slurm-logs/rishabh-ranjan/relational-transformer/expts/pretrain/smoke"
-        ),
-        clone_root=os.path.expanduser("~/roach_clones"),
-        secrets_dir=os.path.expanduser("~/scratch/.secrets"),
+        log_root="~/scratch/slurm-logs/rishabh-ranjan/relational-transformer/expts/pretrain/smoke",
+        clone_root="~/roach_clones",
+        secrets_dir="~/scratch/.secrets",
     )
 
 

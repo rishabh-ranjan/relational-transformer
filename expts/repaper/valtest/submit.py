@@ -10,7 +10,6 @@ through the same runner.
 import json
 from pathlib import Path
 
-from roach.slurm import Resources, submit
 from roach.slurm.clusters.ilc import ILC
 
 from expts.repaper.config import (
@@ -22,6 +21,7 @@ from expts.repaper.config import (
     PRE_DIR,
     SECRETS_DIR,
 )
+from roach.slurm import Resources, submit
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 OUT_DIR = f"{OUT_ROOT}/repaper-valtest/tuned"
@@ -43,7 +43,7 @@ if __name__ == "__main__":
     )
     for task_key, rec in sorted(cfgs.items()):
         db, table = task_key.split("/")
-        if (Path(OUT_DIR) / f"{db}__{table}.json").exists():
+        if (Path(OUT_DIR).expanduser() / f"{db}__{table}.json").exists():
             continue
         ctx, lcs, bw, pl = rec["best_cfg"]
         submit(

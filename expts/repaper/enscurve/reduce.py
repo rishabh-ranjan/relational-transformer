@@ -22,7 +22,7 @@ N_SEEDS = 16
 
 
 def reduce_variant(variant: str) -> None:
-    paths = sorted((Path(OUT_ROOT) / variant).glob("*.json"))
+    paths = sorted((Path(OUT_ROOT).expanduser() / variant).glob("*.json"))
     assert len(paths) == N_TASKS, (
         f"{variant}: {len(paths)} task curves, expected {N_TASKS}"
     )

@@ -2,7 +2,6 @@
 the cluster. Skipped without a GPU: the model's attention has no CPU backward.
 """
 
-import os
 from datetime import datetime
 from pathlib import Path
 
@@ -11,7 +10,7 @@ import torch
 
 from examples.smoke import smoke
 
-PRE_DIR = os.path.expanduser("~/scratch/pre/relbench-preprocessed")
+PRE_DIR = "~/scratch/pre/relbench-preprocessed"
 
 
 @pytest.mark.skipif(not torch.cuda.is_available(), reason="training needs a GPU")

@@ -10,7 +10,6 @@ is not duplicated. Why one job per database, and why two stages, is in
 """
 
 import json
-import os
 import subprocess
 import sys
 from pathlib import Path
@@ -70,7 +69,7 @@ KEEP = ("db-task-lists", "legacy")
 # rebuild can be staged beside the live one (`-preprocessed-new`) and promoted
 # into place once it verifies.
 OUT_NAME = f"{NAME}-preprocessed"
-LEGACY_DIR = os.path.expanduser(f"~/scratch/share/stanford-star/{OUT_NAME}/legacy")
+LEGACY_DIR = f"~/scratch/share/stanford-star/{OUT_NAME}/legacy"
 
 # NAME = "the-join"
 # SOURCE_REPO = "stanford-star/the-join"
@@ -84,13 +83,13 @@ LEGACY_DIR = os.path.expanduser(f"~/scratch/share/stanford-star/{OUT_NAME}/legac
 # OUT_NAME = f"{NAME}-preprocessed"
 # LEGACY_DIR = None
 
-RAW_DIR = os.path.expanduser(f"~/scratch/share/stanford-star/{NAME}")
-OUT_DIR = os.path.expanduser(f"~/scratch/share/stanford-star/{OUT_NAME}")
-LOG_ROOT = os.path.expanduser(f"~/scratch/slurm-logs/preprocess-{NAME}")
+RAW_DIR = f"~/scratch/share/stanford-star/{NAME}"
+OUT_DIR = f"~/scratch/share/stanford-star/{OUT_NAME}"
+LOG_ROOT = f"~/scratch/slurm-logs/preprocess-{NAME}"
 SIZES = Path(__file__).with_name(f"sizes-{NAME}.json")
-REPO_ROOT = os.path.expanduser("~/clones/rishabh-ranjan/relational-transformer")
-CLONE_ROOT = os.path.expanduser("~/roach_clones")
-SECRETS_DIR = os.path.expanduser("~/scratch/.secrets")
+REPO_ROOT = "~/clones/rishabh-ranjan/relational-transformer"
+CLONE_ROOT = "~/roach_clones"
+SECRETS_DIR = "~/scratch/.secrets"
 BATCH_SIZE = 1024
 
 
@@ -399,15 +398,15 @@ def submit_embed(
         resources=embed_resources(expected_bytes),
         name=f"{prefix}-{name}",
         setup=SETUP,
-        repo_root=os.path.expanduser("~/clones/rishabh-ranjan/relational-transformer"),
+        repo_root="~/clones/rishabh-ranjan/relational-transformer",
         cluster=ILC,
         job_env="expts/job_env.sh",
         log_root=LOG_ROOT,
         # the node's own big disk, not /tmp (the 280G root filesystem): clones
         # are shared per commit and hold the pixi env, which pixi hardlinks from
         # the package cache only when the two are on the same filesystem
-        clone_root=os.path.expanduser("~/roach_clones"),
-        secrets_dir=os.path.expanduser("~/scratch/.secrets"),
+        clone_root="~/roach_clones",
+        secrets_dir="~/scratch/.secrets",
         after=after,
     )
 
@@ -422,7 +421,7 @@ def check_tree_is_submittable() -> None:
     """
     dirty = subprocess.run(
         ["git", "status", "--porcelain"],
-        cwd=os.path.expanduser("~/clones/rishabh-ranjan/relational-transformer"),
+        cwd="~/clones/rishabh-ranjan/relational-transformer",
         capture_output=True,
         text=True,
     ).stdout.strip()
@@ -529,14 +528,12 @@ def main() -> None:
             resources=resources,
             name=f"pre-{name}",
             setup=SETUP,
-            repo_root=os.path.expanduser(
-                "~/clones/rishabh-ranjan/relational-transformer"
-            ),
+            repo_root="~/clones/rishabh-ranjan/relational-transformer",
             cluster=ILC,
             job_env="expts/job_env.sh",
             log_root=LOG_ROOT,
-            clone_root=os.path.expanduser("~/roach_clones"),
-            secrets_dir=os.path.expanduser("~/scratch/.secrets"),
+            clone_root="~/roach_clones",
+            secrets_dir="~/scratch/.secrets",
         )
         # Queued now, held by slurm until its rustler stage succeeds: the GPU
         # queue fills itself behind the cpu one, with nothing to poll and no

@@ -17,8 +17,8 @@ import wandb
 
 from expts.repaper.config import OUT_ROOT, project
 
-DEFAULT_DIR = Path(OUT_ROOT) / "repaper-scaling" / "subsampled" / "rt"
-TUNED_DIR = Path(OUT_ROOT) / "repaper-valtest" / "tuned"
+DEFAULT_DIR = Path(OUT_ROOT).expanduser() / "repaper-scaling" / "subsampled" / "rt"
+TUNED_DIR = Path(OUT_ROOT).expanduser() / "repaper-valtest" / "tuned"
 N_TASKS = 21
 
 

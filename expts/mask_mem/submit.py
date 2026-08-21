@@ -3,7 +3,6 @@
 # dataclasses / AMPERE are unused while RESOURCES is blank, and imported so that
 # filling it in is one line and not an import hunt.
 import dataclasses  # noqa: F401
-import os
 
 from roach.slurm.clusters.ilc import AMPERE, ILC  # noqa: F401
 
@@ -46,14 +45,12 @@ def main() -> None:
         ),
         resources=RESOURCES,
         name="mask-mem",
-        repo_root=os.path.expanduser("~/clones/rishabh-ranjan/relational-transformer"),
+        repo_root="~/clones/rishabh-ranjan/relational-transformer",
         cluster=ILC,
         job_env="expts/job_env.sh",
-        log_root=os.path.expanduser(
-            "~/scratch/slurm-logs/rishabh-ranjan/relational-transformer/expts/mask-mem"
-        ),
-        clone_root=os.path.expanduser("~/roach_clones"),
-        secrets_dir=os.path.expanduser("~/scratch/.secrets"),
+        log_root="~/scratch/slurm-logs/rishabh-ranjan/relational-transformer/expts/mask-mem",
+        clone_root="~/roach_clones",
+        secrets_dir="~/scratch/.secrets",
     )
 
 

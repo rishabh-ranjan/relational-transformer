@@ -67,7 +67,6 @@ def main(
     that matters is exactly what this flag measures.
     """
     import pandas as pd
-
     from relarena.cache import resolve_cache_config
     from relarena.dataset import RelBenchDatasetTask, concat_tables
     from relarena.metrics import primary_metric
@@ -75,8 +74,9 @@ def main(
     from relarena.models.rt.export import target_stats
     from relarena.models.rt.model import RTModel
 
-    out = Path(out_dir)
+    out = Path(out_dir).expanduser()
     out.mkdir(parents=True, exist_ok=True)
+    cache_dir = str(Path(cache_dir).expanduser())
     Path(cache_dir).mkdir(parents=True, exist_ok=True)
 
     source = RelBenchDatasetTask(dataset, task, download=True)

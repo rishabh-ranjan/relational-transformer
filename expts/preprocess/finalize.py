@@ -27,6 +27,8 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
+from huggingface_hub import CommitOperationDelete, HfApi
+
 from expts.preprocess.submit import (  # noqa: E402
     CURATED,
     EMBEDDER,
@@ -37,7 +39,6 @@ from expts.preprocess.submit import (  # noqa: E402
     SOURCE_REPO,
     TARGET_REPO,
 )
-from huggingface_hub import CommitOperationDelete, HfApi
 
 REQUIRED = (
     "meta.json",
@@ -57,8 +58,10 @@ def databases(out: Path) -> list[str]:
 
 def verify() -> list[str]:
     """Report every database that is missing, incomplete, or empty."""
-    out, problems = Path(OUT_DIR), []
-    expected = sorted(p.parent.name for p in Path(RAW_DIR).glob("*/manifest.yaml"))
+    out, problems = Path(OUT_DIR).expanduser(), []
+    expected = sorted(
+        p.parent.name for p in Path(RAW_DIR).expanduser().glob("*/manifest.yaml")
+    )
     built = set(databases(out))
 
     for name in expected:
@@ -91,8 +94,10 @@ def verify_legacy() -> list[str]:
     """The legacy tree, held to the same standard as the build."""
     if not LEGACY_DIR:
         return []
-    out, problems = Path(LEGACY_DIR), []
-    expected = sorted(p.parent.name for p in Path(RAW_DIR).glob("*/manifest.yaml"))
+    out, problems = Path(LEGACY_DIR).expanduser(), []
+    expected = sorted(
+        p.parent.name for p in Path(RAW_DIR).expanduser().glob("*/manifest.yaml")
+    )
     built = set(databases(out)) if out.is_dir() else set()
     # anything in here that is not a database is scratch that would be published
     for extra in sorted(built - set(expected)):
@@ -140,7 +145,7 @@ def _has_target(task: dict, column_index: dict) -> bool:
 
 def task_lists() -> None:
     """Write `db-task-lists/` from the metas this build just produced."""
-    out = Path(OUT_DIR)
+    out = Path(OUT_DIR).expanduser()
     by_kind: dict[str, list[list[str]]] = defaultdict(list)
     every: list[list[str]] = []
     dropped: list[str] = []
@@ -221,7 +226,7 @@ def upload(private: bool = False) -> None:
         )
     task_lists()
 
-    out, repo = Path(OUT_DIR), TARGET_REPO
+    out, repo = Path(OUT_DIR).expanduser(), TARGET_REPO
     local = set(databases(out))
     api = HfApi()
     api.create_repo(repo, repo_type="dataset", private=private, exist_ok=True)

@@ -15,7 +15,6 @@ roach.slurm.
     from examples.smoke import smoke; smoke(...)  # or submitted with roach.slurm
 """
 
-import os
 from datetime import datetime
 
 from rt.train import main as train
@@ -102,7 +101,7 @@ def smoke(
 
 if __name__ == "__main__":
     smoke(
-        pre_dir=os.path.expanduser("~/scratch/pre/relbench-preprocessed"),
+        pre_dir="~/scratch/pre/relbench-preprocessed",
         out_root="/tmp/rt-smoke",
         run_id=f"{datetime.now():%y-%m-%d_%H-%M-%S}",
         total_steps=3,

@@ -77,7 +77,7 @@ def rustler(
     repo the raw directory was downloaded from, not the local path it was read
     through.
     """
-    out_root, raw = Path(out_dir), Path(raw_dir) / dataset
+    out_root, raw = Path(out_dir).expanduser(), Path(raw_dir).expanduser() / dataset
     pre_dataset_dir = out_root / dataset
 
     if is_rustler_done(pre_dataset_dir):
@@ -109,7 +109,7 @@ def embed(
     batch_size: int,
 ) -> None:
     """Text embeddings for a database rustler has already written."""
-    pre_dataset_dir = Path(out_dir) / dataset
+    pre_dataset_dir = Path(out_dir).expanduser() / dataset
 
     if is_done(pre_dataset_dir, embedder):
         print(f"= {dataset}: embeddings already done", flush=True)
@@ -148,7 +148,7 @@ def legacy_rustler(
     cannot ride along with the upload that replaces the collection. The RT-v1
     checkpoints read this; half of it on the Hub is worse than the old one.
     """
-    out_root = Path(out_dir)
+    out_root = Path(out_dir).expanduser()
     pre_dataset_dir = out_root / dataset
     if is_rustler_done(pre_dataset_dir):
         print(f"= {dataset}: legacy rustler already done", flush=True)

@@ -22,6 +22,8 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
+from huggingface_hub import HfApi
+
 from expts.preprocess.preprocess import is_done, is_rustler_done  # noqa: E402
 from expts.preprocess.submit import (  # noqa: E402
     EMBEDDER,
@@ -32,7 +34,6 @@ from expts.preprocess.submit import (  # noqa: E402
     SOURCE_REPO,
     load_sizes,
 )
-from huggingface_hub import HfApi
 
 # Only rate samples inside this window are used, so an ETA reflects how the
 # sweep is going now rather than averaging in a slow start or a stall.
@@ -84,7 +85,7 @@ def squeue_states() -> dict[str, int]:
 def _job_names() -> list[str]:
     return [
         f"{s}{p.parent.name}"
-        for p in Path(RAW_DIR).glob("*/manifest.yaml")
+        for p in Path(RAW_DIR).expanduser().glob("*/manifest.yaml")
         for s in STAGES
     ]
 
@@ -199,7 +200,7 @@ MIN_COMPLETIONS = 5
 def sample(done_bytes: int, done_count: int) -> tuple[float, int, int] | None:
     """Append a sample; return the oldest one inside the window, if any."""
     now = time.time()
-    SAMPLES = Path(LOG_ROOT) / "progress.jsonl"
+    SAMPLES = Path(LOG_ROOT).expanduser() / "progress.jsonl"
     SAMPLES.parent.mkdir(parents=True, exist_ok=True)
     history = []
     if SAMPLES.exists():
@@ -241,7 +242,9 @@ def databases() -> list[str]:
             if f.endswith("/manifest.yaml") and f.count("/") == 1
         )
     except Exception:  # offline: fall back to what is on disk
-        return sorted(p.parent.name for p in Path(RAW_DIR).glob("*/manifest.yaml"))
+        return sorted(
+            p.parent.name for p in Path(RAW_DIR).expanduser().glob("*/manifest.yaml")
+        )
 
 
 def cost(names: list[str]) -> dict[str, tuple[float, float]]:
@@ -251,7 +254,7 @@ def cost(names: list[str]) -> dict[str, tuple[float, float]]:
     once `text.json` exists it is the real thing rather than a prediction, which
     matters because the prediction is the weaker of the two.
     """
-    sizes, out = load_sizes(), Path(OUT_DIR)
+    sizes, out = load_sizes(), Path(OUT_DIR).expanduser()
     known_out = sorted(v.get("out", 0) for v in sizes.values())
     known_text = sorted(v.get("text", 0) for v in sizes.values())
     med_out = known_out[len(known_out) // 2] if known_out else 0
@@ -276,7 +279,7 @@ def cost(names: list[str]) -> dict[str, tuple[float, float]]:
 
 def report() -> None:
     names = databases()
-    out = Path(OUT_DIR)
+    out = Path(OUT_DIR).expanduser()
     est = cost(names)
 
     done = [n for n in names if is_done(out / n, EMBEDDER)]

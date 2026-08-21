@@ -25,7 +25,9 @@ def main() -> None:
     from relbench.datasets import get_dataset
     from relbench.tasks import get_task, get_task_names
 
-    pairs = json.loads((Path(PRE_DIR) / "db-task-lists" / "forecast.json").read_text())
+    pairs = json.loads(
+        (Path(PRE_DIR).expanduser() / "db-task-lists" / "forecast.json").read_text()
+    )
     for db in sorted({db for db, _ in pairs}):
         ds = get_dataset(db, download=True)
         rb_db = ds.get_db(upto_test_timestamp=False)

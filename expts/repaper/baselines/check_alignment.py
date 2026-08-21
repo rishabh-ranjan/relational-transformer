@@ -26,12 +26,14 @@ def main() -> None:
     from relbench.datasets import get_dataset
     from relbench.tasks import get_task
 
-    pairs = json.loads((Path(PRE_DIR) / "db-task-lists" / "forecast.json").read_text())
+    pairs = json.loads(
+        (Path(PRE_DIR).expanduser() / "db-task-lists" / "forecast.json").read_text()
+    )
 
     for db in sorted({d for d, _ in pairs}):
         rb_db = get_dataset(db, download=True).get_db(upto_test_timestamp=False)
         for tbl_name, tbl in rb_db.table_dict.items():
-            raw_path = Path(RAW_DIR) / db / "db" / f"{tbl_name}.parquet"
+            raw_path = Path(RAW_DIR).expanduser() / db / "db" / f"{tbl_name}.parquet"
             assert raw_path.exists(), f"{db}: no raw parquet for table {tbl_name}"
             n_raw = pd.read_parquet(raw_path, columns=[]).shape[0]
             assert len(tbl.df) == n_raw, (
@@ -46,7 +48,11 @@ def main() -> None:
         for split in ("train", "val", "test"):
             classic = rb_task.get_table(split).df.reset_index(drop=True)
             raw = pd.read_parquet(
-                Path(RAW_DIR) / db / "tasks" / task_name / f"{split}.parquet"
+                Path(RAW_DIR).expanduser()
+                / db
+                / "tasks"
+                / task_name
+                / f"{split}.parquet"
             ).reset_index(drop=True)
             assert len(classic) == len(raw), (
                 f"{db}/{task_name}/{split}: {len(classic)} vs {len(raw)} rows"

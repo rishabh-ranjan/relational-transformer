@@ -24,8 +24,9 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
-from expts.preprocess.submit import RAW_DIR, SOURCE_REPO  # noqa: E402
 from huggingface_hub import HfApi, hf_hub_download
+
+from expts.preprocess.submit import RAW_DIR, SOURCE_REPO  # noqa: E402
 
 ATTEMPTS = 20
 # git-lfs opens this many transfers; the batch API is not what rate-limits, so
@@ -52,7 +53,7 @@ def _pointers(d: Path) -> list[Path]:
 
 
 def download() -> None:
-    d, repo = Path(RAW_DIR), SOURCE_REPO
+    d, repo = Path(RAW_DIR).expanduser(), SOURCE_REPO
     url = f"https://huggingface.co/datasets/{repo}"
 
     if not (d / ".git").is_dir():
@@ -113,7 +114,7 @@ def repair() -> int:
     than bad output.
     """
 
-    d, repo = Path(RAW_DIR), SOURCE_REPO
+    d, repo = Path(RAW_DIR).expanduser(), SOURCE_REPO
     info = HfApi().repo_info(repo, repo_type="dataset", files_metadata=True)
     want = {f.rfilename: (f.size or 0) for f in info.siblings if "/" in f.rfilename}
 

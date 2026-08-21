@@ -22,13 +22,17 @@ def main() -> None:
     tasks = [
         tuple(p)
         for p in json.loads(
-            (Path(PRE_DIR) / "db-task-lists" / "forecast.json").read_text()
+            (Path(PRE_DIR).expanduser() / "db-task-lists" / "forecast.json").read_text()
         )
     ]
     out = {}
     for db, table in tasks:
         path = (
-            Path(CKPT_ROOT) / "rtv2" / PROJECT / f"tune--{db}--{table}" / "tuning.json"
+            Path(CKPT_ROOT).expanduser()
+            / "rtv2"
+            / PROJECT
+            / f"tune--{db}--{table}"
+            / "tuning.json"
         )
         assert path.exists(), f"missing {path}; the grid is not finished"
         rec = json.loads(path.read_text())[f"{db}/{table}"]

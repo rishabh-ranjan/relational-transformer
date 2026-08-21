@@ -19,7 +19,6 @@ finished is submitted with no dependency at all.
 import dataclasses
 import functools
 import json
-import os
 import subprocess
 from pathlib import Path
 
@@ -156,9 +155,7 @@ def main() -> None:
                 d_ff=2048,
                 splits=["test"],
                 db_task_list=[(db, task)],
-                pre_dir=os.path.expanduser(
-                    "~/scratch/share/stanford-star/relbench-preprocessed"
-                ),
+                pre_dir="~/scratch/share/stanford-star/relbench-preprocessed",
                 tokens_per_gpu=2**18,
                 num_workers=resources.cpus_per_task,
                 prefetch_factor=2,
@@ -179,21 +176,17 @@ def main() -> None:
                 targets=targets_for(db, task),
                 project=PROJECT,
                 entity="rtv2",
-                out_root=os.path.expanduser("~/scratch/ckpts"),
+                out_root="~/scratch/ckpts",
                 wandb_disabled=False,
             ),
             resources=resources,
             name=f"ens-{db}-{task}",
-            repo_root=os.path.expanduser(
-                "~/clones/rishabh-ranjan/relational-transformer"
-            ),
+            repo_root="~/clones/rishabh-ranjan/relational-transformer",
             cluster=ILC,
             job_env="expts/job_env.sh",
-            log_root=os.path.expanduser(
-                "~/scratch/slurm-logs/rishabh-ranjan/relational-transformer/expts/fine-tune-ens"
-            ),
-            clone_root=os.path.expanduser("~/roach_clones"),
-            secrets_dir=os.path.expanduser("~/scratch/.secrets"),
+            log_root="~/scratch/slurm-logs/rishabh-ranjan/relational-transformer/expts/fine-tune-ens",
+            clone_root="~/roach_clones",
+            secrets_dir="~/scratch/.secrets",
             run_id=None,
         )
 
