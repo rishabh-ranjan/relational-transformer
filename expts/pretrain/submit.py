@@ -1,12 +1,17 @@
 """Submit the pretraining run. See [README.md](README.md)."""
 
+import dataclasses
 from pathlib import Path
 
 from roach.slurm.clusters import ilc
 
 from roach.slurm import submit
 
-resources = ilc.BLACKWELL
+# 2026-08-21: blackwell1 fully allocated (6 b200 on il-lo, 2 on il); `il` preempts
+# il-lo, and rkvs job 136059 holds 8 of il's 10, leaving exactly 2.
+resources = dataclasses.replace(
+    ilc.BLACKWELL, gpus="b200:2", qos="il", time="7-00:00:00", mem="750000M"
+)
 
 tokens_per_gpu = {"a100": 2**17, "b200": 2**18}[resources.gpus.rpartition(":")[0]]
 
