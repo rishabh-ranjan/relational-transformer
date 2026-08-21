@@ -1,25 +1,12 @@
 """Submit the pretraining run. See [README.md](README.md)."""
 
-import dataclasses
-import json
 from pathlib import Path
 
 from roach.slurm.clusters import ilc
 
 from roach.slurm import submit
 
-resources = dataclasses.replace(
-    ilc.AMPERE_LO,
-    nodes=1,
-    qos="il",
-    time="7-00:00:00",
-    exclusive=True,
-    cpus_per_task=16,
-    nodelist="ampere1,ampere2,ampere3,ampere4,ampere5,ampere6,ampere7,ampere8,ampere9",
-)
-# resources = dataclasses.replace(
-#     ilc.BLACKWELL, gpus="b200:2", qos="il", time="7-00:00:00", mem="750000M"
-# )
+resources = ilc.BLACKWELL
 
 tokens_per_gpu = {"a100": 2**17, "b200": 2**18}[resources.gpus.rpartition(":")[0]]
 
@@ -36,7 +23,7 @@ submit(
         materialize_attn_masks=True,
         loss_fn="huber",
         load_ckpt_path="~/scratch/hf/stanford-star/rt-plurel/classification",
-        db_task_list="~/scratch/hf/stanford-star/the-join-preprocessed/db-task-lists/all.json",
+        db_task_list="expts/pretrain/all_5gb_cutoff.json",
         train_splits=["train"],
         pre_dir="~/scratch/hf/stanford-star/the-join-preprocessed",
         tokens_per_gpu=tokens_per_gpu,
@@ -71,12 +58,10 @@ submit(
         db_cutoff=None,
         resume_save_mins=20.0,
         eval_splits=["val"],
-        eval_db_task_list=json.loads(
-            Path(__file__).with_name("eval-tasks.json").read_text()
-        ),
-        eval_pre_dir="~/scratch/share/stanford-star/relbench-preprocessed",
-        eval_tokens_per_gpu=tokens_per_gpu // 2,
-        eval_num_workers=1,
+        eval_db_task_list="expts/pretrain/eval-tasks.json",
+        eval_pre_dir="~/scratch/hf/stanford-star/relbench-preprocessed",
+        eval_tokens_per_gpu=tokens_per_gpu,
+        eval_num_workers=resources.cpus_per_task,
         eval_prefetch_factor=2,
         eval_num_walks=10_000,
         eval_walk_length=20,
@@ -91,9 +76,9 @@ submit(
         targets={},
         project="2026-08-07-pretrain",
         entity="rtv2",
-        run_name="rt-j-from-rt-plurel",
+        run_name="new-pretrain",
         wandb_disabled=False,
-        out_root="~/scratch/ckpts",
+        out_root="~/scratch/relational-transformer/pretrain",
     ),
     resources=resources,
     name="pretrain",
@@ -101,8 +86,7 @@ submit(
     repo_root=str(Path(__file__).resolve().parents[2]),
     cluster=ilc.ILC,
     job_env="expts/job_env.sh",
-    log_root="~/scratch/slurm-logs/rishabh-ranjan/relational-transformer/expts/pretrain",
+    log_root="~/scratch/relational-transformer/pretrain/slurm-logs",
     clone_root="~/roach_clones",
     secrets_dir="~/scratch/.secrets",
-    timeout_grace_secs=1800,
 )

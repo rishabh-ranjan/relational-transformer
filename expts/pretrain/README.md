@@ -12,14 +12,15 @@ produces is what `expts/fine_tune` loads as its pretrained arm.
   `chmod 700`. The wandb key must belong to a member of the `rtv2` team.
 - `pixi install` run once in the checkout, and push access to `origin`.
 - Inputs, produced by [`expts/preprocess`](../preprocess/README.md):
-  `pre_dir` (the Join; `db_task_list` is its `rt-j.json`) and `eval_pre_dir`
-  (RelBench; the validation tasks are [`eval-tasks.json`](eval-tasks.json)
-  beside this file, passed inline because a compute node cannot read this
-  repo). If startup reports `tasks_skipped` or `ignored`, regenerate the lists
-  with `expts/preprocess/finalize.py task-lists`.
+  `pre_dir` (the Join) and `eval_pre_dir` (RelBench). The task lists,
+  [`all_5gb_cutoff.json`](all_5gb_cutoff.json) and
+  [`eval-tasks.json`](eval-tasks.json), sit beside this file and are read from
+  the job's clone by repo-relative path, so commit them before submitting. If
+  startup reports `tasks_skipped` or `ignored`, regenerate the lists with
+  `expts/preprocess/finalize.py task-lists`.
 
 Logs, checkpoints and per-node clones land under the submitting user's own
-`~/scratch` and `~/`; inputs are read-only under `~/scratch/share`.
+`~/scratch` and `~/`; inputs are read-only under `~/scratch/hf`.
 
 ## Running it
 
@@ -38,16 +39,15 @@ pixi run python -m expts.pretrain.submit    # prints the run_id
   allocated cpus) in `nodelist` to start immediately instead of queueing. A
   node the run used in the last few hours reaches the first step in minutes
   rather than tens of minutes.
-- Blackwell: cards of blackwell1, shared; set `tokens_per_gpu` and
-  `eval_tokens_per_gpu` to the b200 values noted beside them. `il` gives 2
-  cards for 7d, `il-interactive` 2 for 12h at top priority, `il-lo` up to 4.
+- Blackwell: cards of blackwell1, shared. `il` gives 2 cards for 7d,
+  `il-interactive` 2 for 12h at top priority, `il-lo` up to 4.
 
 Preemption and the wall clock both requeue and resume from the run's own
 checkpoint; no action is needed.
 
-Logs and `args.json`: `~/scratch/slurm-logs/rishabh-ranjan/relational-transformer/expts/pretrain/<run_id>_<jobid>.out`
+Logs and `args.json`: `~/scratch/relational-transformer/pretrain/slurm-logs/<run_id>_<jobid>.out`
 (a new file per requeue, same run_id). Checkpoints and `params.json`:
-`~/scratch/ckpts/rtv2/<project>/<run_id>`.
+`~/scratch/relational-transformer/pretrain/rtv2/<project>/<run_id>`.
 
 ## Watching it
 
@@ -62,7 +62,7 @@ To find a run already in flight:
 
 ```
 squeue -u $USER -h -n pretrain -o "%i|%T|%D|%N|%q"
-ls -t ~/scratch/slurm-logs/rishabh-ranjan/relational-transformer/expts/pretrain/*.out | head -1
+ls -t ~/scratch/relational-transformer/pretrain/slurm-logs/*.out | head -1
 ```
 
 The log name gives the run_id; `grep -c resume_saved_at_step` and `tail` give
