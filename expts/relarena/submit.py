@@ -36,7 +36,7 @@ SECRETS_DIR = os.path.expanduser("~/scratch/.secrets")
 SHARE = os.path.expanduser("~/scratch/share/relarena")
 
 # Node-local, and written by the job itself: the warm and the run are one job,
-# so nothing has to be shared, and /dfs is slow enough to matter for a cache
+# so nothing has to be shared, and ~/scratch is slow enough to matter for a cache
 # read on every context build.
 #
 # On the node NVMe, not /tmp. /tmp is the root filesystem -- 438G on blackwell1,

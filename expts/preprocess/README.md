@@ -166,7 +166,7 @@ quietly break either:
 | turing2 | 80 | 754 G | 10 × 2080Ti |
 | turing3 | 80 | 1448 G | 10 × 2080Ti |
 
-`/dfs` measured ~700 MB/s buffered write and ~680 MB/s read from one node, so
+`~/scratch` measured ~700 MB/s buffered write and ~680 MB/s read from one node, so
 writing the output there is not the bottleneck. `MaxMemPerCPU` is 10700M but is
 not enforced against a per-node `--mem` (checked with `sbatch --test-only`: a
 1-cpu job may ask for 200G), which is why the rustler stage can take one cpu
