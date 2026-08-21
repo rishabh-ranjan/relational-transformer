@@ -8,6 +8,21 @@ from roach.slurm.clusters import ilc
 
 from roach.slurm import submit
 
+resources = dataclasses.replace(
+    ilc.AMPERE_LO,
+    nodes=1,
+    qos="il",
+    time="7-00:00:00",
+    exclusive=True,
+    cpus_per_task=16,
+    nodelist="ampere1,ampere2,ampere3,ampere4,ampere5,ampere6,ampere7,ampere8,ampere9",
+)
+# resources = dataclasses.replace(
+#     ilc.BLACKWELL, gpus="b200:2", qos="il", time="7-00:00:00", mem="750000M"
+# )
+
+tokens_per_gpu = {"a100": 2**17, "b200": 2**18}[resources.gpus.rpartition(":")[0]]
+
 submit(
     "rt.train:main",
     args=dict(
@@ -20,12 +35,12 @@ submit(
         compile=True,
         materialize_attn_masks=True,
         loss_fn="huber",
-        load_ckpt_path="~/scratch/share/stanford-star/rt-plurel/classification",
-        db_task_list="~/scratch/share/stanford-star/the-join-preprocessed/db-task-lists/rt-j.json",
+        load_ckpt_path="~/scratch/hf/stanford-star/rt-plurel/classification",
+        db_task_list="~/scratch/hf/stanford-star/the-join-preprocessed/db-task-lists/all.json",
         train_splits=["train"],
-        pre_dir="~/scratch/share/stanford-star/the-join-preprocessed",
-        tokens_per_gpu=2**17,  # b200: 2**18
-        num_workers=16,
+        pre_dir="~/scratch/hf/stanford-star/the-join-preprocessed",
+        tokens_per_gpu=tokens_per_gpu,
+        num_workers=resources.cpus_per_task,
         prefetch_factor=2,
         ctx_size_list=[512, 1024, 2048, 4096, 8192],
         local_ctx_size_list=[256, 512, 1024, 2048, 4096, 8192],
@@ -60,7 +75,7 @@ submit(
             Path(__file__).with_name("eval-tasks.json").read_text()
         ),
         eval_pre_dir="~/scratch/share/stanford-star/relbench-preprocessed",
-        eval_tokens_per_gpu=2**16,  # b200: 2**17
+        eval_tokens_per_gpu=tokens_per_gpu // 2,
         eval_num_workers=1,
         eval_prefetch_factor=2,
         eval_num_walks=10_000,
@@ -80,18 +95,7 @@ submit(
         wandb_disabled=False,
         out_root="~/scratch/ckpts",
     ),
-    resources=dataclasses.replace(
-        ilc.AMPERE_LO,
-        nodes=1,
-        qos="il",
-        time="7-00:00:00",
-        exclusive=True,
-        cpus_per_task=16,
-        nodelist="ampere1,ampere2,ampere3,ampere4,ampere5,ampere6,ampere7,ampere8,ampere9",
-    ),
-    # resources=dataclasses.replace(
-    #     ilc.BLACKWELL, gpus="b200:2", qos="il", time="7-00:00:00", mem="750000M"
-    # ),
+    resources=resources,
     name="pretrain",
     run_id=None,
     repo_root=str(Path(__file__).resolve().parents[2]),
