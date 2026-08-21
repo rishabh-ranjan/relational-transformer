@@ -24,10 +24,19 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from expts.relarena.submit import (  # noqa: E402
-    BAD_NODES, CACHE_DIR, EXPERIMENTS, REPO_ROOT, RESERVATION_WALL, SECRETS_DIR,
-    SHARE, a100, b200, relarena_setup, reserved,
+    CACHE_DIR,
+    EXPERIMENTS,
+    REPO_ROOT,
+    RESERVATION_WALL,
+    SECRETS_DIR,
+    SHARE,
+    a100,
+    b200,
+    relarena_setup,
+    reserved,
 )
 from roach.slurm import submit  # noqa: E402
+from roach.slurm.clusters.ilc import ILC  # noqa: E402
 
 #: Tasks longest-first, so the ones that decide the makespan start earliest.
 ORDER = [(d, t) for _m, d, t in EXPERIMENTS]
@@ -81,6 +90,8 @@ def main() -> None:
                 name=f"relarena-{model}-{dataset}-{task}",
                 setup=relarena_setup(),
                 repo_root=REPO_ROOT,
+                cluster=ILC,
+                job_env="expts/job_env.sh",
                 log_root=f"{SHARE}/slurm-logs",
                 clone_root="/lfs/local/0/roach_clones",
                 secrets_dir=SECRETS_DIR,

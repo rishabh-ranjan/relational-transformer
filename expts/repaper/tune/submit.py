@@ -17,6 +17,7 @@ import json
 from pathlib import Path
 
 from roach.slurm import Resources, submit
+from roach.slurm.clusters.ilc import ILC
 
 from expts.repaper.config import (
     CKPT_CLF,
@@ -128,6 +129,8 @@ def submit_task(db: str, table: str, qos: str, gpu: str = "a100:1") -> None:
         name=f"tune-{db}-{table}",
         run_id=run_id,
         repo_root=str(REPO_ROOT),
+        cluster=ILC,
+        job_env="expts/job_env.sh",
         log_root=LOG_ROOT,
         clone_root=CLONE_ROOT,
         secrets_dir=SECRETS_DIR,

@@ -16,7 +16,7 @@ roach.slurm.
 """
 
 from rt.train import main as train
-from roach.slurm import timestamp
+from datetime import datetime
 
 
 def smoke(
@@ -102,7 +102,7 @@ if __name__ == "__main__":
     smoke(
         pre_dir="/dfs/user/ranjanr/pre/relbench-preprocessed",
         out_root="/tmp/rt-smoke",
-        run_id=timestamp(),
+        run_id=f"{datetime.now():%y-%m-%d_%H-%M-%S}",
         total_steps=3,
         compile=False,
     )

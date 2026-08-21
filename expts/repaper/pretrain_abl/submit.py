@@ -25,7 +25,8 @@ import json
 import sys
 from pathlib import Path
 
-from roach.slurm import AMPERE_LO, submit
+from roach.slurm import submit
+from roach.slurm.clusters.ilc import AMPERE_LO, ILC
 
 from expts.repaper.config import (
     CKPT_ROOT,
@@ -168,6 +169,8 @@ def submit_arm(arm: str, run_id: str | None) -> None:
         name=f"pabl-{arm}",
         run_id=run_id,
         repo_root=str(REPO_ROOT),
+        cluster=ILC,
+        job_env="expts/job_env.sh",
         log_root=LOG_ROOT,
         clone_root=CLONE_ROOT,
         secrets_dir=SECRETS_DIR,

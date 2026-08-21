@@ -33,7 +33,8 @@ import dataclasses
 import getpass
 from pathlib import Path
 
-from roach.slurm import AMPERE_LO, BLACKWELL, submit
+from roach.slurm import submit
+from roach.slurm.clusters.ilc import AMPERE_LO, BLACKWELL, ILC
 
 # rel-f1 is the smallest preprocessed database, so loading it is seconds. Two
 # tasks rather than one so the eval path builds a real task list.
@@ -162,6 +163,8 @@ def main() -> None:
         ),
         name="pretrain-smoke",
         repo_root=str(REPO_ROOT),
+        cluster=ILC,
+        job_env="expts/job_env.sh",
         # Its own log directory: MONITOR.md identifies the live run by the
         # newest log under the run's log_root, and a smoke test landing there
         # would answer with its own run_id.

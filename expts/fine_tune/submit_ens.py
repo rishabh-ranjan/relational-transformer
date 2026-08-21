@@ -23,6 +23,7 @@ import subprocess
 from pathlib import Path
 
 from roach.slurm import Resources, submit
+from roach.slurm.clusters.ilc import ILC
 
 from submit import TASKS, a100, b200, targets_for  # noqa: F401
 
@@ -181,6 +182,8 @@ def main() -> None:
             resources=resources,
             name=f"ens-{db}-{task}",
             repo_root="/lfs/hyperturing1/0/ranjanr/clones/rishabh-ranjan/relational-transformer",
+            cluster=ILC,
+            job_env="expts/job_env.sh",
             log_root="/dfs/user/ranjanr/slurm-logs/rishabh-ranjan/relational-transformer/expts/fine-tune-ens",
             clone_root="/lfs/local/0/roach_clones",
             secrets_dir="/dfs/user/ranjanr/.secrets",

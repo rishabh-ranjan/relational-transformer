@@ -4,7 +4,8 @@
 # filling it in is one line and not an import hunt.
 import dataclasses  # noqa: F401
 
-from roach.slurm import AMPERE, Resources, submit  # noqa: F401
+from roach.slurm import Resources, submit
+from roach.slurm.clusters.ilc import AMPERE, ILC  # noqa: F401
 
 # The slot this one job goes in, chosen by hand at submission time.
 #
@@ -44,6 +45,8 @@ def main() -> None:
         resources=RESOURCES,
         name="mask-mem",
         repo_root="/lfs/hyperturing1/0/ranjanr/clones/rishabh-ranjan/relational-transformer",
+        cluster=ILC,
+        job_env="expts/job_env.sh",
         log_root="/dfs/user/ranjanr/slurm-logs/rishabh-ranjan/relational-transformer/expts/mask-mem",
         clone_root="/lfs/local/0/roach_clones",
         secrets_dir="/dfs/user/ranjanr/.secrets",

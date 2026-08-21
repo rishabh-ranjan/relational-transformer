@@ -35,7 +35,7 @@ A run is alive when that step is higher than the one you read last round. Keep
 the log for what wandb does not carry: a traceback, `resumed_from`, a preemption.
 
 Neither preemption nor the wall clock needs you: both requeue and resume from
-the run's own checkpoint (see [`roach.slurm`](../../roach/slurm/README.md)),
+the run's own checkpoint (see [`roach.slurm`](https://github.com/rishabh-ranjan/roach)),
 which matters most on `il-interactive`'s 12 hours.
 
 ## Ensembling the fine-tuned checkpoints

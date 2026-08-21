@@ -12,7 +12,7 @@ running this on a cluster without writing any slurm boilerplate, see
 roach.slurm.submit and expts/fine_tune/submit.py.
 """
 
-from roach.slurm import timestamp
+from datetime import datetime
 from rt.train import main
 
 
@@ -98,5 +98,5 @@ if __name__ == "__main__":
         pre_dir="data/the-join-preprocessed",
         eval_pre_dir="data/relbench-preprocessed",
         out_root="~/ckpts",
-        run_id=timestamp(),
+        run_id=f"{datetime.now():%y-%m-%d_%H-%M-%S}",
     )

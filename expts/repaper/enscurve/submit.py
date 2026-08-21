@@ -4,6 +4,7 @@ import json
 from pathlib import Path
 
 from roach.slurm import Resources, submit
+from roach.slurm.clusters.ilc import ILC
 
 from expts.repaper.config import (
     CKPT_CLF,
@@ -101,6 +102,8 @@ def submit_variant(variant: str, qos: str, tasks=None) -> None:
             resources=resources(db, qos),
             name=f"ens-{variant}-{db}-{table}",
             repo_root=str(REPO_ROOT),
+            cluster=ILC,
+            job_env="expts/job_env.sh",
             log_root=LOG_ROOT,
             clone_root=CLONE_ROOT,
             secrets_dir=SECRETS_DIR,

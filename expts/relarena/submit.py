@@ -23,10 +23,13 @@ carries has to be in the lock.
 from pathlib import Path
 
 from roach.slurm import Resources, submit
+from roach.slurm.clusters.ilc import ILC
 
 HERE = Path(__file__).parent
 
-REPO_ROOT = "/lfs/hyperturing1/0/ranjanr/clones/rishabh-ranjan/relational-transformer-relarena"
+REPO_ROOT = (
+    "/lfs/hyperturing1/0/ranjanr/clones/rishabh-ranjan/relational-transformer-relarena"
+)
 SECRETS_DIR = "/dfs/user/ranjanr/.secrets"
 SHARE = "/dfs/user/ranjanr/share/relarena"
 
@@ -287,10 +290,7 @@ RUN_IDS: dict[tuple[str, str, str], str] = {}
 def main() -> None:
     for dataset, task, split, mask_labels, cutoff_offset in ZERO_SHOT:
         resources = ZERO_SHOT_RESOURCES[dataset, task]
-        print(
-            f"  zero-shot/{dataset}/{task}/{split} "
-            f"{resources.gpus} {resources.qos}"
-        )
+        print(f"  zero-shot/{dataset}/{task}/{split} {resources.gpus} {resources.qos}")
         submit(
             "expts.relarena.zero_shot:main",
             args=dict(
@@ -306,6 +306,8 @@ def main() -> None:
             name=f"relarena-zero-shot-{dataset}-{task}-{split}-off{cutoff_offset}",
             setup=relarena_setup(),
             repo_root=REPO_ROOT,
+            cluster=ILC,
+            job_env="expts/job_env.sh",
             log_root=f"{SHARE}/slurm-logs",
             clone_root="/lfs/local/0/roach_clones",
             secrets_dir=SECRETS_DIR,
@@ -319,6 +321,8 @@ def main() -> None:
             name=f"relarena-bench-compile-{dataset}-{task}",
             setup=relarena_setup(),
             repo_root=REPO_ROOT,
+            cluster=ILC,
+            job_env="expts/job_env.sh",
             log_root=f"{SHARE}/slurm-logs",
             clone_root="/lfs/local/0/roach_clones",
             secrets_dir=SECRETS_DIR,
@@ -347,6 +351,8 @@ def main() -> None:
             name=f"relarena-{model}-{dataset}-{task}",
             setup=relarena_setup(),
             repo_root=REPO_ROOT,
+            cluster=ILC,
+            job_env="expts/job_env.sh",
             log_root=f"{SHARE}/slurm-logs",
             clone_root="/lfs/local/0/roach_clones",
             secrets_dir=SECRETS_DIR,

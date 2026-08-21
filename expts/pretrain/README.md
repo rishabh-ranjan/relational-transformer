@@ -20,7 +20,7 @@ one account. What the submitting user has to have:
 
 Logs, checkpoints and per-node clones all land under the submitting user's own
 `/dfs/user/$USER` and `/lfs/local/0/$USER`; the first job on a node sets that
-node up (see `roach/slurm/env.sh`). Inputs are shared and read-only under
+node up (roach's ILC cluster env). Inputs are shared and read-only under
 `/dfs/user/ranjanr/share`.
 
 ## Running it
@@ -66,7 +66,7 @@ pixi run python -m expts.pretrain.smoke --nodelist ampere3,ampere9
 ```
 
 Neither preemption nor the wall clock needs you: both requeue and resume from
-the run's own checkpoint (see [`roach.slurm`](../../roach/slurm/README.md)),
+the run's own checkpoint (see [`roach.slurm`](https://github.com/rishabh-ranjan/roach)),
 and resume is GPU-count flexible, which is what lets the shape change under a
 running experiment without costing work.
 

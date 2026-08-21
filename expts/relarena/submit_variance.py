@@ -21,9 +21,15 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from expts.relarena.submit import (  # noqa: E402
-    CACHE_DIR, REPO_ROOT, SECRETS_DIR, SHARE, b200, relarena_setup,
+    CACHE_DIR,
+    REPO_ROOT,
+    SECRETS_DIR,
+    SHARE,
+    b200,
+    relarena_setup,
 )
 from roach.slurm import submit  # noqa: E402
+from roach.slurm.clusters.ilc import ILC  # noqa: E402
 
 DATASET, TASK, SEEDS = "rel-avito", "user-clicks", range(1, 6)
 
@@ -33,14 +39,20 @@ def main() -> None:
         job = submit(
             "expts.relarena.run:main",
             args=dict(
-                dataset=DATASET, task=TASK, model="rt-plurel", seed=seed,
-                n_trials=1, cache_dir=CACHE_DIR,
+                dataset=DATASET,
+                task=TASK,
+                model="rt-plurel",
+                seed=seed,
+                n_trials=1,
+                cache_dir=CACHE_DIR,
                 out_dir=f"{SHARE}/results-variance",
             ),
             resources=b200("il-lo", "21-00:00:00"),
             name=f"relarena-rt-plurel-{DATASET}-{TASK}-var{seed}",
             setup=relarena_setup(),
             repo_root=REPO_ROOT,
+            cluster=ILC,
+            job_env="expts/job_env.sh",
             log_root=f"{SHARE}/slurm-logs",
             clone_root="/lfs/local/0/roach_clones",
             secrets_dir=SECRETS_DIR,

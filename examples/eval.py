@@ -10,7 +10,7 @@ on demand); the data is a local directory (see docs/downloads.md).
 """
 
 from rt.eval import main
-from roach.slurm import timestamp
+from datetime import datetime
 
 
 def evaluate(pre_dir: str, out_root: str, checkpoint: str, run_id: str) -> None:
@@ -59,5 +59,5 @@ if __name__ == "__main__":
         pre_dir="data/relbench-preprocessed",
         out_root="~/ckpts",
         checkpoint="stanford-star/rt-j/classification",
-        run_id=timestamp(),
+        run_id=f"{datetime.now():%y-%m-%d_%H-%M-%S}",
     )

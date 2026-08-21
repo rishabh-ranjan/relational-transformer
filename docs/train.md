@@ -151,20 +151,23 @@ the (large) data from shared storage per item.
 
 ## On a cluster
 
-Submission lives in [`roach.slurm`](../roach/slurm/README.md),
-a pinned dependency; that README is the reference for how a job is built and how
+Submission lives in [`roach.slurm`](https://github.com/rishabh-ranjan/roach),
+a pinned dependency; its README is the reference for how a job is built and how
 it survives preemption. In short: it refuses a dirty or unpushed tree, records
 the commit, checks your arguments against the target's signature, and hands
 slurm a script that clones that commit, builds the environment on the node, and
 starts one rank per GPU.
 
 ```python
-from roach.slurm import AMPERE, submit
+from roach.slurm import submit
+from roach.slurm.clusters.ilc import AMPERE, ILC
 
 submit("examples.train:train",
        args={"pre_dir": ..., "eval_pre_dir": ..., "out_root": ...},
        resources=AMPERE,   # or Resources(...) for a shape roach does not ship
+       cluster=ILC,
        name="rt-j",
+       job_env="expts/job_env.sh",
        repo_root=..., log_root=..., clone_root=..., secrets_dir=...)
 ```
 

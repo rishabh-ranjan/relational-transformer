@@ -6,7 +6,8 @@ import getpass
 import json
 from pathlib import Path
 
-from roach.slurm import AMPERE_LO, BLACKWELL, Resources, submit
+from roach.slurm import Resources, submit
+from roach.slurm.clusters.ilc import AMPERE_LO, BLACKWELL, ILC
 
 # The checkout this script belongs to, whatever that is, rather than one named
 # clone. `submit` refuses a dirty or unpushed tree, and the usual clone is
@@ -49,7 +50,9 @@ EVAL_TASKS = [
 # up to 4 preemptibly. The run checkpoints and resumes through preemption and
 # the wall clock alike, so either costs wall clock rather than work.
 def resources(gpus: str, nodes: int, qos: str, nodelist: str) -> Resources:
-    time = {"il-lo": "21-00:00:00", "il": "7-00:00:00", "il-interactive": "12:00:00"}[qos]
+    time = {"il-lo": "21-00:00:00", "il": "7-00:00:00", "il-interactive": "12:00:00"}[
+        qos
+    ]
     kind, count = gpus.split(":")
     if kind == "a100":
         assert count == "8", gpus
@@ -62,7 +65,11 @@ def resources(gpus: str, nodes: int, qos: str, nodelist: str) -> Resources:
             cpus_per_task=16,
             nodelist=nodelist,
         )
-    assert kind == "b200" and nodes == 1 and nodelist == "blackwell1", (gpus, nodes, nodelist)
+    assert kind == "b200" and nodes == 1 and nodelist == "blackwell1", (
+        gpus,
+        nodes,
+        nodelist,
+    )
     # 36 cpus and 375G per card: MaxMemPerCPU is 10700M, so this is as much
     # memory as the cpus can carry.
     return dataclasses.replace(
@@ -199,6 +206,8 @@ def main() -> None:
         name="pretrain",
         run_id=args.run_id,
         repo_root=str(REPO_ROOT),
+        cluster=ILC,
+        job_env="expts/job_env.sh",
         log_root=f"/dfs/user/{USER}/slurm-logs/rishabh-ranjan/relational-transformer/expts/pretrain",
         clone_root=f"/lfs/local/0/{USER}/roach_clones",
         secrets_dir=f"/dfs/user/{USER}/.secrets",

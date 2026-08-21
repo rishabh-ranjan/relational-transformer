@@ -17,6 +17,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from roach.slurm import Resources, submit  # noqa: E402
+from roach.slurm.clusters.ilc import ILC  # noqa: E402
 
 from expts.preprocess.preprocess import is_done, is_rustler_done  # noqa: E402
 from collections import defaultdict
@@ -360,6 +361,8 @@ def submit_legacy_rustler(name: str, expected_bytes: int):
         name=f"lpre-{name}",
         setup=SETUP,
         repo_root=REPO_ROOT,
+        cluster=ILC,
+        job_env="expts/job_env.sh",
         log_root=LOG_ROOT,
         clone_root=CLONE_ROOT,
         secrets_dir=SECRETS_DIR,
@@ -393,6 +396,8 @@ def submit_embed(
         name=f"{prefix}-{name}",
         setup=SETUP,
         repo_root="/lfs/hyperturing1/0/ranjanr/clones/rishabh-ranjan/relational-transformer",
+        cluster=ILC,
+        job_env="expts/job_env.sh",
         log_root=LOG_ROOT,
         # the node's own big disk, not /tmp (the 280G root filesystem): clones
         # are shared per commit and hold the pixi env, which pixi hardlinks from
@@ -521,6 +526,8 @@ def main() -> None:
             name=f"pre-{name}",
             setup=SETUP,
             repo_root="/lfs/hyperturing1/0/ranjanr/clones/rishabh-ranjan/relational-transformer",
+            cluster=ILC,
+            job_env="expts/job_env.sh",
             log_root=LOG_ROOT,
             clone_root="/lfs/local/0/roach_clones",
             secrets_dir="/dfs/user/ranjanr/.secrets",

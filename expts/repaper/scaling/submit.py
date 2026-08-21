@@ -11,6 +11,7 @@ import json
 from pathlib import Path
 
 from roach.slurm import Resources, submit
+from roach.slurm.clusters.ilc import ILC
 
 from expts.repaper.config import (
     CKPT_CLF,
@@ -235,6 +236,8 @@ def submit_arm(arm: str, tasks, resources_for) -> None:
             resources=resources_for(db),
             name=f"scal-{arm.replace('/', '-')}-{db}-{table}",
             repo_root=str(REPO_ROOT),
+            cluster=ILC,
+            job_env="expts/job_env.sh",
             log_root=LOG_ROOT,
             clone_root=CLONE_ROOT,
             secrets_dir=SECRETS_DIR,
@@ -270,6 +273,8 @@ def submit_nosem_data() -> None:
         ),
         name="nosem-data",
         repo_root=str(REPO_ROOT),
+        cluster=ILC,
+        job_env="expts/job_env.sh",
         log_root=LOG_ROOT,
         clone_root=CLONE_ROOT,
         secrets_dir=SECRETS_DIR,

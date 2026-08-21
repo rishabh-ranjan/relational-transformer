@@ -18,8 +18,6 @@ requires-python = ">=3.11"
 # so installing this package as a *library* (relarena does) does not drag a
 # plotting stack and a pre-commit install into the consumer's environment.
 dependencies = [
-    # roach.slurm ships in this distribution and type-checks its arguments.
-    "beartype",
     "einops",
     "huggingface-hub",
     "ml_dtypes",
@@ -45,6 +43,9 @@ dependencies = [
 # the wandb workspace builder (expts/fine_tune/workspace.py), and the baselines
 # and plots under expts/. None of it is imported from `src/rt`.
 dev = [
+    # Submits experiments and is the job-side entry point (roach.slurm.run);
+    # pin and the submitting environment must agree (see its README).
+    "roach @ git+https://github.com/rishabh-ranjan/roach@v0.1.0",
     # Builds the FAISS indices the sampler's opt-in vecdb feature reads
     # (expts/repaper/baselines/build_vector_db.py).
     "faiss-cpu",
@@ -66,11 +67,6 @@ manifest-path = "rustler/Cargo.toml"
 module-name = "rt.rustler"
 # The whole crate, FAISS aside (`vecdb` needs cmake and a BLAS; see rustler/Cargo.toml).
 features = ["pyo3/extension-module"]
-# Nothing extra. `roach` is slurm submission tooling, not part of RT, and lives
-# at the repo root beside `expts/` rather than under `python-source` -- a
-# consumer who `pip install`s this wants a relational transformer, not a batch
-# submitter. Experiments reach it because the bootstrap `cd`s to the checkout,
-# which is the same way they reach `expts`.
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
@@ -153,9 +149,8 @@ uv = "*"
 setuptools = "<81"
 
 [tool.pixi.feature.featurize.pypi-dependencies]
-# roach.slurm's package init type-checks with beartype, and jobs enter through
-# `python -m roach.slurm.run` whatever environment they run in.
-beartype = "*"
+# Jobs enter through `python -m roach.slurm.run` whatever environment they run in.
+roach = { git = "https://github.com/rishabh-ranjan/roach", tag = "v0.1.0" }
 relbench = "==2.1.2"
 fastdfs = "*"
 duckdb = "*"
