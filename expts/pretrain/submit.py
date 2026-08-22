@@ -8,9 +8,10 @@ from roach.slurm.clusters import ilc
 from roach.slurm import submit
 
 # 2026-08-21: blackwell1 fully allocated (6 b200 on il-lo, 2 on il); `il` preempts
-# il-lo, and rkvs job 136059 holds 8 of il's 10, leaving exactly 2.
+# il-lo, and rkvs job 136059 holds 8 of il's 10, leaving exactly 2. mem: the
+# mmapped data is 282G train + 139G eval; at 750G the cgroup thrashed.
 resources = dataclasses.replace(
-    ilc.BLACKWELL, gpus="b200:2", qos="il", time="7-00:00:00", mem="750000M"
+    ilc.BLACKWELL, gpus="b200:2", qos="il", time="7-00:00:00", mem="1200000M"
 )
 
 tokens_per_gpu = {"a100": 2**17, "b200": 2**18}[resources.gpus.rpartition(":")[0]]
@@ -32,7 +33,7 @@ submit(
         train_splits=["train"],
         pre_dir="~/scratch/hf/stanford-star/the-join-preprocessed",
         tokens_per_gpu=tokens_per_gpu,
-        num_workers=resources.cpus_per_task,
+        num_workers=16,
         prefetch_factor=2,
         ctx_size_list=[512, 1024, 2048, 4096, 8192],
         local_ctx_size_list=[256, 512, 1024, 2048, 4096, 8192],
