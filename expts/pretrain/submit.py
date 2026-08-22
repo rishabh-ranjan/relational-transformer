@@ -1,6 +1,5 @@
 """Submit the pretraining run. See [README.md](README.md)."""
 
-import dataclasses
 from pathlib import Path
 
 from roach.slurm.clusters import marlowe
@@ -8,12 +7,13 @@ from roach.slurm.clusters import marlowe
 from roach.slurm import submit
 
 # 2026-08-22: one 8xH100 node on Marlowe's batch partition (--exclusive,
-# 1456000M), on the cutoff subset that is on Marlowe scratch. Pinned to n30,
-# whose page cache already holds the data from the previous attempt (441391),
-# which was cancelled: 14 train + 14 eval loader workers per 14-core rank
-# pushed item builds past timeout_per_item, 1.6k skips before the first step.
+# 1456000M), on the cutoff subset that is on Marlowe scratch. The previous
+# attempt (441391) was cancelled: one eval loader per task, each with 14
+# workers, was 294 eval + 14 train workers per 14-core rank, and item builds
+# blew timeout_per_item (1.7k skips, no first step). Eval loaders get one
+# worker each.
 cluster = marlowe.MARLOWE
-resources = dataclasses.replace(marlowe.H100, nodelist="n30")
+resources = marlowe.H100
 
 # Marlowe's gres is untyped and every card there is an H100.
 gpu = resources.gpus.rpartition(":")[0] or {"marlowe": "h100"}[cluster.name]
