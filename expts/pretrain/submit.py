@@ -12,7 +12,6 @@ from roach.slurm import submit
 resources = marlowe.H100
 
 tokens_per_gpu = 2**17  # H100-80G, the A100-80G's value
-num_workers = resources.cpus_per_task  # train and eval loaders alike
 
 submit(
     "rt.train:main",
@@ -31,7 +30,7 @@ submit(
         train_splits=["train"],
         pre_dir="~/scratch/hf/stanford-star/the-join-lite-preprocessed",
         tokens_per_gpu=tokens_per_gpu,
-        num_workers=num_workers,
+        num_workers=resources.cpus_per_task,
         prefetch_factor=2,
         ctx_size_list=[512, 1024, 2048, 4096, 8192],
         local_ctx_size_list=[256, 512, 1024, 2048, 4096, 8192],
@@ -65,7 +64,7 @@ submit(
         eval_db_task_list="expts/pretrain/eval-tasks.json",
         eval_pre_dir="~/scratch/hf/stanford-star/relbench-preprocessed",
         eval_tokens_per_gpu=tokens_per_gpu,
-        eval_num_workers=num_workers,
+        eval_num_workers=resources.cpus_per_task,
         eval_prefetch_factor=2,
         eval_num_walks=10_000,
         eval_walk_length=20,
