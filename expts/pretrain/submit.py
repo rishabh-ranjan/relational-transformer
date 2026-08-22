@@ -1,20 +1,21 @@
 """Submit the pretraining run. See [README.md](README.md)."""
 
-import dataclasses
 from pathlib import Path
 
-from roach.slurm.clusters import ilc
+from roach.slurm.clusters import marlowe
 
 from roach.slurm import submit
 
-# 2026-08-21: blackwell1 fully allocated (6 b200 on il-lo, 2 on il); `il` preempts
-# il-lo, and rkvs job 136059 holds 8 of il's 10, leaving exactly 2. mem: the
-# mmapped data is 282G train + 139G eval; at 750G the cgroup thrashed.
-resources = dataclasses.replace(
-    ilc.BLACKWELL, gpus="b200:2", qos="il", time="7-00:00:00", mem="1200000M"
-)
+# 2026-08-22: one 8xH100 node on Marlowe's batch partition (--exclusive,
+# 1456000M), the first real run there, on the cutoff subset that is on Marlowe
+# scratch. Each rank is confined to its cpus_per_task cores (task/cgroup), so
+# the loaders are sized from that: the eval loaders are persistent and prefetch
+# while training runs, so they come out of the same cores.
+resources = marlowe.H100
 
-tokens_per_gpu = {"a100": 2**17, "b200": 2**18}[resources.gpus.rpartition(":")[0]]
+tokens_per_gpu = 2**17  # H100-80G, the A100-80G's value
+eval_num_workers = max(1, resources.cpus_per_task // 8)
+num_workers = resources.cpus_per_task - 2 - eval_num_workers  # the rank keeps two
 
 submit(
     "rt.train:main",
@@ -31,9 +32,9 @@ submit(
         load_ckpt_path="~/scratch/hf/stanford-star/rt-plurel/classification",
         db_task_list="expts/pretrain/all_5gb_cutoff.json",
         train_splits=["train"],
-        pre_dir="~/scratch/hf/stanford-star/the-join-preprocessed",
+        pre_dir="~/scratch/hf/stanford-star/the-join-lite-preprocessed",
         tokens_per_gpu=tokens_per_gpu,
-        num_workers=16,
+        num_workers=num_workers,
         prefetch_factor=2,
         ctx_size_list=[512, 1024, 2048, 4096, 8192],
         local_ctx_size_list=[256, 512, 1024, 2048, 4096, 8192],
@@ -67,7 +68,7 @@ submit(
         eval_db_task_list="expts/pretrain/eval-tasks.json",
         eval_pre_dir="~/scratch/hf/stanford-star/relbench-preprocessed",
         eval_tokens_per_gpu=tokens_per_gpu,
-        eval_num_workers=2,
+        eval_num_workers=eval_num_workers,
         eval_prefetch_factor=2,
         eval_num_walks=10_000,
         eval_walk_length=20,
@@ -90,7 +91,7 @@ submit(
     name="pretrain",
     run_id=None,
     repo_root=str(Path(__file__).resolve().parents[2]),
-    cluster=ilc.ILC,
+    cluster=marlowe.MARLOWE,
     job_env="expts/job_env.sh",
     log_root="~/scratch/relational-transformer/pretrain/slurm-logs",
     clone_root="~/roach_clones",
