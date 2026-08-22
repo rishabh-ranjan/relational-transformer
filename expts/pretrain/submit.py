@@ -7,11 +7,7 @@ from roach.slurm.clusters import marlowe
 from roach.slurm import submit
 
 # 2026-08-22: one 8xH100 node on Marlowe's batch partition (--exclusive,
-# 1456000M), on the cutoff subset that is on Marlowe scratch. The previous
-# attempt (441391) was cancelled: one eval loader per task, each with 14
-# workers, was 294 eval + 14 train workers per 14-core rank, and item builds
-# blew timeout_per_item (1.7k skips, no first step). Eval loaders get one
-# worker each.
+# 1456000M), on the cutoff subset that is on Marlowe scratch.
 cluster = marlowe.MARLOWE
 resources = marlowe.H100
 
@@ -70,7 +66,7 @@ submit(
         eval_db_task_list="expts/pretrain/eval-tasks.json",
         eval_pre_dir="~/scratch/hf/stanford-star/relbench-preprocessed",
         eval_tokens_per_gpu=tokens_per_gpu,
-        eval_num_workers=1,
+        eval_num_workers=1,  # per eval task: 21 loaders, each with this many workers, per rank
         eval_prefetch_factor=2,
         eval_num_walks=10_000,
         eval_walk_length=20,
