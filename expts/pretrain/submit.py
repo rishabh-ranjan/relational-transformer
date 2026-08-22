@@ -1,5 +1,6 @@
 """Submit the pretraining run. See [README.md](README.md)."""
 
+import dataclasses
 from pathlib import Path
 
 from roach.slurm.clusters import marlowe
@@ -7,10 +8,12 @@ from roach.slurm.clusters import marlowe
 from roach.slurm import submit
 
 # 2026-08-22: one 8xH100 node on Marlowe's batch partition (--exclusive,
-# 1456000M), the first real run there, on the cutoff subset that is on Marlowe
-# scratch. Each rank is confined to its cpus_per_task cores (task/cgroup).
+# 1456000M), on the cutoff subset that is on Marlowe scratch. Pinned to n30,
+# whose page cache already holds the data from the previous attempt (441391),
+# which was cancelled: 14 train + 14 eval loader workers per 14-core rank
+# pushed item builds past timeout_per_item, 1.6k skips before the first step.
 cluster = marlowe.MARLOWE
-resources = marlowe.H100
+resources = dataclasses.replace(marlowe.H100, nodelist="n30")
 
 # Marlowe's gres is untyped and every card there is an H100.
 gpu = resources.gpus.rpartition(":")[0] or {"marlowe": "h100"}[cluster.name]
@@ -67,7 +70,7 @@ submit(
         eval_db_task_list="expts/pretrain/eval-tasks.json",
         eval_pre_dir="~/scratch/hf/stanford-star/relbench-preprocessed",
         eval_tokens_per_gpu=tokens_per_gpu,
-        eval_num_workers=resources.cpus_per_task,
+        eval_num_workers=1,
         eval_prefetch_factor=2,
         eval_num_walks=10_000,
         eval_walk_length=20,
