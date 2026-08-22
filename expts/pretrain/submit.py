@@ -9,9 +9,12 @@ from roach.slurm import submit
 # 2026-08-22: one 8xH100 node on Marlowe's batch partition (--exclusive,
 # 1456000M), the first real run there, on the cutoff subset that is on Marlowe
 # scratch. Each rank is confined to its cpus_per_task cores (task/cgroup).
+cluster = marlowe.MARLOWE
 resources = marlowe.H100
 
-tokens_per_gpu = 2**17  # H100-80G, the A100-80G's value
+# Marlowe's gres is untyped and every card there is an H100.
+gpu = resources.gpus.rpartition(":")[0] or {"marlowe": "h100"}[cluster.name]
+tokens_per_gpu = {"a100": 2**17, "h100": 2**17, "b200": 2**18}[gpu]
 
 submit(
     "rt.train:main",
@@ -87,7 +90,7 @@ submit(
     name="pretrain",
     run_id=None,
     repo_root=str(Path(__file__).resolve().parents[2]),
-    cluster=marlowe.MARLOWE,
+    cluster=cluster,
     job_env="expts/job_env.sh",
     log_root="~/scratch/relational-transformer/pretrain/slurm-logs",
     clone_root="~/roach_clones",
