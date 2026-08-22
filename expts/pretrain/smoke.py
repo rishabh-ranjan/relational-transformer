@@ -111,7 +111,7 @@ submit(
     repo_root=str(Path(__file__).resolve().parents[2]),
     cluster=ilc.ILC,
     job_env="expts/job_env.sh",
-    log_root="~/scratch/slurm-logs/rishabh-ranjan/relational-transformer/expts/pretrain/smoke",
+    log_root="~/scratch/relational-transformer/pretrain/smoke/slurm-logs",
     clone_root="~/roach_clones",
     secrets_dir="~/scratch/.secrets",
 )

@@ -48,7 +48,7 @@ def main() -> None:
         repo_root="~/clones/rishabh-ranjan/relational-transformer",
         cluster=ILC,
         job_env="expts/job_env.sh",
-        log_root="~/scratch/slurm-logs/rishabh-ranjan/relational-transformer/expts/mask-mem",
+        log_root="~/scratch/relational-transformer/mask_mem/slurm-logs",
         clone_root="~/roach_clones",
         secrets_dir="~/scratch/.secrets",
     )

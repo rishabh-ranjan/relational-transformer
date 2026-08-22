@@ -41,7 +41,7 @@ from roach.slurm import submit
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 PRE_DIR_JOIN = JOIN_PRE_DIR
-LOG_ROOT = f"{LOG_ROOT}/repaper/pretrain_abl"
+LOG_ROOT = f"{LOG_ROOT}/repaper/pretrain_abl/slurm-logs"
 
 EVAL_TASKS = [
     (db, task)

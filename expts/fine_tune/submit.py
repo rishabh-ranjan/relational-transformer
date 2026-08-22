@@ -351,7 +351,7 @@ def main() -> None:
             repo_root="~/clones/rishabh-ranjan/relational-transformer",
             cluster=ILC,
             job_env="expts/job_env.sh",
-            log_root="~/scratch/slurm-logs/rishabh-ranjan/relational-transformer/expts/fine-tune",
+            log_root="~/scratch/relational-transformer/fine_tune/slurm-logs",
             clone_root="~/roach_clones",
             secrets_dir="~/scratch/.secrets",
             run_id=RUN_IDS.get((db, task)),

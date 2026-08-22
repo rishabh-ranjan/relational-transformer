@@ -93,7 +93,7 @@ def main() -> None:
                 repo_root=REPO_ROOT,
                 cluster=ILC,
                 job_env="expts/job_env.sh",
-                log_root=f"{SHARE}/slurm-logs",
+                log_root="~/scratch/relational-transformer/relarena/slurm-logs",
                 clone_root="~/roach_clones",
                 secrets_dir=SECRETS_DIR,
             )

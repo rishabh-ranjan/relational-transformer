@@ -32,7 +32,7 @@ from roach.slurm import Resources, submit
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 PROJECT = project("tune")
-LOG_ROOT = f"{LOG_ROOT}/repaper/tune"
+LOG_ROOT = f"{LOG_ROOT}/repaper/tune/slurm-logs"
 
 TASKS = [
     tuple(p)

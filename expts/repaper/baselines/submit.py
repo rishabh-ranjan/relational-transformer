@@ -19,7 +19,7 @@ from expts.repaper.config import (
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 DB_TASK_LIST = f"{PRE_DIR}/db-task-lists/forecast.json"
-LOG_ROOT = f"{LOG_ROOT}/repaper/baselines"
+LOG_ROOT = f"{LOG_ROOT}/repaper/baselines/slurm-logs"
 
 PAIRS = [tuple(p) for p in json.loads(Path(DB_TASK_LIST).read_text())]
 DBS = sorted({db for db, _ in PAIRS})

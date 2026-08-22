@@ -25,7 +25,7 @@ from roach.slurm import Resources, submit
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 OUT_ROOT = f"{OUT_ROOT}/repaper-submit"
-LOG_ROOT = f"{LOG_ROOT}/repaper/submit"
+LOG_ROOT = f"{LOG_ROOT}/repaper/submit/slurm-logs"
 
 MEM = {
     "rel-amazon": "120G",

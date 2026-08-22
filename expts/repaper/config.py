@@ -29,7 +29,7 @@ SHARE = "~/scratch/share/relational-transformer/repaper"
 # explicit directory under OUT_ROOT.
 CKPT_ROOT = "~/scratch/ckpts"
 OUT_ROOT = f"{CKPT_ROOT}/rtv2"
-LOG_ROOT = "~/scratch/slurm-logs/rishabh-ranjan/relational-transformer/expts"
+LOG_ROOT = "~/scratch/relational-transformer"
 CLONE_ROOT = "~/roach_clones"
 SECRETS_DIR = "~/scratch/.secrets"
 

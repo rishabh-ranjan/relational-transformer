@@ -18,7 +18,7 @@ from roach.slurm import Resources, submit
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 OUT_ROOT = f"{OUT_ROOT}/repaper-enscurve"
-LOG_ROOT = f"{LOG_ROOT}/repaper/enscurve"
+LOG_ROOT = f"{LOG_ROOT}/repaper/enscurve/slurm-logs"
 
 TASKS = [
     tuple(p)

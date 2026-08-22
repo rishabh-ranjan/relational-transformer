@@ -23,7 +23,9 @@ freely, git holds the variants.
 Nothing in it is settled, and the resource plan least of all. **Work out which
 gpus and which qos this submission should ask for at the moment you submit** —
 the `roach` skill's cluster page says how — and write that answer into the
-file. What the plan said last time is a record of a different cluster and a
+file. The cluster itself is the human's call alone: a submission goes to ILC
+unless the instruction names Marlowe, whose allocation is metered and shared,
+and then with exactly the partition and node count the instruction gave. What the plan said last time is a record of a different cluster and a
 different instruction, not a default to inherit: read it as one more variant
 git is holding for you. The same goes for the task list, the hyperparameters,
 and every other value in the call.
@@ -40,9 +42,15 @@ from roach.slurm import submit
 from roach.slurm.clusters.ilc import BLACKWELL, ILC
 
 submit("expts.<name>.<module>:<function>", args={...}, resources=BLACKWELL,
-       cluster=ILC, name=..., job_env="expts/job_env.sh",
-       repo_root=..., log_root=..., clone_root=..., secrets_dir=...)
+       cluster=ILC, name=..., job_env="expts/job_env.sh", repo_root=...,
+       log_root="~/scratch/relational-transformer/<expt>/slurm-logs",
+       clone_root="~/roach_clones", secrets_dir="~/scratch/.secrets")
 ```
+
+Those three paths are the same strings on every cluster (`~` is the cluster's
+home; the dotfiles make `~/scratch` its shared store), so a Marlowe submission
+changes only `cluster=MARLOWE` and `resources=` from
+`roach.slurm.clusters.marlowe`.
 
 What is this repo's, on top of that:
 

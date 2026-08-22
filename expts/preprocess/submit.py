@@ -85,7 +85,7 @@ LEGACY_DIR = f"~/scratch/share/stanford-star/{OUT_NAME}/legacy"
 
 RAW_DIR = f"~/scratch/share/stanford-star/{NAME}"
 OUT_DIR = f"~/scratch/share/stanford-star/{OUT_NAME}"
-LOG_ROOT = f"~/scratch/slurm-logs/preprocess-{NAME}"
+LOG_ROOT = f"~/scratch/relational-transformer/preprocess/{NAME}/slurm-logs"
 SIZES = Path(__file__).with_name(f"sizes-{NAME}.json")
 REPO_ROOT = "~/clones/rishabh-ranjan/relational-transformer"
 CLONE_ROOT = "~/roach_clones"

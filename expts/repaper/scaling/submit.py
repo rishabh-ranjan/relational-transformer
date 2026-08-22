@@ -26,7 +26,7 @@ from roach.slurm import Resources, submit
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 OUT_ROOT = f"{OUT_ROOT}/repaper-scaling"
-LOG_ROOT = f"{LOG_ROOT}/repaper/scaling"
+LOG_ROOT = f"{LOG_ROOT}/repaper/scaling/slurm-logs"
 
 TASKS = [
     tuple(p)
