@@ -8,14 +8,11 @@ from roach.slurm import submit
 
 # 2026-08-22: one 8xH100 node on Marlowe's batch partition (--exclusive,
 # 1456000M), the first real run there, on the cutoff subset that is on Marlowe
-# scratch. Each rank is confined to its cpus_per_task cores (task/cgroup), so
-# the loaders are sized from that: the eval loaders are persistent and prefetch
-# while training runs, so they come out of the same cores.
+# scratch. Each rank is confined to its cpus_per_task cores (task/cgroup).
 resources = marlowe.H100
 
 tokens_per_gpu = 2**17  # H100-80G, the A100-80G's value
-eval_num_workers = max(1, resources.cpus_per_task // 8)
-num_workers = resources.cpus_per_task - 2 - eval_num_workers  # the rank keeps two
+num_workers = resources.cpus_per_task  # train and eval loaders alike
 
 submit(
     "rt.train:main",
@@ -68,7 +65,7 @@ submit(
         eval_db_task_list="expts/pretrain/eval-tasks.json",
         eval_pre_dir="~/scratch/hf/stanford-star/relbench-preprocessed",
         eval_tokens_per_gpu=tokens_per_gpu,
-        eval_num_workers=eval_num_workers,
+        eval_num_workers=num_workers,
         eval_prefetch_factor=2,
         eval_num_walks=10_000,
         eval_walk_length=20,
