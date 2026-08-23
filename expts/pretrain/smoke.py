@@ -38,6 +38,7 @@ submit(
         db_task_list=[("rel-f1", "driver-dnf"), ("rel-f1", "driver-top3")],
         train_splits=["train"],
         pre_dir="~/scratch/hf/stanford-star/relbench-preprocessed",
+        stage_dir=None,
         tokens_per_gpu=2**16,
         num_workers=4,
         prefetch_factor=2,

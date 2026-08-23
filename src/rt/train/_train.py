@@ -45,7 +45,7 @@ from torch import optim
 from torch.utils.data import DataLoader
 
 from rt._env import _setup_env
-from rt.data import TrainDataset, get_tasks
+from rt.data import TrainDataset, get_tasks, stage_paths
 from rt.model import (
     RelationalTransformer,
     load_model,
@@ -58,6 +58,7 @@ from rt.eval import member_context_seed, metric_for
 from rt.eval import Evaluator
 from rt.progress import fmt_bytes, fmt_duration, log
 import wandb
+
 
 # The val metric each task type is selected on, and which direction wins.
 BEST_METRICS = [("clf", "auroc", max), ("reg", "nmae", min)]
@@ -230,6 +231,13 @@ def main(
     # with its own `items_per_task` cap.
     train_splits: list[str],
     pre_dir: str,
+    # Node-local directory ``pre_dir``, ``eval_pre_dir`` and ``load_ckpt_path``
+    # are copied into before anything is opened (``rt.data.stage_paths``);
+    # environment variables are expanded, so ``"$TMPDIR/hf"`` names the job's
+    # scratch without knowing the job id. None reads the data where it is,
+    # which is right wherever the shared filesystem keeps the working set
+    # resident.
+    stage_dir: str | None,
     tokens_per_gpu: int,
     num_workers: int,
     prefetch_factor: int,
@@ -388,6 +396,14 @@ def main(
 
     device, rank, local_rank, world_size, ddp = setup_dist(num_workers)
     is_main = rank == 0
+
+    if stage_dir is not None:
+        pre_dir, eval_pre_dir, load_ckpt_path = stage_paths(
+            stage_dir,
+            [pre_dir, eval_pre_dir, load_ckpt_path],
+            local_rank=local_rank,
+            barrier=torch.distributed.barrier if ddp else (lambda: None),
+        )
 
     use_wandb = (not wandb_disabled) and is_main
     if use_wandb:

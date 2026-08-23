@@ -149,6 +149,18 @@ populates the preprocessed mixture into the page cache at startup
 (`mmap_populate=True`) so the GPUs are fed instead of cold-faulting
 the (large) data from shared storage per item.
 
+That only helps if the page cache keeps the data. On a shared filesystem
+whose client evicts it -- Lustre's lock LRU and client cache cap do, for a
+working set of a few hundred GB -- pass `stage_dir`: a node-local directory
+that `pre_dir`, `eval_pre_dir` and `load_ckpt_path` are copied into before
+anything is opened (`rt.data.stage_paths`). Environment variables are
+expanded, so `stage_dir="$TMPDIR/hf"` names the job's own scratch without
+knowing the job id; one rank per node copies (a few hundred GB takes about
+two minutes over a fast interconnect, the top-level directories in parallel),
+the others wait, and a `.staged` marker makes a requeue onto the same node
+skip the copy. `stage_dir=None` reads in place, which is right where the
+shared filesystem keeps the working set resident.
+
 ## On a cluster
 
 Submission lives in [`roach.slurm`](https://github.com/rishabh-ranjan/roach),

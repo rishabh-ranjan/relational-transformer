@@ -95,6 +95,7 @@ def submit_arm(arm: str, run_id: str | None) -> None:
             db_task_list=f"{PRE_DIR_JOIN}/db-task-lists/rt-j.json",
             train_splits=["train"],
             pre_dir=PRE_DIR_JOIN,
+            stage_dir=None,
             tokens_per_gpu=2**17,
             num_workers=16,
             prefetch_factor=2,

@@ -33,6 +33,7 @@ def train(pre_dir: str, eval_pre_dir: str, out_root: str, run_id: str) -> None:
         db_task_list=f"{pre_dir}/db-task-lists/rt-j.json",
         train_splits=["train"],
         pre_dir=pre_dir,
+        stage_dir=None,
         tokens_per_gpu=2**17,
         num_workers=16,
         prefetch_factor=2,

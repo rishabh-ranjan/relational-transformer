@@ -16,10 +16,6 @@ resources = marlowe.H100
 gpu = resources.gpus.rpartition(":")[0] or {"marlowe": "h100"}[cluster.name]
 tokens_per_gpu = {"a100": 2**17, "h100": 2**17, "b200": 2**18}[gpu]
 
-# The data, copied onto the held node's NVMe (the holder's per-job dir): the
-# Lustre client does not keep the mmapped working set resident, and item
-# builds that fault over the network run for minutes.
-STAGED = "/local_scratch/ranjanr.441761/hf/stanford-star"
 
 submit(
     "rt.train:main",
@@ -33,10 +29,13 @@ submit(
         compile=True,
         materialize_attn_masks=True,
         loss_fn="huber",
-        load_ckpt_path=f"{STAGED}/rt-plurel/classification",
+        load_ckpt_path="~/scratch/hf/stanford-star/rt-plurel/classification",
         db_task_list="expts/pretrain/all_5gb_cutoff.json",
         train_splits=["train"],
-        pre_dir=f"{STAGED}/the-join-lite-preprocessed",
+        pre_dir="~/scratch/hf/stanford-star/the-join-lite-preprocessed",
+        # Marlowe's Lustre client does not keep the mmapped working set
+        # resident; the job's node-local scratch does.
+        stage_dir="$TMPDIR/hf",
         tokens_per_gpu=tokens_per_gpu,
         num_workers=resources.cpus_per_task,
         prefetch_factor=2,
@@ -70,7 +69,7 @@ submit(
         resume_save_mins=20.0,
         eval_splits=["val"],
         eval_db_task_list="expts/pretrain/eval-tasks.json",
-        eval_pre_dir=f"{STAGED}/relbench-preprocessed",
+        eval_pre_dir="~/scratch/hf/stanford-star/relbench-preprocessed",
         eval_tokens_per_gpu=tokens_per_gpu,
         eval_num_workers=1,  # per eval task: 21 loaders, each with this many workers, per rank
         eval_prefetch_factor=2,

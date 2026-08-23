@@ -18,6 +18,7 @@ from rt.data.resolve import (
     resolve_pre_dir,
     resolve_repo,
 )
+from rt.data.stage import stage_paths
 from rt.data.tasks import Task, get_tasks, resolve_db_task_list
 
 __all__ = [
@@ -37,4 +38,5 @@ __all__ = [
     "resolve_db_task_list",
     "resolve_pre_dir",
     "resolve_repo",
+    "stage_paths",
 ]

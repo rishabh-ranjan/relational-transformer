@@ -51,6 +51,7 @@ def main(dataset: str, task: str, cache_dir: str, steps: int = 300) -> None:
             phase=cfg.PHASE_INNER,
             task_type=src.task.task_type,
             pre_dir=str(pre),
+            stage_dir=None,
             db_name=DB_NAME,
             task_name=TASK_DIR,
             train_split="train",

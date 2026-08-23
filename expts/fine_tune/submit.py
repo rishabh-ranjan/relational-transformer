@@ -292,6 +292,7 @@ def main() -> None:
                 db_task_list=[(db, task)],
                 train_splits=["train", "val"],
                 pre_dir="~/scratch/share/stanford-star/relbench-preprocessed",
+                stage_dir=None,
                 tokens_per_gpu=2**18 if resources.gpus.startswith("b200") else 2**17,
                 num_workers=resources.cpus_per_task,
                 prefetch_factor=2,
