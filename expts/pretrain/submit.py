@@ -7,7 +7,8 @@ from roach.slurm.clusters import marlowe
 from roach.slurm import submit
 
 # 2026-08-22: one 8xH100 node on Marlowe's batch partition (--exclusive,
-# 1456000M), on the cutoff subset that is on Marlowe scratch.
+# 1456000M), on the cutoff subset that is on Marlowe scratch, as a step of the
+# held allocation while the launch path is being debugged.
 cluster = marlowe.MARLOWE
 resources = marlowe.H100
 
@@ -66,7 +67,7 @@ submit(
         eval_db_task_list="expts/pretrain/eval-tasks.json",
         eval_pre_dir="~/scratch/hf/stanford-star/relbench-preprocessed",
         eval_tokens_per_gpu=tokens_per_gpu,
-        eval_num_workers=1,  # per eval task: 21 loaders, each with this many workers, per rank
+        eval_num_workers=0,  # in-process: one loader per eval task, and worker loaders deadlock the step-0 eval on 8 ranks
         eval_prefetch_factor=2,
         eval_num_walks=10_000,
         eval_walk_length=20,
@@ -94,4 +95,5 @@ submit(
     log_root="~/scratch/relational-transformer/pretrain/slurm-logs",
     clone_root="~/roach_clones",
     secrets_dir="~/scratch/.secrets",
+    inside="441761",  # hold-pretrain; iterating until an attempt trains
 )
