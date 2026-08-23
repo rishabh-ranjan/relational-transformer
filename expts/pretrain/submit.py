@@ -3,16 +3,20 @@
 import dataclasses
 from pathlib import Path
 
-from roach.slurm.clusters import marlowe
+from roach.slurm.clusters import ilc
 
 from roach.slurm import submit
 
+# 2026-08-22: ampere6 and ampere8 idle; `il` holds nothing of mine but the 2 b200
+# this run moves off (ILC job 136150, ~18k steps, resumed here by run_id).
+cluster = ilc.ILC
+resources = dataclasses.replace(ilc.AMPERE, nodelist="ampere6,ampere8")
 # 2026-08-22: one 8xH100 node on Marlowe's batch partition (--exclusive,
 # 1456000M), on the cutoff subset that is on Marlowe scratch. Resumes the run
 # started in hold-pretrain 441761, queued to start the moment that allocation
 # ends (its 2-day wall clock), whatever way it ends.
-cluster = marlowe.MARLOWE
-resources = dataclasses.replace(marlowe.H100, dependency="afterany:441761")
+# cluster = marlowe.MARLOWE
+# resources = dataclasses.replace(marlowe.H100, dependency="afterany:441761")
 
 # Marlowe's gres is untyped and every card there is an H100.
 gpu = resources.gpus.rpartition(":")[0] or {"marlowe": "h100"}[cluster.name]
@@ -37,7 +41,8 @@ submit(
         load_ckpt_path="~/scratch/hf/stanford-star/rt-plurel/classification",
         db_task_list="expts/pretrain/all_5gb_cutoff.json",
         train_splits=["train"],
-        pre_dir="~/scratch/hf/stanford-star/the-join-lite-preprocessed",
+        pre_dir="~/scratch/hf/stanford-star/the-join-preprocessed",
+        # pre_dir="~/scratch/hf/stanford-star/the-join-lite-preprocessed",
         stage_dir=stage_dir,
         tokens_per_gpu=tokens_per_gpu,
         num_workers=resources.cpus_per_task,
@@ -95,7 +100,8 @@ submit(
     ),
     resources=resources,
     name="pretrain",
-    run_id="26-08-22_19-30-56_099498146",
+    run_id="26-08-21_18-37-31_427018036",
+    # run_id="26-08-22_19-30-56_099498146",
     repo_root=str(Path(__file__).resolve().parents[2]),
     cluster=cluster,
     job_env="expts/job_env.sh",
