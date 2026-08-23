@@ -24,5 +24,8 @@ done
 echo "job-env: /dev/shm $(df -h /dev/shm | awk 'NR==2{print $4}') free"
 
 export TOKENIZERS_PARALLELISM=false
+# A hung rank can be made to print every thread's Python stack into the job
+# log: `srun --jobid=<id> --overlap -N1 -n1 kill -ABRT <rank pid>` (it dies).
+export PYTHONFAULTHANDLER=1
 # The mixture is mlocked (examples/mlock.py); roach passes --propagate=MEMLOCK.
 ulimit -l unlimited || { echo "job-env: cannot raise RLIMIT_MEMLOCK" >&2; exit 1; }
