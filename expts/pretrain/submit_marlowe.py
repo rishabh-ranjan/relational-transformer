@@ -36,7 +36,6 @@ submit(
         db_task_list="~/scratch/hf/stanford-star/the-join-lite-preprocessed/db-task-lists/rt-j.json",
         train_splits=["train"],
         pre_dir="~/scratch/hf/stanford-star/the-join-lite-preprocessed",
-        # pre_dir="~/scratch/hf/stanford-star/the-join-lite-preprocessed",
         stage_dir=stage_dir,
         tokens_per_gpu=tokens_per_gpu,
         num_workers=resources.cpus_per_task,
