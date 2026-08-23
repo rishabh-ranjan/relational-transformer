@@ -15,6 +15,9 @@ resources = marlowe.H100
 # Marlowe's gres is untyped and every card there is an H100.
 gpu = resources.gpus.rpartition(":")[0] or {"marlowe": "h100"}[cluster.name]
 tokens_per_gpu = {"a100": 2**17, "h100": 2**17, "b200": 2**18}[gpu]
+# Marlowe's Lustre client does not keep the mmapped working set resident, so
+# the data is copied onto the job's node-local scratch; ILC's /dfs keeps it.
+stage_dir = {"ilc": None, "marlowe": "$TMPDIR/hf"}[cluster.name]
 
 
 submit(
@@ -33,9 +36,7 @@ submit(
         db_task_list="expts/pretrain/all_5gb_cutoff.json",
         train_splits=["train"],
         pre_dir="~/scratch/hf/stanford-star/the-join-lite-preprocessed",
-        # Marlowe's Lustre client does not keep the mmapped working set
-        # resident; the job's node-local scratch does.
-        stage_dir="$TMPDIR/hf",
+        stage_dir=stage_dir,
         tokens_per_gpu=tokens_per_gpu,
         num_workers=resources.cpus_per_task,
         prefetch_factor=2,
