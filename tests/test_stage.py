@@ -37,15 +37,13 @@ def test_staged_paths_are_relocated_copies(tmp_path, other_device):
     calls = []
     out = stage_paths(
         str(tmp_path / "localdisk"),
-        [str(pre), str(ev), None, "org/hub-checkpoint"],
+        [str(pre), str(ev)],
         local_rank=0,
         barrier=lambda: calls.append(1),
     )
     assert out == [
         str(tmp_path / "localdisk" / "the-join"),
         str(tmp_path / "localdisk" / "relbench"),
-        None,
-        "org/hub-checkpoint",
     ]
     assert calls == [1]
     for name, n in (("the-join", 3), ("relbench", 1)):
@@ -85,3 +83,13 @@ def test_env_vars_expand_and_same_filesystem_is_refused(tmp_path, monkeypatch):
     monkeypatch.setenv("RT_TEST_STAGE", str(tmp_path / "notlocal"))
     with pytest.raises(AssertionError, match="same filesystem"):
         stage_paths("$RT_TEST_STAGE", [str(pre)], local_rank=0, barrier=lambda: None)
+
+
+def test_a_missing_source_is_refused(tmp_path, other_device):
+    with pytest.raises(AssertionError, match="nothing to stage"):
+        stage_paths(
+            str(tmp_path / "localdisk"),
+            [str(tmp_path / "absent")],
+            local_rank=0,
+            barrier=lambda: None,
+        )

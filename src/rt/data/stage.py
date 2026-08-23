@@ -22,11 +22,11 @@ MARKER = ".staged"
 
 def stage_paths(
     stage_dir: str,
-    paths: list[str | None],
+    paths: list[str],
     *,
     local_rank: int,
     barrier: Callable[[], None],
-) -> list[str | None]:
+) -> list[str]:
     """Return ``paths`` relocated under ``stage_dir``, copying them there first.
 
     ``stage_dir`` has environment variables and ``~`` expanded, so a submit
@@ -37,18 +37,18 @@ def stage_paths(
     last makes the copy idempotent: a requeue onto the same node, or a second
     run in a held allocation, finds it and skips the copy.
 
-    ``None`` entries pass through. A path that is not an existing local
-    directory or file (a Hub checkpoint spec) passes through unchanged. Two
-    inputs with the same basename would collide and are rejected.
+    Every path must be an existing local directory; two with the same basename
+    would collide and are rejected.
     """
     root = Path(os.path.expandvars(stage_dir)).expanduser()
-    srcs = [Path(p).expanduser() if p is not None else None for p in paths]
-    local = [s for s in srcs if s is not None and s.exists()]
-    names = [s.name for s in local]
+    srcs = [Path(p).expanduser() for p in paths]
+    for s in srcs:
+        assert s.is_dir(), f"nothing to stage at {s}"
+    names = [s.name for s in srcs]
     assert len(set(names)) == len(names), f"staged paths share a basename: {names}"
     if local_rank == 0:
         root.mkdir(parents=True, exist_ok=True)
-        for src in local:
+        for src in srcs:
             dst = root / src.name
             assert os.stat(src).st_dev != os.stat(root).st_dev, (
                 f"stage_dir {root} is on the same filesystem as {src}; "
@@ -69,23 +69,13 @@ def stage_paths(
                 secs=f"{time.time() - tic:.0f}",
             )
     barrier()
-    out: list[str | None] = []
-    for p, s in zip(paths, srcs, strict=True):
-        if s is not None and s.exists():
-            out.append(str(root / s.name))
-        else:
-            out.append(p)
-    return out
+    return [str(root / s.name) for s in srcs]
 
 
 def _copy(src: Path, dst: Path) -> None:
     """``cp -r`` with the top-level entries copied in parallel: a preprocessed
     directory is hundreds of db directories, and one stream does not fill an
     interconnect."""
-    if src.is_file():
-        dst.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copy2(src, dst)
-        return
     dst.mkdir(parents=True)
     entries = sorted(src.iterdir())
 

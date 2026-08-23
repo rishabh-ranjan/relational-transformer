@@ -231,8 +231,8 @@ def main(
     # with its own `items_per_task` cap.
     train_splits: list[str],
     pre_dir: str,
-    # Node-local directory ``pre_dir``, ``eval_pre_dir`` and ``load_ckpt_path``
-    # are copied into before anything is opened (``rt.data.stage_paths``);
+    # Node-local directory ``pre_dir`` and ``eval_pre_dir`` are copied into
+    # before anything is opened (``rt.data.stage_paths``);
     # environment variables are expanded, so ``"$TMPDIR/hf"`` names the job's
     # scratch without knowing the job id. None reads the data where it is,
     # which is right wherever the shared filesystem keeps the working set
@@ -398,9 +398,9 @@ def main(
     is_main = rank == 0
 
     if stage_dir is not None:
-        pre_dir, eval_pre_dir, load_ckpt_path = stage_paths(
+        pre_dir, eval_pre_dir = stage_paths(
             stage_dir,
-            [pre_dir, eval_pre_dir, load_ckpt_path],
+            [pre_dir, eval_pre_dir],
             local_rank=local_rank,
             barrier=torch.distributed.barrier if ddp else (lambda: None),
         )
