@@ -29,7 +29,8 @@ Write `run_id` and `resources` into [`submit_ilc.py`](submit_ilc.py) or
 then
 
 ```
-pixi run python -m expts.pretrain.submit_marlowe    # prints the run_id
+pixi run python -m expts.pretrain.submit_ilc        # prints the run_id
+pixi run python -m expts.pretrain.submit_marlowe
 ```
 
 - `run_id=None` starts a new run; a run_id resumes that run from its
