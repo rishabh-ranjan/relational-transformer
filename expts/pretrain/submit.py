@@ -72,7 +72,7 @@ submit(
         eval_db_task_list="expts/pretrain/eval-tasks.json",
         eval_pre_dir=f"{STAGED}/relbench-preprocessed",
         eval_tokens_per_gpu=tokens_per_gpu,
-        eval_num_workers=0,  # in-process: one loader per eval task, and worker loaders deadlock the step-0 eval on 8 ranks
+        eval_num_workers=1,  # per eval task: 21 loaders, each with this many workers, per rank
         eval_prefetch_factor=2,
         eval_num_walks=10_000,
         eval_walk_length=20,
