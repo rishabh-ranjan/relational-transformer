@@ -1,4 +1,4 @@
-"""Submit the pretraining run. See [README.md](README.md)."""
+"""Submit the pretraining run on Marlowe. See [README.md](README.md)."""
 
 import dataclasses
 from pathlib import Path
@@ -7,10 +7,6 @@ from roach.slurm.clusters import marlowe
 
 from roach.slurm import submit
 
-# 2026-08-22: ampere6 and ampere8 idle; `il` holds nothing of mine but the 2 b200
-# this run moves off (ILC job 136150, ~18k steps, resumed here by run_id).
-# cluster = ilc.ILC
-# resources = dataclasses.replace(ilc.AMPERE, nodelist="ampere6,ampere8")
 # 2026-08-23: two 8xH100 nodes on Marlowe's batch partition (--exclusive,
 # 1456000M each), the rt-j mixture, as a step of hold-pretrain 443431.
 cluster = marlowe.MARLOWE
@@ -99,7 +95,6 @@ submit(
     resources=resources,
     name="pretrain",
     run_id=None,
-    # run_id="26-08-21_18-37-31_427018036",  # the ILC run
     repo_root=str(Path(__file__).resolve().parents[2]),
     cluster=cluster,
     job_env="expts/job_env.sh",

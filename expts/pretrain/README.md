@@ -24,11 +24,12 @@ Logs, checkpoints and per-node clones land under the submitting user's own
 
 ## Running it
 
-Write `run_id` and `resources` into [`submit.py`](submit.py), commit, push,
+Write `run_id` and `resources` into [`submit_ilc.py`](submit_ilc.py) or
+[`submit_marlowe.py`](submit_marlowe.py), commit, push,
 then
 
 ```
-pixi run python -m expts.pretrain.submit    # prints the run_id
+pixi run python -m expts.pretrain.submit_marlowe    # prints the run_id
 ```
 
 - `run_id=None` starts a new run; a run_id resumes that run from its
