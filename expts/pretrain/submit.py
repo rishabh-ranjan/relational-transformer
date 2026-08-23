@@ -1,5 +1,6 @@
 """Submit the pretraining run. See [README.md](README.md)."""
 
+import dataclasses
 from pathlib import Path
 
 from roach.slurm.clusters import marlowe
@@ -7,10 +8,11 @@ from roach.slurm.clusters import marlowe
 from roach.slurm import submit
 
 # 2026-08-22: one 8xH100 node on Marlowe's batch partition (--exclusive,
-# 1456000M), on the cutoff subset that is on Marlowe scratch, as a step of the
-# held allocation while the launch path is being debugged.
+# 1456000M), on the cutoff subset that is on Marlowe scratch. Resumes the run
+# started in hold-pretrain 441761, queued to start the moment that allocation
+# ends (its 2-day wall clock), whatever way it ends.
 cluster = marlowe.MARLOWE
-resources = marlowe.H100
+resources = dataclasses.replace(marlowe.H100, dependency="afterany:441761")
 
 # Marlowe's gres is untyped and every card there is an H100.
 gpu = resources.gpus.rpartition(":")[0] or {"marlowe": "h100"}[cluster.name]
@@ -93,12 +95,11 @@ submit(
     ),
     resources=resources,
     name="pretrain",
-    run_id=None,
+    run_id="26-08-22_19-30-56_099498146",
     repo_root=str(Path(__file__).resolve().parents[2]),
     cluster=cluster,
     job_env="expts/job_env.sh",
     log_root="~/scratch/relational-transformer/pretrain/slurm-logs",
     clone_root="~/roach_clones",
     secrets_dir="~/scratch/.secrets",
-    inside="441761",  # hold-pretrain; iterating until an attempt trains
 )
