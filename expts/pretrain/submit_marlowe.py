@@ -9,7 +9,7 @@ cluster = marlowe.MARLOWE
 resources = dataclasses.replace(marlowe.H100, nodes=2)
 
 gpu = resources.gpus.rpartition(":")[0] or {"marlowe": "h100"}[cluster.name]
-tokens_per_gpu = {"a100": 2**17, "h100": 2**17, "b200": 2**18}[gpu]
+tokens_per_gpu = {"a100": 2**17, "h100": 2**16, "b200": 2**18}[gpu]
 stage_dir = {"ilc": None, "marlowe": "$TMPDIR/hf"}[cluster.name]
 
 
