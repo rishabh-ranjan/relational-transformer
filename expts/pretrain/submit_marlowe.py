@@ -32,7 +32,7 @@ submit(
         compile=True,
         materialize_attn_masks=True,
         loss_fn="huber",
-        load_ckpt_path="~/scratch/hf/stanford-star/rt-plurel/classification",
+        load_ckpt_path=None,
         db_task_list="~/scratch/hf/stanford-star/the-join-lite-preprocessed/db-task-lists/rt-j.json",
         train_splits=["train"],
         pre_dir="~/scratch/hf/stanford-star/the-join-lite-preprocessed",
@@ -48,7 +48,7 @@ submit(
         walk_length=20,
         mask_prob_max=0.5,
         items_per_task=100_000,
-        delta_finetune=True,
+        delta_finetune=False,  # nothing to be a delta of without load_ckpt_path
         optimizer="muon",
         lr=5e-4,
         wd=0.1,
