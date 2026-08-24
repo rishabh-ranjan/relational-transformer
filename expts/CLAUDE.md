@@ -11,6 +11,9 @@ rules in
 - **One file where one file will do.** `fine_tune/submit.py` is the shape to
   copy: submit the entry point directly, every argument spelled out at the call;
   a sweep is a loop around that call. A second file has to earn itself.
+- **Comment out to switch.** Commented-out code is not commentary: leave the
+  shape you are not using sitting there commented; coming back to it is
+  uncommenting.
 - **No module-level `CONSTANTS` for a value one call site consumes.** Write the
   value in the argument that takes it. Bulky or wanted twice: a function that
   returns it, beside its use (`targets_for(db, task)`). `TASKS`, which a sweep

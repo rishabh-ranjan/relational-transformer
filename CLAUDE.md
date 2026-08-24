@@ -8,9 +8,10 @@ one day — released with the package, read by someone who arrived from the pape
 
 ## No comments, no docstrings
 
-Code says what it does; git says what changed. Functional pragmas (`# noqa`,
-`# type:`, `#!`, `#SBATCH`) are tool instructions, not comments, and stay.
-Prose for humans lives in `docs/` and the READMEs, nowhere else.
+No prose comments and no docstrings: code says what it does; git says what
+changed; prose for humans lives in `docs/` and the READMEs. Not prose and
+allowed: functional pragmas (`# noqa`, `# type:`, `#!`, `#SBATCH`) and
+commented-out code kept as a switch.
 
 ## Code style
 
