@@ -1,11 +1,3 @@
-//! Preprocess a relbench-3.0.0 dataset into rustler's on-disk format.
-//!
-//! Input is a self-describing dataset directory (a `manifest.yaml` next to
-//! `db/<table>.parquet`, and optionally `tasks/<task>/{train,val,test}.parquet`).
-//! The manifest is the sole source of relational metadata (primary keys, the
-//! foreign-key graph, time columns); the parquet files carry only native column
-//! dtypes. Output is written to `<out_dir>/<dataset name>/`.
-
 use crate::common::{Adj, Edge, Node, Offsets, SemType, TableInfo, TableType};
 use clap::Parser;
 use glob::glob;
@@ -25,7 +17,6 @@ use std::time::Instant;
 
 const PBAR_TEMPLATE: &str = "{percent}% {bar} {decimal_bytes}/{decimal_total_bytes} [{elapsed_precise}<{eta_precise}, {decimal_bytes_per_sec}]";
 
-/// Version of the preprocessed on-disk format, recorded in `meta.json`.
 const PRE_FORMAT_VERSION: u32 = 1;
 
 #[derive(Debug, Clone)]
@@ -45,11 +36,6 @@ struct Table {
     node_idx_offset: i64,
 }
 
-// ---------------------------------------------------------------------------
-// relbench-3.0.0 manifest schema (only the fields rustler needs). Unknown
-// fields are ignored, so this stays forward-compatible with the full schema.
-// ---------------------------------------------------------------------------
-
 #[derive(Debug, Clone, Default, Deserialize)]
 #[serde(deny_unknown_fields)]
 struct TableSpec {
@@ -58,7 +44,7 @@ struct TableSpec {
     #[serde(default)]
     time_col: Option<String>,
     #[serde(default)]
-    fkeys: HashMap<String, String>, // fkey_col -> parent_table
+    fkeys: HashMap<String, String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -68,10 +54,6 @@ struct DatasetManifest {
     #[serde(default)]
     tables: HashMap<String, TableSpec>,
 
-    // Manifest keys rt has no use for. They are listed only so
-    // `deny_unknown_fields` can reject a key that is in neither group: a new
-    // manifest field then stops preprocessing loudly instead of vanishing on
-    // its way into meta.json, which carries the used fields and nothing else.
     #[serde(default)]
     #[allow(dead_code)]
     manifest_version: Option<serde_yaml::Value>,
@@ -89,7 +71,6 @@ struct DatasetManifest {
 #[derive(Debug, Default, Deserialize)]
 #[serde(deny_unknown_fields)]
 struct TaskManifest {
-    /// "forecast" | "external" | "autocomplete".
     #[serde(default)]
     kind: Option<String>,
     #[serde(default)]
@@ -110,19 +91,10 @@ struct TaskManifest {
     dst_entity_table: Option<String>,
     #[serde(default)]
     dst_entity_col: Option<String>,
-    /// Columns that leak this task's target and must be kept out of its
-    /// context, as `[table, column]` pairs. Not an autocomplete-only concern:
-    /// an autocomplete target *is* a db column, so anything trivially derivable
-    /// from it sits right next to it in the same row -- but a forecast/external
-    /// target is often *derived from* a db column (dbinfer's `cvr` from
-    /// `View.added_to_cart`), which leaks the same way. Honored for every kind.
+
     #[serde(default)]
     remove_columns: Vec<(String, String)>,
 
-    // Manifest keys rt has no use for. They are listed only so
-    // `deny_unknown_fields` can reject a key that is in neither group: a new
-    // manifest field then stops preprocessing loudly instead of vanishing on
-    // its way into meta.json, which carries the used fields and nothing else.
     #[serde(default)]
     #[allow(dead_code)]
     name: Option<serde_yaml::Value>,
@@ -147,8 +119,6 @@ struct TaskManifest {
 }
 
 impl TaskManifest {
-    /// Foreign keys of a task label table: its entity column(s) point into the
-    /// database entity table(s) (src/dst for recommendation tasks).
     fn fkeys(&self) -> HashMap<String, String> {
         let mut m = HashMap::new();
         for (col, table) in [
@@ -171,8 +141,6 @@ fn load_yaml<T: serde::de::DeserializeOwned>(path: &Path) -> T {
         .unwrap_or_else(|e| panic!("failed to parse YAML {}: {}", path.display(), e))
 }
 
-/// Read an integer value (a foreign key / row index) as i64, accepting any
-/// width. relbench-3.0.0 stores reindexed keys as whatever int type fits.
 fn anyvalue_to_i64(v: &AnyValue) -> Option<i64> {
     match v {
         AnyValue::Int8(x) => Some(*x as i64),
@@ -183,18 +151,13 @@ fn anyvalue_to_i64(v: &AnyValue) -> Option<i64> {
         AnyValue::UInt16(x) => Some(*x as i64),
         AnyValue::UInt32(x) => Some(*x as i64),
         AnyValue::UInt64(x) => Some(*x as i64),
-        // Nullable-int keys upcast to float by pandas; NaN means "missing".
+
         AnyValue::Float32(x) => (!x.is_nan()).then_some(*x as i64),
         AnyValue::Float64(x) => (!x.is_nan()).then_some(*x as i64),
         _ => None,
     }
 }
 
-/// Read the timestamp (seconds since epoch, as i32) at row `r` of a table's
-/// designated time column. Returns None for null cells, and also when the time
-/// column is not a Datetime (a few datasets designate a non-temporal column,
-/// e.g. an integer `year`); such edges simply carry no timestamp rather than
-/// aborting the whole dataset.
 fn read_timestamp(df: &DataFrame, tcol_name: &str, r: usize) -> Option<i32> {
     let col = df.column(tcol_name).ok()?;
     let dt = col.datetime().ok()?;
@@ -202,9 +165,6 @@ fn read_timestamp(df: &DataFrame, tcol_name: &str, r: usize) -> Option<i32> {
         .map(|v| (v / 1_000_000_000).clamp(i32::MIN as i64, i32::MAX as i64) as i32)
 }
 
-/// Parent row indices referenced by a single foreign-key cell. Handles scalar
-/// keys and list-valued keys (a row that links to several parents, e.g. a
-/// many-to-many relation); null/NaN entries are skipped.
 fn fk_parent_idxs(v: &AnyValue) -> Vec<i64> {
     match v {
         AnyValue::Null => Vec::new(),
@@ -213,10 +173,6 @@ fn fk_parent_idxs(v: &AnyValue) -> Vec<i64> {
     }
 }
 
-/// Normalize a freshly-read table to a uniform set of dtypes before
-/// featurization: dates and non-nanosecond datetimes -> Datetime(ns), and
-/// categoricals -> strings. Other dtypes are handled downstream (numbers,
-/// bools, strings, binary).
 fn normalize_df(df: DataFrame) -> DataFrame {
     let casts: Vec<Expr> = df
         .iter()
@@ -246,32 +202,20 @@ fn normalize_df(df: DataFrame) -> DataFrame {
         .expect("failed to normalize column dtypes")
 }
 
-/// Name of the synthetic column added to tables whose rows are not identifiable.
 const IDENTIFIER_COL: &str = "identifier";
 
-/// A table needs an `identifier` when fewer than this fraction of its rows carry a
-/// distinct tuple of emitted values. 0.5 sits in a wide empty gap on the 4DBInfer
-/// databases -- the tables that fail cluster at 0.0-0.42 and the ones that pass at
-/// 0.76-1.00 -- so the exact value is not load-bearing.
 const IDENTIFIABILITY_MIN: f64 = 0.5;
 
-/// Rows sampled when estimating identifiability. Bounded so a 92M-row table
-/// (`diginetica/QueryResult`) costs the same as any other.
 const IDENTIFIABILITY_SAMPLE: usize = 1_000_000;
 
-/// When to give a database table a synthetic `identifier` column. Set with
-/// `RT_IDENTIFIER_POLICY`; `threshold` is the default and the one the audit
-/// supports. The narrower policies exist so the three can be compared empirically
-/// rather than argued about.
 #[derive(Debug, Clone, Copy, PartialEq)]
 enum IdentifierPolicy {
-    /// Never. Reproduces preprocessing from before any of this existed.
     None,
-    /// Only when the table emits no cells at all.
+
     Empty,
-    /// Also when the only emitted column is the time column.
+
     EmptyOrTime,
-    /// When measured identifiability falls below `IDENTIFIABILITY_MIN`.
+
     Threshold,
 }
 
@@ -290,43 +234,6 @@ impl IdentifierPolicy {
     }
 }
 
-/// Make every table able to appear in a context.
-///
-/// A cell is only emitted for a column that is neither the primary key nor a foreign
-/// key (see the emission loop below), so a table whose columns are *all* keys emits
-/// nothing at all. Its rows still exist as nodes and still route BFS and walks, but
-/// the model never observes them -- and they consume a `bfs_width` slot while
-/// yielding nothing. That is a silent, severe loss: `PostTag` (648k rows) is the
-/// entire post-tag relation, `ProductNameToken` (942k) and `QuerySearchstringToken`
-/// are the entire search-token signal, and every materialized dimension table
-/// (`Item`, `Visitor`, `Session`, `User`, ...) is key-only by construction.
-///
-/// Two steps, in order:
-///
-/// 1. **Drop constant columns.** A column with a single distinct value (nulls
-///    included) distinguishes no two rows. The numeric arm forces `std = 1.0` when
-///    it is zero, so such a column normalizes to a constant 0.0 in every cell -- a
-///    context slot spent on nothing. Keys and the time column are structural and
-///    exempt.
-/// 2. **Add an `identifier` column** when the emitted columns cannot tell the
-///    table's rows apart. Values are drawn i.i.d. from N(0, 1), so rows become
-///    distinguishable without inventing a meaning; the column reads as an ordinary
-///    numeric feature downstream. The relational structure is untouched -- the table
-///    keeps its keys and edges -- but its rows can now be told apart in a context.
-///
-/// The trigger for (2) is *measured*, not inferred from the schema shape, because
-/// schema shape gets it wrong in both directions on real data. Emitting only a time
-/// column is fine when timestamps are near-unique (`diginetica/Click` distinguishes
-/// 0.991 of its rows, `View` 0.9999) and useless when they are coarse
-/// (`retailrocket/ItemCategory`: 18 distinct values over 788k rows). Conversely a
-/// table can carry real feature columns and still identify almost nothing
-/// (`stackexchange/Vote`: 0.024 over BountyAmount/CreationDate/VoteTypeId;
-/// `retailrocket/ItemAvailability`: 36 distinct tuples over 1.5M rows;
-/// `diginetica/Product`: 0.026). So the test is the fraction of rows carrying a
-/// distinct tuple of emitted values, estimated on a bounded sample, against
-/// `IDENTIFIABILITY_MIN`.
-///
-/// Seeded per table by name, so preprocessing is reproducible.
 fn ensure_emittable(
     df: DataFrame,
     table_name: &str,
@@ -335,11 +242,6 @@ fn ensure_emittable(
     fcol_name_to_ptable_name: &HashMap<String, String>,
     tcol_name: &Option<String>,
 ) -> DataFrame {
-    // Database tables only. A task table always emits its target, so it is never
-    // invisible; and its rows are *meant* to look alike -- a binary label under one
-    // cutoff gives two distinct tuples over a whole split. Injecting noise there
-    // would change the in-context learning setup rather than fix a visibility
-    // problem, and would spend a cell on every label row.
     if !matches!(table_type, TableType::Db) {
         return df;
     }
@@ -367,8 +269,6 @@ fn ensure_emittable(
         df.drop_many(&constant)
     };
 
-    // A cell is emitted for every column that is not the pkey and not an fkey; the
-    // time column does emit one, so a table carrying it is not necessarily silent.
     let emitted: Vec<String> = df
         .iter()
         .filter(|s| {
@@ -378,8 +278,6 @@ fn ensure_emittable(
         .map(|s| s.name().to_string())
         .collect();
 
-    // Fraction of rows carrying a distinct tuple of emitted values, on a bounded
-    // sample. 0.0 when nothing is emitted at all.
     let identifiability = if emitted.is_empty() {
         0.0
     } else {
@@ -417,7 +315,6 @@ fn ensure_emittable(
         let mut rng = StdRng::seed_from_u64(std::hash::Hasher::finish(&hasher));
         let vals: Vec<f64> = (0..n)
             .map(|_| {
-                // Box-Muller, so this needs no rand_distr dependency.
                 let u1: f64 = rand::Rng::random_range(&mut rng, f64::MIN_POSITIVE..1.0);
                 let u2: f64 = rand::Rng::random_range(&mut rng, 0.0..1.0);
                 (-2.0 * u1.ln()).sqrt() * (std::f64::consts::TAU * u2).cos()
@@ -436,26 +333,22 @@ fn ensure_emittable(
 
 #[derive(Parser)]
 pub struct Cli {
-    /// Local dataset directory in relbench-3.0.0 layout: a `manifest.yaml`
-    /// next to `db/<table>.parquet` (and optionally `tasks/<task>/`).
     #[arg(long)]
     pub dataset_dir: String,
-    /// Output root. Preprocessed data is written to `<out_dir>/<dataset name>`.
+
     #[arg(long)]
     pub out_dir: String,
-    /// Ingest only the database tables; skip `tasks/`.
+
     #[arg(long, default_value_t = false)]
     pub skip_tasks: bool,
-    /// Keep database tables out of the node vector (task nodes only).
+
     #[arg(long, default_value_t = false)]
     pub skip_db: bool,
-    /// Provenance recorded in `meta.json` (e.g. the source HF dataset spec).
+
     #[arg(long)]
     pub source: Option<String>,
 }
 
-/// One parquet file to ingest, with relational metadata resolved from the
-/// (dataset or task) manifest.
 struct ReadSpec {
     path: PathBuf,
     table_name: String,
@@ -471,9 +364,6 @@ pub fn main(cli: Cli) {
     let name = manifest.name.clone();
     println!("preprocessing dataset {:?} from {:?}", name, dataset_dir);
 
-    // Assemble the work list: database tables first, then task label tables.
-    // The order fixes node_idx_offset assignment, so we sort within each group
-    // for reproducible output.
     let mut specs: Vec<ReadSpec> = Vec::new();
 
     let mut db_specs: Vec<ReadSpec> = Vec::new();
@@ -501,8 +391,7 @@ pub fn main(cli: Cli) {
     specs.extend(db_specs);
 
     let mut num_task_tables = 0usize;
-    // Per-task metadata (target column + type) recorded in meta.json so the
-    // pretraining/eval task lists can be built straight from preprocessed data.
+
     let mut tasks_meta: Vec<serde_json::Value> = Vec::new();
     if !cli.skip_tasks {
         let mut task_specs: Vec<ReadSpec> = Vec::new();
@@ -513,10 +402,7 @@ pub fn main(cli: Cli) {
                 continue;
             }
             let tm: TaskManifest = load_yaml(&tm_path);
-            // Recommendation tasks have no clf/reg target, so nothing
-            // downstream can build a Task from one. Skipped whole: not listed
-            // in meta.json, and their label tables are not read either, so a
-            // build carries no nodes for a task it cannot serve.
+
             if tm.task_type.as_deref() == Some("recommendation") {
                 continue;
             }
@@ -543,9 +429,8 @@ pub fn main(cli: Cli) {
             }
             let mut task_meta = serde_json::json!({
                 "name": task_name,
-                // Autocomplete tasks ship as a manifest only (no train/val/test
-                // parquet): the target is a column of an existing db table, so
-                // there is no label table to read and `splits` stays empty.
+
+
                 "kind": tm.kind,
                 "target_col": tm.target_col,
                 "task_type": tm.task_type,
@@ -553,9 +438,7 @@ pub fn main(cli: Cli) {
                 "time_col": tm.time_col,
                 "splits": splits,
             });
-            // Omitted when empty rather than written as []: an empty list says
-            // nothing a missing key does not, and the vast majority of tasks
-            // declare no leakage columns.
+
             if !tm.remove_columns.is_empty() {
                 task_meta["remove_columns"] = serde_json::json!(tm.remove_columns);
             }
@@ -589,8 +472,6 @@ pub fn main(cli: Cli) {
         let fcol_name_to_ptable_name = spec.fcol_name_to_ptable_name;
         let tcol_name = spec.tcol_name;
 
-        // Drop columns that can say nothing, and guarantee the table can be seen at
-        // all. Must happen before col_stats, which are positional over `df`.
         let df = ensure_emittable(
             df,
             &table_name,
@@ -643,12 +524,6 @@ pub fn main(cli: Cli) {
             let col = col.rechunk();
             match col.dtype() {
                 DataType::Boolean => {
-                    // Unlike the numeric arm below, a zero std is left as 0, so
-                    // a boolean column with a single distinct value normalizes
-                    // to 0.0/0.0 = NaN in every cell. That is the one source of
-                    // NaN cells in preprocessed data, and it is deliberate: such
-                    // a column says nothing about a row, and `fly` drops NaN
-                    // cells from the context exactly as it drops missing ones.
                     let col_float = col.cast(&DataType::Float64).unwrap().drop_nulls();
                     let col_mean = col_float.mean().unwrap_or(0.0);
                     let col_std = col_float.std(1).unwrap_or(0.0);
@@ -668,7 +543,6 @@ pub fn main(cli: Cli) {
                 | DataType::Float64
                 | DataType::Float32
                 | DataType::Duration(_) => {
-                    // Duration -> raw integer count of time units, then numeric.
                     let col = if matches!(col.dtype(), DataType::Duration(_)) {
                         col.cast(&DataType::Int64).unwrap()
                     } else {
@@ -682,8 +556,6 @@ pub fn main(cli: Cli) {
                     table.col_stats.push(ColStat { mean, std });
                 }
                 DataType::Datetime(u, _) => {
-                    // Accumulate a single global mean/std over all datetime
-                    // cells (Welford), so datetimes share one normalizer.
                     let col = if *u != TimeUnit::Nanoseconds {
                         col.cast(&DataType::Datetime(TimeUnit::Nanoseconds, None))
                             .unwrap()
@@ -769,14 +641,12 @@ pub fn main(cli: Cli) {
         for (col, col_stat) in table.df.iter().zip(&table.col_stats) {
             let col = col.rechunk();
 
-            // Convert categoricals to strings
             let col = if matches!(col.dtype(), DataType::Categorical(_, _)) {
                 col.cast(&DataType::String).unwrap()
             } else {
                 col
             };
 
-            // Convert datetime columns to nanoseconds if needed
             let col = if let DataType::Datetime(unit, tz) = col.dtype() {
                 if *unit != TimeUnit::Nanoseconds {
                     col.cast(&DataType::Datetime(TimeUnit::Nanoseconds, tz.clone()))
@@ -897,8 +767,7 @@ pub fn main(cli: Cli) {
                     AnyValue::UInt32(val) => AnyValue::Float64(val as f64),
                     AnyValue::UInt64(val) => AnyValue::Float64(val as f64),
                     AnyValue::Float32(val) => AnyValue::Float64(val as f64),
-                    // Duration columns (e.g. lap/pit times): treat the raw
-                    // integer count of time units as a numeric value.
+
                     AnyValue::Duration(val, _) => AnyValue::Float64(val as f64),
                     AnyValue::Binary(val) =>
                     {
@@ -950,9 +819,7 @@ pub fn main(cli: Cli) {
                         node.col_name_idxs.push(col_name_idx);
                         node.class_value_idx.push(-1);
                     }
-                    // List/array columns (e.g. RelBench rel-amazon product.category)
-                    // are flattened to their textual representation and treated as
-                    // a single Text value.
+
                     AnyValue::String(val) => {
                         let l = text_to_idx.len() as i32;
                         let text_idx = *text_to_idx.entry(val.to_string()).or_insert_with(|| l);
@@ -1003,7 +870,6 @@ pub fn main(cli: Cli) {
     let mut writer = BufWriter::new(file);
     serde_json::to_writer(&mut writer, &text_vec).unwrap();
 
-    // Column name -> index mapping collected during node processing.
     let column_index: HashMap<String, i32> = column_name_to_idx.into_iter().collect();
     let file = fs::File::create(format!("{}/column_index.json", pre_path)).unwrap();
     let mut writer = BufWriter::new(file);
@@ -1069,8 +935,6 @@ pub fn main(cli: Cli) {
     writer.write_all(&bytes).unwrap();
     println!("done in {:?}.", tic.elapsed());
 
-    // Self-describing metadata for the preprocessed artifact. The embedding
-    // step appends `text_embeddings` (model -> file) to this file.
     let source = cli
         .source
         .unwrap_or_else(|| dataset_dir.display().to_string());

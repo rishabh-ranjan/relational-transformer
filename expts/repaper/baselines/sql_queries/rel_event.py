@@ -1,30 +1,3 @@
-"""SQL feature queries for rel-event (event recommendation) tasks.
-
-Each query produces ~14 pre-normalized features designed for
-few-shot linear prediction in the rel2tab pipeline.
-
-Database tables:
-  - users:           user_id, locale, birthyear, gender, joinedAt, location, timezone
-  - events:          event_id, user_id (creator), start_time, city, state, zip,
-                     country, lat, lng, c_1..c_100, c_other
-  - event_attendees: event, status (yes/no/maybe/invited), user_id, start_time
-  - event_interest:  user, event, invited, timestamp, interested, not_interested
-  - user_friends:    user, friend  (no time column, treated as static)
-
-Tasks (all entity=user, all share the same feature set since they all
-predict different facets of next-7-day behavior):
-  - user-attendance: timestamp -> regression  (count of events attended next 7d)
-  - user-repeat:     timestamp -> binary      (will attend next 7d | attended last 14d)
-  - user-ignore:     timestamp -> binary      (will ignore >2 invites next 7d)
-"""
-
-# ---------------------------------------------------------------------------
-# User-level features (shared by user-attendance, user-repeat, user-ignore)
-# 14 features: attend_recency, invite_recency, log_attend_7d/14d/90d,
-#   attend_trend_7d, yes_ratio, log_invites_7d/90d, interest_rate,
-#   ignore_rate, log_friends, log_account_age, is_new_user
-# ---------------------------------------------------------------------------
-
 USER_FEATURES_SQL = """
 WITH task AS (
     SELECT timestamp, "user" FROM task_table

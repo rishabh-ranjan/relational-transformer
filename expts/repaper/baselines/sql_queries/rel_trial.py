@@ -1,9 +1,3 @@
-"""SQL feature queries for rel-trial (Clinical Trials) tasks.
-
-Each query produces 8-12 pre-normalized features designed for
-few-shot linear prediction in the rel2tab pipeline.
-"""
-
 STUDY_OUTCOME_SQL = """
 WITH task AS (
     SELECT timestamp, nct_id FROM task_table

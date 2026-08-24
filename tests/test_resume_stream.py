@@ -1,12 +1,3 @@
-"""A resumed run must draw the batches an uninterrupted run would have drawn.
-
-The stream is a pure function of two counters -- the ctx-size selector and the
-rustler sampler's batch counter -- so "resume exactly" means starting both where
-the interrupted run left them. This brute-forces the loop those counters drive
-and checks the closed-form entry point agrees with it, which is the only thing
-standing between a correct resume and a silently skewed one.
-"""
-
 from __future__ import annotations
 
 import random
@@ -37,7 +28,6 @@ def _ctx_at(ctx_list: list[int], t: int) -> int:
 
 
 def _next_index(target: int, worker_id: int, stride: int) -> int:
-    """The first yield index >= target that belongs to `worker_id`."""
     i = worker_id
     while i < target:
         i += stride
@@ -45,16 +35,6 @@ def _next_index(target: int, worker_id: int, stride: int) -> int:
 
 
 def _walk(ctx_list, start_step, worker_id, stride):
-    """The counters an uninterrupted run holds after `start_step` steps.
-
-    Written from the DataLoader's semantics rather than from the implementation:
-    yields are handed out round-robin, index `i` going to worker `i % stride`.
-
-    Multi-ctx: one yield is one optimizer step, and that yield makes
-    `grad_accum` sampler calls. Single-ctx: one yield is one microbatch, so
-    `start_step` optimizer steps consume `start_step * grad_accum` of them and
-    the sampler advances once per yield.
-    """
     if len(ctx_list) == 1:
         consumed = start_step * _grad_accum(ctx_list[0])
         nxt = _next_index(consumed, worker_id, stride)
@@ -95,25 +75,30 @@ def test__resume_at_zero__is_a_fresh_run() -> None:
 
 
 def test__resume_is_a_continuation__not_a_replay_and_not_a_jump() -> None:
-    """Resuming at N then walking M lands where walking N+M once lands."""
     ctx_list = [128, 256, 512, 1024]
     for stride in (1, 4):
         for worker_id in range(stride):
             a = resume_positions(
-                train_ctx_size_list=ctx_list, start_step=500,
-                worker_id=worker_id, stride=stride, **CFG,
+                train_ctx_size_list=ctx_list,
+                start_step=500,
+                worker_id=worker_id,
+                stride=stride,
+                **CFG,
             )
             whole = resume_positions(
-                train_ctx_size_list=ctx_list, start_step=1500,
-                worker_id=worker_id, stride=stride, **CFG,
+                train_ctx_size_list=ctx_list,
+                start_step=1500,
+                worker_id=worker_id,
+                stride=stride,
+                **CFG,
             )
-            # continue the walk from `a` for another 1000 optimizer steps
             ctx_step, sampler_step = a
             while ctx_step < 1500:
                 ctx = random.Random(CFG["seed"] + ctx_step).choice(ctx_list)
                 bs = max(1, CFG["train_tokens_per_gpu"] // ctx)
                 ga = (
-                    1 if CFG["total_bs"] < CFG["world_size"] * bs
+                    1
+                    if CFG["total_bs"] < CFG["world_size"] * bs
                     else CFG["total_bs"] // (CFG["world_size"] * bs)
                 )
                 sampler_step += stride * ga
@@ -122,17 +107,6 @@ def test__resume_is_a_continuation__not_a_replay_and_not_a_jump() -> None:
 
 
 def test__step_zero__is_never_evaluated_or_selected() -> None:
-    """The untrained net must not be a candidate.
-
-    Scoring step 0 makes it selectable, and where the fine-tune's gain is small
-    next to eval noise the warm start wins: the run then trains nothing and
-    reports the published checkpoint. On rel-avito/user-clicks two of five seeds
-    did that -- 0.4897 against 0.6635 for the seeds that trained.
-
-    This also fixes where the patience window starts. `improved_at` stays 0
-    until the first eval, which lands at `eval_freq` and always improves on
-    nothing, so the earliest stop is `eval_freq + early_stop_after_steps`.
-    """
     import inspect
 
     import rt.train._train as t
@@ -141,6 +115,4 @@ def test__step_zero__is_never_evaluated_or_selected() -> None:
     assert "if eval_freq and step > 0 and step % eval_freq == 0" in src, (
         "the eval trigger must skip step 0"
     )
-    # ...and a run too short to reach its first eval is rejected, not left to
-    # publish nothing.
     assert "eval_freq <= total_steps" in src

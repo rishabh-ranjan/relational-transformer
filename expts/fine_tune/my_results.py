@@ -1,24 +1,3 @@
-"""Build my_results.csv from the ensembling runs, and my_results.md from that
-plus results.csv -- the published comparison with our row in it.
-
-    pixi run python expts/fine_tune/my_results.py
-
-`my_results.csv` holds our numbers alone, in results.csv's columns so the two
-concatenate. `my_results.md` is results.md's four tables with `Ours` added,
-same ordering, bolding and units -- the rendering is imported from
-`make_results.py` rather than repeated.
-
-Our row is one fine-tuned checkpoint per task (`submit.py`), its context
-configuration chosen on validation over `submit_hpo_ens.py`'s grid, scored on
-test as the average over 4 context seeds. `val_score` is the winning
-configuration's validation score, which is a selection criterion and so
-optimistically biased, exactly as the published `(H)` rows are.
-
-A cell marked `^` is a test set the run subsampled (`submit_ens_only.items_for`
-caps the largest ones), so it is not comparable to a published number over the
-whole split. Rerunning the capped tasks uncapped is what removes the marker.
-"""
-
 import json
 from pathlib import Path
 
@@ -30,27 +9,17 @@ from submit_ens_only import TASKS, items_for, ntest
 ENTITY = "rtv2"
 PROJECT = "2026-08-10-fine_tune_hpo_ens"
 OUT_ROOT = Path("~/scratch/ckpts").expanduser()
-# The row label our numbers get in the published comparison.
 OURS = "Ours"
 
-# What a task is scored by, and which relbench metric name that is.
 METRICS = {"auroc": "roc_auc", "nmae": "mae"}
 
 
 def task_types() -> dict[str, str]:
-    """`{db}/{task}` -> results.csv's `task_type`, so our rows land in the same
-    table as everyone else's."""
     d = pd.read_csv(Path(__file__).parent / "results.csv")
     return dict(zip(d.dataset + "/" + d.task, d.task_type))
 
 
 def tuned() -> dict[str, dict]:
-    """`{db}/{task}` -> the `tuning.json` its run wrote: winning config and the
-    validation score that chose it.
-
-    Newest wins: a cancelled attempt that got as far as writing one leaves it
-    behind, and run directories are named by timestamp.
-    """
     out = {}
     root = OUT_ROOT / ENTITY / PROJECT
     for path in sorted(root.glob("*/tuning.json"), key=lambda q: q.parent.name):
@@ -59,11 +28,6 @@ def tuned() -> dict[str, dict]:
 
 
 def tested() -> dict[str, tuple[str, float, int]]:
-    """`{db}/{task}` -> (metric, test value in percent, ensemble size).
-
-    The largest ensemble size the run reached, so a table can be built while
-    the sweep is still going; the size comes back with it to say so.
-    """
     out: dict[str, tuple[str, float, int]] = {}
     for run in wandb.Api().runs(f"{ENTITY}/{PROJECT}"):
         name = run.config["run_name"]
@@ -86,12 +50,6 @@ def tested() -> dict[str, tuple[str, float, int]]:
 
 
 def our_rows() -> pd.DataFrame:
-    """Our results in results.csv's schema, one row per task.
-
-    Scores go in raw, the units results.csv keeps: a probability for AUROC and
-    an unnormalized MAE for regression, which is what `make_results.table`
-    expects to normalize itself.
-    """
     types, tune, test = task_types(), tuned(), tested()
     rows = []
     for db, task in TASKS:
@@ -100,8 +58,6 @@ def our_rows() -> pd.DataFrame:
             continue
         metric, value, size = test[pair]
         cfg = tune[pair]["best_cfg"]
-        # `metric_for` scores regression on the normalized scale, so its value
-        # is already nMAE; results.csv wants the raw MAE behind it.
         scale = 1.0 if metric == "auroc" else stds[pair]
         rows.append(
             {
@@ -139,7 +95,6 @@ def our_rows() -> pd.DataFrame:
 
 
 def marks(ours: pd.DataFrame) -> dict[tuple[str, str], str]:
-    """`^` on every cell of ours whose test set was subsampled."""
     return {
         (OURS, f"{r.dataset}/{r.task}"): "^"
         for r in ours.itertuples()

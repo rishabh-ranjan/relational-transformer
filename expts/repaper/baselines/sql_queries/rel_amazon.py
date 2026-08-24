@@ -1,28 +1,3 @@
-"""SQL feature queries for rel-amazon (Amazon Reviews) tasks.
-
-Each query produces ~14 pre-normalized features designed for
-few-shot linear prediction in the rel2tab pipeline.
-
-Database tables:
-  - customer: customer_id, customer_name
-  - product:  product_id, category, brand, title, description, price
-  - review:   review_time, customer_id, product_id, rating, verified, review_text, summary
-
-Tasks (user-level):
-  - user-churn: (timestamp, customer_id) -> binary
-  - user-ltv:   (timestamp, customer_id) -> regression
-Tasks (item-level):
-  - item-churn: (timestamp, product_id)  -> binary
-  - item-ltv:   (timestamp, product_id)  -> regression
-"""
-
-# ---------------------------------------------------------------------------
-# User-level features (shared by user-churn and user-ltv)
-# 14 features: recency, reviews_30d, reviews_90d, reviews_total, avg_rating,
-#   rating_std, count_low_rating, verified_rate, avg_price, spend_1y,
-#   spend_total, log_unique_products, categories, trend, is_new_user
-# ---------------------------------------------------------------------------
-
 USER_FEATURES_SQL = """
 WITH task AS (
     SELECT timestamp, customer_id FROM task_table
@@ -151,13 +126,6 @@ LEFT JOIN user_agg ua
 USER_CHURN_SQL = USER_FEATURES_SQL
 USER_LTV_SQL = USER_FEATURES_SQL
 
-
-# ---------------------------------------------------------------------------
-# Item-level features (shared by item-churn and item-ltv)
-# 14 features: recency, reviews_90d, reviews_total, avg_rating, rating_std,
-#   verified_rate, unique_reviewers, unique_reviewers_1y, price,
-#   estimated_revenue_1y, item_age, review_trend_30d, trend_90d, is_new_product
-# ---------------------------------------------------------------------------
 
 ITEM_FEATURES_SQL = """
 WITH task AS (

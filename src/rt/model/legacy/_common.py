@@ -1,12 +1,8 @@
-"""Shared glue for the legacy architectures: block-mask building, the
-Evaluator-facing ``predict`` adapter, and Hub checkpoint loading."""
-
 import torch
 from torch.nn.attention.flex_attention import create_block_mask
 from pathlib import Path
 from huggingface_hub import hf_hub_download
 
-# Both legacy papers use the same architecture dims.
 LEGACY_MODEL_DIMS = dict(num_blocks=12, d_model=256, d_text=384, num_heads=8, d_ff=1024)
 LEGACY_EMBEDDER = "all-MiniLM-L12-v2"
 
@@ -27,13 +23,6 @@ def make_block_mask(mask, batch_size, seq_len, device):
 
 
 def predict(model, batch, eval_ctx_size_list, device, task):
-    """Evaluator-facing eval-time predictions; mirrors
-    :meth:`rt.model.net.RelationalTransformer.predict` for the legacy nets
-    (which keep token order, so ``is_targets`` needs no re-sort).
-
-    Unlike the current net, these were trained with Boolean as a real semantic
-    type, so classification targets are read from the BCE-trained boolean head.
-    """
     val_key = "boolean" if task.task_type == "clf" else "number"
     preds = {}
     for ctx_size in eval_ctx_size_list:
@@ -41,16 +30,13 @@ def predict(model, batch, eval_ctx_size_list, device, task):
             k: v[:, :ctx_size].to(device, non_blocking=True) for k, v in batch.items()
         }
         _, yhat_dict = model(trunc)
-        yhat = yhat_dict[val_key].squeeze(-1)  # (B, S)
+        yhat = yhat_dict[val_key].squeeze(-1)
         is_targets = trunc["is_targets"]
         preds[ctx_size] = (yhat * is_targets.to(yhat.dtype)).sum(dim=1).cpu()
     return preds
 
 
 def load_legacy_checkpoint(cls, repo_id: str, filename: str, device: str = "cpu"):
-    """Build ``cls`` with the shared legacy dims and load a released ``.pt``
-    (flat bf16 state dict) from the Hub or a local path."""
-
     p = Path(filename).expanduser()
     if not p.is_file():
         p = Path(hf_hub_download(repo_id, filename))

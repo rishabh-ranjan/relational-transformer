@@ -1,12 +1,3 @@
-"""Submit the leaderboard-ensemble units: 21 tasks x top-4 configs.
-
-Each unit reuses the ensemble runner (``expts.repaper.enscurve.run``) at one
-of the task's top-4 validation configurations, 4 context seeds, on the FULL
-official test split -- 16 raw predictions per task in total, which
-``reduce.py`` averages into the RelBench submission and the paper's
-tuned+ensembled table.
-"""
-
 import json
 from pathlib import Path
 

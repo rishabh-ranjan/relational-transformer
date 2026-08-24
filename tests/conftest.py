@@ -1,15 +1,3 @@
-"""Shared fixtures for the relational-transformer test suite.
-
-These tests exercise the installed package (the public `rt` API + the compiled
-`rt.rustler` engine) -- the checkout's own editable install, so `pixi run
-pytest` is all it takes; activation rebuilds `rt.rustler` if rustler/ changed.
-
-Every dependency these tests touch is declared -- torch is a hard dependency of
-the package, polars and pytest come from the `test` extra -- so they import
-plainly. A missing one is a broken environment and should fail at collection,
-not vanish into a skip.
-"""
-
 import json
 from datetime import datetime, timedelta
 
@@ -29,11 +17,6 @@ def tiny_dims() -> dict:
 
 @pytest.fixture()
 def tiny_checkpoint(tmp_path, tiny_dims):
-    """A real checkpoint dir (config.json + model.safetensors) for a tiny model.
-
-    Returns ``(checkpoint_dir, source_model)``.
-    """
-
     src = RelationalTransformer(**tiny_dims, compile=False, materialize_attn_masks=True)
     ckpt = tmp_path / "ckpt"
     ckpt.mkdir()
@@ -46,15 +29,6 @@ def tiny_checkpoint(tmp_path, tiny_dims):
 
 @pytest.fixture()
 def synthetic_dataset(tmp_path):
-    """A tiny hand-rolled dataset in relbench-3.0.0 layout (``manifest.yaml``
-    next to ``db/<table>.parquet``), for the preprocess round-trip.
-
-    Two tables in the shape rustler cares about: an entity table with a pkey and
-    no time column, and an activity table with a pkey, a time column, and a fkey
-    into the entity table. Column dtypes cover the branches ``normalize_df``
-    dispatches on -- string, int, float, bool, and datetime.
-    """
-
     n_users, n_events = 10, 18
     users = pl.DataFrame(
         {
@@ -99,15 +73,6 @@ def synthetic_dataset(tmp_path):
 
 @pytest.fixture()
 def synthetic_dataset_with_external_task(synthetic_dataset):
-    """:func:`synthetic_dataset` plus a ``kind: external`` task that declares
-    ``remove_columns``.
-
-    The task predicts ``spend`` for a user at a timestamp, and its label is derived from
-    ``events.amount`` -- so ``events.amount`` has to stay out of the context. This is the
-    shape ``remove_columns`` takes for a non-autocomplete task: the leaking column lives in
-    a *different* table from the label rows.
-    """
-
     ds = synthetic_dataset
     tdir = ds / "tasks" / "spend"
     tdir.mkdir(parents=True)

@@ -1,19 +1,3 @@
-"""SQL feature queries for rel-hm (H&M fashion) tasks.
-
-Each query produces 8-13 pre-normalized features designed for
-few-shot linear prediction in the rel2tab pipeline.
-
-Database tables:
-  - transactions: t_dat, customer_id, article_id, price, sales_channel_id
-  - customer: customer_id, FN, Active, club_member_status, fashion_news_frequency, age, postal_code
-  - article: article_id, product_type_no, product_group_name, department_no,
-             index_group_name, garment_group_name, ...
-
-Tasks:
-  - user-churn:  (timestamp, customer_id) -> binary
-  - item-sales:  (timestamp, article_id)  -> regression
-"""
-
 USER_CHURN_SQL = """
 WITH task AS (
     SELECT timestamp, customer_id FROM task_table

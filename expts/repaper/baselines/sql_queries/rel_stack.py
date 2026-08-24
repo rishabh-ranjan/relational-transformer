@@ -1,31 +1,3 @@
-"""SQL feature queries for rel-stack (Stack Exchange) tasks.
-
-Each query produces ~12 pre-normalized features designed for
-few-shot linear prediction in the rel2tab pipeline.
-
-Database tables:
-  - users:       Id, AccountId, DisplayName, Location, CreationDate
-  - posts:       Id, OwnerUserId, PostTypeId, ParentId, Title, Tags, Body, CreationDate
-  - comments:    Id, PostId, UserId, Text, CreationDate
-  - votes:       Id, UserId, PostId, VoteTypeId, CreationDate
-  - badges:      Id, UserId, Class, Name, TagBased, Date
-  - postLinks:   Id, PostId, RelatedPostId, LinkTypeId, CreationDate
-  - postHistory: Id, PostId, UserId, PostHistoryTypeId, CreationDate
-
-Tasks:
-  - user-engagement: (timestamp, OwnerUserId) -> binary
-  - post-votes:      (timestamp, PostId)      -> regression
-  - user-badge:      (timestamp, UserId)      -> binary
-"""
-
-# ---------------------------------------------------------------------------
-# user-engagement: will user contribute in next ~90 days?
-# Entity: OwnerUserId (maps to users.Id and posts.OwnerUserId)
-# 12 features: activity_recency, post_recency, contributions_90d, posts_90d,
-#   recent_post_burst, total_posts, answer_ratio, badges, account_age,
-#   log_edits_90d, received_upvotes, log_votes_90d
-# ---------------------------------------------------------------------------
-
 USER_ENGAGEMENT_SQL = """
 WITH task AS (
     SELECT timestamp, "OwnerUserId" FROM task_table
@@ -173,15 +145,6 @@ LEFT JOIN users u
     ON u."Id" = t."OwnerUserId"
 """
 
-
-# ---------------------------------------------------------------------------
-# post-votes: predict upvote count in next ~90 days
-# Entity: PostId
-# 12 features: log_upvotes_90d, log_upvotes_total, upvote_velocity,
-#   upvote_trend, upvote_ratio, age_freshness, log_comments,
-#   is_answer, post_age_days, owner_reputation, has_accepted_answer,
-#   log_edits
-# ---------------------------------------------------------------------------
 
 POST_VOTES_SQL = """
 WITH task AS (
@@ -334,15 +297,6 @@ LEFT JOIN edit_agg eda
     ON eda."PostId" = t."PostId" AND eda.task_ts = t.timestamp
 """
 
-
-# ---------------------------------------------------------------------------
-# user-badge: will user receive a badge in next ~90 days?
-# Entity: UserId (different from OwnerUserId in user-engagement)
-# 12 features: activity_recency, contributions_90d, recent_post,
-#   badge_momentum, total_badges, gold_badge_flag, received_upvotes,
-#   total_posts, account_age, log_edits_90d, log_votes_90d,
-#   log_comments_90d (bonus from contributions)
-# ---------------------------------------------------------------------------
 
 USER_BADGE_SQL = """
 WITH task AS (

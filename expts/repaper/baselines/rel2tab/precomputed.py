@@ -1,5 +1,3 @@
-"""Eval-time lookup of features precomputed by the featurize scripts."""
-
 import json
 from pathlib import Path
 
@@ -10,17 +8,7 @@ from expts.repaper.baselines.rel2tab.featurizer import Featurizer
 
 
 class PrecomputedFeaturizer(Featurizer):
-    """Load per-table feature blobs written by the featurize scripts.
-
-    Reads ``<features_root>/<db>/<subdir>/<table>_vectors.bin`` (row-major
-    float32) + ``<table>_meta.json`` for every (db, table) pair, eagerly at
-    init; ``compute_features`` is then an index lookup by
-    ``node_idx - min_offset``. ``featurize`` passes rows through unchanged --
-    the paper's precomputed baselines use the on-disk features as-is.
-    """
-
     def __init__(self, features_root, features_subdir, db_tables):
-        # (db, table) -> (features_tensor, min_offset)
         self._features: dict[tuple[str, str], tuple[torch.Tensor, int]] = {}
         for db, table in sorted(set(db_tables)):
             feat_dir = Path(features_root).expanduser() / db / features_subdir

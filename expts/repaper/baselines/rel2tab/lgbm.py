@@ -1,13 +1,3 @@
-"""LightGBM predictor: one model fit per (row, ctx) work item.
-
-Stock library defaults (n_estimators=100, num_leaves=31, learning_rate=0.1,
-min_child_samples=20, reg_lambda=0), mirroring the stock-defaults choice the
-paper's tree baseline makes. Each fit is tiny (a few hundred rows), so the
-job's cpus are spent across work items -- ``predict_batch`` fans the fits out
-with joblib at one thread per fit -- rather than inside one fit, where
-LightGBM's own threading buys nothing at this size.
-"""
-
 import numpy as np
 
 
@@ -32,7 +22,6 @@ class LGBMPredictor:
         self.params = dict(n_jobs=1, verbose=-1)
 
     def _prep(self, train_features, train_labels, test_features, task_type):
-        """Return the numpy work tuple, or a trivial prediction."""
         if train_features is None or len(train_labels) < 2:
             return 0.5 if task_type == "clf" else 0.0
         return (

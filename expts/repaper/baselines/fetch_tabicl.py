@@ -1,12 +1,3 @@
-"""Fetch the TabICL v2 checkpoints once, to a directory every node can read.
-
-Compute nodes have no Hub access, so the predictor loads from this directory
-(``tabicl_batched.CLF_CHECKPOINT`` / ``REG_CHECKPOINT``). Run on the login
-node:
-
-    pixi run python -m expts.repaper.baselines.fetch_tabicl
-"""
-
 import shutil
 from pathlib import Path
 

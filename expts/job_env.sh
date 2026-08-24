@@ -29,3 +29,6 @@ export TOKENIZERS_PARALLELISM=false
 export PYTHONFAULTHANDLER=1
 # The mixture is mlocked (examples/mlock.py); roach passes --propagate=MEMLOCK.
 ulimit -l unlimited || { echo "job-env: cannot raise RLIMIT_MEMLOCK" >&2; exit 1; }
+
+export NCCL_DEBUG=INFO
+export NCCL_DEBUG_SUBSYS=INIT,NET,ENV

@@ -1,5 +1,3 @@
-"""rt.data.stage_paths: the copy, the marker, the relocation."""
-
 import os
 
 import pytest
@@ -9,8 +7,6 @@ from rt.data import stage_paths
 
 @pytest.fixture
 def other_device(monkeypatch):
-    """Make the stage root look like a different filesystem from the
-    sources, which is what staging is for and what it asserts."""
     real = os.stat
 
     def stat(path, *a, **k):
@@ -70,7 +66,6 @@ def test_a_marker_skips_the_copy_and_other_ranks_only_wait(tmp_path, other_devic
     assert (
         tmp_path / "localdisk" / "the-join" / "db0" / "nodes.rkyv"
     ).read_bytes() != b"changed"
-    # a non-zero local rank never copies, only waits and relocates
     out = stage_paths(
         str(tmp_path / "localdisk2"), [str(pre)], local_rank=1, barrier=lambda: None
     )

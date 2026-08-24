@@ -1,23 +1,3 @@
-"""Precompute the LLM-agent SQL features for one database's task tables.
-
-Runs the committed DuckDB feature queries (``sql_queries/``, written once by
-the LLM data-scientist agent) over the full database -- loaded with
-``upto_test_timestamp=False`` so rows between the train cutoff and a row's own
-timestamp are available as history -- and writes one feature blob per task
-table, z-scored globally:
-
-    <features_root>/<db>/sql_features/<table>_vectors.bin   (row-major f32)
-    <features_root>/<db>/sql_features/<table>_meta.json
-
-Task rows are read from the raw HF-format parquets (``raw_dir``) -- the exact
-rows, in the exact order, that the preprocessed data indexes -- so feature row
-``r`` is node ``min_offset + r`` by construction. The classic relbench package
-supplies only the database; ``check_alignment.py`` proves the two sources
-carry the same rows and labels.
-
-Runs in the ``featurize`` pixi environment (classic relbench 2.x API).
-"""
-
 import json
 import os
 from pathlib import Path
@@ -48,9 +28,6 @@ def featurize_db(
     con = duckdb.connect()
     con.execute("SET preserve_insertion_order=false")
     con.execute("SET threads=4")
-    # Full database, not truncated at the test timestamp: rows between the
-    # train cutoff and a target's own timestamp are legitimate history (this
-    # matters for rel-f1, whose db extends past the test timestamp).
     rb_db = get_dataset(db, download=True).get_db(upto_test_timestamp=False)
     for tbl_name, tbl in rb_db.table_dict.items():
         con.register(tbl_name, tbl.df)
@@ -104,7 +81,6 @@ def featurize_db(
         arr = np.where(np.isfinite(arr), arr, np.nan)
         np.nan_to_num(arr, copy=False, nan=0.0)
 
-        # Global z-score normalization.
         mean = arr.mean(axis=0, keepdims=True)
         std = arr.std(axis=0, keepdims=True)
         std = np.where(std < 1e-8, 1.0, std)

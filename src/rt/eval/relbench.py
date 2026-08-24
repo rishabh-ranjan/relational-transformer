@@ -1,7 +1,3 @@
-"""RelBench submission scoring: denormalize / sigmoid predictions, key rows
-back to the relbench parquet, write submission CSVs, score with relbench's own
-evaluator."""
-
 import json
 import tempfile
 from functools import cache
@@ -12,20 +8,9 @@ import sklearn.metrics as M
 
 from rt.data import read_meta, resolve_pre_dir
 
-# `relbench` is imported inside the two functions that need it, not here.
-# Scoring a submission is the only thing in `rt` that reaches for the package,
-# and it is reached only by a run that asked for relbench scoring -- while this
-# module is imported unconditionally by `rt.eval._eval`, and so by `rt.train`.
-# At module scope the import made *training* require relbench, and require the
-# fork's API at that: `relbench.submit` does not exist in the 2.x releases a
-# consumer may reasonably have installed (relarena pins 2.1.2). Deferring it
-# keeps a training run working with any relbench, or none.
-
 
 @cache
 def _seed_offset(pre_dir: str, db: str, table: str, split: str, embedder: str) -> int:
-    """Global rustler ``node_idx`` of the first row of ``table``'s ``split``
-    (so ``node_idx - offset`` is the relbench parquet row index)."""
     local = resolve_pre_dir(pre_dir)
     ti = json.loads((Path(local) / db / "table_info.json").read_text())
     split_cap = {"train": "Train", "val": "Val", "test": "Test"}.get(
@@ -43,8 +28,6 @@ def _load_relbench_task(source: str, table: str):
 
 
 def _train_stats(rtask) -> tuple[float, float]:
-    """Train-split target ``(mean, std)`` -- the exact inverse of rustler's
-    ``(val - mean) / std`` normalization (``std`` ddof=1, 0 -> 1.0)."""
     df = rtask.get_table("train").df
     col = rtask.target_col
     mean = float(df[col].mean())
@@ -61,17 +44,6 @@ def _emit_and_score(
     preds,
     node_idxs,
 ):
-    """Denormalize/sigmoid ``preds``, write a relbench prediction-table CSV keyed
-    by ``(entity_col, time_col)``, and score it with relbench's evaluator.
-    ``csv_out_dir=None`` scores via a temp file and keeps no CSV.
-
-    Returns ``(metric_name, metric_value, n, align_str, csv_path | None)``.
-    ``align_str`` is a built-in alignment guard: denormalized rt labels are
-    compared row-for-row to the relbench ground truth (max abs diff for reg,
-    class agreement for clf) -- both should be ~perfect when the node-index
-    join is correct.
-    """
-
     meta = read_meta(pre_dir, task.db_name)
     source = meta.get("source")
     if not source:
@@ -103,7 +75,7 @@ def _emit_and_score(
             if rowidx.size
             else "n/a"
         )
-    else:  # clf -> probability in [0, 1]; AUROC is invariant to the sigmoid.
+    else:
         out_preds = 1.0 / (1.0 + np.exp(-preds))
         agree = (
             float(np.mean((labels > 0).astype(int) == (gt_vals > 0).astype(int)))
@@ -127,11 +99,6 @@ def _emit_and_score(
         score_path, ret_path = Path(tf.name), None
 
     if rowidx.size < n_test:
-        # Subsampled run (eval.items_per_task < test size): relbench's evaluator
-        # refuses CSVs that do not cover the full test set, so score the
-        # subsample here with the same metric definitions it uses -- AUROC for
-        # clf; NMAE = MAE / train-split target std (ddof=1) for reg.
-
         if ret_path is None:
             Path(score_path).unlink(missing_ok=True)
         if task.task_type == "reg":

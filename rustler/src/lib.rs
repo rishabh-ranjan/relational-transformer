@@ -4,8 +4,6 @@ mod common;
 pub mod fly;
 mod pre;
 
-/// Preprocess a relbench-3.0.0-layout dataset dir (parquet -> rustler's on-disk
-/// rkyv format). Releases the GIL.
 #[pyfunction]
 #[pyo3(signature = (dataset_dir, out_dir, *, source=None, skip_tasks=false, skip_db=false))]
 fn preprocess(

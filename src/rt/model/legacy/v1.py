@@ -1,14 +1,3 @@
-"""RT-v1 architecture (ICLR 2026, arXiv:2510.06377).
-
-Faithful copy of ``rt/model.py`` at the ``rt-v1`` tag of
-stanford-star/relational-transformer, with two edge adaptations to the
-current pipeline: the target-cell key is ``is_targets`` (the old batch
-called it ``masks``), and an Evaluator-facing ``predict`` is attached.
-State-dict keys match the released ``.pt`` checkpoints
-(``pretrain_<db>_<task>.pt`` etc.) exactly: no q/k norm, and a fourth
-unrestricted ``full`` attention per block.
-"""
-
 from functools import partial
 
 import torch
@@ -147,32 +136,22 @@ class V1Transformer(nn.Module):
         col_name_idxs = batch["col_name_idxs"]
         table_name_idxs = batch["table_name_idxs"]
         is_padding = batch["is_padding"]
-        # current pipeline name for the old "masks" key
         masks = batch["is_targets"]
 
         batch_size, seq_len = node_idxs.shape
         device = node_idxs.device
 
-        # Padding mask for attention pairs (allow only non-pad -> non-pad)
-        pad = (~is_padding[:, :, None]) & (~is_padding[:, None, :])  # (B, S, S)
+        pad = (~is_padding[:, :, None]) & (~is_padding[:, None, :])
 
-        # cells in the same node
-        same_node = node_idxs[:, :, None] == node_idxs[:, None, :]  # (B, S, S)
+        same_node = node_idxs[:, :, None] == node_idxs[:, None, :]
 
-        # kv index is among q's foreign -> primary neighbors
-        kv_in_f2p = (node_idxs[:, None, :, None] == f2p_nbr_idxs[:, :, None, :]).any(
-            -1
-        )  # (B, S, S)
+        kv_in_f2p = (node_idxs[:, None, :, None] == f2p_nbr_idxs[:, :, None, :]).any(-1)
 
-        # q index is among kv's primary -> foreign neighbors (reverse relation)
-        q_in_f2p = (node_idxs[:, :, None, None] == f2p_nbr_idxs[:, None, :, :]).any(
-            -1
-        )  # (B, S, S)
+        q_in_f2p = (node_idxs[:, :, None, None] == f2p_nbr_idxs[:, None, :, :]).any(-1)
 
-        # Same column AND same table
         same_col_table = (col_name_idxs[:, :, None] == col_name_idxs[:, None, :]) & (
             table_name_idxs[:, :, None] == table_name_idxs[:, None, :]
-        )  # (B, S, S)
+        )
 
         attn_masks = {
             "feat": (same_node | kv_in_f2p) & pad,
@@ -215,17 +194,16 @@ class V1Transformer(nn.Module):
         loss_out = x.new_zeros(())
         yhat_out = {"number": None, "text": None, "datetime": None, "boolean": None}
 
-        sem_types = batch["sem_types"]  # (B,S) ints 0..3
-        masks = masks.bool()  # (B,S) where to train
+        sem_types = batch["sem_types"]
+        masks = masks.bool()
 
         for i, t in enumerate(["number", "text", "datetime", "boolean"]):
-            yhat = self.dec_dict[t](x)  # (B,S, D_t)
-            y = batch[f"{t}_values"]  # (B,S, D_y)
-            sem_type_mask = (sem_types == i) & masks  # (B,S) mask for this type
+            yhat = self.dec_dict[t](x)
+            y = batch[f"{t}_values"]
+            sem_type_mask = (sem_types == i) & masks
 
             if not sem_type_mask.any():
                 if t in yhat_out:
-                    # still touch the param to avoid unused param error
                     loss_out = loss_out + (yhat.sum() * 0.0)
                     yhat_out[t] = yhat
                 continue

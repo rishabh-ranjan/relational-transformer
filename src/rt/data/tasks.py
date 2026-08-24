@@ -1,28 +1,9 @@
-"""Task resolution from an explicit db-task list.
-
-The set of tasks to train or evaluate on is always given explicitly as a
-``db_task_list``: a list of ``(db_name, task_name)`` pairs, a local path to a
-JSON file holding such a list. ``task_name`` names a task recorded in the
-db's ``meta.json``: a forecast/external task, or an autocomplete task
-(``kind: autocomplete``, a manifest-only task dir whose target is a column of a
-db table). There is no enumerate-everything fallback and no on-the-fly column
-resolution: the list is the single source of truth.
-
-Curated lists ship inside the preprocessed dataset repos, so they arrive with
-the data they refer to: ``<pre_dir>/db-task-lists/forecast.json`` (for
-relbench-preprocessed, the 21-task RelBench benchmark) and
-``<pre_dir>/db-task-lists/{forecast,autocomplete,all,rt-j}.json`` (for
-the-join-preprocessed, the pretraining mixtures).
-"""
-
 import json
 from dataclasses import dataclass
 from pathlib import Path
 
 from rt.data.resolve import read_meta
 
-# relbench task_type -> RT task_type. Only node-level clf/reg tasks are modeled;
-# recommendation tasks are skipped.
 _TASK_TYPE = {"binary_classification": "clf", "regression": "reg"}
 
 
@@ -31,28 +12,12 @@ class Task:
     db_name: str
     table_name: str
     target_column: str
-    task_type: str  # "clf" | "reg"
-    split: str = ""  # "train" | "val" | "test"
-    # ``(table, column)`` pairs to keep out of this task's context because they
-    # leak the target -- ``remove_columns`` in the task's manifest.yaml, carried
-    # through to meta.json by the preprocessor. Empty for most tasks, and honored
-    # for every ``kind``: an autocomplete target *is* a real db column sitting in
-    # a row next to columns trivially derivable from it, while a forecast or
-    # external target is often *derived from* a db column (dbinfer's ``cvr`` from
-    # ``View.added_to_cart``), which leaks the same way. The sampler drops these
-    # cells on rows sharing the target's timestamp -- the same forecast horizon,
-    # where the column encodes the label -- and keeps strictly-past rows, which
-    # carry it as legitimate history.
+    task_type: str
+    split: str = ""
     leakage_columns: tuple[tuple[str, str], ...] = ()
 
 
 def resolve_db_task_list(db_task_list) -> list[tuple[str, str]]:
-    """Materialize a db_task_list into ``[(db_name, task_name), ...]``.
-
-    Accepts an in-memory list of pairs or a path to a JSON file of pairs. The
-    released lists ship inside the preprocessed dataset repos, so they arrive
-    with the data: ``<pre_dir>/db-task-lists/<name>.json``.
-    """
     if isinstance(db_task_list, str):
         p = Path(db_task_list).expanduser()
         if not p.is_file():
@@ -72,23 +37,6 @@ def resolve_db_task_list(db_task_list) -> list[tuple[str, str]]:
 
 
 def get_tasks(pre_dir, db_task_list, splits) -> list[Task]:
-    """Build full :class:`Task` objects for a db_task_list at the given splits.
-
-    Names resolve against the explicit tasks recorded in the db's ``meta.json``
-    -- there is no on-the-fly resolution of column specs. A name the build does
-    not offer as a clf/reg target is reported and ignored, not raised on: a
-    published list outlives the build it was written for.
-
-    Forecast/external tasks carry a label table per split, so they are emitted
-    once per requested split that the task actually ships. Autocomplete tasks
-    (``kind: autocomplete``) have no label table at all: the target is a column
-    of an existing db table, so they carry no splits and are emitted at the
-    ``train`` split only.
-
-    A task's ``remove_columns`` becomes :attr:`Task.leakage_columns`, which the
-    dataset turns into column indices the sampler drops from every context. This
-    happens for every ``kind``, not just autocomplete.
-    """
     pairs = resolve_db_task_list(db_task_list)
     by_db: dict[str, list[str]] = {}
     for db, name in pairs:
@@ -106,23 +54,12 @@ def get_tasks(pre_dir, db_task_list, splits) -> list[Task]:
         for name in names:
             t = explicit.get(name)
             if t is None:
-                # A published list can name a task this build does not offer as
-                # something to predict: a recommendation task (which has no
-                # clf/reg target), or an entry left over from an older build.
-                # Ignoring it keeps a stale list from taking down a run over a
-                # task nobody could have trained on anyway.
                 ignored.append(f"{db}/{name}")
                 continue
             tt = _TASK_TYPE[t["task_type"]]
             leaks = tuple(
                 (str(tbl), str(col)) for tbl, col in t.get("remove_columns") or ()
             )
-            # A non-autocomplete task with no splits can never yield a Task at
-            # any split. Naming one is a mistake that would otherwise resolve to
-            # nothing in silence -- the shape a the-join autocomplete task takes
-            # if its `kind` goes missing from meta.json, since it ships no label
-            # parquet. (A task that simply does not ship the *requested* split is
-            # fine and stays quiet.)
             if t.get("kind") != "autocomplete" and not t.get("splits"):
                 raise ValueError(
                     f"{db}: task {name!r} has kind={t.get('kind')!r} and no splits, "
@@ -130,7 +67,7 @@ def get_tasks(pre_dir, db_task_list, splits) -> list[Task]:
                     f"(re-preprocess the db)"
                 )
             if t.get("kind") == "autocomplete":
-                if "train" in splits:  # autocomplete is a pretraining-only signal
+                if "train" in splits:
                     out.append(
                         Task(db, t["entity_table"], t["target_col"], tt, "train", leaks)
                     )

@@ -1,14 +1,3 @@
-"""Preprocess a relbench-format dataset into the tensors RT trains on.
-
-No CLI: uncomment the call you want, edit the arguments, run it.
-
-    pixi run python examples/preprocess.py
-
-``one`` handles a single dataset, ``many`` a whole Hub collection (optionally
-sharded across a slurm array), ``ls`` prints what is in a collection, and
-``upload`` publishes the result. Raw inputs may be a local path or a Hub spec.
-"""
-
 from rt.preprocess import ls, many, one, upload
 
 
@@ -27,8 +16,6 @@ def preprocess_one_dataset() -> None:
 
 
 def preprocess_a_collection() -> None:
-    """`shard`/`num_shards` split the work across a job array; each job takes
-    every num_shards-th dataset."""
     many(
         repo="stanford-star/the-join",
         out_dir="data/the-join-preprocessed",
@@ -50,7 +37,6 @@ def list_a_collection() -> None:
 
 
 def upload_result() -> None:
-    """One preprocessed dataset, or a whole output root with ``bulk=True``."""
     upload(
         pre_dir="data/relbench-preprocessed/rel-f1",
         repo="your-org/your-preprocessed",

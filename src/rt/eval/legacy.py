@@ -1,9 +1,3 @@
-"""Reproduce the published RT-v1 and RT-PluRel evaluations.
-
-The architectures live in ``rt.model.legacy``; this is the evaluation loop they
-share. See examples/eval_legacy.py for the published context configuration.
-"""
-
 from pathlib import Path
 
 import torch
@@ -37,11 +31,6 @@ def run(
     vector_db_path: str | None,
     db_cutoff: str | None,
 ) -> dict:
-    """Evaluate one legacy architecture, one checkpoint per task.
-
-    ``model_for_task(task) -> net`` is how the two legacy families differ: RT-v1
-    loads a task-wise checkpoint, RT-PluRel one checkpoint for all tasks.
-    """
     """``model_for_task(task) -> nn.Module`` supplies the (possibly per-task)
     legacy checkpoint, already on-device in bf16."""
     device = "cuda" if torch.cuda.is_available() else "cpu"

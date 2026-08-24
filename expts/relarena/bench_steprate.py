@@ -1,21 +1,3 @@
-"""Why is training ~2x the fitted s/step? Isolate the candidates.
-
-The fitted 0.94 s/step came from one task (rel-f1/driver-position) under a
-configuration that has since changed. Three things could explain the gap, and
-they call for different fixes:
-
-  H1  num_walks=10_000 is expensive, and its cost scales with the graph, so it
-      is cheap on rel-f1 and dear on rel-avito. Fix: fewer walks.
-  H2  the observed rate is wall-clock per step and therefore includes the
-      in-loop eval, which went from ensemble 1 to ensemble 4. Then nothing is
-      slower; the estimator is measuring something else. Fix: none needed.
-  H3  s/step genuinely scales with database size and a constant fitted on the
-      smallest dataset in the sweep was never going to hold. Fix: reproject.
-
-Every config runs the same step count from the same warm cache, so total wall
-time is directly comparable -- startup and preprocessing are common to all.
-"""
-
 from __future__ import annotations
 
 import time
@@ -62,7 +44,7 @@ def main(dataset: str, task: str, cache_dir: str, steps: int = 300) -> None:
             run_id=label,
             seed=0,
         )
-        args["early_stop_after_steps"] = None  # never stop; every config runs `steps`
+        args["early_stop_after_steps"] = None
         args["can_select_init_model"] = False
         args.update(over)
         tic = time.perf_counter()

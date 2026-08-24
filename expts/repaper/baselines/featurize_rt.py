@@ -1,17 +1,3 @@
-"""Precompute RT-J row embeddings for one database's task tables.
-
-For every row of every task table: build a small walk-free local context
-around the row (single BFS, the row's target cell masked), run the RT-J
-checkpoint matching the task's type with ``return_embeddings=True``, and keep
-the embedding at the masked target cell as the row's vector. Written as:
-
-    <features_root>/<db>/rt_features/<table>_vectors.bin   (row-major f32)
-    <features_root>/<db>/rt_features/<table>_meta.json
-
-These vectors feed ``build_vector_db.py`` for the RT-similarity retriever
-ablation. Runs in the default environment on one GPU.
-"""
-
 import json
 from pathlib import Path
 
@@ -42,12 +28,11 @@ def featurize_db(
     device = "cuda"
     tasks = [t for t in get_tasks(pre_dir, db_task_list, ("test",)) if t.db_name == db]
     assert tasks, f"no tasks for {db} in {db_task_list}"
-    # One embedding file per table; the first task of a table names its target.
     by_table = {}
     for t in tasks:
         by_table.setdefault(t.table_name, t)
 
-    nets = {}  # task_type -> (net, config)
+    nets = {}
     for task in sorted(by_table.values(), key=lambda t: t.table_name):
         if task.task_type not in nets:
             ckpt = ckpt_clf if task.task_type == "clf" else ckpt_reg
@@ -102,9 +87,7 @@ def featurize_db(
                 batch = process_batch(tup, ds.d_text)
                 batch.pop("batch_mask", None)
                 batch = {k: v.to(device, non_blocking=True) for k, v in batch.items()}
-                x = net(batch, return_embeddings=True)  # (B, S, d_model)
-                # forward sorts cells by column index; pick the target cell
-                # through the same sort or the gather lands on the wrong cell.
+                x = net(batch, return_embeddings=True)
                 sort_keys = batch["col_name_idxs"].masked_fill(
                     batch["is_padding"], torch.iinfo(batch["col_name_idxs"].dtype).max
                 )

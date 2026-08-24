@@ -1,25 +1,3 @@
-"""Check the build, write its task lists, and publish it.
-
-    pixi run python expts/preprocess/finalize.py verify
-    pixi run python expts/preprocess/finalize.py task-lists
-    pixi run python expts/preprocess/finalize.py upload
-
-`verify` is not optional politeness: a database whose job was preempted between
-rustler and the embedding step leaves a directory that looks finished, and
-publishing it would put a hole in the pretraining data that only shows up in a
-run weeks later.
-
-`upload` mirrors rather than merges, and nothing goes out until the whole
-replacement -- including any `legacy/` tree -- verifies; see
-[README.md](README.md). Root files (README.md, .gitattributes) are left alone,
-and so is anything in the collection's `keep`.
-
-(The Hub has no atomic multi-file swap: `upload_large_folder` commits in
-batches. What is guaranteed here is that nothing starts going out until the
-whole replacement exists and verifies, not that the repo is unobservable
-mid-push.)
-"""
-
 import json
 import sys
 from collections import defaultdict
@@ -57,7 +35,6 @@ def databases(out: Path) -> list[str]:
 
 
 def verify() -> list[str]:
-    """Report every database that is missing, incomplete, or empty."""
     out, problems = Path(OUT_DIR).expanduser(), []
     expected = sorted(
         p.parent.name for p in Path(RAW_DIR).expanduser().glob("*/manifest.yaml")
@@ -91,7 +68,6 @@ def verify() -> list[str]:
 
 
 def verify_legacy() -> list[str]:
-    """The legacy tree, held to the same standard as the build."""
     if not LEGACY_DIR:
         return []
     out, problems = Path(LEGACY_DIR).expanduser(), []
@@ -99,7 +75,6 @@ def verify_legacy() -> list[str]:
         p.parent.name for p in Path(RAW_DIR).expanduser().glob("*/manifest.yaml")
     )
     built = set(databases(out)) if out.is_dir() else set()
-    # anything in here that is not a database is scratch that would be published
     for extra in sorted(built - set(expected)):
         problems.append(f"legacy/{extra}: not a database of this build")
     for name in expected:
@@ -120,22 +95,10 @@ def verify_legacy() -> list[str]:
     return problems
 
 
-# What `rt.data.tasks` can build a Task from. A list naming anything else is
-# not a list a training run can load: `get_tasks` raises on the first one.
 SUPPORTED_TASK_TYPES = ("binary_classification", "regression")
 
 
 def _has_target(task: dict, column_index: dict) -> bool:
-    """Is this task's target column present in the build?
-
-    Preprocessing drops non-structural columns of database tables that hold a
-    single distinct value, so a task whose target is constant loses its entry
-    in `column_index.json` and can only be skipped at load time. Leaving it in
-    the list buys nothing: the task carries no signal to learn.
-
-    An autocomplete target lives on the entity table; a forecast target lives
-    on the task's own table, which is named after the task. Accept either.
-    """
     target = task["target_col"]
     return any(
         f"{target} of {table}" in column_index
@@ -144,7 +107,6 @@ def _has_target(task: dict, column_index: dict) -> bool:
 
 
 def task_lists() -> None:
-    """Write `db-task-lists/` from the metas this build just produced."""
     out = Path(OUT_DIR).expanduser()
     by_kind: dict[str, list[list[str]]] = defaultdict(list)
     every: list[list[str]] = []
@@ -161,10 +123,6 @@ def task_lists() -> None:
                 dropped.append(f"{name}/{task['name']}")
                 continue
             every.append([name, task["name"]])
-            # A task either predicts a column of the database (autocomplete) or
-            # ships a label table (everything else, listed as forecast). Keying
-            # on the literal `kind` instead would drop any task whose manifest
-            # spells that second case differently.
             kind = "autocomplete" if task["kind"] == "autocomplete" else "forecast"
             by_kind[kind].append([name, task["name"]])
 
@@ -210,14 +168,6 @@ def task_lists() -> None:
 
 
 def upload(private: bool = False) -> None:
-    """Publish the whole replacement, or none of it.
-
-    Both trees are verified before anything is pushed: a collection is what its
-    databases and its legacy variant are together, and replacing one of them
-    while the other is half-built is how a published dataset ends up internally
-    inconsistent.
-    """
-
     problems = verify() + verify_legacy()
     if problems:
         raise SystemExit(
@@ -231,10 +181,6 @@ def upload(private: bool = False) -> None:
     api = HfApi()
     api.create_repo(repo, repo_type="dataset", private=private, exist_ok=True)
 
-    # One call: the legacy tree lives under out/legacy, so the whole
-    # replacement goes in a single operation. With two, the second can fail
-    # after the first has already changed the published repo -- leaving new
-    # databases beside an old legacy variant of them.
     print(f"uploading {out} -> {repo}")
     api.upload_large_folder(repo_id=repo, repo_type="dataset", folder_path=str(out))
 

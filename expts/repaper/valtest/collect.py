@@ -1,14 +1,3 @@
-"""Collect the default-vs-tuned table into results.json + one wandb run.
-
-Default column: the ``subsampled/rt`` arm of ../scaling at ctx 8192.
-Tuned column: the tuned single-seed runs this experiment submitted. The wandb
-run (project ``2026-08-19-repaper-valtest``, run ``valtest``) carries the
-whole table as a wandb.Table, which is what the paper's table generator
-fetches; ``results.json`` is committed beside this file.
-
-    pixi run python -m expts.repaper.valtest.collect
-"""
-
 import json
 from pathlib import Path
 

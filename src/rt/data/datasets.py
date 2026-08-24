@@ -1,5 +1,3 @@
-"""rustler-backed torch datasets for training and evaluation."""
-
 import json
 import math
 import random
@@ -15,18 +13,10 @@ from rt.data.resolve import get_column_index, read_meta, resolve_pre_dir
 
 from rt.rustler import Sampler
 
-MAX_F2P_NBRS = 5  # See fly.rs L32
+MAX_F2P_NBRS = 5
 
 
 def _resolve_cutoff(db_cutoff, db_name: str, pre_dir: str) -> int | None:
-    """The context cutoff for one database, in seconds since the epoch.
-
-    ``None`` for no cutoff; ``"val"`` / ``"test"`` to look the split's timestamp
-    up in relbench; or an **integer**, which is used as-is. The integer form is
-    for data that relbench cannot be asked about -- a database assembled by a
-    caller rather than loaded from a release, whose splits are the caller's own
-    and whose ``meta.json`` therefore carries no ``source``.
-    """
     if db_cutoff is None:
         return None
     if isinstance(db_cutoff, int):
@@ -36,14 +26,6 @@ def _resolve_cutoff(db_cutoff, db_name: str, pre_dir: str) -> int | None:
 
 @cache
 def _split_timestamps(db_name: str, pre_dir: str) -> dict[str, int]:
-    """``db_name``'s test timestamp, in rustler's seconds since the epoch.
-
-    relbench owns this number and the preprocessed data does not carry it, so
-    it is read from relbench at run time. ``meta.json``'s ``source`` is how the
-    dataset was addressed when it was preprocessed -- a local directory or a
-    Hub ``org/repo[/subdir]`` spec -- which is exactly what
-    ``relbench.load_dataset`` takes.
-    """
     import relbench
 
     source = read_meta(pre_dir, db_name).get("source")
@@ -170,21 +152,15 @@ class RustlerDataset:
                 drop_indices = []
                 for drop_table, col in columns_to_drop:
                     if drop_table == table_name and col == target_column:
-                        continue  # never drop the target itself
+                        continue
                     try:
                         drop_indices.append(
                             get_column_index(col, drop_table, db_name, pre_dir)
                         )
                     except ValueError:
-                        pass  # column absent from this db's index; ignore
+                        pass
                 drop_column_indices.append(drop_indices)
 
-                # relbench's ``get_db(upto_test_timestamp=True)`` generalized:
-                # rows past the split's own timestamp are not in the database
-                # the model is allowed to see. ``"test"`` is what a test-split
-                # eval gets; ``"val"`` is the same rule one split earlier, and
-                # is what a val-selected run has to use for val to predict
-                # test rather than to see past it.
                 cutoff_timestamps.append(_resolve_cutoff(db_cutoff, db_name, pre_dir))
 
                 dataset_tuples.append((db_name, table_name, node_idx_offset, num_nodes))
@@ -195,8 +171,6 @@ class RustlerDataset:
                 skipped_tasks.append((task_name, e))
 
         if skipped_tasks and local_rank == 0 and not quiet:
-            # prose, not a record: `log` values have to be whitespace-free, and
-            # underscoring an error message to fit that made it unreadable.
             print(
                 f"skipped {len(skipped_tasks)} of {num_tasks} tasks:",
                 flush=True,
@@ -268,8 +242,6 @@ class TrainDataset(RustlerDataset, IterableDataset):
         db_cutoff: str | int | None,
         start_step: int = 0,
     ):
-        # TrainDataset drives both shuffle and context construction from the
-        # same seed — this matches prior single-seed behavior.
         RustlerDataset.__init__(
             self,
             tasks=tasks,
@@ -297,17 +269,10 @@ class TrainDataset(RustlerDataset, IterableDataset):
         )
         self.train_ctx_size_list = train_ctx_size_list
         self.seed = random.Random(seed).getrandbits(64)
-        #: Optimizer steps already taken by the run this one continues. The
-        #: stream is a function of the counters alone, so starting them where an
-        #: uninterrupted run would have them makes a resume draw the same
-        #: batches -- no re-seeding, and no replay either.
         self.start_step = start_step
         self.train_tokens_per_gpu = train_tokens_per_gpu
         self.total_bs = total_bs
         self.mask_prob_max_shared = mask_prob_max_shared
-        # total_bs must split evenly into world_size * per_gpu_bs so the global
-        # batch is exactly total_bs. Pick a GPU count that divides
-        # total_bs / per_gpu_bs (the launcher does this); fail loudly otherwise.
         for c in train_ctx_size_list:
             train_bs = max(1, train_tokens_per_gpu // c)
             if total_bs < world_size * train_bs:
@@ -337,10 +302,6 @@ class TrainDataset(RustlerDataset, IterableDataset):
         )
         self.sampler.set_step_py(sampler_step)
         self.sampler.set_stride_py(stride)
-        # Single ctx_size: yield individual microbatches so workers prefetch
-        # in parallel. List-yielding (multi-ctx case) blocks each worker for
-        # grad_accum batches before yielding, which is unnecessary here since
-        # all microbatches share the only ctx_size anyway.
         single_ctx = len(self.train_ctx_size_list) == 1
         while True:
             if self.mask_prob_max_shared is not None:
@@ -358,9 +319,6 @@ class TrainDataset(RustlerDataset, IterableDataset):
                 tup = self.sampler.batch_py(None, train_bs, train_ctx_size)
                 yield self._process_batch(tup)
             else:
-                # Multi ctx_size: yield grad_accum batches atomically with
-                # shared ctx_size to avoid worker-round-robin interleaving
-                # ctx_size_list within an optimizer step.
                 batches = []
                 for _ in range(grad_accum):
                     tup = self.sampler.batch_py(None, train_bs, train_ctx_size)
@@ -380,34 +338,17 @@ def resume_positions(
     worker_id: int,
     stride: int,
 ) -> tuple[int, int]:
-    """Where worker `worker_id` stands after `start_step` optimizer steps.
-
-    Returns `(ctx_step, sampler_step)`: the value the ctx-size selector and the
-    rustler sampler's own counter would hold in a run that was never
-    interrupted. Resuming at the same `world_size` reproduces that run's
-    stream exactly; at a different one the sampler's batch counter lands where
-    a run that had always used the new count would be, so the draw from there
-    on is fresh rather than a replay.
-
-    Two counters, advancing at different rates. The ctx selector indexes
-    optimizer steps and moves by `stride` per yield; the sampler is a *batch*
-    counter and moves by `stride` per `batch_py`, of which one optimizer step
-    makes `grad_accum` -- and `grad_accum` depends on the ctx size that step
-    drew, so the walk is simulated rather than solved. It is integer work over
-    `start_step / stride` iterations: microseconds, no data touched.
-    """
     ctx_step = worker_id
     sampler_step = worker_id
     if start_step <= 0:
         return ctx_step, sampler_step
     single_ctx = len(train_ctx_size_list) == 1
     if single_ctx:
-        # One yield per microbatch: both counters move by `stride` together, and
-        # an optimizer step consumes `grad_accum` yields.
         ctx = train_ctx_size_list[0]
         train_bs = max(1, train_tokens_per_gpu // ctx)
         grad_accum = (
-            1 if total_bs < world_size * train_bs
+            1
+            if total_bs < world_size * train_bs
             else total_bs // (world_size * train_bs)
         )
         target = start_step * grad_accum
@@ -438,11 +379,6 @@ class EvalDataset(Dataset):
         self.eval_ctx_size = eval_ctx_size
 
     def __len__(self):
-        # Uniform across ranks: every rank iterates the same number of
-        # batches. Higher-rank offsets on the last batch may legitimately
-        # overshoot num_items; the rustler sampler fills those slots as
-        # phantoms (batch_mask[i]=false) so the downstream fixed-size
-        # gather is simple and correct.
         return math.ceil(
             self.rustler_dataset.num_items
             / (self.eval_bs * self.rustler_dataset.world_size)
@@ -454,9 +390,6 @@ class EvalDataset(Dataset):
         )
 
 
-# relbench task_type -> RT task_type. Only node-level clf/reg tasks are modeled;
-# recommendation tasks are skipped.
 _TASK_TYPE = {"binary_classification": "clf", "regression": "reg"}
 
-# autocomplete: which sem-type becomes which task. Text/DateTime are not targets.
 _SEM_TASK_TYPE = {"Boolean": "clf", "Number": "reg"}

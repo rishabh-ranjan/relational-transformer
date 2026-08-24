@@ -1,11 +1,3 @@
-"""Aggregate the per-task ensemble curves into the two wandb runs the
-ensembling figure reads (runs ``default`` and ``tuned``; keys ``ens_size``,
-``test/avg_mae``, ``test/avg_auc``, and
-``per_task/relbench/<db>/<table>/test/{mae,auc}``).
-
-    pixi run python -m expts.repaper.enscurve.reduce
-"""
-
 import json
 from pathlib import Path
 
@@ -55,4 +47,3 @@ def reduce_variant(variant: str) -> None:
 
 if __name__ == "__main__":
     reduce_variant("default")
-    # reduce_variant("tuned")

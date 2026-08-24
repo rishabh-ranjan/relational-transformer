@@ -1,17 +1,3 @@
-"""Derive the schema-semantics-ablated copy of the preprocessed eval data.
-
-The ablation removes schema semantics by deranging the column-name embeddings:
-for each database, a Sattolo permutation (a uniform random cycle, so no column
-keeps its own name) over the column indices in ``column_index.json``, applied
-to the rows of the text-embedding table those indices address. Cells that
-shared a column name still share one, cells that differed still differ, and
-nothing else about the data changes -- every other file is a symlink to the
-original, so the derived tree costs only the embedding files it rewrites.
-
-The permutation is deterministic per (db, seed). Table-name embeddings are
-not touched (their rows are not in ``column_index.json``).
-"""
-
 import hashlib
 import json
 import shutil
@@ -19,8 +5,6 @@ from pathlib import Path
 
 
 def derange(indices: list[int], seed_material: str) -> dict[int, int]:
-    """Sattolo's algorithm over ``indices``: a uniform random cyclic
-    permutation, so every index maps to a different one."""
     import numpy as np
 
     assert len(indices) >= 2, f"need >= 2 columns to derange ({seed_material})"
@@ -29,7 +13,7 @@ def derange(indices: list[int], seed_material: str) -> dict[int, int]:
     )
     shuffled = list(indices)
     for i in range(len(shuffled) - 1, 0, -1):
-        j = int(rng.integers(0, i))  # strictly below i: no fixed points
+        j = int(rng.integers(0, i))
         shuffled[i], shuffled[j] = shuffled[j], shuffled[i]
     return dict(zip(indices, shuffled))
 
@@ -41,7 +25,6 @@ def main(*, pre_dir: str, out_dir: str, embedder: str, d_text: int, seed: int) -
     out = Path(out_dir).expanduser()
     out.mkdir(parents=True, exist_ok=True)
 
-    # The task lists ship with the data; the derived tree points at the same one.
     lists = out / "db-task-lists"
     if not lists.exists():
         lists.symlink_to(pre / "db-task-lists")
@@ -61,8 +44,6 @@ def main(*, pre_dir: str, out_dir: str, embedder: str, d_text: int, seed: int) -
         col_index = json.loads((src / "column_index.json").read_text())
         perm = derange(sorted(col_index.values()), f"{db}:{seed}")
 
-        # The embedding file can be tens of GB (it holds every cell text), so
-        # copy it and patch only the column-name rows through memmaps.
         shutil.copyfile(src / emb_name, dst / emb_name)
         src_mm = np.memmap(src / emb_name, dtype=np.uint16, mode="r").reshape(
             -1, d_text

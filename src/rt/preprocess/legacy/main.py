@@ -1,35 +1,3 @@
-"""Legacy (RT-v1-era) RelBench preprocessing.
-
-The RT-v1 ``pre.rs`` hard-coded per-database rules that cast binary columns
-(classification task targets and a few db columns) to polars ``Boolean``
-before featurization, which made them a real Boolean semantic type
-(``sem_types == 3``, values in ``boolean_values``, BCE-trained decoder head).
-The current manifest-driven ``pre.rs`` types columns purely by parquet dtype,
-and the RelBench source parquets store those columns as ints — so they become
-z-scored numbers, a mismatch for the released RT-v1 checkpoints.
-
-This module reproduces the RT-v1 rules as a *dataset transform*: it copies a
-RelBench dataset directory, casts the legacy-boolean columns to parquet
-``Boolean`` dtype, then runs the unchanged rustler ``pre`` + embedding
-pipeline on the transformed copy. The output is bit-compatible with the
-regular preprocessed layout and is published under a ``legacy/`` folder of
-the ``*-preprocessed`` Hub repo (use ``pre_dir=<repo>/legacy``).
-
-Faithfulness notes (vs ``rt-v1:rustler/src/pre.rs``):
-- All ``cast_col_to_bool`` task-target rules are ported, except
-  rel-event/user-attendance: RT-v1 also cast that *regression* target to
-  bool (its paper skipped rel-event); the leaderboard needs numeric
-  attendance predictions, so it stays numeric here.
-- All ``make_column_boolean`` (equality-to-first-non-null) db-column rules
-  are ported.
-- rel-amazon ``product.category`` keeps RT-v1's first-list-element text
-  (the current pipeline stringifies the whole list).
-- RT-v1's rel-event row-dropping (``drop_nulls`` on event_attendees /
-  user_friends) is not ported: it changed node indexing for robustness of
-  the old loader, not typing semantics, and the current pipeline handles
-  nulls.
-"""
-
 import shutil
 from pathlib import Path
 import polars as pl
@@ -42,9 +10,6 @@ from rt.preprocess._preprocess import (
 )
 from huggingface_hub import HfApi
 
-# (db, table) -> columns cast to Boolean via `col != 0` (RT-v1 cast_col_to_bool;
-# polars int -> bool casts nonzero to true). Task-table rules apply to every
-# split parquet of that task.
 CAST_TO_BOOL: dict[tuple[str, str], list[str]] = {
     ("rel-amazon", "user-churn"): ["churn"],
     ("rel-amazon", "item-churn"): ["churn"],
@@ -60,8 +25,6 @@ CAST_TO_BOOL: dict[tuple[str, str], list[str]] = {
     ("rel-avito", "user-clicks"): ["num_click"],
 }
 
-# (db, table) -> columns binarized as `col == first non-null value` (RT-v1
-# make_column_boolean).
 BINARIZE_FIRST: dict[tuple[str, str], list[str]] = {
     ("rel-stack", "postLinks"): ["LinkTypeId"],
     ("rel-trial", "studies"): ["has_dmc"],
@@ -86,7 +49,6 @@ def _transform_df(df, db_name: str, table_name: str):
             )
 
     if db_name == "rel-amazon" and table_name == "product" and "category" in df.columns:
-        # RT-v1 kept only the first list element as the category text.
         df = df.with_columns(
             pl.col("category").list.first().cast(pl.String).alias("category")
         )
@@ -95,9 +57,6 @@ def _transform_df(df, db_name: str, table_name: str):
 
 
 def transform_dataset(dataset_dir: Path, out_dataset_dir: Path, db_name: str) -> Path:
-    """Copy ``dataset_dir`` to ``out_dataset_dir`` with the RT-v1 boolean rules
-    applied to the relevant parquets. Everything else is copied verbatim."""
-
     out_dataset_dir = Path(out_dataset_dir)
     if out_dataset_dir.exists():
         shutil.rmtree(out_dataset_dir)
@@ -110,7 +69,6 @@ def transform_dataset(dataset_dir: Path, out_dataset_dir: Path, db_name: str) ->
             dst.mkdir(parents=True, exist_ok=True)
             continue
         if src.suffix == ".parquet":
-            # db/<table>.parquet or tasks/<task>/<split>.parquet
             parts = rel.parts
             table_name = Path(parts[-1]).stem if parts[0] == "db" else parts[1]
             df = pl.read_parquet(src)
@@ -137,18 +95,6 @@ def rustler_one_legacy(
     *,
     revision: str | None = None,
 ) -> Path:
-    """The cpu half of the legacy pipeline: transform, then rustler `pre`.
-
-    Exported separately from :func:`preprocess_one_legacy` because the embedding
-    that follows it wants a GPU and this wants one thread, and a caller
-    scheduling the two -- expts/preprocess does, on slurm -- can only ask for
-    each what it needs if it can run them as two calls. Whoever wants both in
-    one process still has `preprocess_one_legacy`, which is these two calls.
-
-    Leaves the transformed copy in ``<out_dir>/_transformed/<name>``: it is
-    scratch, and deleting it is the caller's, since only the caller knows
-    whether anything else still needs to read it.
-    """
     out_dir = Path(out_dir).expanduser()
     dataset_dir = resolve_dataset_dir(spec, revision=revision)
     name = dataset_name(dataset_dir)
@@ -173,11 +119,6 @@ def preprocess_one_legacy(
     private: bool,
     revision: str | None,
 ) -> Path:
-    """Legacy variant of :func:`rt.preprocess._preprocess.preprocess_one`: resolve the
-    dataset, apply the RT-v1 boolean transform, run the regular rustler `pre` +
-    embedding pipeline, and (optionally) upload under ``legacy/<name>`` of
-    ``upload_repo``."""
-
     out_dir = Path(out_dir).expanduser()
     pre_dataset_dir = rustler_one_legacy(spec, out_dir, revision=revision)
     name = pre_dataset_dir.name

@@ -1,12 +1,3 @@
-"""Collect the 21 per-task tuning.json files into tuned_configs.json.
-
-Refuses to run on an incomplete grid. The output is committed beside this
-file: it is what the enscurve tuned arm, the default-vs-tuned table, and the
-leaderboard top-4 ensemble read, and regenerating it costs the whole grid.
-
-    pixi run python -m expts.repaper.tune.collect
-"""
-
 import ast
 import json
 from pathlib import Path
@@ -14,8 +5,8 @@ from pathlib import Path
 from expts.repaper.config import CKPT_ROOT, PRE_DIR, project
 
 PROJECT = project("tune")
-N_TOP = 4  # configs the leaderboard ensemble keeps per task
-N_CFGS = 120  # every job must have scored the whole grid
+N_TOP = 4
+N_CFGS = 120
 
 
 def main() -> None:
@@ -36,11 +27,11 @@ def main() -> None:
         )
         assert path.exists(), f"missing {path}; the grid is not finished"
         rec = json.loads(path.read_text())[f"{db}/{table}"]
-        scores = rec["val_scores"]  # str((ctx, lcs, bw, pl)) -> value
+        scores = rec["val_scores"]
         assert len(scores) == N_CFGS, (
             f"{db}/{table}: {len(scores)} configs scored, expected {N_CFGS}"
         )
-        reverse = rec["task_type"] == "clf"  # higher auroc / lower mae
+        reverse = rec["task_type"] == "clf"
         ranked = sorted(
             scores.items(), key=lambda kv: (-kv[1] if reverse else kv[1], kv[0])
         )

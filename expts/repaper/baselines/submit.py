@@ -1,5 +1,3 @@
-"""Submit featurization jobs. See README.md for the order of operations."""
-
 import json
 from pathlib import Path
 
@@ -24,9 +22,6 @@ LOG_ROOT = f"{LOG_ROOT}/repaper/baselines/slurm-logs"
 PAIRS = [tuple(p) for p in json.loads(Path(DB_TASK_LIST).read_text())]
 DBS = sorted({db for db, _ in PAIRS})
 
-# Task types, needed by the rdblearn featurizer's base-estimator choice. Kept
-# here rather than resolved from meta.json so this file submits without the
-# default environment's data helpers.
 CLF = {
     ("rel-amazon", "item-churn"),
     ("rel-amazon", "user-churn"),
@@ -42,15 +37,9 @@ CLF = {
     ("rel-trial", "study-outcome"),
 }
 
-# The whole database sits in DuckDB / DFS working memory, so memory follows
-# the database, not the task.
 MEM = {
     "rel-amazon": "250G",
     "rel-avito": "64G",
-    # rel-event's DFS working set far outgrows its on-disk size (48G and 150G
-    # jobs were OOM-killed): wide attendee tables fan out under depth-2
-    # aggregation. 400G fits only the big-memory nodes (hyperturing/rambo
-    # class), which zero-gres jobs reach.
     "rel-event": "400G",
     "rel-f1": "16G",
     "rel-hm": "150G",
@@ -59,11 +48,6 @@ MEM = {
 }
 
 
-# Zero-GPU jobs on the il partition under il-lo: the cpu-only partition
-# (il-cpu) admits only the il-cpu-long QOS, whose whole 8-cpu per-user budget
-# the standing dev-node allocation already holds. turing3/hyperion cpus are
-# idle and their cards are too old for anything else, so taking cpus there
-# starves nothing.
 def cpu_resources(mem: str, cpus: int) -> Resources:
     return Resources(
         partition="il",
@@ -140,8 +124,6 @@ def submit_rdblearn() -> None:
 
 
 def submit_rt(dbs=None) -> None:
-    # One GPU per db; needs the default environment (the RT model), not the
-    # featurize one.
     for db in dbs or DBS:
         submit(
             "expts.repaper.baselines.featurize_rt:featurize_db",
@@ -168,7 +150,6 @@ def submit_rt(dbs=None) -> None:
                 cpus_per_task=8,
                 ntasks=None,
                 exclusive=False,
-                # the ampere job_submit plugin caps a 1-gpu job at 252154M
                 mem=min(MEM[db], "240G", key=lambda m: int(m.rstrip("G"))),
                 mem_per_gpu=None,
                 constraint="ampere",
@@ -182,7 +163,6 @@ def submit_rt(dbs=None) -> None:
 
 
 def submit_vecdb(subdirs) -> None:
-    # CPU index build over the finished feature blobs, one job per feature set.
     for subdir, root in [
         ("rdblearn_features", f"{SHARE}/vector_db/rdblearn"),
         ("rt_features", f"{SHARE}/vector_db/rt"),
@@ -207,14 +187,6 @@ def submit_vecdb(subdirs) -> None:
 
 
 if __name__ == "__main__":
-    # Stage 1 (featurize env, cpu jobs): the two classic-relbench featurizers.
-    # Stage 2 (default env, one a100 per db): RT row embeddings -- needs only
-    # the checkpoint, so it runs alongside stage 1. Every job no-ops on a table
-    # whose blob exists, so resubmitting fills gaps (and a new checkpoint
-    # means deleting the rt_features / vector_db/rt trees first; ../README.md).
     submit_sql()
     submit_rdblearn()
     submit_rt()
-    # Stage 3, once a feature set has all 21 *_meta.json files:
-    # submit_vecdb(["rdblearn_features"])
-    # submit_vecdb(["rt_features"])

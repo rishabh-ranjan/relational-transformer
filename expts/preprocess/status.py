@@ -1,18 +1,3 @@
-"""Where the sweep is, and when it will finish.
-
-    pixi run python expts/preprocess/status.py
-    watch -n60 pixi run python expts/preprocess/status.py
-
-Progress is measured in estimated *seconds of work*, per stage, from the two
-sizes in `sizes.py` -- counting databases would say a sweep was 97% done with a
-quarter of the work left. A database counts twice, once as each stage finishes,
-so progress moves with the work rather than jumping when a database completes.
-
-The rate comes from samples this script leaves in `progress.jsonl` next to the
-job logs, so an ETA is available from the second invocation onward and does not
-assume the sweep started when you happened to look.
-"""
-
 import json
 import subprocess
 import sys
@@ -35,20 +20,11 @@ from expts.preprocess.submit import (  # noqa: E402
     load_sizes,
 )
 
-# Only rate samples inside this window are used, so an ETA reflects how the
-# sweep is going now rather than averaging in a slow start or a stall.
 WINDOW = timedelta(hours=1)
 
-# Measured on the Join: rustler is single-threaded and tracks output size; the
-# embedding stage tracks text.json and, on six GPUs, runs about four times a
-# single card. Only their ratio matters here -- the ETA divides by the rate it
-# observes -- so these being a little stale costs nothing.
 RUSTLER_S_PER_GIB_OUT = 21
 EMBED_S_PER_GIB_TEXT = 2424 / 4.1
 
-# Bumped when what a sample counts changes, so old records are ignored rather
-# than differenced against new ones -- a rate computed across a unit change
-# reads as the sweep finishing in seconds, or never.
 SAMPLE_UNIT = "job-seconds-v1"
 
 
@@ -56,9 +32,6 @@ def gib(n: float) -> str:
     return f"{n / 2**30:,.1f} GiB"
 
 
-# Both stages, because a database is "being worked on" in either. Reading one
-# prefix only reports a database whose embed job is running as a failure, on the
-# strength of a superseded rustler job.
 STAGES = ("pre-", "emb-")
 
 
@@ -135,17 +108,6 @@ def _queued() -> set[str]:
 
 
 def stuck(names: set[str], done: set[str], limit: int = 8) -> list[str]:
-    """Databases of *this collection* whose last attempt failed unretried.
-
-    Not "jobs that failed today": a database that failed, was resubmitted and
-    succeeded would be reported as broken forever, which trains you to ignore
-    the line. What matters is whether it is finished or on its way -- a failure
-    with a successful retry behind it is not a problem.
-
-    And not other collections' jobs: they share a job-name prefix, so a failure
-    from a different sweep would otherwise be reported here as this one's, with
-    no way to act on it.
-    """
     out = subprocess.run(
         [
             "sacct",
@@ -181,7 +143,6 @@ def stuck(names: set[str], done: set[str], limit: int = 8) -> list[str]:
             "SUSPENDED",
         }:
             bad.append(f"{db}: {state}")
-    # A database is stuck once, however many attempts it took to get there.
     seen, unique = set(), []
     for entry in reversed(bad):
         db = entry.split(":", 1)[0]
@@ -191,14 +152,10 @@ def stuck(names: set[str], done: set[str], limit: int = 8) -> list[str]:
     return unique[:limit]
 
 
-# An ETA from one or two finished databases is arithmetic, not information:
-# extrapolating the first minutes of a sweep whose work spans three orders of
-# magnitude gives answers off by weeks. Say so instead.
 MIN_COMPLETIONS = 5
 
 
 def sample(done_bytes: int, done_count: int) -> tuple[float, int, int] | None:
-    """Append a sample; return the oldest one inside the window, if any."""
     now = time.time()
     SAMPLES = Path(LOG_ROOT).expanduser() / "progress.jsonl"
     SAMPLES.parent.mkdir(parents=True, exist_ok=True)
@@ -224,36 +181,19 @@ def sample(done_bytes: int, done_count: int) -> tuple[float, int, int] | None:
 
 
 def databases() -> list[str]:
-    """Every database the build will contain, downloaded yet or not.
-
-    Taken from the source repo rather than from what has landed locally: while
-    the download is still running, a local count makes the total grow under you
-    and the percentage go backwards.
-
-    A database is a top-level directory with a manifest.yaml in it -- the same
-    rule the local scan uses. Not "every top-level directory": the raw repos
-    also carry a STATS/ catalogue, which is not a database and would be counted
-    as one.
-    """
     try:
         return sorted(
             f.split("/", 1)[0]
             for f in HfApi().list_repo_files(SOURCE_REPO, repo_type="dataset")
             if f.endswith("/manifest.yaml") and f.count("/") == 1
         )
-    except Exception:  # offline: fall back to what is on disk
+    except Exception:
         return sorted(
             p.parent.name for p in Path(RAW_DIR).expanduser().glob("*/manifest.yaml")
         )
 
 
 def cost(names: list[str]) -> dict[str, tuple[float, float]]:
-    """database -> (rustler seconds, embed seconds), estimated.
-
-    Text bytes come from the previous build until this one has written its own;
-    once `text.json` exists it is the real thing rather than a prediction, which
-    matters because the prediction is the weaker of the two.
-    """
     sizes, out = load_sizes(), Path(OUT_DIR).expanduser()
     known_out = sorted(v.get("out", 0) for v in sizes.values())
     known_text = sorted(v.get("text", 0) for v in sizes.values())

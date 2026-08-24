@@ -1,5 +1,3 @@
-"""Evaluation: shared Evaluator kernel, metrics, relbench scoring, drivers."""
-
 from rt.eval.evaluator import Evaluator
 from rt.eval._eval import (
     build_evaluator,

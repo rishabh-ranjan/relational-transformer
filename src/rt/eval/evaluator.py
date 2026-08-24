@@ -1,6 +1,3 @@
-"""Evaluator: the shared per-(task, ctx_size) eval kernel used by standalone
-eval and by in-loop training eval (rank-aware under DDP)."""
-
 import time
 
 import torch
@@ -13,17 +10,6 @@ from rt.model.net import SEM_TYPE_BOOLEAN
 
 
 class Evaluator:
-    """Standard per-task eval over a fixed task list.
-
-    Build once with sampler/loader knobs; call ``evaluate_raw`` one or
-    more times. Re-using an instance across
-    eval points reuses prefetch state and avoids loader rebuild —
-    important for the in-loop training eval.
-
-    Synthetic-DB tasks (``"synthetic" in db_name``) are dropped at
-    construction; they were never evaluated by the inline path either.
-    """
-
     def __init__(
         self,
         *,
@@ -71,8 +57,6 @@ class Evaluator:
 
         init_tic = time.time()
         prefetch_time = 0.0
-        # items the eval actually reads, summed over tasks: what a split's size
-        # became after items_per_task capped it.
         total_items = 0
 
         for eval_task in self.tasks:
@@ -113,10 +97,6 @@ class Evaluator:
                 prefetch_factor=prefetch_factor if num_workers > 0 else None,
                 persistent_workers=persistent_workers,
                 pin_memory=True,
-                # in_order=True guarantees sampler-order yields; with False the
-                # row order is worker-completion order — a timing race that breaks
-                # cross-seed prediction averaging (context ensembling) on rows
-                # written by eval_grid.
                 in_order=True,
             )
             _prefetch_tic = time.time()
@@ -131,24 +111,6 @@ class Evaluator:
             )
 
     def mem_guard(self, nets):
-        """Allocate what a real eval allocates, as cheaply as possible, so a run
-        that cannot afford its evals finds out now rather than at the next
-        ``eval_freq`` boundary. Nothing is scored and nothing is logged.
-
-        Cut to the minimum that still reaches the peak:
-
-        - **one batch, one task.** The footprint is set by shape, not data --
-          ``eval_bs`` rows at the largest ctx size -- so every task and every
-          batch reaches the same peak.
-        - **the largest ctx size only.** ``predict`` walks the whole list, and
-          the smaller entries cost time without ever being the high-water mark.
-        - **every net the real eval runs**, though: the live net and the SWA net
-          are separately compiled modules, so their workspaces are separate
-          allocations and only running both accounts for both.
-
-        The batch is already prefetched by the persistent workers, so the cost
-        is the forwards themselves.
-        """
         if not self.eval_loader_iters:
             return
         eval_task = next(iter(self.eval_loader_iters))
@@ -160,9 +122,6 @@ class Evaluator:
                 net.eval()
                 net.predict(batch, [max(self.ctx_size_list)], self.device, eval_task)
         del batch
-        # Every rank drives a fixed batch count per task, so the batch consumed
-        # here has to be put back or the ranks desync at the first real eval.
-        # With persistent workers a fresh iterator forks nothing.
         self.eval_loader_iters[eval_task] = iter(self.eval_loaders[eval_task])
         for net, was_training in zip(nets, modes, strict=True):
             net.train(was_training)
@@ -170,36 +129,6 @@ class Evaluator:
     def evaluate_raw(
         self, nets_with_prefix, eval_ctx_size_list_to_use, with_node_idxs=False
     ):
-        """Per-task pipeline primitive.
-
-        Drives per-batch forward + DDP gather + ``batch_mask`` filtering
-        for every task. Yields one tuple per ``(task, ctx_size)`` on
-        rank 0::
-
-            (task, ctx_size, labels_np, preds_by_prefix_np, num_labels_np)
-
-        - ``labels_np``: ``(n_real,)`` per-row labels.
-        - ``preds_by_prefix_np``: dict ``prefix → (n_real,) preds``,
-          one entry per ``(net, prefix)`` in ``nets_with_prefix``.
-        - ``num_labels_np``: ``(n_real,) int64`` per-row count of
-          in-context training labels for that row's target column at
-          ``ctx_size`` (the ``mean_labels`` source data).
-
-        ``n_real`` is the number of real (non-phantom) rows across all
-        ranks for that task — already filtered by ``batch_mask``.
-
-        With ``with_node_idxs=True`` a sixth element ``node_idxs_np`` is
-        appended to the yielded tuple: the ``(n_real,) int64`` global
-        rustler node index of each row's *seed* (target) node. Because
-        rustler assigns a task row the node index ``node_idx_offset + r``
-        (``r`` the 0-based row index in the relbench task-table parquet),
-        ``node_idx - node_idx_offset`` recovers the exact parquet row, which
-        is how :mod:`rt.eval` keys predictions back to the relbench
-        ``(entity_col, time_col)`` for a leaderboard submission (eval row
-        order is *not* the parquet row order, so a positional join is wrong).
-
-        Other ranks drive every collective but yield nothing.
-        """
         device = self.device
         ddp = self.ddp
         world_size = self.world_size
@@ -208,19 +137,17 @@ class Evaluator:
         for net, _ in nets_with_prefix:
             net.eval()
 
+        t_load = t_predict = t_gather = t_post = 0.0
+        t_call = time.perf_counter()
+
+        def _sync():
+            if device.startswith("cuda"):
+                torch.cuda.synchronize(device)
+
         with torch.inference_mode():
             for eval_task, eval_loader_iter in self.eval_loader_iters.items():
                 eval_loader = self.eval_loaders[eval_task]
 
-                # The number of eval batches per task MUST be identical on every
-                # rank, or NCCL deadlocks (ranks issue a different number of
-                # collective calls). ``len(eval_loader.dataset)`` is
-                # ``ceil(num_items / (eval_bs * world_size))`` -- uniform across
-                # ranks (``num_items`` is the task's total item count, not a
-                # per-rank count), and the rustler sampler fills any overshoot
-                # slots as phantoms (batch_mask[i]=False). ``items_per_task``
-                # only caps how many batches we bother running; the cap is the
-                # same integer on every rank, so it never desyncs the schedule.
                 n_batches = len(eval_loader.dataset)
                 if self.items_per_task is not None:
                     n_batches = min(
@@ -236,20 +163,13 @@ class Evaluator:
                 labels = []
                 batch_masks = []
                 node_idxs_acc = []
-                # Drive the loop by the fixed, cross-rank-uniform batch count.
-                # Every rank processes exactly ``n_batches`` batches (each of
-                # ``eval_bs`` rows, phantom-padded as needed), so every rank
-                # contributes exactly ``n_batches * eval_bs`` rows to every
-                # collective below -- no StopIteration / local-count breaks.
                 for _ in range(n_batches):
+                    _t = time.perf_counter()
                     batch = next(eval_loader_iter)
+                    t_load += time.perf_counter() - _t
 
                     batch_mask = batch.pop("batch_mask")
 
-                    # Per-row in-context training-label count for the
-                    # target column, for each requested ctx_size. Gathered
-                    # and masked alongside labels/preds so the eventual
-                    # mean_labels stat is uniform over real items.
                     for eval_ctx_size in eval_ctx_size_list_to_use:
                         tb = {k: v[:, :eval_ctx_size] for k, v in batch.items()}
                         tb_is_targets = tb["is_targets"]
@@ -276,6 +196,7 @@ class Evaluator:
                             is_label_cell.sum(dim=1).to(torch.int64)
                         )
 
+                    _t = time.perf_counter()
                     for net, prefix in nets_with_prefix:
                         preds_by_ctx = net.predict(
                             batch,
@@ -286,12 +207,9 @@ class Evaluator:
                         for ctx_size, yhat in preds_by_ctx.items():
                             assert yhat.size(0) == batch_mask.size(0)
                             preds_per_prefix_per_ctx[prefix][ctx_size].append(yhat)
+                    _sync()
+                    t_predict += time.perf_counter() - _t
 
-                    # Read the label from the channel its semantic type names:
-                    # Boolean-typed targets (legacy-preprocessed data) live in
-                    # boolean_values, everything else in number_values. The
-                    # stored value is the same either way, so this needs no
-                    # knowledge of which net is being evaluated.
                     vals = torch.where(
                         (batch["sem_types"] == SEM_TYPE_BOOLEAN).unsqueeze(-1),
                         batch["boolean_values"],
@@ -302,9 +220,6 @@ class Evaluator:
                     labels.append(y)
                     batch_masks.append(batch_mask)
                     if with_node_idxs:
-                        # Seed (target) node's global rustler index per row. Exactly
-                        # one target cell per real row, so the masked sum picks it
-                        # out; phantom rows have no target → 0, dropped by batch_mask.
                         nidx = (
                             batch["node_idxs"].to(torch.int64)
                             * batch["is_targets"].to(torch.int64)
@@ -312,14 +227,9 @@ class Evaluator:
                         assert nidx.size(0) == batch_mask.size(0)
                         node_idxs_acc.append(nidx)
 
-                # prefetch next pass while we run gather + metric compute.
                 self.eval_loader_iters[eval_task] = iter(eval_loader)
 
-                # Every rank ran exactly ``n_batches`` batches of ``eval_bs``
-                # rows, so ``labels_cat`` has the same length on every rank and
-                # the all_gathers are inherently in lockstep -- no cross-rank
-                # MIN reduce or truncation needed. Phantom rows are filtered out
-                # via ``masks_gathered`` on rank 0 after the gather.
+                _t = time.perf_counter()
                 labels_cat = torch.cat(labels, dim=0).to(device)
                 masks_cat = torch.cat(batch_masks, dim=0).to(device)
                 if ddp:
@@ -339,6 +249,9 @@ class Evaluator:
                     labels_gathered = labels_cat
                     masks_gathered = masks_cat
 
+                _sync()
+                t_gather += time.perf_counter() - _t
+                _t = time.perf_counter()
                 if global_rank == 0:
                     labels_np = labels_gathered[masks_gathered].float().cpu().numpy()
 
@@ -403,3 +316,14 @@ class Evaluator:
                         if with_node_idxs:
                             out = out + (node_idxs_np,)
                         yield out
+                t_post += time.perf_counter() - _t
+
+        if self.local_rank == 0:
+            log(
+                eval_phase_secs=1,
+                total=f"{time.perf_counter() - t_call:.0f}",
+                load=f"{t_load:.0f}",
+                predict=f"{t_predict:.0f}",
+                gather=f"{t_gather:.0f}",
+                post=f"{t_post:.0f}",
+            )

@@ -1,12 +1,3 @@
-"""Submit the tuned arm of the default-vs-tuned table: one job per task.
-
-The table compares the shared default context (8192, 256, 32, pl=1) against
-each task's tuned configuration on the 8192-row test subsample at a single
-context seed. The default column is the `subsampled/rt` arm of
-``../scaling`` (identical protocol); only the tuned runs live here,
-through the same runner.
-"""
-
 import json
 from pathlib import Path
 

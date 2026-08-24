@@ -1,7 +1,3 @@
-"""Run the smoke example, so a broken training path fails in CI rather than on
-the cluster. Skipped without a GPU: the model's attention has no CPU backward.
-"""
-
 from datetime import datetime
 from pathlib import Path
 

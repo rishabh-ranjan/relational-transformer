@@ -1,24 +1,9 @@
-"""Pretrain a Relational Transformer on the Join -- the released RT-J recipe.
-
-There is no CLI: copy this file, change what you want, run it. The arguments
-here are the ones the released runs used; ``rt.train._train`` requires all of
-them, so nothing is hidden in a default you did not choose.
-
-    pixi run python examples/train.py                      # one process
-    srun --ntasks-per-node=8 pixi run python examples/train.py   # DDP, one rank per GPU
-
-Data is a local directory -- download it first (see docs/downloads.md). For
-running this on a cluster without writing any slurm boilerplate, see
-roach.slurm.submit and expts/fine_tune/submit.py.
-"""
-
 from datetime import datetime
 from rt.train import main
 
 
 def train(pre_dir: str, eval_pre_dir: str, out_root: str, run_id: str) -> None:
     main(
-        # model (RT-J dims)
         embedder="all-MiniLM-L12-v2",
         d_text=384,
         num_blocks=12,
@@ -29,7 +14,6 @@ def train(pre_dir: str, eval_pre_dir: str, out_root: str, run_id: str) -> None:
         materialize_attn_masks=True,
         loss_fn="huber",
         load_ckpt_path=None,
-        # data + optimization
         db_task_list=f"{pre_dir}/db-task-lists/rt-j.json",
         train_splits=["train"],
         pre_dir=pre_dir,
@@ -65,7 +49,6 @@ def train(pre_dir: str, eval_pre_dir: str, out_root: str, run_id: str) -> None:
         vector_db_path=None,
         db_cutoff=None,
         resume_save_mins=20.0,
-        # in-loop validation on RelBench
         eval_splits=["val"],
         eval_db_task_list=f"{eval_pre_dir}/db-task-lists/forecast.json",
         eval_pre_dir=eval_pre_dir,
@@ -82,8 +65,6 @@ def train(pre_dir: str, eval_pre_dir: str, out_root: str, run_id: str) -> None:
         eval_ensemble_size=1,
         eval_vector_db_path=None,
         eval_lcs_bw_pl_grid=[(256, 32, True)],
-        # logging: the run id names the output directory and the wandb run, and
-        # reusing it is how a preempted run resumes
         run_id=run_id,
         targets={},
         project="rt-train",

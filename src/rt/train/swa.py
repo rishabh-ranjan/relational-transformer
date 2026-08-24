@@ -1,41 +1,14 @@
-"""Stochastic weight averaging over training parameters, backed by an fp32
-shadow copy (used in-loop by rt.train)."""
-
 import torch
 
 
 class SwaState:
-    """Equal-weight or EMA running average of a fixed set of named tensors.
-
-    Backed by an fp32 dict of clones; updates are in-place via
-    ``lerp_``. The averaging weight schedule depends on ``momentum``:
-
-    - ``1.0``: equal-weight averaging (``alpha = 1/n``). After ``k``
-      updates, ``params[name]`` equals the arithmetic mean of the
-      ``k`` inputs.
-    - ``< 1.0``: bias-corrected EMA (``alpha = (1-m) / (1-m^n)``).
-      First update has ``alpha=1.0``, asymptotes to ``1-m`` as ``n``
-      grows.
-
-    Used from training (``rt.train``: in-loop SWA over ``raw_net``
-    parameters).
-    """
-
     def __init__(self, named_tensors, momentum):
-        """``named_tensors``: iterable of ``(name, tensor)`` pairs. The
-        fp32 storage is allocated as clones on the source tensors'
-        devices. The first ``update`` sets them exactly (``alpha=1.0``),
-        so the clones are only ever read at ``n == 0`` — construct from
-        the tensors the average is meant to start at, not from whatever
-        a later load will put there."""
         self.momentum = momentum
         self.params = {name: t.detach().float().clone() for name, t in named_tensors}
         self.n = 0
 
     @torch.no_grad()
     def update(self, named_tensors):
-        """Add one snapshot to the running average. Source key set must
-        equal the stored key set."""
         self.n += 1
         if self.momentum == 1.0:
             alpha = 1.0 / self.n
@@ -52,7 +25,6 @@ class SwaState:
             target.lerp_(src[name].float(), alpha)
 
     def state_dict(self):
-        """CPU-serializable snapshot for training resume."""
         return {
             "momentum": self.momentum,
             "n": self.n,
@@ -75,8 +47,6 @@ class SwaState:
 
     @torch.no_grad()
     def sync_to(self, named_tensors):
-        """Copy the running average into the target tensors in-place.
-        Target key set must equal the stored key set."""
         dst = dict(named_tensors)
         assert dst.keys() == self.params.keys(), (
             f"key mismatch:"

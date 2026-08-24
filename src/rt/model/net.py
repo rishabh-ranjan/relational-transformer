@@ -62,11 +62,6 @@ class MaskedAttention(nn.Module):
         q = self.q_norm(q)
         k = self.k_norm(k)
 
-        # clamp_min(1) so kv_size=0 (queries with all-masked keys) gives
-        # log(1)=0 instead of log(1e-6)=-13.8. flex_attention already
-        # zeros the output for fully-masked queries; this just removes
-        # the wrong-sign numerical hazard on q for those rows. Has no
-        # effect when kv_size >= 1.
         q = (
             q
             * self.scale
@@ -155,25 +150,16 @@ def _make_block_mask(mask, batch_size, q_seq_len, kv_seq_len, device):
 
 
 def _kv_sizes(node_idxs, f2p_nbr_idxs, col_name_idxs, table_name_idxs, is_padding):
-    # Exact per-query key counts for the three attention types, computed without
-    # ever materializing a (B, S, S) tensor. Peak memory is O(B*S*F).
-    #
-    # Strategy: per batch row, sort the relevant key tensors and look up counts
-    # via searchsorted (count of value v in sorted list = upper - lower bound).
     B, S = node_idxs.shape
     Fnbr = f2p_nbr_idxs.shape[-1]
     INT64_MAX = torch.iinfo(torch.int64).max
-    SENTINEL = INT64_MAX  # padding/invalid keys are shifted past any real value
+    SENTINEL = INT64_MAX
 
-    not_pad = (~is_padding).long()  # (B, S)
+    not_pad = (~is_padding).long()
 
-    # Sorted node ids per batch row, with padding tokens shifted to the sentinel
-    # so they never match a real query.
     node_sortable = node_idxs.to(torch.int64).masked_fill(is_padding, SENTINEL)
-    sorted_nodes, _ = node_sortable.sort(dim=-1)  # (B, S)
+    sorted_nodes, _ = node_sortable.sort(dim=-1)
 
-    # ---- col: kv tokens with the same (col_name_idxs, table_name_idxs) and not padding.
-    # Pack (col, table) into one 64-bit key; both indices are small non-negative vocab ids.
     combined = col_name_idxs.to(torch.int64) * (1 << 32) + table_name_idxs.to(
         torch.int64
     )
@@ -183,12 +169,9 @@ def _kv_sizes(node_idxs, f2p_nbr_idxs, col_name_idxs, table_name_idxs, is_paddin
     hi_c = torch.searchsorted(sorted_combined, combined_q, side="right")
     col_count = (hi_c - lo_c) * not_pad
 
-    # ---- feat: kv tokens whose node id is in {node[q]} ∪ f2p_nbr_idxs[q,:], not padding.
-    # Build the candidate set per query, dedupe via sort+is_first, then sum counts of each
-    # unique non-(-1) candidate looked up in sorted_nodes.
     candidates = torch.cat([node_idxs.unsqueeze(-1), f2p_nbr_idxs], dim=-1).to(
         torch.int64
-    )  # (B, S, F+1)
+    )
     sorted_cand, _ = candidates.sort(dim=-1)
     is_first = torch.cat(
         [
@@ -197,7 +180,7 @@ def _kv_sizes(node_idxs, f2p_nbr_idxs, col_name_idxs, table_name_idxs, is_paddin
         ],
         dim=-1,
     )
-    keep = is_first & (sorted_cand >= 0)  # exclude -1 (no neighbor) sentinels
+    keep = is_first & (sorted_cand >= 0)
     sorted_cand_flat = sorted_cand.reshape(B, S * (Fnbr + 1))
     lo_f = torch.searchsorted(sorted_nodes, sorted_cand_flat, side="left").view(
         B, S, Fnbr + 1
@@ -207,10 +190,7 @@ def _kv_sizes(node_idxs, f2p_nbr_idxs, col_name_idxs, table_name_idxs, is_paddin
     )
     feat_count = ((hi_f - lo_f) * keep.long()).sum(-1) * not_pad
 
-    # ---- nbr: kv tokens whose f2p list contains node[q], not padding.
-    # Build a per-batch flat list of unique non-(-1) f2p values from non-padding kv,
-    # sort it, then look up node[q] counts.
-    sorted_f, _ = f2p_nbr_idxs.to(torch.int64).sort(dim=-1)  # (B, S, F)
+    sorted_f, _ = f2p_nbr_idxs.to(torch.int64).sort(dim=-1)
     is_first_f = torch.cat(
         [
             torch.ones_like(sorted_f[..., :1], dtype=torch.bool),
@@ -236,7 +216,6 @@ def _kv_sizes(node_idxs, f2p_nbr_idxs, col_name_idxs, table_name_idxs, is_paddin
 
 SEM_TYPE_NAMES = ["number", "text", "datetime", "boolean"]
 
-# Indices into SEM_TYPE_NAMES; must match rustler's SemType discriminants.
 SEM_TYPE_NUMBER = SEM_TYPE_NAMES.index("number")
 SEM_TYPE_BOOLEAN = SEM_TYPE_NAMES.index("boolean")
 
@@ -298,7 +277,6 @@ class RelationalTransformer(nn.Module):
         self.norm_out = RMSNorm(d_model, eps=1e-6)
         self.d_model = d_model
 
-        # zero-init output weights
         for module in self.dec_dict.values():
             nn.init.zeros_(module.weight)
             nn.init.zeros_(module.bias)
@@ -317,26 +295,6 @@ class RelationalTransformer(nn.Module):
         subfolder: str | None = None,
         **model_kwargs,
     ):
-        """Load a pretrained RT model from a local path *or* the HuggingFace Hub.
-
-        ``model_id_or_path`` may be a Hub repo (``org/repo[/subdir]``), a local
-        checkpoint directory, or a local weights file; a sibling ``config.json``
-        supplies the model dims and the text-embedding model. A Hub reference is
-        downloaded and cached on demand; a local path is used as-is and never
-        triggers a download. ``subfolder`` selects a sub-directory within the
-        repo/directory (the HuggingFace-idiomatic way to pick one of several
-        checkpoints; equivalent to appending it to ``model_id_or_path``). Extra
-        keyword args fill/override model dims for checkpoints that ship without a
-        ``config.json``.
-
-        Returns the model, moved to ``device``, with its resolved ``config`` dict
-        attached as ``model.config``.
-
-            model = RelationalTransformer.from_pretrained("stanford-star/rt-j", subfolder="classification")
-            model = RelationalTransformer.from_pretrained("stanford-star/rt-j/classification")
-            model = RelationalTransformer.from_pretrained("/path/to/checkpoint")
-        """
-
         config, model_path = resolve_checkpoint(
             model_id_or_path, revision=revision, subfolder=subfolder
         )
@@ -355,8 +313,6 @@ class RelationalTransformer(nn.Module):
             num_heads=m["num_heads"],
             d_ff=m["d_ff"],
             compile=compile,
-            # materialized masks are O(ctx^2) memory; RT_MATERIALIZE_ATTN_MASKS=0
-            # forces the flex-attention path for long-ctx (>=16k) inference.
             materialize_attn_masks=(
                 False
                 if os.environ.get("RT_MATERIALIZE_ATTN_MASKS", "") == "0"
@@ -378,7 +334,6 @@ class RelationalTransformer(nn.Module):
         batch_size, seq_len = node_idxs.shape
         device = node_idxs.device
 
-        # Sort cells by column index (padding stays at end)
         sort_keys = col_name_idxs.masked_fill(
             is_padding, torch.iinfo(col_name_idxs.dtype).max
         )
@@ -399,11 +354,6 @@ class RelationalTransformer(nn.Module):
             k = t + "_values"
             type_values[t] = batch[k].gather(1, si.expand_as(batch[k]))
 
-        # Boolean cells take the numeric path: their stored value is already a
-        # z-scored 0/1, so re-typing them as Number lets one head cover both.
-        # This net has no trained boolean head -- every checkpoint was fit with
-        # the fold in place. The legacy RT-v1 / PluRel nets do keep Boolean as a
-        # real type (BCE head), which is why they do not do this.
         is_bool = (sem_types == SEM_TYPE_BOOLEAN).unsqueeze(-1)
         type_values["number"] = torch.where(
             is_bool, type_values["boolean"], type_values["number"]
@@ -418,7 +368,6 @@ class RelationalTransformer(nn.Module):
         )
 
         if self.materialize_attn_masks:
-            # Materialize (B, S, S) pairwise masks, then convert to block masks.
             pad = (~is_padding[:, :, None]) & (~is_padding[:, None, :])
             same_node = node_idxs[:, :, None] == node_idxs[:, None, :]
             kv_in_f2p = (
@@ -455,9 +404,6 @@ class RelationalTransformer(nn.Module):
                 for attn_type, attn_mask in attn_masks.items()
             }
         else:
-            # Build sparse block masks via flex_attention's mask_mod path: closures index
-            # into per-token tensors directly. create_block_mask samples mask_mod at block
-            # granularity, never materializing a (B, S, S) tensor.
             node_idxs_c = node_idxs.contiguous()
             f2p_nbr_idxs_c = f2p_nbr_idxs.contiguous()
             col_name_idxs_c = col_name_idxs.contiguous()
@@ -498,7 +444,6 @@ class RelationalTransformer(nn.Module):
                 "col": make_bm(col_mask_mod),
             }
 
-            # Exact per-query key counts, computed analytically without (B, S, S).
             kv_sizes = _kv_sizes(
                 node_idxs_c,
                 f2p_nbr_idxs_c,
@@ -514,9 +459,6 @@ class RelationalTransformer(nn.Module):
         )
 
         for i, t in enumerate(["number", "text", "datetime", "boolean"]):
-            # Missing/NaN cells never reach the model: `pre` emits no cell for
-            # them, and the sampler skips (with a warning) any that survive in
-            # legacy preprocessed data.
             t_values = type_values[t]
             x = x + (
                 self.norm_dict[t](self.enc_dict[t](t_values))
@@ -538,71 +480,48 @@ class RelationalTransformer(nn.Module):
         yhat_out = {"number": None, "text": None, "datetime": None, "boolean": None}
 
         B, S, _ = x.shape
-        masks = is_targets.bool()  # (B,S) where to train
+        masks = is_targets.bool()
 
         loss_per_seq = x.new_zeros(B)
         sem_type_names = ["number", "text", "datetime", "boolean"]
         sem_type_losses = {}
 
         for i, t in enumerate(sem_type_names):
-            yhat = self.dec_dict[t](x)  # (B,S, D_t)
-            y = type_values[t]  # (B,S, D_y)
-            sem_type_mask = (sem_types == i) & masks  # (B,S) mask for this type
+            yhat = self.dec_dict[t](x)
+            y = type_values[t]
+            sem_type_mask = (sem_types == i) & masks
 
             if t in ("number", "text", "datetime"):
                 if self.loss_fn == "huber":
-                    loss_t = F.huber_loss(yhat, y, reduction="none").mean(-1)  # (B, S)
+                    loss_t = F.huber_loss(yhat, y, reduction="none").mean(-1)
                 elif self.loss_fn == "l1":
-                    # No quadratic region: the gradient does not shrink as the
-                    # error does, and a target far from the prediction pulls in
-                    # proportion to how far it is rather than to its square.
-                    loss_t = F.l1_loss(yhat, y, reduction="none").mean(-1)  # (B, S)
+                    loss_t = F.l1_loss(yhat, y, reduction="none").mean(-1)
                 else:
-                    # `bce`: the head's output is a logit and the stored value
-                    # carries the label in its sign -- z-scored 0/1 targets come
-                    # out strictly positive/negative, and an exact 0 (no signed
-                    # label) is dropped from the mean rather than guessed at.
                     lab = (y > 0).to(yhat.dtype)
                     w = (y != 0).to(yhat.dtype)
                     bce = F.binary_cross_entropy_with_logits(
                         yhat, lab, reduction="none"
                     )
-                    loss_t = (bce * w).sum(-1) / w.sum(-1).clamp(min=1)  # (B, S)
+                    loss_t = (bce * w).sum(-1) / w.sum(-1).clamp(min=1)
             elif t == "boolean":
                 loss_t = F.binary_cross_entropy_with_logits(
                     yhat, (y > 0).float(), reduction="none"
-                ).mean(-1)  # (B, S)
+                ).mean(-1)
 
-            # Per-sem_type average loss (clamp avoids 0/0 when type is absent)
             n_tokens = sem_type_mask.sum()
             sem_type_losses[t] = (loss_t * sem_type_mask).sum() / n_tokens.clamp(min=1)
 
-            # Sum loss per sequence for this type
-            loss_per_seq = loss_per_seq + (loss_t * sem_type_mask).sum(dim=1)  # (B,)
+            loss_per_seq = loss_per_seq + (loss_t * sem_type_mask).sum(dim=1)
 
             yhat_out[t] = yhat
 
-        # Normalize by number of masks per sequence, then average across sequences
-        # clamp_min(1): a sequence with no target (eval's phantom rows) has a
-        # zero loss sum, and 0/1 keeps it finite instead of NaN.
-        masks_per_seq = masks.sum(dim=1).float().clamp_min(1.0)  # (B,)
-        loss_per_seq = loss_per_seq / masks_per_seq  # (B,)
-        loss_out = loss_per_seq.mean()  # scalar
+        masks_per_seq = masks.sum(dim=1).float().clamp_min(1.0)
+        loss_per_seq = loss_per_seq / masks_per_seq
+        loss_out = loss_per_seq.mean()
 
         return loss_out, yhat_out, sem_type_losses, is_targets
 
     def predict(self, batch, eval_ctx_size_list, device, task):
-        """Eval-mode predictions at multiple context sizes.
-
-        batch: dict of CPU tensors (B, S_max). ``task`` is unused here (kept
-        for signature parity with the legacy nets' ``predict``).
-        Returns dict mapping ctx_size → (B,) prediction tensor (CPU), with
-        one entry per batch row. Rows with no target (phantom rows from
-        last-batch overshoot, batch_mask=false) get 0.0; the caller filters
-        them out using batch_mask after gather.
-        """
-        # Boolean cells are folded into the number channel in forward, so every
-        # prediction -- clf included -- comes out of the number head.
         preds = {}
         for ctx_size in eval_ctx_size_list:
             trunc = {
@@ -610,10 +529,7 @@ class RelationalTransformer(nn.Module):
                 for k, v in batch.items()
             }
             _, yhat_dict, _, sorted_is_targets = self(trunc, return_embeddings=False)
-            # Each real row has exactly one target position (eval invariant).
-            # Collapse (B, S, 1) → (B,) by summing the per-row target entry.
-            # Phantom rows have no target → sum is 0, filtered by batch_mask.
-            yhat = yhat_dict["number"].squeeze(-1)  # (B, S)
+            yhat = yhat_dict["number"].squeeze(-1)
             preds[ctx_size] = (yhat * sorted_is_targets.to(yhat.dtype)).sum(dim=1).cpu()
         return preds
 
@@ -627,15 +543,6 @@ def load_rt_model(
     subfolder: str | None = None,
     model_kwargs: dict | None = None,
 ):
-    """Resolve a checkpoint, build the RelationalTransformer, load its weights.
-
-    Returns ``(model, config)``. Thin backward-compatible wrapper around
-    :meth:`rt.model.RelationalTransformer.from_pretrained` (the HuggingFace-style
-    entry point, which returns just the model with ``config`` attached as
-    ``model.config``). ``model_kwargs`` overrides/fills model dims when a
-    checkpoint has no ``config.json`` (e.g. a raw internal ckpt during dev).
-    """
-
     model = RelationalTransformer.from_pretrained(
         spec,
         device=device,

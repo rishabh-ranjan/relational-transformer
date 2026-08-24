@@ -1,5 +1,3 @@
-"""Relational Transformer architecture + checkpoint IO."""
-
 from rt.model.checkpoints import (
     CONFIG_FILE,
     MODEL_DIM_KEYS,

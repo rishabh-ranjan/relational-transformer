@@ -1,22 +1,3 @@
-"""Precompute RDBLearn DFS features for one task table.
-
-Fits an ``RDBLearnEstimator`` (fastdfs depth-2 DFS over the relational graph,
-per-row temporal cutoffs from the task's time column) on the task table and
-extracts its transformed DFS feature matrix for every row, written as:
-
-    <features_root>/<db>/rdblearn_features/<table>_vectors.bin  (row-major f32)
-    <features_root>/<db>/rdblearn_features/<table>_meta.json
-
-Task rows are read from the raw HF-format parquets (``raw_dir``) -- the exact
-rows, in the exact order, that the preprocessed data indexes -- so feature row
-``r`` is node ``min_offset + r`` by construction. The classic relbench package
-supplies only the database and the task metadata; ``check_alignment.py``
-proves the two sources carry the same rows and labels.
-
-Runs in the ``featurize`` pixi environment plus the ``install-rdblearn`` pixi
-task (rdblearn is installed --no-deps on top of it).
-"""
-
 import json
 import os
 import time
@@ -74,11 +55,6 @@ def featurize_table(
     )
 
     tic = time.time()
-    # fastdfs's RelBenchAdapter calls get_db() with no args; the full db (not
-    # truncated at the test timestamp) is what allows up-to-date rows in the
-    # context window, which matters for rel-f1 -- patch it for this call only.
-    # relbench's autocomplete tasks call ``get_db.cache_clear()`` (the original
-    # is lru_cached); the patch carries a no-op one, since it caches nothing.
     _orig_get_db = relbench.base.Dataset.get_db
 
     def _full_get_db(self, *a, **kw):

@@ -1,15 +1,3 @@
-"""SQL feature queries for relbench tasks.
-
-Each per-dataset module exports SQL constants that produce 8-12
-pre-normalized features per task, designed for few-shot linear prediction.
-
-Registry maps (dataset_short, task_name) -> {
-    "sql": SQL string for feature extraction,
-    "entity_col": entity column name,
-    "time_col": time column name,
-}
-"""
-
 from expts.repaper.baselines.sql_queries.rel_trial import (
     STUDY_OUTCOME_SQL,
     STUDY_ADVERSE_SQL,
@@ -47,7 +35,6 @@ from expts.repaper.baselines.sql_queries.rel_event import (
 )
 
 SQL_REGISTRY: dict[tuple[str, str], dict] = {
-    # rel-trial
     ("rel-trial", "study-outcome"): {
         "sql": STUDY_OUTCOME_SQL,
         "entity_col": "nct_id",
@@ -63,7 +50,6 @@ SQL_REGISTRY: dict[tuple[str, str], dict] = {
         "entity_col": "facility_id",
         "time_col": "timestamp",
     },
-    # rel-avito
     ("rel-avito", "user-visits"): {
         "sql": USER_VISITS_SQL,
         "entity_col": "UserID",
@@ -79,7 +65,6 @@ SQL_REGISTRY: dict[tuple[str, str], dict] = {
         "entity_col": "AdID",
         "time_col": "timestamp",
     },
-    # rel-f1
     ("rel-f1", "driver-position"): {
         "sql": DRIVER_POSITION_SQL,
         "entity_col": "driverId",
@@ -95,7 +80,6 @@ SQL_REGISTRY: dict[tuple[str, str], dict] = {
         "entity_col": "driverId",
         "time_col": "date",
     },
-    # rel-hm
     ("rel-hm", "user-churn"): {
         "sql": HM_USER_CHURN_SQL,
         "entity_col": "customer_id",
@@ -106,7 +90,6 @@ SQL_REGISTRY: dict[tuple[str, str], dict] = {
         "entity_col": "article_id",
         "time_col": "timestamp",
     },
-    # rel-stack
     ("rel-stack", "user-engagement"): {
         "sql": USER_ENGAGEMENT_SQL,
         "entity_col": "OwnerUserId",
@@ -122,7 +105,6 @@ SQL_REGISTRY: dict[tuple[str, str], dict] = {
         "entity_col": "UserId",
         "time_col": "timestamp",
     },
-    # rel-amazon
     ("rel-amazon", "user-churn"): {
         "sql": AMAZON_USER_CHURN_SQL,
         "entity_col": "customer_id",
@@ -143,7 +125,6 @@ SQL_REGISTRY: dict[tuple[str, str], dict] = {
         "entity_col": "product_id",
         "time_col": "timestamp",
     },
-    # rel-event
     ("rel-event", "user-attendance"): {
         "sql": USER_ATTENDANCE_SQL,
         "entity_col": "user",

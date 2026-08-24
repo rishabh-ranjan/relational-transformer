@@ -1,25 +1,3 @@
-"""Submit the pretraining ablations: 5 runs, each one knob off the base recipe.
-
-The base arm of both ablation figures is the released pretraining run itself
-(wandb rtv2/2026-08-07-pretrain, run rt-j): every argument here is that run's
-(see ../pretrain/submit.py) except the one being ablated, plus early stopping
-(10k-step patience on the in-loop val metric) so an arm stops spending nodes
-once its curve has flattened, and keep_all_ckpts=False (nothing selects a
-checkpoint from an ablation).
-
-Arms:
-  mask0 / mask25 / mask75    mask_prob_max in {0.0, 0.25, 0.75} (base: 0.5)
-  mix-forecast               trains on rt-j's forecast tasks only
-  mix-autocomplete           trains on rt-j's autocomplete tasks only
-
-The mix arms' task lists are the rt-j mixture intersected with the published
-forecast/autocomplete lists (3050 and 7765 of the 10815 pairs), written once
-to the shared repaper directory so compute nodes can read them.
-
-    pixi run python -m expts.repaper.pretrain_abl.submit           # new runs
-    pixi run python -m expts.repaper.pretrain_abl.submit <arm> <run_id>  # resume one
-"""
-
 import dataclasses
 import json
 import sys
@@ -52,8 +30,6 @@ EVAL_TASKS = [
 
 
 def mix_list(kind: str) -> str:
-    """Write (once) and return the path of the rt-j mixture filtered to one
-    task family."""
     out = Path(SHARE).expanduser() / "db-task-lists" / f"rt-j-{kind}.json"
     if not out.exists():
         base = Path(PRE_DIR_JOIN) / "db-task-lists"
@@ -80,7 +56,6 @@ def submit_arm(arm: str, run_id: str | None) -> None:
     submit(
         "rt.train:main",
         args=dict(
-            # model: RT-J's dims (verbatim from expts/pretrain/submit.py)
             embedder="all-MiniLM-L12-v2",
             d_text=384,
             num_blocks=12,
@@ -91,7 +66,6 @@ def submit_arm(arm: str, run_id: str | None) -> None:
             materialize_attn_masks=True,
             loss_fn="huber",
             load_ckpt_path=None,
-            # data: the Join's mixture
             db_task_list=f"{PRE_DIR_JOIN}/db-task-lists/rt-j.json",
             train_splits=["train"],
             pre_dir=PRE_DIR_JOIN,
@@ -107,7 +81,6 @@ def submit_arm(arm: str, run_id: str | None) -> None:
             walk_length=20,
             mask_prob_max=0.5,
             items_per_task=100_000,
-            # optimization
             delta_finetune=False,
             optimizer="muon",
             lr=5e-4,
@@ -117,8 +90,6 @@ def submit_arm(arm: str, run_id: str | None) -> None:
             grad_norm_max=1.0,
             total_bs=1024,
             total_steps=100_001,
-            # the one thing every arm adds over the base run: stop once the
-            # in-loop val metric has not improved for 10k steps.
             early_stop_after_steps=10_000,
             can_select_init_model=False,
             swa_momentum=0.9995,
@@ -128,13 +99,8 @@ def submit_arm(arm: str, run_id: str | None) -> None:
             eval_freq=1_000,
             keep_all_ckpts=False,
             vector_db_path=None,
-            # The base run predates the db_cutoff knob entirely (its commit's
-            # RustlerDataset had none), so no cutoff is what matches it --
-            # and "test" would resolve 475 Join sources through the Hub and
-            # crash on databases without a test timestamp.
             db_cutoff=None,
             resume_save_mins=20.0,
-            # in-loop validation: identical to the base run
             eval_splits=["val"],
             eval_db_task_list=EVAL_TASKS,
             eval_pre_dir=PRE_DIR,
@@ -151,7 +117,6 @@ def submit_arm(arm: str, run_id: str | None) -> None:
             eval_ensemble_size=1,
             eval_vector_db_path=None,
             eval_lcs_bw_pl_grid=[(256, 32, True)],
-            # logging
             targets={},
             project=project("pretrain-abl"),
             entity="rtv2",

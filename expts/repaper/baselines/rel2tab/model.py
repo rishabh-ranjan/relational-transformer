@@ -1,6 +1,3 @@
-"""Rel2TabModel: a (featurizer, predictor) pair behind the ``rt.eval``
-evaluator's model contract."""
-
 import time
 
 import torch
@@ -15,28 +12,12 @@ def _fmt(secs):
 
 
 class Rel2TabModel(nn.Module):
-    """Label-matched tabular baseline over RT's eval contexts.
-
-    ``predict(batch, eval_ctx_size_list, device, task)`` matches
-    ``rt.model.net.RelationalTransformer.predict``, so
-    ``rt.eval.evaluator.Evaluator.evaluate_raw`` drives it unchanged. For each
-    row it takes the task-table rows visible in the row's context at each
-    requested ctx-size prefix as the train set, features them, and predicts the
-    target -- so the baseline consumes exactly the labels RT saw.
-    """
-
     def __init__(self, featurizer, predictor):
         super().__init__()
         self.featurizer = featurizer
         self.predictor = predictor
 
     def _extract_task_nodes(self, batch):
-        """Unique task-node label cells across the batch.
-
-        Returns (item_idxs, positions, node_idxs, labels, is_target, f2ps), all
-        length-N 1-D tensors: one entry per cell of the target column on a task
-        node (the target cell itself included, flagged by ``is_target``).
-        """
         B = batch["is_targets"].shape[0]
         node_idxs = batch["node_idxs"]
         col_name_idxs = batch["col_name_idxs"]
@@ -62,8 +43,6 @@ class Rel2TabModel(nn.Module):
             & (col_name_idxs == target_col)
         )
         lc_b, lc_s = is_label_cell.nonzero(as_tuple=True)
-        # The label lives in the channel its semantic type names (same rule as
-        # Evaluator.evaluate_raw's label read).
         vals = torch.where(
             (batch["sem_types"] == SEM_TYPE_BOOLEAN).unsqueeze(-1),
             batch["boolean_values"],
@@ -90,12 +69,11 @@ class Rel2TabModel(nn.Module):
         f2ps,
         features,
     ):
-        """{ctx_size: (true_bs,) predictions}. One work item per (row, ctx)."""
         preds = {ctx: torch.zeros(true_bs) for ctx in eval_ctx_sizes}
         default = 0.5 if task_type == "clf" else 0.0
         has_feats = features is not None
 
-        work_items = []  # (ctx, b, train_feats, train_labels, test_feat)
+        work_items = []
         for b in range(true_bs):
             b_mask = item_idxs == b
             if not b_mask.any():
@@ -150,12 +128,6 @@ class Rel2TabModel(nn.Module):
         return preds
 
     def predict(self, batch, eval_ctx_size_list, device, task):
-        """Predictions at every requested ctx size, ``(bs,)`` each.
-
-        Rustler lays real rows at indices 0..true_bs-1 and pads the rest as
-        phantoms; phantom slots stay 0 and the caller drops them by
-        ``batch_mask``.
-        """
         bs = batch["is_targets"].size(0)
         true_bs = int(batch["is_targets"].any(dim=1).sum().item())
         cpu_batch = {

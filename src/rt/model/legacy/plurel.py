@@ -1,13 +1,3 @@
-"""RT-PluRel architecture (ICML 2026, arXiv:2602.04029).
-
-Faithful copy of ``rt/model.py`` from stanford-star/plurel, with two edge
-adaptations to the current pipeline: the target-cell key is ``is_targets``
-and an Evaluator-facing ``predict`` is attached. State-dict keys match the
-released ``stanford-star/rt-plurel`` ``.pt`` checkpoints exactly: q/k
-RMSNorm, three attention types (no ``full``), per-sequence loss
-normalization.
-"""
-
 from functools import partial
 
 import torch
@@ -36,7 +26,6 @@ class MaskedAttention(nn.Module):
         super().__init__()
         self.num_heads = num_heads
         self.head_dim = d_model // self.num_heads
-        # setup qk norm
         self.q_norm = nn.RMSNorm(self.head_dim)
         self.k_norm = nn.RMSNorm(self.head_dim)
 
@@ -54,7 +43,6 @@ class MaskedAttention(nn.Module):
         k = rearrange(k, "b s (h d) -> b h s d", h=self.num_heads)
         v = rearrange(v, "b s (h d) -> b h s d", h=self.num_heads)
 
-        # apply qk norm
         q = self.q_norm(q)
         k = self.k_norm(k)
 
@@ -162,26 +150,17 @@ class PluRelTransformer(nn.Module):
         batch_size, seq_len = node_idxs.shape
         device = node_idxs.device
 
-        # Padding mask for attention pairs (allow only non-pad -> non-pad)
-        pad = (~is_padding[:, :, None]) & (~is_padding[:, None, :])  # (B, S, S)
+        pad = (~is_padding[:, :, None]) & (~is_padding[:, None, :])
 
-        # cells in the same node
-        same_node = node_idxs[:, :, None] == node_idxs[:, None, :]  # (B, S, S)
+        same_node = node_idxs[:, :, None] == node_idxs[:, None, :]
 
-        # kv index is among q's foreign -> primary neighbors
-        kv_in_f2p = (node_idxs[:, None, :, None] == f2p_nbr_idxs[:, :, None, :]).any(
-            -1
-        )  # (B, S, S)
+        kv_in_f2p = (node_idxs[:, None, :, None] == f2p_nbr_idxs[:, :, None, :]).any(-1)
 
-        # q index is among kv's primary -> foreign neighbors (reverse relation)
-        q_in_f2p = (node_idxs[:, :, None, None] == f2p_nbr_idxs[:, None, :, :]).any(
-            -1
-        )  # (B, S, S)
+        q_in_f2p = (node_idxs[:, :, None, None] == f2p_nbr_idxs[:, None, :, :]).any(-1)
 
-        # Same column AND same table
         same_col_table = (col_name_idxs[:, :, None] == col_name_idxs[:, None, :]) & (
             table_name_idxs[:, :, None] == table_name_idxs[:, None, :]
-        )  # (B, S, S)
+        )
 
         attn_masks = {
             "feat": (same_node | kv_in_f2p) & pad,
@@ -223,41 +202,39 @@ class PluRelTransformer(nn.Module):
         yhat_out = {"number": None, "text": None, "datetime": None, "boolean": None}
 
         B, S, _ = x.shape
-        sem_types = batch["sem_types"]  # (B,S) ints 0..3
-        masks = is_targets.bool()  # (B,S) where to train
+        sem_types = batch["sem_types"]
+        masks = is_targets.bool()
 
         loss_per_seq = x.new_zeros(B)
 
         for i, t in enumerate(["number", "text", "datetime", "boolean"]):
-            yhat = self.dec_dict[t](x)  # (B,S, D_t)
-            y = batch[f"{t}_values"]  # (B,S, D_y)
-            sem_type_mask = (sem_types == i) & masks  # (B,S) mask for this type
+            yhat = self.dec_dict[t](x)
+            y = batch[f"{t}_values"]
+            sem_type_mask = (sem_types == i) & masks
 
             if not sem_type_mask.any():
                 if t in yhat_out:
-                    # still touch the param to avoid unused param error
                     loss_per_seq = loss_per_seq + (yhat.sum() * 0.0)
                     yhat_out[t] = yhat
                 continue
 
             if t in ("number", "datetime"):
-                loss_t = F.huber_loss(yhat, y, reduction="none").mean(-1)  # (B, S)
+                loss_t = F.huber_loss(yhat, y, reduction="none").mean(-1)
             elif t == "boolean":
                 loss_t = F.binary_cross_entropy_with_logits(
                     yhat, (y > 0).float(), reduction="none"
-                ).mean(-1)  # (B, S)
+                ).mean(-1)
             elif t == "text":
                 raise ValueError("masking text not supported")
 
-            loss_per_seq = loss_per_seq + (loss_t * sem_type_mask).sum(dim=1)  # (B,)
+            loss_per_seq = loss_per_seq + (loss_t * sem_type_mask).sum(dim=1)
 
             if t in yhat_out:
                 yhat_out[t] = yhat
 
-        # clamp: phantom rows (batch_mask=False) have no target cells
-        masks_per_seq = masks.sum(dim=1).float().clamp(min=1)  # (B,)
-        loss_per_seq = loss_per_seq / masks_per_seq  # (B,)
-        loss_out = loss_per_seq.mean()  # scalar
+        masks_per_seq = masks.sum(dim=1).float().clamp(min=1)
+        loss_per_seq = loss_per_seq / masks_per_seq
+        loss_out = loss_per_seq.mean()
 
         return loss_out, yhat_out
 

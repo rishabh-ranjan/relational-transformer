@@ -1,5 +1,3 @@
-"""Submit the pretraining run on Marlowe. See [README.md](README.md)."""
-
 import dataclasses
 from pathlib import Path
 
@@ -7,16 +5,11 @@ from roach.slurm.clusters import marlowe
 
 from roach.slurm import submit
 
-# 2026-08-24: continues the from-scratch rt-j run past hold-pretrain 443431's
-# wall clock: queued to start the moment that allocation ends, however it ends.
 cluster = marlowe.MARLOWE
-resources = dataclasses.replace(marlowe.H100, nodes=2, dependency="afterany:443431")
+resources = dataclasses.replace(marlowe.H100, nodes=2)
 
-# Marlowe's gres is untyped and every card there is an H100.
 gpu = resources.gpus.rpartition(":")[0] or {"marlowe": "h100"}[cluster.name]
 tokens_per_gpu = {"a100": 2**17, "h100": 2**17, "b200": 2**18}[gpu]
-# Marlowe's Lustre client does not keep the mmapped working set resident, so
-# the data is copied onto the job's node-local scratch; ILC's /dfs keeps it.
 stage_dir = {"ilc": None, "marlowe": "$TMPDIR/hf"}[cluster.name]
 
 
@@ -32,8 +25,8 @@ submit(
         compile=True,
         materialize_attn_masks=True,
         loss_fn="huber",
-        load_ckpt_path=None,
-        db_task_list="~/scratch/hf/stanford-star/the-join-lite-preprocessed/db-task-lists/rt-j.json",
+        load_ckpt_path="~/scratch/hf/stanford-star/rt-plurel/classification",
+        db_task_list="expts/pretrain/all_5gb_cutoff.json",
         train_splits=["train"],
         pre_dir="~/scratch/hf/stanford-star/the-join-lite-preprocessed",
         stage_dir=stage_dir,
@@ -48,7 +41,7 @@ submit(
         walk_length=20,
         mask_prob_max=0.5,
         items_per_task=100_000,
-        delta_finetune=False,  # nothing to be a delta of without load_ckpt_path
+        delta_finetune=True,
         optimizer="muon",
         lr=5e-4,
         wd=0.1,
@@ -72,7 +65,7 @@ submit(
         eval_db_task_list="expts/pretrain/eval-tasks.json",
         eval_pre_dir="~/scratch/hf/stanford-star/relbench-preprocessed",
         eval_tokens_per_gpu=tokens_per_gpu,
-        eval_num_workers=1,  # per eval task: 21 loaders, each with this many workers, per rank
+        eval_num_workers=1,
         eval_prefetch_factor=2,
         eval_num_walks=10_000,
         eval_walk_length=20,
@@ -93,11 +86,12 @@ submit(
     ),
     resources=resources,
     name="pretrain",
-    run_id="26-08-23_20-59-15_654509453",
+    run_id=None,
     repo_root=str(Path(__file__).resolve().parents[2]),
     cluster=cluster,
     job_env="expts/job_env.sh",
     log_root="~/scratch/relational-transformer/pretrain/slurm-logs",
     clone_root="~/roach_clones",
     secrets_dir="~/scratch/.secrets",
+    inside="443431",
 )

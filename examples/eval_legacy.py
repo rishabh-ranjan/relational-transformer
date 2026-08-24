@@ -1,12 +1,3 @@
-"""Reproduce the published RT-v1 / RT-PluRel leaderboard submissions.
-
-The context configuration below is the one those papers used: the whole 1024
-token context is a single BFS neighborhood around the seed (local_ctx_size ==
-ctx_size), width 256, no random-walk tier and no recency-sorted neighbors.
-
-    pixi run python examples/eval_legacy.py
-"""
-
 from rt.eval.legacy import run
 from rt.model.legacy.plurel import (
     PLUREL_HUB_REPO,
@@ -15,8 +6,6 @@ from rt.model.legacy.plurel import (
 )
 from rt.model.legacy.v1 import V1_HUB_REPO, V1Transformer
 
-# Legacy data: RelBench re-preprocessed with the RT-v1-era boolean typing, which
-# is what those nets' BCE-trained boolean head expects.
 PRE_DIR = "data/relbench-preprocessed/legacy"
 
 CONTEXT = dict(
@@ -39,8 +28,6 @@ CONTEXT = dict(
 
 
 def eval_v1(out_dir: str = "eval_v1_out") -> None:
-    """Task-wise checkpoints, each pretrained with its target database held out."""
-
     def model_for_task(task):
         filename = f"pretrain_{task.db_name}_{task.table_name}.pt"
         print(f"loading {V1_HUB_REPO}/{filename}")
@@ -56,9 +43,6 @@ def eval_v1(out_dir: str = "eval_v1_out") -> None:
 
 
 def eval_plurel(mode: str = "synth", out_dir: str = "eval_plurel_out") -> None:
-    """`synth` is one synthetic-only checkpoint for every task; `synth-real` is
-    the task-wise continued-pretraining checkpoint."""
-
     def model_for_task(task):
         filename = (
             PLUREL_SYNTH_CKPT
@@ -73,7 +57,7 @@ def eval_plurel(mode: str = "synth", out_dir: str = "eval_plurel_out") -> None:
         out_dir=out_dir,
         pre_dir=PRE_DIR,
         db_task_list=f"{PRE_DIR}/db-task-lists/forecast.json",
-        **{**CONTEXT, "bfs_width": 128},  # the PluRel paper's width
+        **{**CONTEXT, "bfs_width": 128},
     )
 
 

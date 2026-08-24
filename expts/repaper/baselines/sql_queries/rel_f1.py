@@ -1,9 +1,3 @@
-"""SQL feature queries for rel-f1 (Formula 1) tasks.
-
-Each query produces 8-12 pre-normalized features designed for
-few-shot linear prediction in the rel2tab pipeline.
-"""
-
 DRIVER_POSITION_SQL = """
 WITH task AS (
     SELECT date AS timestamp, "driverId" FROM task_table

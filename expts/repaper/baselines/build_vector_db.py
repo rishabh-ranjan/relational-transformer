@@ -1,18 +1,3 @@
-"""Build the FAISS indices the sampler's vecdb retriever reads.
-
-Reads the per-table feature blobs written by the featurize scripts and writes
-one FAISS index plus L2-normalized vectors per table, in the layout rustler's
-``vector_db_path`` knob consumes:
-
-    <vector_db_root>/<db>/<table>.index         (FAISS, METRIC_INNER_PRODUCT)
-    <vector_db_root>/<db>/<table>_vectors.bin   (row-major f32, normalized)
-
-Vectors are L2-normalized so inner-product search is cosine similarity.
-Tables above ``ivf_threshold`` rows get an IVF index with ``nprobe`` baked in
-(0 = auto ``max(8, sqrt(nlist))``); smaller tables get a Flat index. Pass a
-separate ``vector_db_root`` per feature set (rdblearn / rt).
-"""
-
 import json
 import time
 from pathlib import Path
@@ -35,7 +20,6 @@ def build_all(
 
     from expts.repaper.baselines.rel2tab.featurizer import table_offset_and_len
 
-    # One index per unique (db, table); a db's tasks can share a table.
     pairs = sorted(set(resolve_db_task_list(db_task_list)))
     for db, table in pairs:
         out_dir = Path(vector_db_root).expanduser() / db
@@ -60,8 +44,6 @@ def build_all(
             feat_dir / f"{table}_vectors.bin", dtype=np.float32
         ).reshape(total_nodes, meta["n_features"])
 
-        # Zero rows (no features) get unit length before the divide so they
-        # land at cosine zero rather than NaN.
         norms = np.linalg.norm(vectors, axis=1, keepdims=True)
         norms = np.where(norms < 1e-8, 1.0, norms)
         vectors = vectors / norms
@@ -77,9 +59,6 @@ def build_all(
             index.train(vectors[: min(nlist * 40, num_nodes)])
             index.add(vectors)
             faiss.ParameterSpace().set_index_parameter(index, "nprobe", chosen_nprobe)
-            # On-disk inverted lists: each consumer process mmaps the postings
-            # instead of copying them into its own heap -- the eval dataloader
-            # runs several worker processes, each of which loads the index.
             index.own_invlists = False
             old_invlists = index.invlists
             new_invlists = faiss.OnDiskInvertedLists(

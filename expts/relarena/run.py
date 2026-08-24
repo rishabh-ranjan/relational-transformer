@@ -1,16 +1,3 @@
-"""One RelArena experiment, as a roach target. See [submit.py](submit.py).
-
-Runs `(model, dataset, task, seed)` end to end inside the job: warm RT's tensor
-cache, run the harness, write the result frame. Nothing is read from the
-environment -- every knob is an argument, so the same call is the same job.
-
-The warm and the run are one job on purpose. `run_experiment` resolves its cache
-with `on_miss="raise"` (a configured benchmark must not quietly re-embed a
-database per trial), so the artifacts have to exist before it starts; and the
-cache lives on node-local disk, so the warmer has to be on the node that will
-read it.
-"""
-
 from pathlib import Path
 
 
@@ -25,14 +12,10 @@ def main(
     out_dir: str,
     run_id: str,
 ) -> None:
-    """Warm the caches, run one experiment, write `<out_dir>/<run_id>.csv`."""
     import logging
 
     import pandas as pd
 
-    # relarena logs its decisions at INFO -- which checkpoint the selection arm
-    # chose, which context won the search. Without this they go nowhere, and a
-    # stage that silently did not run looks exactly like one that did.
     logging.basicConfig(
         level=logging.INFO, format="%(levelname)s %(name)s: %(message)s"
     )
@@ -47,9 +30,6 @@ def main(
     cache_dir = str(Path(cache_dir).expanduser())
     Path(cache_dir).mkdir(parents=True, exist_ok=True)
 
-    # Every rt-family model, not just "rt": the name check was exact, so
-    # `rt-norefit` skipped warming entirely and every one of its jobs died on
-    # the first cache miss (run_experiment reads with on_miss="raise").
     if model.startswith("rt"):
         from relarena.models.rt.warm_cache import precompute_dataset_task
 
@@ -72,11 +52,6 @@ def main(
 
     best = summary.tuned or summary.default
     print(f"+ wrote {path}", flush=True)
-    # run_experiment catches a refit failure, logs it, and returns a summary
-    # whose test_score is None -- so a job can exit 0 having written a result
-    # row with no result in it. Five rt-norefit jobs did exactly that when
-    # their test export was missing from the cache. Fail here instead: a run
-    # that produced no test number did not succeed.
     if best is None or best.test_score is None:
         raise RuntimeError(
             f"{model} on {dataset}/{task} produced no test score; see the refit "

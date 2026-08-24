@@ -1,5 +1,3 @@
-"""mlock: pin the preprocessed mixture in RAM across training restarts."""
-
 import ctypes
 import ctypes.util
 import os
@@ -53,13 +51,6 @@ def mlock_main(
     embedder_ref: str,
     workers: int,
 ) -> None:
-    """Hold a preprocessed mixture resident in the page cache until interrupted.
-
-    ``db_task_list`` names the dbs to lock -- pairs, or a path to a JSON file of
-    them (the released lists ship with the data, as
-    ``<pre_dir>/db-task-lists/<name>.json``). ``workers`` is the mlock
-    concurrency: networked filesystems typically populate faster with more.
-    """
     db_names = sorted({db for db, _ in resolve_db_task_list(db_task_list)})
     log(mlock_dbs=len(db_names))
 
@@ -159,10 +150,6 @@ def mlock_main(
     log(sleeping_until_signaled=True)
 
     def _fast_exit(signum: int, frame: object) -> None:
-        # Proactively release all locked pages before exiting. Without this the
-        # kernel reclaims ~1TB of mlocked memory lazily on process teardown,
-        # which can exceed slurm's UnkillableStepTimeout on scancel and DRAIN the
-        # node ("Kill task failed"). munlockall() makes teardown prompt.
         try:
             _libc.munlockall()
         except Exception:

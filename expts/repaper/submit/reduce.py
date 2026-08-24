@@ -1,19 +1,3 @@
-"""Average the 16 full-test predictions per task into the RelBench submission.
-
-Reads the 4 per-config state files each task's units wrote (each the sum of 4
-raw context-seed predictions), averages all 16 in raw output space aligned by
-node index, then writes the prediction CSVs through ``rt.eval``'s own
-submission writer (which denormalizes regression to the target scale and
-sigmoids classification logits) and scores them with RelBench's evaluator.
-
-Also writes ``results.json`` beside the CSVs (the paper's tuned+ensembled
-per-task table) and prints the packaging commands (``python -m
-relbench.submit``) that validate the directory and produce the leaderboard
-zips.
-
-    pixi run python -m expts.repaper.submit.reduce
-"""
-
 import json
 from pathlib import Path
 
@@ -78,7 +62,6 @@ def main() -> None:
     out = CSV_DIR.parent / "results.json"
     out.write_text(json.dumps(summary, indent=1, sort_keys=True) + "\n")
 
-    # The paper's tuned+ensembled table fetches these flat keys.
     import wandb
 
     run = wandb.init(

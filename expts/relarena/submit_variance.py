@@ -1,20 +1,3 @@
-"""Repeat one task N times to measure rt-plurel's run-to-run spread.
-
-Seeds 1..N, not repeats of seed 0: the pipeline is close to deterministic given
-a seed, so repeating one would measure GPU nondeterminism rather than the
-variance that matters -- data order, context draws, and the step validation
-lands on. Seed 0 stays untouched as the canonical result.
-
-Results land in `results-variance/`, not `results/`. Five extra rows for one
-task in the main directory would weight that task five times over in any
-leaderboard built from it.
-
-il-lo on blackwell is deliberate here. The rule against it existed because a
-preemption restarted the run from step 0; rt 1.7.0 resumes exactly instead, so a
-preemption now costs the checkpoint interval and this is the first real exercise
-of that path.
-"""
-
 import sys
 from pathlib import Path
 

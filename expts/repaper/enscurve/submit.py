@@ -1,5 +1,3 @@
-"""Submit ensemble-curve jobs: one per (variant, task). See README.md."""
-
 import json
 from pathlib import Path
 
@@ -114,5 +112,3 @@ def submit_variant(variant: str, qos: str, tasks=None) -> None:
 
 if __name__ == "__main__":
     submit_variant("default", "il-lo")
-    # After ../tune/tuned_configs.json is committed:
-    # submit_variant("tuned", "il-lo")

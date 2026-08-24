@@ -1,18 +1,3 @@
-"""Submit the context-hyperparameter grid: one tuning job per task.
-
-Each job is ``rt.eval:main`` in tune-only mode: it scores every surviving
-(ctx, lcs, bw, pl) configuration on the task's validation split -- 4096 rows,
-each configuration's prediction averaged over 4 context seeds, the val split
-evaluated under its own db cutoff -- and writes ``tuning.json`` with every
-configuration's score. ``collect.py`` gathers the 21 files into the committed
-``tuned_configs.json`` that the enscurve, val-vs-test and leaderboard
-experiments read.
-
-Grid: ctx {512,1024,2048,4096,8192} x lcs {256,...,8192 | lcs<=ctx} x
-bw {16,64,256} x pl {T,F} = 120 configurations per task, evaluated as
-36 evaluator passes (all ctx sizes of a (lcs,bw,pl) entry share one pass).
-"""
-
 import json
 from pathlib import Path
 
@@ -70,8 +55,6 @@ def resources(db: str, qos: str, gpu: str = "a100:1") -> Resources:
         cpus_per_task=36 if b200 else 8,
         ntasks=None,
         exclusive=False,
-        # blackwell's DefMemPerGPU (240G) covers the biggest db; an explicit
-        # --mem on ampere is capped by the per-gpu plugin instead.
         mem=None if b200 else MEM[db],
         mem_per_gpu=None,
         constraint=None if b200 else "ampere",
@@ -89,7 +72,7 @@ def submit_task(db: str, table: str, qos: str, gpu: str = "a100:1") -> None:
     submit(
         "rt.eval:main",
         args=dict(
-            load_ckpt_path=None,  # filled below by task type
+            load_ckpt_path=None,
             embedder="all-MiniLM-L12-v2",
             d_text=384,
             num_blocks=12,
@@ -111,10 +94,6 @@ def submit_task(db: str, table: str, qos: str, gpu: str = "a100:1") -> None:
             shuffle_seed=0,
             context_seed=0,
             vector_db_path=None,
-            # No db-level cutoff: per-row temporal masking is the only trim
-            # (a val target sees history up to its own timestamp; future task
-            # labels stay out via the sampler's timestamp and same-horizon
-            # filters).
             db_cutoff=None,
             lcs_bw_pl_grid=GRID,
             val_ensemble_size=4,
@@ -155,11 +134,5 @@ CLF = {
 }
 
 if __name__ == "__main__":
-    # One job per task, resumable; the grid is the critical path for the tuned
-    # ensemble curve, the default-vs-tuned table and the leaderboard ensemble,
-    # so give it the high tiers: e.g. submit_task(db, table, "il-interactive",
-    # gpu="b200:1") for the biggest databases (rel-amazon, then rel-hm /
-    # rel-stack), il-lo for the rest. A job moved between tiers keeps its
-    # run_id and resumes from ensemble_resume.pt.
     for db, table in TASKS:
         submit_task(db, table, "il-lo")

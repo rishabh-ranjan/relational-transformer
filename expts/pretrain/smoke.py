@@ -1,14 +1,3 @@
-"""Smoke-test the pretraining launch path on rel-f1 for 20 steps.
-
-    pixi run python -m expts.pretrain.smoke
-
-Pass: `time_to_first_step` in the log within a few minutes of the ranks
-starting, then a clean exit. Silence past that is a hang: do not start a real
-run on that cluster until it is understood.
-
-Nothing is logged to wandb.
-"""
-
 import dataclasses
 from pathlib import Path
 
@@ -16,10 +5,6 @@ from roach.slurm.clusters import marlowe
 
 from roach.slurm import submit
 
-# 2026-08-22: the first job through roach on Marlowe: one H100 on the free
-# preempt partition, exercising the remote submit, the clone on ~/roach_clones,
-# the secrets and the per-job TMPDIR. relbench-preprocessed and rt-plurel are
-# on Marlowe scratch; the-join-preprocessed is still copying.
 resources = dataclasses.replace(marlowe.H100_PREEMPT, gpus="1", exclusive=False)
 
 submit(

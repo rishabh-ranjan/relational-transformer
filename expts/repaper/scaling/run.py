@@ -1,29 +1,3 @@
-"""Context-scaling eval: one (method, task) job, per-ctx test metric to disk.
-
-The compute half of the scaling family (baselines figures, retriever and
-schema-semantics ablations); ``reduce.py`` aggregates the JSONs into the wandb
-runs the paper's figures read. For one method and one task it measures, at
-every requested context size, the metric on the normalized scale (NMAE for
-regression -- rustler normalizes the target by the same train std RelBench's
-NMAE divides out -- and AUROC for classification, which the sigmoid cannot
-change) together with the mean number of in-context labeled rows.
-
-The whole ctx sweep is one pass: the evaluator builds each row's context once
-at ``max(ctx_size_list)`` and scores every size off a prefix of it.
-
-Methods share the evaluator through one ``predict(batch, ctx_sizes, device,
-task)`` contract:
-
-* ``rt``            -- RT-J, routed to the clf / reg checkpoint by task type.
-* ``rdblearn_tabicl`` / ``sql_tabicl``  -- batched TabICL v2 on precomputed
-  RDBLearn / SQL features (GPU).
-* ``rdblearn_lgbm`` / ``sql_lgbm``      -- a stock-defaults LightGBM fit per
-  (row, ctx) on the same features (CPU).
-
-Writes ``<out_dir>/<db>__<table>.json`` atomically and skips if it already
-exists, so a sweep resubmits idempotently.
-"""
-
 import json
 import os
 import uuid
@@ -98,9 +72,6 @@ def main(
     if method == "rt":
         from rt.model import load_rt_model
 
-        # The compiled net recompiles once per ctx size (each is a distinct
-        # sequence-length shape) within the pass; keep the dynamo cache above
-        # the sweep's shape count so it never thrashes.
         torch._dynamo.config.cache_size_limit = max(16, 2 * len(ctx_sizes))
         device = "cuda"
         ckpt = ckpt_clf if task.task_type == "clf" else ckpt_reg

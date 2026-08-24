@@ -1,12 +1,3 @@
-"""DDP eval plumbing: the gather + phantom-filter path in ``Evaluator``.
-
-Runs two real processes over gloo/CPU in seconds -- no GPU, no checkpoint, no
-preprocessed data. The rows each rank sees are fabricated, so the assertions
-are exact: rank 0 must reconstruct every real row of both shards, in
-rank-major order, with labels/preds/node_idxs/num_labels staying aligned, and
-the phantom (padding) rows dropped.
-"""
-
 import os
 
 import numpy as np
@@ -23,13 +14,11 @@ import tempfile
 from pathlib import Path
 import rt.eval._eval  # noqa: F401
 
-CTX = 4  # seq len of the fake batches
+CTX = 4
 EVAL_BS = 2
 N_BATCHES = 2
 WORLD_SIZE = 2
-# Rank r's batch b, row i holds the seed node index below; the last row of the
-# last batch on rank 1 is a phantom (batch_mask=False) and must not survive.
-PHANTOM = (1, 1, 1)  # (rank, batch, row)
+PHANTOM = (1, 1, 1)
 
 
 class _FakeTask:
@@ -40,15 +29,13 @@ class _FakeTask:
 
 
 def _fake_batch(rank, b):
-    """One eval batch: EVAL_BS rows, target cell at position 0, one in-context
-    label cell at position 1, positions 2..3 padding."""
     node_base = 100 * (rank + 1) + 10 * b
     is_targets = torch.zeros(EVAL_BS, CTX, dtype=torch.bool)
     is_targets[:, 0] = True
     node_idxs = torch.zeros(EVAL_BS, CTX, dtype=torch.int64)
     for i in range(EVAL_BS):
-        node_idxs[i, 0] = node_base + i  # seed node
-        node_idxs[i, 1] = 900 + i  # some other row of the task table
+        node_idxs[i, 0] = node_base + i
+        node_idxs[i, 1] = 900 + i
     col_name_idxs = torch.zeros(EVAL_BS, CTX, dtype=torch.int64)
     is_task_nodes = torch.ones(EVAL_BS, CTX, dtype=torch.bool)
     is_padding = torch.zeros(EVAL_BS, CTX, dtype=torch.bool)
@@ -56,7 +43,7 @@ def _fake_batch(rank, b):
     sem_types = torch.full((EVAL_BS, CTX), SEM_TYPE_BOOLEAN, dtype=torch.int64)
     boolean_values = torch.zeros(EVAL_BS, CTX, 1)
     for i in range(EVAL_BS):
-        boolean_values[i, 0, 0] = float((node_base + i) % 2)  # the label
+        boolean_values[i, 0, 0] = float((node_base + i) % 2)
     batch_mask = torch.ones(EVAL_BS, dtype=torch.bool)
     for i in range(EVAL_BS):
         if (rank, b, i) == PHANTOM:
@@ -75,8 +62,6 @@ def _fake_batch(rank, b):
 
 
 class _FakeNet:
-    """Predicts ``seed_node_idx / 1000`` so preds are traceable to their row."""
-
     def eval(self):
         return self
 
@@ -86,8 +71,6 @@ class _FakeNet:
 
 
 def _make_evaluator(rank, ddp):
-    """An Evaluator wired to fake loaders -- ``__init__`` only builds rustler
-    datasets, which is exactly the part this test replaces."""
     ev = object.__new__(Evaluator)
     task = _FakeTask()
     ev.tasks = [task]
@@ -104,7 +87,6 @@ def _make_evaluator(rank, ddp):
     batches = [_fake_batch(rank, b) for b in range(N_BATCHES)]
 
     class _Loader:
-        # len(dataset) drives the batch count; identical on every rank.
         dataset = [None] * N_BATCHES
 
         def __iter__(self):
@@ -117,7 +99,6 @@ def _make_evaluator(rank, ddp):
 
 
 def _expected(ddp):
-    """Real (non-phantom) seed node indices, rank-major."""
     ranks = range(WORLD_SIZE) if ddp else [0]
     return [
         100 * (r + 1) + 10 * b + i
@@ -143,7 +124,6 @@ def _run(rank, ddp, out):
         out["num_labels"] = num_labels.tolist()
         out["node_idxs"] = node_idxs.tolist()
     else:
-        # Non-zero ranks drive every collective but must yield nothing.
         assert yields == []
         out["yields"] = 0
     if ddp:
@@ -154,10 +134,8 @@ def _check(out, ddp):
     exp = _expected(ddp)
     assert out["node_idxs"] == exp
     assert out["ctx"] == CTX
-    # preds and labels stay row-aligned with the gathered node_idxs
     assert out["preds"] == pytest.approx([n / 1000.0 for n in exp])
     assert out["labels"] == pytest.approx([float(n % 2) for n in exp])
-    # exactly one in-context label cell per row (position 1)
     assert out["num_labels"] == [1] * len(exp)
 
 
@@ -176,8 +154,6 @@ def _worker(rank, port, ret):
 
 
 def test_eval_gather_ddp_two_ranks():
-    """Two real processes: rank 0's yield must equal the union of both shards."""
-
     with socket.socket() as s:
         s.bind(("127.0.0.1", 0))
         port = s.getsockname()[1]
@@ -199,14 +175,6 @@ def test_eval_gather_ddp_two_ranks():
 
 
 class _EnsembleFakeEvaluator:
-    """Stands in for a real Evaluator inside ``run_ensemble``.
-
-    ``evaluate_raw`` barriers once per task before yielding, so if the ranks
-    disagree about *which* tasks (or how many) to run, the ranks desync and the
-    test hangs -- which is exactly the failure mode of not broadcasting the
-    tuning result.
-    """
-
     def __init__(self, tasks, rank, ddp, value_for):
         self.tasks = tasks
         self.global_rank = rank
@@ -219,8 +187,6 @@ class _EnsembleFakeEvaluator:
                 dist.barrier()
             if self.global_rank != 0:
                 continue
-            # labels chosen so AUC is well defined; preds encode the config so
-            # the tuner has a unique winner per task.
             labels = np.array([0.0, 1.0, 0.0, 1.0])
             p = self.value_for(task)
             preds = np.array([0.0, p, 0.0, p])
@@ -234,8 +200,6 @@ def _run_ensemble_worker(rank, port, ret):
     os.environ["MASTER_ADDR"] = "127.0.0.1"
     os.environ["MASTER_PORT"] = str(port)
 
-    # ``rt.eval._eval`` the attribute is the *function* re-exported by the
-    # package __init__; the module itself lives in sys.modules.
     m = sys.modules["rt.eval._eval"]
 
     dist.init_process_group("gloo", rank=rank, world_size=WORLD_SIZE)
@@ -245,8 +209,6 @@ def _run_ensemble_worker(rank, port, ret):
     test_tasks = [_named_task(f"t{i}", "test") for i in range(2)]
 
     def fake_build_evaluator(tasks, pre_dir, *, local_ctx_size, **kw):
-        # Task t0 prefers the first grid config, t1 the second -- so the two
-        # tasks end up in *different* groups and the ordering must agree.
         def value_for(task):
             good = local_ctx_size == (64 if task.table_name == "t0" else 128)
             return 1.0 if good else 0.5
@@ -275,6 +237,10 @@ def _run_ensemble_worker(rank, port, ret):
         csv_out_dir=None,
         targets={},
         use_wandb=False,
+        context_seed=0,
+        shuffle_seed=0,
+        db_cutoff=None,
+        resume_path=Path(tempfile.mkdtemp()) / "eval-resume.json",
         embedder="test-embed",
         global_rank=rank,
         local_rank=rank,
@@ -293,9 +259,6 @@ def _named_task(table_name, split):
 
 
 def test_run_ensemble_ddp_does_not_deadlock():
-    """Only rank 0 sees the tuning metrics; without broadcasting the winning
-    configs the ranks would iterate different task groups and hang."""
-
     with socket.socket() as s:
         s.bind(("127.0.0.1", 0))
         port = s.getsockname()[1]
@@ -314,22 +277,20 @@ def test_run_ensemble_ddp_does_not_deadlock():
         assert p.exitcode == 0, f"rank {r} exited {p.exitcode} (None = hung)"
 
     assert set(dict(ret[0])) == {"rel-fake/t0", "rel-fake/t1"}
-    assert dict(ret[1]) == {}  # non-zero ranks score nothing
+    assert dict(ret[1]) == {}
 
 
 def test_eval_shards_are_disjoint_and_complete():
-    """The rustler eval sampler's rank offsets partition the item range: every
-    item lands on exactly one rank, and overshoot slots are phantoms."""
     num_items, bs = 7, 2
     world_size = 2
-    n_batches = -(-num_items // (bs * world_size))  # ceil, uniform across ranks
+    n_batches = -(-num_items // (bs * world_size))
     seen = [
-        rank * bs + idx * bs * world_size + i  # rustler: fly.rs offset formula
+        rank * bs + idx * bs * world_size + i
         for rank in range(world_size)
         for idx in range(n_batches)
         for i in range(bs)
     ]
     real = sorted(x for x in seen if x < num_items)
-    assert real == list(range(num_items))  # complete, no duplicates
+    assert real == list(range(num_items))
     assert len(seen) == n_batches * bs * world_size
-    assert np.all(np.diff(sorted(seen)) == 1)  # contiguous, phantoms at the end
+    assert np.all(np.diff(sorted(seen)) == 1)

@@ -1,20 +1,3 @@
-"""Aggregate one arm's per-task JSONs into the wandb run its figure reads.
-
-Reads every ``<arm_dir>/<db>__<table>.json`` written by ``run.py``, refuses to
-reduce an incomplete arm (the figure would silently average over fewer tasks),
-and logs ONE wandb run with one history row per ctx size:
-
-    ctx_size
-    ctx_scaling/steps=0/test/avg_mae               mean NMAE over reg tasks
-    ctx_scaling/steps=0/test/avg_auc               mean AUROC over clf tasks
-    ctx_scaling/steps=0/test/avg_mean_labels_reg   mean in-context labels, reg
-    ctx_scaling/steps=0/test/avg_mean_labels_clf   mean in-context labels, clf
-    per_task/ctx_scaling/steps=0/relbench/<db>/<table>/test/{mae,auc,mean_labels}
-
-Edit the loop at the bottom and run directly; each (project, run_name,
-arm_dir, expected task count) line is one figure series.
-"""
-
 import json
 from pathlib import Path
 
@@ -77,9 +60,6 @@ def reduce_arm(*, project: str, run_name: str, arm_dir: str, n_tasks: int) -> No
 ROOT = f"{OUT_ROOT}/repaper-scaling"
 
 if __name__ == "__main__":
-    # (project, run name the gen script fetches, arm dir, expected #tasks).
-    # Each line asserts its arm is complete; run when all arms are, or comment
-    # out the ones still filling.
     for project_name, run_name, arm, n_tasks in [
         ("fulltest", "rt-j", f"{ROOT}/fulltest/rt", 21),
         (
@@ -121,8 +101,6 @@ if __name__ == "__main__":
             21,
         ),
         ("subsampled", "precomputed_sql_lightgbm", f"{ROOT}/subsampled/sql_lgbm", 21),
-        # The ablation project reads the default subsampled RT arm twice: it is
-        # both the random-walk retriever arm and the semantics-on arm.
         ("abl", "abl/rw", f"{ROOT}/subsampled/rt", 21),
         ("abl", "abl/sem", f"{ROOT}/subsampled/rt", 21),
         ("abl", "abl/nosem", f"{ROOT}/abl/nosem", 21),

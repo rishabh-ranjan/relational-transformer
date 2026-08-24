@@ -1,25 +1,4 @@
 #!/usr/bin/env python
-"""Preprocess relbench-3.0.0 datasets into rustler's shareable on-disk format.
-
-A dataset is addressed exactly like in the ``relbench`` loader: a local path, or
-a HuggingFace Hub spec ``org/repo[/subdir]`` (e.g. ``stanford-star/the-join/join-act-mooc``
-or ``stanford-star/relbench/rel-f1``). Hub datasets are downloaded (and cached) on
-demand; local paths are used in place.
-
-Pipeline per dataset:  download/resolve  ->  rustler `pre`  ->  text embeddings.
-The result is a self-contained ``<out_dir>/<name>/`` directory (see ``meta.json``)
-that can be used directly for training or uploaded to a Hub ``*-preprocessed`` repo
-and consumed from there.
-
-There is no CLI: ``one``, ``many``, ``ls`` and ``upload`` are functions, called
-from a script (``examples/preprocess.py`` is the copy-and-edit starting point).
-
-Recommended sharing workflow for a large collection (e.g. the 650-dataset Join):
-preprocess everything locally with ``many`` (``upload_repo=None``), then push the
-whole ``out_dir`` in one resumable ``upload(..., bulk=True)`` pass. ``bulk`` uses
-``upload_large_folder`` (batched commits, far fewer Hub API calls than per-dataset
-``upload_folder``), which avoids the account rate limits that per-dataset uploads hit.
-"""
 
 import json
 import sys
@@ -27,19 +6,12 @@ from pathlib import Path
 
 
 from huggingface_hub import HfApi, snapshot_download
-import yaml  # PyYAML ships with huggingface_hub's deps; fall back to a tiny parse
+import yaml
 from rt.rustler import preprocess
 from rt.preprocess.embed import embed_texts
 
 
-# --------------------------------------------------------------------------- #
-# Hub / local addressing  (mirrors relbench.hf so we need no relbench dep)
-# --------------------------------------------------------------------------- #
 def resolve_repo(spec: str) -> tuple[str, str]:
-    """Split a Hub spec into ``(repo_id, subdir)``.
-
-    ``"org/name"`` -> ``("org/name", "")``; ``"org/name/a/b"`` -> ``("org/name", "a/b")``.
-    """
     parts = spec.strip("/").split("/")
     if len(parts) < 2:
         raise ValueError(
@@ -49,11 +21,6 @@ def resolve_repo(spec: str) -> tuple[str, str]:
 
 
 def resolve_dataset_dir(spec: str, revision: str | None = None) -> Path:
-    """Return a local directory holding the dataset (manifest.yaml + db/ + tasks/).
-
-    A local path with a ``manifest.yaml`` is used as-is; otherwise ``spec`` is a Hub
-    ``org/repo[/subdir]`` and only that sub-path is downloaded (and cached).
-    """
     p = Path(spec).expanduser()
     if (p / "manifest.yaml").exists():
         return p
@@ -62,11 +29,6 @@ def resolve_dataset_dir(spec: str, revision: str | None = None) -> Path:
         return Path(
             snapshot_download(repo_id=repo_id, revision=revision, repo_type="dataset")
         )
-    # One bulk snapshot scoped to ``subdir``. Downloading the files one by one
-    # instead is what gets rate limited (HTTP 429): a dataset here is hundreds of
-    # task dirs, and every hf_hub_download is its own HEAD + GET. snapshot_download
-    # resolves the whole file list in one paginated listing and fetches in
-    # parallel, so a dataset costs a couple of API calls rather than thousands.
     local_root = snapshot_download(
         repo_id=repo_id,
         revision=revision,
@@ -77,8 +39,6 @@ def resolve_dataset_dir(spec: str, revision: str | None = None) -> Path:
 
 
 def dataset_name(dataset_dir: Path) -> str:
-    """Read the dataset name from its manifest (the output subdirectory name)."""
-
     text = (dataset_dir / "manifest.yaml").read_text()
     try:
         return yaml.safe_load(text)["name"]
@@ -89,9 +49,6 @@ def dataset_name(dataset_dir: Path) -> str:
     raise ValueError(f"no 'name' in {dataset_dir / 'manifest.yaml'}")
 
 
-# --------------------------------------------------------------------------- #
-# Pipeline steps
-# --------------------------------------------------------------------------- #
 def run_rustler_pre(
     dataset_dir: Path, out_dir: Path, source: str, skip_tasks: bool
 ) -> None:
@@ -100,30 +57,22 @@ def run_rustler_pre(
 
 
 def embed_dataset(pre_dataset_dir: Path, embedder: str, batch_size: int) -> int:
-    """Compute text embeddings for a preprocessed dataset; return d_text."""
-
-    # Lazy import so download/upload/list work without torch installed.
-
     out_root = pre_dataset_dir.parent
     name = pre_dataset_dir.name
     embed_texts(
         dataset_name=name,
         pre_dir=str(out_root),
-        device=None,  # auto: all visible GPUs, else CPU
+        device=None,
         batch_size=batch_size,
         embedder=embedder,
     )
     emb_path = pre_dataset_dir / f"text_emb_{embedder}.bin"
     num_text = len(json.loads((pre_dataset_dir / "text.json").read_text()))
-    # bfloat16 -> 2 bytes/elem; the emb file is (num_text, d_text) row-major.
     d_text = emb_path.stat().st_size // (max(num_text, 1) * 2)
     return d_text
 
 
 def _embeddings_done(pre_dataset_dir: Path) -> bool:
-    """True once ``meta.json`` records its text-embedding files and they exist.
-    Used by ``skip_existing`` so a dataset whose embedding step was interrupted
-    (meta.json present, but no ``.bin``) is reprocessed rather than skipped."""
     meta_path = pre_dataset_dir / "meta.json"
     if not meta_path.exists():
         return False
@@ -149,7 +98,6 @@ def update_meta_with_embeddings(
 
 
 def upload_dataset(pre_dataset_dir: Path, repo: str, private: bool) -> None:
-    """Upload ``<out_dir>/<name>/`` to ``repo`` under ``<name>/`` on the Hub."""
     name = pre_dataset_dir.name
     api = HfApi()
     api.create_repo(repo, repo_type="dataset", private=private, exist_ok=True)
@@ -165,15 +113,6 @@ def upload_dataset(pre_dataset_dir: Path, repo: str, private: bool) -> None:
 
 
 def bulk_upload(out_dir: Path, repo: str, private: bool) -> None:
-    """Upload an entire preprocessed ``out_dir`` (all ``<name>/`` subdirs) in one
-    resumable pass with ``upload_large_folder``.
-
-    This is the recommended path for sharing a whole collection (e.g. the 650-dataset
-    Join): it batches files and commits in chunks, so it uses far fewer Hub API calls
-    than uploading each dataset with ``upload_folder`` -- which trips account-level
-    rate limits on big collections. It is resumable: re-running picks up where an
-    interrupted upload left off. Workflow: preprocess locally, then bulk-upload.
-    """
     api = HfApi()
     api.create_repo(repo, repo_type="dataset", private=private, exist_ok=True)
     print(f"bulk-uploading {out_dir} -> {repo} (upload_large_folder)", flush=True)
@@ -211,12 +150,7 @@ def preprocess_one(
     return pre_dataset_dir
 
 
-# --------------------------------------------------------------------------- #
-# Listing a collection repo (e.g. the-join's join-*/ datasets)
-# --------------------------------------------------------------------------- #
 def list_datasets(repo: str, revision: str | None = None) -> list[str]:
-    """Top-level dataset subdirectories of a Hub collection repo (those with a
-    manifest.yaml), as ``org/repo/<subdir>`` specs."""
     api = HfApi()
     files = api.list_repo_files(repo, repo_type="dataset", revision=revision)
     subdirs = sorted(
@@ -241,7 +175,6 @@ def one(
     public: bool,
     revision: str | None,
 ) -> None:
-    """Preprocess a single dataset (a local path or ``org/repo[/subdir]``)."""
     preprocess_one(
         dataset,
         Path(out_dir).expanduser(),
@@ -270,7 +203,6 @@ def many(
     public: bool,
     revision: str | None,
 ) -> None:
-    """Preprocess every dataset in a Hub collection, or this job's shard of them."""
     specs = list_datasets(repo, revision=revision)
     assert 0 <= shard < num_shards, (
         f"shard must be in [0, num_shards); got shard={shard} num_shards={num_shards}"
@@ -300,7 +232,7 @@ def many(
                 private=not public,
                 revision=revision,
             )
-        except Exception as e:  # one bad dataset shouldn't sink the shard
+        except Exception as e:
             print(
                 f"  FAILED {spec}: {type(e).__name__}: {e}", file=sys.stderr, flush=True
             )
@@ -313,13 +245,11 @@ def many(
 
 
 def ls(*, repo: str, revision: str | None) -> None:
-    """Print the dataset specs in a Hub collection."""
     for spec in list_datasets(repo, revision=revision):
         print(spec)
 
 
 def upload(*, pre_dir: str, repo: str, bulk: bool, public: bool) -> None:
-    """Upload one preprocessed dataset, or a whole collection with ``bulk``."""
     path = Path(pre_dir).expanduser()
     if bulk:
         bulk_upload(path, repo, private=not public)

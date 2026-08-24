@@ -1,5 +1,3 @@
-"""Public API: RelationalTransformer.from_pretrained + load_rt_model."""
-
 import json
 
 import torch
@@ -17,10 +15,10 @@ def test_from_pretrained_local(tiny_checkpoint):
     ckpt, src = tiny_checkpoint
     model = RelationalTransformer.from_pretrained(ckpt, device="cpu")
     assert isinstance(model, RelationalTransformer)
-    assert model.config["embedder"] == "test-embed"  # config attached
+    assert model.config["embedder"] == "test-embed"
     s1, s2 = src.state_dict(), model.state_dict()
     assert s1.keys() == s2.keys()
-    assert all(torch.equal(s1[k], s2[k]) for k in s1)  # weights round-trip
+    assert all(torch.equal(s1[k], s2[k]) for k in s1)
 
 
 def test_load_rt_model_backcompat(tiny_checkpoint):
@@ -42,7 +40,6 @@ def test_from_pretrained_subfolder(tmp_path, tiny_dims):
 
 
 def test_from_pretrained_model_kwargs(tmp_path, tiny_dims):
-    # config.json without dims -> dims supplied via keyword args
     src = RelationalTransformer(**tiny_dims, compile=False, materialize_attn_masks=True)
     save_model(src.state_dict(), tmp_path / MODEL_FILE)
     (tmp_path / CONFIG_FILE).write_text(json.dumps({"embedder": "x"}))
@@ -51,6 +48,5 @@ def test_from_pretrained_model_kwargs(tmp_path, tiny_dims):
 
 
 def test_compile_true_builds(tiny_dims):
-    # __init__ must torch.compile forward when compile=True.
     m = RelationalTransformer(**tiny_dims, compile=True, materialize_attn_masks=True)
     assert callable(m.forward)

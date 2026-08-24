@@ -1,9 +1,3 @@
-"""SQL feature queries for rel-avito (Avito classifieds) tasks.
-
-Each query produces 8-12 pre-normalized features designed for
-few-shot linear prediction in the rel2tab pipeline.
-"""
-
 AD_CTR_SQL = """
 WITH task AS (
     SELECT timestamp, "AdID" FROM task_table

@@ -1,19 +1,3 @@
-"""How big each database's preprocessed output comes out.
-
-Written by the previous published build, read here to size each job and to
-weight progress. Two numbers per database, because the two stages scale on
-different things (see [README.md](README.md)):
-
-* ``out`` -- total output bytes, which rustler tracks.
-* ``text`` -- bytes of ``text.json``, which the embedding stage tracks.
-
-Text bytes are themselves a proxy -- the cost is per string, not per byte -- so
-anything with the build in front of it should prefer ``num_text_strings`` from
-``meta.json``. This is for what has not been built yet.
-
-Regenerate for whichever collection ``submit.py`` currently names.
-"""
-
 import json
 import sys
 from collections import defaultdict
@@ -30,8 +14,6 @@ def write() -> None:
     per_db: dict[str, dict[str, int]] = defaultdict(lambda: {"out": 0, "text": 0})
     for f in info.siblings:
         db, _, rest = f.rfilename.partition("/")
-        # only the collection's own databases: not db-task-lists, not legacy/,
-        # not anything else the published repo carries alongside them
         if rest and db not in KEEP and "/" not in rest:
             per_db[db]["out"] += f.size or 0
             if rest == "text.json":

@@ -1,17 +1,3 @@
-"""Context-ensembling curve: one (variant, task) job, metric at every size.
-
-Evaluates one task at one fixed context configuration with ``n_seeds``
-independent context seeds (the same seed family ``rt.eval`` ensembles draw
-from), averaging the raw per-row predictions over the first k seeds and
-scoring the average on the normalized scale at every k = 1..n_seeds. Writes
-
-    <out_dir>/<db>__<table>.json     {"curve": {k: metric}, ...}
-    <out_dir>/<db>__<table>.state.npz  (resume: per-seed prediction sums)
-
-A preemption costs at most one seed. ``reduce.py`` aggregates the per-task
-curves into the two wandb runs the ensembling figure reads.
-"""
-
 import json
 import os
 import uuid
@@ -104,8 +90,6 @@ def main(
         p = preds_by_prefix[""].astype(np.float64)
         if sum_preds is None:
             sum_preds, labels0, nodes0 = np.zeros_like(p), labels, node_idxs
-        # shuffle_seed fixes the subset and in_order=True the sequence, so
-        # every seed sees the same rows in the same order.
         assert np.array_equal(nodes0, node_idxs) and np.array_equal(labels0, labels)
         sum_preds += p
         k = seed + 1

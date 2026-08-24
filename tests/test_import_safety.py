@@ -1,6 +1,3 @@
-"""Import-time guarantees, checked in fresh subprocesses (sys.modules must be
-pristine, so each assertion runs in its own interpreter)."""
-
 import subprocess
 import sys
 import textwrap
@@ -15,8 +12,6 @@ def _run(code: str) -> subprocess.CompletedProcess:
 
 
 def test_rt_preprocess_imports():
-    # rt.preprocess must import cleanly. The heavy embedding deps
-    # (orjson/ml_dtypes/sentence_transformers) are stubbed out.
     r = _run(
         """
         import sys, types

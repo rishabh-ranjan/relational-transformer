@@ -1,59 +1,3 @@
-"""Build the wandb workspace for this experiment: a panel for every key the
-project logs -- metrics and machine telemetry alike -- with each metric's SWA
-twin and published target folded into the panel of the curve they belong to.
-
-    pixi run python expts/fine_tune/workspace.py [--project 2026-08-07-fine_tune]
-    pixi run python expts/fine_tune/workspace.py \
-        --project 2026-08-10-fine_tune_ens_only --x ens_size
-
-wandb has no horizontal-reference-line primitive, so `rt.train` logs each
-target the submit script passes it as a constant at every step -- a flat
-series.
-That series is a metric key of its own (`target/{key}`), and wandb's default
-auto-panels would put it in a panel by itself; this script is what pairs it
-with the curve it bounds. The same goes for the `swa/` twins.
-
-Every panel is drawn against `--x`, `epoch` by default: the fractional pass
-over the train stream `rt.train` logs each step, since tasks differ by orders
-of magnitude in size, so a step means something different in each run and an
-epoch does not. A project of `rt.eval` ensemble runs has no epoch -- its x is
-`ens_size`, and the same script builds its workspace: the metric keys and the
-targets are the same family, only the axis differs.
-
-The leading `dashboard:` sections are the hand-arranged ones -- one per metric
-and split, sized so the whole set is on one page -- and every remaining key
-gets a panel further down, grouped by namespace: nothing a run logs is dropped
-just because this script did not anticipate it, telemetry included.
-
-The key list comes from the runs themselves (the summary of every run, plus
-the system stream), so this works against any project, and a metric added to
-`rt.train` shows up as soon as one run has logged it. On top of that the whole
-benchmark is seeded from `published_best` below -- all 21 RelBench forecast
-tasks, curve and target alike -- so a task the sweep has not run yet, or runs
-later, has its panel waiting rather than needing this script rerun.
-
-It writes your personal workspace -- the view the project's URL opens on, so
-the layout is there without picking anything from the view menu -- and writes
-it wholesale: edit this script, not the UI, or the next run drops your changes.
-
-Runs are grouped by `run_name`, so a task interrupted and requeued reads as one
-curve rather than one curve per attempt; see the runset settings in `build`.
-
-This script imports nothing from a submit script and must not start to. A
-submit script is edited every submission -- a name, a helper, a whole sweep
-shape can go at any time -- and this one script builds the workspace for every
-project. `published_best` and `ntrain` live here as their own copies; keep them
-that way, and if a submit script needs the same numbers let it carry its own.
-
-New runs show up in the view on their own: every run in the project is in its
-runset (no filters), no run limit is written (a panel draws the whole sweep,
-and without the "Limited to N runs" caption any `max_runs` value earns), and
-the run feed's page size is lifted off 10 so the run list is not stuck on
-1-10. Panels are not automatic -- `auto_generate_panels` is off, so a key this
-script has not seen gets its panel by rerunning the script; seeding the whole
-benchmark above is what keeps that from being every new task.
-"""
-
 import argparse
 import functools
 import json
@@ -70,28 +14,15 @@ HERE = Path(__file__).parent
 ENTITY = "rtv2"
 PROJECT = "2026-08-08-fine_tune"
 
-# The metric families that get a hand-arranged `dashboard:` section, in the
-# order they should appear.
 METRICS = ("auroc", "nmae")
 SPLITS = ("val", "test")
 
-# The panel box, in pixels, square. The spec has no aspect-ratio field, so a
-# panel is square only if both sides are absolute -- which means turning
-# `snapToColumns` off, and letting the app fit as many boxes per row as the
-# window holds rather than pinning a column count. Small enough that a wide
-# window takes a whole split's tasks in a row or two.
 BOX = 200
 
-# Pagination only, now that the row width is the window's to decide: the page
-# has to be big enough that no section is ever split across one.
 COLS = 8
 
-# The app-managed telemetry section. Its charts are generated client-side, so
-# the saved spec carries the name and nothing else.
 SYSTEM = "System"
 
-# wandb's own bookkeeping series, plus the two axes every panel is drawn
-# against. Panels for these say nothing about a run.
 INTERNAL = {
     "_runtime",
     "_step",
@@ -103,14 +34,8 @@ INTERNAL = {
     "tune/idx",
 }
 
-# Keys whose panel gets a log y-axis: timings whose interesting structure is
-# the occasional order-of-magnitude spike, which a linear axis flattens the
-# rest of the curve to draw.
 LOG_Y = {"train/load_time", "train/sec_per_step"}
 
-# The `dashboard: train` section, in the order the panels should read. `None`
-# is the step-vs-runtime panel, which is drawn from wandb's own bookkeeping
-# series rather than from a logged key.
 TRAIN_ORDER = (
     "train/load_time",
     "train/sec_per_step",
@@ -120,23 +45,10 @@ TRAIN_ORDER = (
     "train/lr",
 )
 
-# How many runs the run list shows before paging. Also 10 by default, which is
-# what opens the list on "1-10"; 100 is what the app allows (it clamps anything
-# larger down to this).
 PAGE_SIZE = 100
 
 
 def published_best() -> dict[str, float]:
-    """The best published number per wandb metric key, from results.csv.
-
-    Over the default and the HPO arm of every model, AUROC as a percent and MAE
-    normalized by the train-target std and taken as a percent -- the same way
-    `make_results.py` builds results.md, so a value here is the bolded number
-    in that table and lands on the axis the run's own curve is drawn against.
-
-    `{metric}/{split}/mean` comes along too: the best mean over that table's
-    whole task set, i.e. where the field's best all-round model sits.
-    """
     import pandas as pd
     from huggingface_hub import hf_hub_download
 
@@ -173,13 +85,6 @@ def published_best() -> dict[str, float]:
 
 
 def ntrain() -> dict[str, float]:
-    """Train-set size per `{db}/{task}`, from RelBench's own task stats.
-
-    The `num_rows_train` column results.md orders its table columns by, so
-    anything ordered by this reads in the order that table does. A pair the
-    stats do not cover sorts last rather than raising -- this only decides a
-    display order, and `mean` is such a pair.
-    """
     import pandas as pd
     from huggingface_hub import hf_hub_download
 
@@ -193,64 +98,36 @@ def ntrain() -> dict[str, float]:
     }
 
 
-# Read once each: both are asked for per key below, and neither changes within
-# a run.
 targets = functools.cache(published_best)
 sizes = functools.cache(ntrain)
 
 
 @functools.cache
 def api() -> wandb.Api:
-    """One `Api` for the whole script: each one re-reads the settings files and
-    re-opens a client, and nothing here needs more than a single session."""
     return wandb.Api()
 
 
 def swa_key(key: str) -> str:
-    """Where `rt.train` logs the SWA twin of `key`."""
     return f"swa/{key}"
 
 
 def target_key(key: str) -> str:
-    """Where `rt.train` logs the published target for `key`."""
     return f"target/{key}"
 
 
 def best_key(key: str) -> str:
-    """Where `rt.eval` logs the best-so-far twin of a `tune/` key."""
     return key.replace("tune/", "tune/best/", 1) if key.startswith("tune/") else ""
 
 
 def axis(key: str, x: str) -> str:
-    """The x this key is logged against.
-
-    The tuning phase sweeps configurations and the ensembling phase sweeps
-    seeds, so a project carrying both has two x-axes and a panel has to pick
-    the one its key moves along.
-    """
     return "tune/idx" if key.startswith("tune/") else x
 
 
 def task_size(key: str) -> float:
-    """The train-set size behind a `{metric}/{split}/{db}/{task}` key.
-
-    Sorting a dashboard section by this is what puts its panels in results.md's
-    column order. A key naming no task -- or a task RelBench's stats do not
-    cover -- sorts last, where it does not disturb the tasks' order.
-    """
     return sizes().get("/".join(key.split("/")[2:]), math.inf)
 
 
 def panel(key: str, keys: set[str], x: str, prefix: str = "") -> wr.LinePlot:
-    """The metric, its SWA twin, and the target, on one y-axis.
-
-    The keys are given exactly (not as a regex prefix) so `auroc/val/mean`
-    does not swallow the per-task curves, and the target is listed last so it
-    draws on top of the curve it bounds.
-
-    `prefix` comes off the title: what the section name already says does not
-    need repeating in every panel inside it.
-    """
     y = [
         k
         for k in (key, swa_key(key), best_key(key), target_key(key))
@@ -266,12 +143,6 @@ def panel(key: str, keys: set[str], x: str, prefix: str = "") -> wr.LinePlot:
 
 
 def step_vs_runtime() -> wr.LinePlot:
-    """How fast a run is actually moving: step against wall-clock seconds, so
-    a run that has stalled or is crawling reads off the slope.
-
-    `_step` and `_runtime` are wandb's own bookkeeping series -- excluded from
-    the key space, which is why this panel is written by hand.
-    """
     return wr.LinePlot(
         title="step vs runtime", x="_runtime", y=["_step"], smoothing_show_original=True
     )
@@ -285,13 +156,6 @@ def section(
     is_open: bool = True,
     prefix: str = "",
 ) -> ws.Section:
-    """One section, COLS panels wide and deep enough to hold all of them.
-
-    wandb paginates a section at columns x rows and defaults to 3x2, which
-    hides most of a twelve-task sweep behind a pager; the grid here never
-    pages, and its width is fixed so panels are the same size section to
-    section.
-    """
     return ws.Section(
         name=name,
         panels=[panel(k, all_keys, x, prefix) for k in keys],
@@ -304,18 +168,6 @@ def section(
 
 
 def logged_keys(entity: str, project: str) -> list[str]:
-    """Every key logged by any run in the project, system stream included.
-
-    A run's summary carries one entry per metric key it ever logged, so the
-    union over runs is the project's key space; `systemMetrics` is the same
-    thing for the telemetry stream, which the summary does not cover.
-
-    Asked for by hand rather than through `Api.runs`, which is what makes this
-    fast: the SDK's run node pulls config, sweep, files and the rest for every
-    run and then builds a `Run` object around each, tens of seconds for a sweep
-    of any size, where the two JSON blobs this actually reads come back in a
-    fraction of a second.
-    """
     keys: set[str] = set()
     cursor = None
     while True:
@@ -333,23 +185,9 @@ def logged_keys(entity: str, project: str) -> list[str]:
 
 
 def project_keys(entity: str, project: str) -> set[str]:
-    """The key space the panels are built from: what the runs log, plus the
-    benchmark seeded below."""
     keys = set(logged_keys(entity, project))
-    # Every task the benchmark has, whether or not a run has ever logged it --
-    # not just the ones this sweep has submitted so far. `published_best` is
-    # keyed by the same `{metric}/{split}/{db}/{task}` names `rt.train` logs,
-    # and its task set is exactly RelBench's 21 forecast tasks (`results.csv`
-    # covers the whole of `db-task-lists/forecast.json`, checked), so seeding
-    # the lot is what makes the view outlive the run set: a task added to a
-    # sweep, or a run submitted by hand, starts logging into a panel that is
-    # already there instead of into no panel at all. Both halves are
-    # seeded -- the target alone would land in a panel of its own.
     for k in targets():
         keys |= {k, target_key(k)}
-    # The same seeding for the tuning phase, in a project that has one: a task
-    # whose job has not started tuning yet gets the panel its curve will land
-    # in. Only the val targets, which is the split the tuning reads.
     if any(k.startswith("tune/") for k in keys):
         for k in targets():
             if "/val/" in k and not k.endswith("/mean"):
@@ -381,16 +219,6 @@ query Views($entityName: String, $name: String) {
 
 
 def personal_view(entity: str, project: str) -> tuple[str, str, str]:
-    """The (internal name, id, title) of the viewer's own workspace view.
-
-    Opening a project lands on the personal workspace, so that is the view this
-    script writes -- a saved view of its own would have to be picked from the
-    view menu every time, and there is no "make this one the default" anywhere
-    in the API. Its slug is derived from the username rather than random, which
-    is what lets us address it before it exists (a project never visited in the
-    UI has no such view yet, and upserting the slug creates it). The id comes
-    back empty for a view that has never been saved; `save` creates it.
-    """
     username = api().viewer.username
     slug = "nw-nwuser" + "".join(c for c in username if c.isalnum()) + "-w"
     resp = execute_graphql(api(), VIEWS_QUERY, {"entityName": entity, "name": project})
@@ -403,8 +231,6 @@ def personal_view(entity: str, project: str) -> tuple[str, str, str]:
 
 def build(entity: str, project: str, x: str) -> ws.Workspace:
     keys = project_keys(entity, project)
-    # A key that is some other key's twin or target gets no panel of its own:
-    # it already rides along in that key's panel.
     folded = (
         {swa_key(k) for k in keys}
         | {target_key(k) for k in keys}
@@ -423,25 +249,13 @@ def build(entity: str, project: str, x: str) -> ws.Workspace:
 
     for metric in METRICS:
         for split in SPLITS:
-            # The per-task curves against their published bests: what the
-            # sweep is for. The `mean` keys are left out -- they are not a
-            # task, and they fall through to the namespace grouping below.
             picked = [
                 k
                 for k in leaders
                 if k.startswith(f"{metric}/{split}/") and not k.endswith("/mean")
             ]
-            # Smallest train set first, the order results.md gives its columns:
-            # the two read side by side, and it puts the tasks where fine-tuning
-            # has the most to prove at the front of the section.
             picked.sort(key=task_size)
             dashboard(f"{metric}/{split}", picked)
-    # The context search, per task: the score of each configuration in the
-    # order it was tried, the best so far and the published target riding
-    # along in the same panel. `tune/` is where `rt.eval` logs its tuning
-    # phase, and only the tuning experiments have it. Split by metric and
-    # split, and named, like the sections above: the section carries what the
-    # panels have in common and the panel titles carry only the task.
     tuned = set()
     for metric in METRICS:
         for split in SPLITS:
@@ -453,24 +267,13 @@ def build(entity: str, project: str, x: str) -> ws.Workspace:
             picked.sort(key=lambda k: task_size(k.removeprefix("tune/")))
             dashboard(f"tune/{metric}/{split}", picked)
             tuned.update(picked)
-    # The knobs themselves, so a point on those curves reads back to the
-    # configuration that produced it.
     dashboard("tune", [k for k in leaders if k.startswith("tune/") and k not in tuned])
 
-    # The `mean` keys get no dashboard of their own: they fall through to the
-    # namespace grouping below with the rest of their metric.
-
-    # The training curves, in reading order: how fast the run is moving first
-    # (the two timings and the step-vs-runtime slope), then what it is doing
-    # (loss, grad norm, lr). Hand-ordered because the namespace grouping below
-    # sorts alphabetically, which interleaves the two halves.
     train = [
         panel(k, keys, x, "train/") if k else step_vs_runtime()
         for k in TRAIN_ORDER
         if k is None or k in leaders
     ]
-    # A project of eval runs logs none of these: no section rather than an
-    # empty one at the top of the view.
     if any(k in leaders for k in TRAIN_ORDER if k):
         sections.append(
             ws.Section(
@@ -482,9 +285,6 @@ def build(entity: str, project: str, x: str) -> ws.Workspace:
         )
         shown.update(k for k in TRAIN_ORDER if k)
 
-    # Everything else, so nothing a run logs goes missing from the view,
-    # grouped by top-level namespace and collapsed: these are the catch-all,
-    # not what the view is for, and open they push the dashboards off screen.
     rest = [k for k in leaders if k not in shown and not k.startswith("system.")]
     for ns in sorted({k.split("/")[0] for k in rest}):
         sections.append(
@@ -496,11 +296,6 @@ def build(entity: str, project: str, x: str) -> ws.Workspace:
                 is_open=False,
             )
         )
-    # Telemetry is the app's own: the default workspace holds a *panel-less*
-    # section named "System" that the app fills at render time. `save` is what
-    # marks it auto (see there); an empty section alone renders empty, and
-    # panels written by hand against the `system.*` keys the API reports render
-    # blank too.
     if any(k.startswith("system.") for k in keys):
         sections.append(ws.Section(name=SYSTEM, panels=[], is_open=False))
 
@@ -510,25 +305,8 @@ def build(entity: str, project: str, x: str) -> ws.Workspace:
         project=project,
         name=display_name,
         sections=sections,
-        # No `max_runs` here, and `strip_max_runs` takes out the default the
-        # SDK writes in its place -- see there for why any value is the wrong
-        # one.
         settings=ws.WorkspaceSettings(x_axis=x),
-        # The sections here are the whole view: the app is not to append panels
-        # of its own for keys logged after this script ran. A new key gets its
-        # panel by rerunning the script, which folds it into the section it
-        # belongs to rather than into an auto-generated one.
         auto_generate_panels=False,
-        # One line per task, not per slurm attempt. A requeue -- preemption,
-        # wall limit, node failure -- resumes from the checkpoint under a fresh
-        # wandb run named `{task}-{jobid}.{n}`, so a task's history is spread
-        # over as many runs as it was interrupted, each starting at the epoch it
-        # resumed from. `run_name` is `submit`'s `{db}/{task}` and is the same
-        # across all of them, so grouping on it draws the segments as one curve.
-        #
-        # No state filter: an interrupted segment is left `crashed`, which is
-        # indistinguishable from a real crash, and dropping those is what leaves
-        # a task's curve starting mid-training.
         runset_settings=ws.RunsetSettings(groupby=[ws.Config("run_name")]),
     )
     workspace._internal_name, workspace._internal_id = name, id
@@ -536,14 +314,6 @@ def build(entity: str, project: str, x: str) -> ws.Workspace:
 
 
 def strip_max_runs(spec: object) -> None:
-    """Drop every `maxRuns` from the spec, wherever the SDK wrote one.
-
-    Leaving `WorkspaceSettings.max_runs` unset is not enough: the SDK fills it
-    with wandb's own default of 10, and *any* value there is a run limit as far
-    as the app is concerned -- it truncates the sweep and captions every panel
-    "Limited to N runs for each visualized metric". Absent from the spec, the
-    app draws the whole runset with no caption.
-    """
     if isinstance(spec, dict):
         spec.pop("maxRuns", None)
         for v in spec.values():
@@ -566,28 +336,11 @@ mutation Upsert($id: ID, $entityName: String, $projectName: String, $name: Strin
 
 
 def save(workspace: ws.Workspace) -> str:
-    """Save the workspace, with the System section marked auto.
-
-    `wandb_workspaces` has no field for `isPanelsAuto`, the flag that tells the
-    app to generate a section's panels itself -- which is the only way the
-    system charts appear, since nothing in the run's logged keys draws them.
-    So the spec is serialized, the flag set on that one section, and the
-    result upserted directly rather than through `Workspace.save()`.
-
-    The run feed's page size gets the same treatment, for the same reason: no
-    field for it either, and its default of 10 is what makes the run list open
-    on "1-10" with the rest of the sweep behind a pager.
-    """
     view = workspace._to_model()
     view.spec.section.run_sets[0].run_feed.page_size = PAGE_SIZE
     spec = json.loads(view.spec.model_dump_json(by_alias=True, exclude_none=True))
     strip_max_runs(spec)
     for s in spec["section"]["panelBankConfig"]["sections"]:
-        # Square panels. `SectionLayoutSettings` has no width or height field
-        # -- it writes only the column and row counts -- so the box is sized
-        # here. `snapToColumns` off is what makes `boxWidth` mean anything:
-        # with it on the app derives the width from the column count and only
-        # `boxHeight` is honored, which is square at exactly one window width.
         s.setdefault("flowConfig", {}).update(
             snapToColumns=False, boxWidth=BOX, boxHeight=BOX
         )
@@ -610,8 +363,6 @@ def save(workspace: ws.Workspace) -> str:
     )
     workspace._internal_name = resp["upsertView"]["view"]["name"]
     workspace._internal_id = resp["upsertView"]["view"]["id"]
-    # Not `workspace.url`: that builds a `?nw=` link to a saved view, and the
-    # personal workspace is what the bare project URL opens.
     return f"https://wandb.ai/{workspace.entity}/{workspace.project}"
 
 

@@ -1,11 +1,3 @@
-"""Measure and check the embedding stage. A roach target, so it runs in the
-project's environment with a whole node's GPUs in one rank.
-
-`dtypes` answers a correctness question rather than a performance one: the
-single-device and multi-process paths must agree, or a collection built partly
-on one and partly on the other is internally inconsistent.
-"""
-
 import time
 import orjson
 import numpy as np
@@ -19,8 +11,6 @@ def _texts(text_path: str, n: int) -> list[str]:
 
 
 def dtypes(*, text_path: str, n_texts: int, batch_size: int, embedder: str) -> None:
-    """Do both paths compute in bf16, and do they agree?"""
-
     texts = _texts(text_path, n_texts)
     ngpu = torch.cuda.device_count()
     one = TextEmbedder(batch_size, embedder, "cuda:0")
@@ -43,15 +33,13 @@ def dtypes(*, text_path: str, n_texts: int, batch_size: int, embedder: str) -> N
 
 
 def bench(*, text_path: str, n_texts: int, batch_size: int, embedder: str) -> None:
-    """1 GPU against every GPU on the node, same texts."""
-
     texts = _texts(text_path, n_texts)
     ngpu = torch.cuda.device_count()
     print(
         f"gpus={ngpu} card={torch.cuda.get_device_name(0)} texts={len(texts):,}",
         flush=True,
     )
-    TextEmbedder(batch_size, embedder, "cuda:0")  # warm the model in
+    TextEmbedder(batch_size, embedder, "cuda:0")
 
     one = TextEmbedder(batch_size, embedder, "cuda:0")
     t0 = time.monotonic()

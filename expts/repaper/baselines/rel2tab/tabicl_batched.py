@@ -1,40 +1,3 @@
-"""Batched TabICL predictor.
-
-Speeds up TabICL inference by stacking many independent (X_train, y_train,
-X_test) triplets into a single TabICL forward pass at the GPU tensor level.
-The stock TabICL sklearn wrapper batches only ensemble views of the *same*
-dataset; this class batches *different* datasets together by exploiting the
-``(B, T, H)`` batch dimension that TabICL natively supports.
-
-Real workloads have many distinct ``train_size`` values per ``predict_batch``
-call, so grouping by exact ``train_size`` collapses to groups of size 1. We
-instead bucket each item to ``bin_size = next_pow2(max(train_size,
-min_bin_size))`` and pad shorter items up to ``bin_size`` with a real
-**key-padding mask** so padded rows never appear as keys in any attention
-layer the test row sees:
-
-  * In TabICL's ICL transformer, the test query attends to all train
-    positions; padded train positions are masked out of those keys.
-  * In TabICL's column-wise embedding, every induced-self-attention block's
-    stage-1 has inducing points attending to train positions; the same padded
-    positions are masked there so they don't bias the column statistics.
-  * Row-wise interaction processes each row independently across columns, so
-    padded rows never appear as keys for real rows; no mask needed there.
-
-The mask is installed via a thread-local that the patched
-``MultiheadAttentionBlock.forward`` reads. When the thread-local is unset
-(any caller outside this predictor) the patched function is a pass-through.
-
-Items are first checked for trivial cases (no train data, all-identical
-features, single-class labels) and short-circuited. The remaining items are
-grouped by ``(task_type, bin_size, num_classes, num_features)`` and each group
-runs through TabICL in chunks of ``max_batch_size``. Per-task feature scaling
-reproduces TabICL's ``normalization_method="none"`` inference path exactly;
-regression labels are z-scored per item and inverse-scaled afterwards. The
-per-task ensemble-view preprocessing of TabICLClassifier / TabICLRegressor is
-intentionally skipped to keep the path purely batched.
-"""
-
 import math
 import threading
 from collections import defaultdict
@@ -44,12 +7,6 @@ from pathlib import Path
 import numpy as np
 import torch
 
-# --- tabicl module-path compatibility shim -----------------------------------
-# The attention patch + TabICL imports below use ``tabicl.model.*``. Some
-# installed tabicl builds (e.g. the 2.1.x wheels) expose the internals under
-# ``tabicl._model`` instead (identical submodules: attention, layers, ssmax,
-# tabicl). Alias the public path to the private one when only the latter
-# exists so the patched imports resolve regardless of wheel layout.
 import importlib as _importlib  # noqa: E402
 import sys as _sys  # noqa: E402
 
@@ -70,33 +27,10 @@ except ModuleNotFoundError:
     except ModuleNotFoundError:
         pass
 
-# TabICL v2 checkpoints, fetched once by scripts/fetch_tabicl.py (see
-# ../README.md) into a directory every node can read; compute nodes have no
-# Hub access, so nothing downloads at predict time.
 CLF_CHECKPOINT = "tabicl-classifier-v2-20260212.ckpt"
 REG_CHECKPOINT = "tabicl-regressor-v2-20260212.ckpt"
 HF_REPO = "jingang/TabICL"
 
-
-# --- Thread-local key-padding mask plumbing ----------------------------------
-#
-# Two thread-local pieces of state, both set together by ``_padded_forward``:
-#
-#   _local.mask       : (B, train_size) bool, True = padded position to ignore
-#   _local.real_lens  : (B,) int, per-item real train_size before padding
-#
-# ``_local.mask`` is read by the patched ``MultiheadAttentionBlock.forward``
-# and injected as ``key_padding_mask`` whenever the block's keys span the
-# padded train portion.
-#
-# ``_local.real_lens`` is read by the patched ``sdpa_with_flattened_batch``,
-# which would otherwise compute SSMax with ``src_len = bin_size``. Per-item
-# ``log(real_n)`` is required for SSMax correctness -- without it,
-# padded-vs-unpadded predictions diverge by ~25 percentage points on small
-# items even when the mask is right, because every attention layer's queries
-# are scaled by ``log(bin_size)`` instead of ``log(real_n[b])``.
-#
-# Both patches are pass-throughs when the thread-locals are unset.
 
 _local = threading.local()
 _patch_installed = False
@@ -104,12 +38,6 @@ _patch_lock = threading.Lock()
 
 
 def _per_item_ssmax(ssmax_layer, q, n_tensor):
-    """Apply ``ssmax_layer`` to ``q`` with per-flat-item ``n``.
-
-    ``q`` has shape ``(flat_bs, n_heads, tgt_len, head_dim)`` and ``n_tensor``
-    has shape ``(flat_bs,)``. This mirrors the original SSMax forward but
-    broadcasts ``logn`` along the leading dim instead of using a scalar.
-    """
     from tabicl.model.ssmax import QASSMaxMLP, SSMax, SSMaxMLP
 
     logn = torch.log(n_tensor.clamp(min=1).to(q.dtype)).reshape(-1, 1)
@@ -136,11 +64,6 @@ def _per_item_ssmax(ssmax_layer, q, n_tensor):
 
 
 def _install_attention_patch():
-    """Idempotently patch the two TabICL attention sites.
-
-    The patches are pass-throughs when ``_local.mask`` is unset, so direct use
-    of TabICL elsewhere in the process is unaffected.
-    """
     global _patch_installed
     with _patch_lock:
         if _patch_installed:
@@ -234,12 +157,6 @@ def _install_attention_patch():
 
 @contextmanager
 def _padded_forward(mask, real_lens):
-    """Activate the masked + per-item-SSMax forward for the duration of the call.
-
-    Args:
-        mask: bool tensor ``(B, train_size)``, True at padded positions.
-        real_lens: int tensor ``(B,)``, real train_size per item before padding.
-    """
     prev_mask = getattr(_local, "mask", None)
     prev_lens = getattr(_local, "real_lens", None)
     _local.mask = mask
@@ -251,37 +168,7 @@ def _padded_forward(mask, real_lens):
         _local.real_lens = prev_lens
 
 
-# --- Predictor ---------------------------------------------------------------
-
-
 class TabICLBatchedPredictor:
-    """TabICL predictor that batches many independent sequences per forward.
-
-    eval_bs-invariance and precision
-    --------------------------------
-    An item's prediction must NOT depend on how many other items happen to
-    share its TabICL forward pass (``eval_bs`` / chunk composition). The
-    thread-local key-padding mask and per-item SSMax make the *mathematical*
-    result batch-independent, and with fp32 math the per-item predictions are
-    bit-stable across ``max_batch_size`` (only ~1e-6 SDPA reduction-order
-    jitter remains).
-
-    ``torch.autocast`` (AMP / bf16) breaks this: bf16 batched matmuls (cuBLAS)
-    pick kernels / accumulation order as a function of the batch dimension, so
-    the same item gets a slightly different bf16 result depending on the chunk
-    it lands in -- large enough to swing AUROC by >1pt at large contexts. The
-    batched forward therefore always runs in **fp32**.
-
-    Args:
-        max_batch_size: sequences stacked per TabICL forward (memory knob).
-        min_bin_size: smallest padding bin; items with fewer train rows are
-            padded up to it.
-        softmax_temperature: applied to classification logits.
-        checkpoint_dir: local directory holding the TabICL v2 checkpoints
-            (``fetch_tabicl.py``); nothing downloads at predict time.
-        device: cuda device the models run on.
-    """
-
     def __init__(
         self, max_batch_size, min_bin_size, softmax_temperature, checkpoint_dir, device
     ):
@@ -354,12 +241,6 @@ class TabICLBatchedPredictor:
 
     @staticmethod
     def _trivial_pred(train_features, train_labels, test_features, task_type):
-        """Return early prediction if work item is trivial; else None.
-
-        Trivial cases also catch any inputs we can't safely standardize: a
-        feature tensor that's entirely non-finite, or a label tensor that's
-        non-finite, would otherwise propagate NaN through TabICL.
-        """
         if train_features is None or len(train_labels) < 2:
             return 0.5 if task_type == "clf" else 0.0
 
@@ -375,7 +256,6 @@ class TabICLBatchedPredictor:
                 else float(y_train[torch.isfinite(y_train)].mean().item())
             )
 
-        # All-identical features => TabICL has no signal; predict label mean.
         first_row = X_train[0]
         if (X_train == first_row).all():
             finite_y = y_train[torch.isfinite(y_train)]
@@ -392,34 +272,6 @@ class TabICLBatchedPredictor:
 
     @staticmethod
     def _preprocess_none_batched(X_train, x_test, real_lens):
-        """GPU-vectorized equivalent of TabICL's ``PreprocessingPipeline`` with
-        ``normalization_method="none"``: ``CustomStandardScaler`` followed by
-        ``OutlierRemover``.
-
-        TabICL is trained on ``outlier_removing(threshold=4) -> standard_scaling
-        (clip=100)``; at inference, ``"none"`` applies the same two ops in the
-        reverse order (CustomStandardScaler -> OutlierRemover). This helper
-        reproduces that inference-time path exactly while processing all ``B``
-        items in a chunk in one vectorized pass.
-
-        ``X_train`` is pre-stacked and zero-padded to ``(B, T, H)``; per-item
-        statistics are computed over the first ``real_lens[b]`` rows only.
-        Padded train rows in the output have undefined values -- the caller's
-        key-padding mask hides them in attention.
-
-        Constants and ddof choices match the sklearn classes exactly:
-
-        * ``CustomStandardScaler``: ``mean = X.mean(axis=0)`` and
-          ``scale = X.std(axis=0) + 1e-6`` (numpy ``std`` defaults to
-          ``ddof=0``, additive epsilon), output clipped to ``[-100, 100]``.
-        * ``OutlierRemover``: two-stage Z-score with ``ddof=1`` (real_lens >= 2
-          by the trivial-case filter), ``threshold=4.0``, ``std`` floored at
-          ``1e-6``; transform is the log-soft clip
-          ``max(-log1p(|x|) + lower, x); min(log1p(|x|) + upper, x)``.
-
-        Both train and test go through the same two transforms; the bounds are
-        computed from the train slice only.
-        """
         threshold = 4.0
         eps = 1e-6
         clip_min, clip_max = -100.0, 100.0
@@ -429,11 +281,10 @@ class TabICLBatchedPredictor:
         B, T, _H = X_train.shape
 
         arange_T = torch.arange(T, device=device).unsqueeze(0)
-        real_mask = (arange_T < real_lens.unsqueeze(-1)).unsqueeze(-1)  # (B, T, 1)
-        n = real_lens.to(dtype).view(B, 1)  # (B, 1)
+        real_mask = (arange_T < real_lens.unsqueeze(-1)).unsqueeze(-1)
+        n = real_lens.to(dtype).view(B, 1)
         eps_t = torch.tensor(eps, device=device, dtype=dtype)
 
-        # ---- CustomStandardScaler ---- (numpy std default ddof=0; epsilon additive)
         masked_X = X_train * real_mask
         mean_cs = masked_X.sum(dim=1) / n
         diffs_cs = (X_train - mean_cs.unsqueeze(1)) * real_mask
@@ -445,7 +296,6 @@ class TabICLBatchedPredictor:
         )
         x_test_scaled = ((x_test - mean_cs) / scale_cs).clamp(clip_min, clip_max)
 
-        # ---- OutlierRemover stage 1 ---- (ddof=1 since real_lens >= 2 here)
         masked_Xs = X_scaled * real_mask
         mean_or1 = masked_Xs.sum(dim=1) / n
         diffs_or1 = (X_scaled - mean_or1.unsqueeze(1)) * real_mask
@@ -458,10 +308,9 @@ class TabICLBatchedPredictor:
         outlier_mask = (X_scaled < lower_or1.unsqueeze(1)) | (
             X_scaled > upper_or1.unsqueeze(1)
         )
-        valid_mask = real_mask & ~outlier_mask  # (B, T, H)
+        valid_mask = real_mask & ~outlier_mask
 
-        # ---- OutlierRemover stage 2 ---- (ddof=1; NaN where < 2 valid samples)
-        valid_count = valid_mask.sum(dim=1).to(dtype)  # (B, H)
+        valid_count = valid_mask.sum(dim=1).to(dtype)
 
         sum_clean = (X_scaled * valid_mask).sum(dim=1)
         mean_or2 = torch.where(
@@ -478,10 +327,9 @@ class TabICLBatchedPredictor:
         )
         std_or2 = torch.maximum(torch.sqrt(var_or2), eps_t)
 
-        lower_bounds = mean_or2 - threshold * std_or2  # NaN propagates if all-outlier
+        lower_bounds = mean_or2 - threshold * std_or2
         upper_bounds = mean_or2 + threshold * std_or2
 
-        # ---- OutlierRemover.transform: log-soft clip ----
         def _soft_clip(x, lo, hi):
             x = torch.maximum(-torch.log1p(x.abs()) + lo, x)
             x = torch.minimum(torch.log1p(x.abs()) + hi, x)
@@ -495,24 +343,6 @@ class TabICLBatchedPredictor:
 
     @staticmethod
     def _standardize_y_batched(y_train, real_lens):
-        """Per-item ``StandardScaler`` matching sklearn's behavior on
-        regression labels.
-
-        sklearn's ``StandardScaler`` uses ``mean`` and ``std`` (``ddof=0``) and
-        replaces a zero std with 1.0 via ``_handle_zeros_in_scale``. This
-        matches that exactly; padded label positions don't enter the per-item
-        statistics.
-
-        Args:
-            y_train: ``(B, T)`` train labels, padded with anything beyond
-                ``real_lens[b]`` (those positions are masked out).
-            real_lens: ``(B,)`` per-item real n_train.
-
-        Returns:
-            ``y_n``: ``(B, T)`` scaled labels (padded positions undefined).
-            ``y_mean``: ``(B,)`` per-item mean.
-            ``y_std``: ``(B,)`` per-item std (with zero replaced by 1.0).
-        """
         device = y_train.device
         dtype = y_train.dtype
         B, T = y_train.shape
@@ -537,13 +367,11 @@ class TabICLBatchedPredictor:
 
     @staticmethod
     def _bin_size(n_train, min_bin_size):
-        """Return next-pow2 bin >= max(n_train, min_bin_size)."""
         n = max(n_train, min_bin_size)
         return 1 << (n - 1).bit_length()
 
     @staticmethod
     def _zero_pad(rows, target_n):
-        """Right-pad ``rows`` (n, ...) to length ``target_n`` with zeros."""
         n = rows.shape[0]
         if n == target_n:
             return rows
@@ -553,33 +381,12 @@ class TabICLBatchedPredictor:
         return torch.cat([rows, pad], dim=0)
 
     def predict_batch(self, work_items):
-        """Predict many work items by batching forwards through TabICL.
-
-        Args:
-            work_items: list of ``(train_features, train_labels, test_features,
-                task_type)`` tuples. ``train_features`` and ``test_features``
-                are float Tensors with the same feature dimension across the
-                whole batch (they come from one ``compute_features`` call);
-                ``train_labels`` is a 1-D float Tensor.
-
-        Returns:
-            list of scalar floats, one per work item, in input order.
-        """
         n = len(work_items)
         results = [None] * n
 
-        # Phase 1: handle trivial cases, prepare tensors for the rest.
-        # Group key: (task_type, bin_size, num_classes_or_None, num_features).
-        # For clf, items in a group must share num_classes -- TabICL asserts
-        # it across the stacked batch. With zero-padding, padded labels are 0
-        # which adds class 0 to every item; ``num_classes = max(2, observed)``
-        # keeps binary items at ``num_classes=2`` after padding.
         groups = defaultdict(list)
 
         for i, (tf, tl, xf, tt) in enumerate(work_items):
-            # NaN imputation matching sklearn's mean strategy: featurizers
-            # produce NaN when aggregates fall on empty groups; propagating
-            # NaN through manual standardization gives NaN predictions.
             if tf is not None:
                 tf = tf.float()
                 xf = xf.float()
@@ -598,8 +405,6 @@ class TabICLBatchedPredictor:
             n_train, d = tf.shape
             bin_size = self._bin_size(n_train, self.min_bin_size)
 
-            # Standardization is deferred to the batched preprocessor below;
-            # raw tensors are queued here and stacked + preprocessed per chunk.
             if tt == "clf":
                 y_int = (tl > 0).long()
                 num_classes = max(int(y_int.max().item()) + 1, 2)
@@ -608,10 +413,8 @@ class TabICLBatchedPredictor:
                 groups[key].append((i, n_train, tf, y_int.float(), xf, fallback))
             else:
                 key = (tt, bin_size, None, d)
-                # reg fallback is recomputed from the per-item y_mean below.
                 groups[key].append((i, n_train, tf, tl, xf, 0.0))
 
-        # Phase 2: batched forward per group, in chunks.
         for key, items in groups.items():
             tt, bin_size, num_classes, d = key
 
@@ -628,7 +431,6 @@ class TabICLBatchedPredictor:
                 chunk = items[chunk_start : chunk_start + self.max_batch_size]
                 bs = len(chunk)
 
-                # Stack raw (un-standardized) tensors padded to bin_size.
                 X_raw_stack = torch.stack(
                     [self._zero_pad(it[2], bin_size) for it in chunk]
                 ).to(self._device, non_blocking=True)
@@ -654,7 +456,7 @@ class TabICLBatchedPredictor:
                 )
 
                 if tt == "clf":
-                    y_train_stack = y_raw_stack  # 0/1 as float, no scaling
+                    y_train_stack = y_raw_stack
                     y_means = None
                     y_stds = None
                 else:
@@ -672,7 +474,7 @@ class TabICLBatchedPredictor:
                             return_logits=True,
                             softmax_temperature=self.softmax_temperature,
                             inference_config=cfg,
-                        )  # (bs, 1, num_classes)
+                        )
                         probs = torch.softmax(
                             logits.float() / self.softmax_temperature, dim=-1
                         )
@@ -683,13 +485,9 @@ class TabICLBatchedPredictor:
                             y_train=y_train_stack,
                             output_type="mean",
                             inference_config=cfg,
-                        )  # (bs, 1)
+                        )
                         pred_np = means[:, 0].float().detach().cpu().numpy()
 
-                # NaN guard: a non-finite prediction (rare numerical corner
-                # case in TabICL) falls back to a sensible per-item value (the
-                # empirical label rate for clf, the train-label mean for reg)
-                # instead of letting a NaN reach the caller.
                 finite_mask = np.isfinite(pred_np)
                 if tt == "reg":
                     y_means_np = y_means.detach().cpu().numpy()

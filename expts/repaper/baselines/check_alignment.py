@@ -1,19 +1,3 @@
-"""Assert classic relbench and the raw HF-format collection carry the same data.
-
-The featurize scripts read task rows from the HF parquets (the order the
-preprocessed data indexes) but compute features against the database the
-classic relbench package loads. That is only sound if the two distributions
-are the same data, so this check asserts, for every task and split: equal row
-counts, equal and unique (entity, time) key sets, and equal labels by key --
-and, for every database table, equal row counts between the classic db and
-the HF ``db/`` parquets. (Row *order* is allowed to differ; it does.)
-
-Runs in the featurize environment, on the login node:
-
-    RELBENCH_CACHE_DIR=<cache> pixi run -e featurize \
-        python -m expts.repaper.baselines.check_alignment
-"""
-
 import json
 from pathlib import Path
 

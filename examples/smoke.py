@@ -1,20 +1,3 @@
-"""A pretraining run small enough to finish in a minute on one GPU.
-
-Not a benchmark: it exists so that a change to the training path fails here
-first, in seconds, instead of an hour into a real run. Every argument the real
-runs take is passed here too -- that is the point, since a missing one is a
-submit-time error either way.
-
-A GPU is required. The model attends with ``flex_attention``, which has no CPU
-backward ("FlexAttention does not support backward on CPU"), so there is no
-CPU-only training path to fall back on; ``tests/test_smoke.py`` skips itself
-when there is no CUDA device, and the same function runs on a GPU through
-roach.slurm.
-
-    python examples/smoke.py                      # from a checkout, on a GPU
-    from examples.smoke import smoke; smoke(...)  # or submitted with roach.slurm
-"""
-
 from datetime import datetime
 
 from rt.train import main as train
@@ -23,9 +6,7 @@ from rt.train import main as train
 def smoke(
     pre_dir: str, out_root: str, run_id: str, total_steps: int, compile: bool
 ) -> None:
-    """Tiny model, tiny context, two databases' worth of tasks, a few steps."""
     train(
-        # model: small enough to step on a CPU, real enough to exercise the code
         embedder="all-MiniLM-L12-v2",
         d_text=384,
         num_blocks=1,
@@ -36,7 +17,6 @@ def smoke(
         materialize_attn_masks=True,
         loss_fn="huber",
         load_ckpt_path=None,
-        # data + optimization
         db_task_list=[("rel-f1", "driver-dnf")],
         train_splits=["train"],
         pre_dir=pre_dir,
@@ -72,7 +52,6 @@ def smoke(
         vector_db_path=None,
         db_cutoff=None,
         resume_save_mins=60.0,
-        # in-loop validation: the final eval always runs, so keep it minimal
         eval_splits=["val"],
         eval_db_task_list=[("rel-f1", "driver-dnf")],
         eval_pre_dir=pre_dir,
@@ -89,7 +68,6 @@ def smoke(
         eval_ensemble_size=1,
         eval_vector_db_path=None,
         eval_lcs_bw_pl_grid=[(64, 8, True)],
-        # logging
         run_id=run_id,
         targets={},
         project="smoke",

@@ -1,6 +1,3 @@
-"""Preprocessed-data access: local pre_dir resolution, datasets, task
-enumeration, and RAM pinning."""
-
 from rt.data.datasets import (
     EvalDataset,
     RustlerDataset,

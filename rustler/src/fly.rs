@@ -32,12 +32,6 @@ use std::str;
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
 
-/// Allocate a Vec<T> of `len` elements initialized to zero bytes.
-/// Uses alloc_zeroed (calloc) for lazy zero-page optimization,
-/// avoiding eager memset for large allocations.
-///
-/// # Safety
-/// Caller must ensure all-zero-bits is a valid representation of T.
 unsafe fn alloc_zeroed_vec<T>(len: usize) -> Vec<T> {
     if len == 0 {
         return Vec::new();
@@ -64,10 +58,6 @@ fn fmt_thousands(n: usize) -> String {
     out.chars().rev().collect()
 }
 
-/// Expected reasons an item cannot produce a training sequence.
-/// The training path silently retries with a new item; the eval path
-/// propagates these as a panic via `.unwrap()`, since eval items are
-/// expected to be pre-validated.
 #[derive(Debug)]
 enum BuildError {
     MissingTargetCol,
@@ -81,25 +71,8 @@ fn check_deadline(deadline: Instant) {
     }
 }
 
-/// Stride (power of two) for amortized deadline checks inside hot inner
-/// loops with small bodies. Per-iteration overhead becomes a single
-/// `i & (N-1) == 0` predicted-not-taken branch (~1 ns); the actual
-/// `Instant::now()` cost is paid once every N iters. Picked so that the
-/// worst-case overshoot between checks (N × body ≈ 30 µs at body=30 ns)
-/// is comfortably below realistic timeouts (≥ 1 ms).
 const DEADLINE_CHECK_EVERY: usize = 1024;
 
-/// Draws BFS expansion may spend per `bfs_width` slots it is trying to fill
-/// (see `bfs_collect_nodes`). It bounds the expansion at O(bfs_width) whatever
-/// the node's p2f degree, which is the point: the degree reaches 44.5M in
-/// relbench, and work proportional to it is a hang rather than a slow run.
-///
-/// 2 fills the width whenever half the valid edges are eligible, which is
-/// every node that is not dominated by rows of *other* tasks. Below that the
-/// expansion is narrower than asked, and a node's other-task rows are bounded
-/// (a few hundred at the relbench worst case) while its db edges are not, so
-/// the nodes that could be affected are small ones the budget covers many
-/// times over.
 const DRAW_BUDGET: usize = 2;
 
 struct Vecs {
@@ -118,16 +91,10 @@ struct Vecs {
     is_task_nodes: Vec<bool>,
     is_padding: Vec<bool>,
     timestamps: Vec<i32>,
-    // Visualization-only metadata: which seed node owns this cell's BFS
-    // shell, and at what depth from that seed it was visited. -1 / 0 for
-    // padding slots and the primary target cell respectively. Not consumed
-    // by the model — it's free side-info for inspection tooling.
+
     seed_node_idxs: Vec<i32>,
     bfs_depths: Vec<i32>,
-    // Per-slot validity mask (length = bs). `true` for real items, `false`
-    // for dummy/phantom slots (e.g., last-batch overshoot on higher ranks
-    // when num_items isn't a multiple of bs*world_size). Downstream gathers
-    // stay fixed-size and apply this mask after gather on rank 0.
+
     batch_mask: Vec<bool>,
     seq_len: usize,
 }
@@ -173,9 +140,7 @@ impl Vecs {
             timestamps: vec![i32::MIN; l],
             seed_node_idxs: vec![-1; l],
             bfs_depths: vec![-1; l],
-            // Default-true: the common case (training, full eval batches) has
-            // every slot real. Callers flip specific slots to false only when
-            // they know that slot is a phantom (e.g., last-batch overshoot).
+
             batch_mask: vec![true; bs],
             seq_len,
         }
@@ -324,11 +289,6 @@ impl Vecs {
     }
 }
 
-/// Per-table FAISS index + memory-mapped row vectors. Loaded only when
-/// `vector_db_path` is set on the Sampler. The index is wrapped in a Mutex
-/// because FAISS's `search` mutates internal scratch state, but IndexImpl is
-/// not Sync. Vectors are mmap'd as raw f32, row-major, indexed by local
-/// (table-relative) node index.
 #[cfg(feature = "vecdb")]
 struct VectorDbEntry {
     node_idx_offset: i32,
@@ -338,8 +298,6 @@ struct VectorDbEntry {
     index: Mutex<IndexImpl>,
 }
 
-// SAFETY: IndexImpl is not Sync but FAISS's search is internally
-// thread-safe-via-mutex; we serialize access through `index: Mutex<…>`.
 #[cfg(feature = "vecdb")]
 unsafe impl Send for VectorDbEntry {}
 #[cfg(feature = "vecdb")]
@@ -351,9 +309,7 @@ struct Dataset {
     p2f_adj_mmap: Mmap,
     offsets: Vec<i64>,
     table_info: HashMap<String, TableInfo>,
-    /// Per-table FAISS lookup, keyed by table name. `None` when
-    /// `vector_db_path` is not set on the Sampler. When present, every
-    /// table referenced by this dataset's task tuples must have an entry.
+
     #[cfg(feature = "vecdb")]
     vector_db: Option<HashMap<String, VectorDbEntry>>,
 }
@@ -371,56 +327,32 @@ pub struct Sampler {
     world_size: usize,
     datasets: HashMap<String, Dataset>,
     items: Vec<Item>,
-    local_ctx_size_list: Vec<usize>, // Maximum cells per BFS collection; sampled uniformly per item
-    bfs_width_list: Vec<usize>, // Maximum number of DB nodes per BFS level; sampled uniformly per item
-    // Number of random walks used to compute same-table visit counts. When 0,
-    // similar-node selection skips the walk and falls through directly to the
-    // unvisited same-table tier — that's the "random_same_table" mode.
+    local_ctx_size_list: Vec<usize>,
+    bfs_width_list: Vec<usize>,
+
     num_walks: usize,
-    walk_length: usize, // Maximum length of each random walk
-    // Sort key for walk-visited same-table seeds; sampled uniformly per
-    // item from this list. Both branches end with a step_seed-driven
-    // random tiebreak so equal-key seeds don't cluster by HashMap
-    // iteration order.
-    // True:  (ts desc, count desc, random)
-    // False: (count desc, random)
-    // None ts ranks below any Some (std Option ord).
+    walk_length: usize,
+
     prefer_latest_list: Vec<bool>,
-    mask_prob_max: f64, // Maximum probability of masking cells
+    mask_prob_max: f64,
     step: u64,
     stride: u64,
     d_text: usize,
-    // Drives only `self.items.shuffle()` and per-task subsampling in
-    // `create_items` — i.e. *which* items end up in the dataset.
+
     shuffle_seed: u64,
-    // Drives context-construction randomness: train-mode batch item
-    // index sampling, and `step_seed` in `seq_build` (which in turn
-    // feeds mask_prob, local_ctx_size pick, bfs_width pick,
-    // walk visit counts, fallback same-table sampling,
-    // bfs_collect_nodes, and cell masking).
+
     context_seed: u64,
     target_columns: Vec<i32>,
     columns_to_drop: Vec<Vec<i32>>,
-    // Per task: the latest timestamp a row may carry to be visible at all, or
-    // `None` for no cutoff. See `past_cutoff`.
+
     cutoff_timestamps: Vec<Option<i32>>,
     items_per_task: i64,
-    dataset_tuples: Vec<(String, String, i32, i32)>, // (db_name, table_name, node_idx_offset, num_nodes) for each dataset
-    table_ranges: Vec<(i32, i32)>, // (range_start, range_end) per dataset tuple, cached for fallback same-table sampling
+    dataset_tuples: Vec<(String, String, i32, i32)>,
+    table_ranges: Vec<(i32, i32)>,
     quiet: bool,
-    // Per-item wall-clock budget for one `seq_build` attempt. Enforced by
-    // the training path (`seq`); eval bypasses it. Cooperative — checked
-    // at the top of each iteration of the inner BFS-collection and
-    // random-walk loops so the bound is tight even when one helper call
-    // dominates the runtime.
+
     timeout_per_item: f64,
-    // When set, Tier 1 same-table seed selection switches from random
-    // walks to FAISS-similarity lookups against `<vector_db_path>/<db>/
-    // <table>.index` (with row vectors in `<…>_vectors.bin`). The lookup
-    // is streamed: we do an initial small search and progressively
-    // double the search size if the consumer asks for more seeds, so we
-    // never pre-fetch a fixed huge top-k upfront. `None` selects seeds by
-    // random walk with a same-table fallback.
+
     #[cfg_attr(not(feature = "vecdb"), allow(dead_code))]
     vector_db_path: Option<String>,
 }
@@ -512,8 +444,6 @@ impl Sampler {
         vecs.into_pyobject(py)
     }
 
-    /// Build contexts for explicit node indices (one context per node).
-    /// Used by Rel2Tab to build local contexts for each task node.
     fn batch_for_nodes_py(
         &self,
         py: Python<'_>,
@@ -524,7 +454,6 @@ impl Sampler {
         let bs = node_idxs.len();
         let table_name = &self.dataset_tuples[dataset_idx].1;
         let mut vecs = Vecs::new(bs, ctx_size, self.d_text);
-        // batch_mask defaults to all true — every slot is real here.
 
         vecs.chunks_exact_mut(ctx_size, self.d_text)
             .enumerate()
@@ -601,7 +530,6 @@ impl Sampler {
             "cutoff_timestamps must have one entry per task"
         );
 
-        // Collect unique db_names and their associated table_names for deduplication.
         let mut db_to_tables: HashMap<String, Vec<String>> = HashMap::new();
         for (db_name, table_name, _, _) in dataset_tuples.iter() {
             let entry = db_to_tables.entry(db_name.clone()).or_default();
@@ -622,13 +550,7 @@ impl Sampler {
         );
 
         let vector_db_path_ref = vector_db_path.as_deref();
-        // A db whose on-disk files are missing or unreadable is dropped rather
-        // than taking the whole run down -- the same bargain ignore_data_errors
-        // strikes for a bad task below. load_dataset unwraps its way through
-        // half a dozen files, so the guard is a catch_unwind around the load;
-        // the tasks belonging to a dropped db are skipped in the loop after
-        // this one. Without ignore_data_errors (eval, pre-validated inputs) the
-        // panic propagates.
+
         let try_load = |db_name: &String, table_names: &Vec<String>| {
             let compute = std::panic::AssertUnwindSafe(|| {
                 Self::load_dataset(
@@ -668,11 +590,6 @@ impl Sampler {
         };
         pb.finish_and_clear();
 
-        // Pre-compute table ranges for fallback same-table sampling.
-        // When ignore_data_errors is true, catch panics per-task, print a red
-        // warning, drop the offending task and its parallel arrays. When
-        // false (e.g. eval), let panics propagate — eval tasks are expected
-        // to be pre-validated.
         let (
             dataset_tuples,
             target_columns,
@@ -773,7 +690,7 @@ impl Sampler {
             local_rank,
             world_size,
             datasets,
-            items: Vec::new(), // Will be populated by create_items
+            items: Vec::new(),
             local_ctx_size_list,
             bfs_width_list,
             num_walks,
@@ -797,7 +714,6 @@ impl Sampler {
         };
         sampler.create_items();
         if sampler.local_rank == 0 && !sampler.quiet {
-            // dbs that actually loaded, not dbs that were asked for
             let num_dbs = sampler
                 .dataset_tuples
                 .iter()
@@ -864,15 +780,11 @@ impl Sampler {
 
         #[cfg(feature = "vecdb")]
         let vector_db = vector_db_path.map(|root| {
-            // Load `<root>/<db>/<table>.index` + `<root>/<db>/<table>_vectors.bin`
-            // for every table referenced by this db's task tuples.
             let mut entries: HashMap<String, VectorDbEntry> = HashMap::new();
             for table in table_names {
                 let index_path = format!("{}/{}/{}.index", root, db_name, table);
                 let vectors_path = format!("{}/{}/{}_vectors.bin", root, db_name, table);
 
-                // Min node_idx_offset across splits gives the (table-relative)
-                // origin used to convert FAISS local labels to global indices.
                 let node_idx_offset = table_info
                     .iter()
                     .filter(|(key, _)| key.rsplit_once(':').map(|(t, _)| t) == Some(table.as_str()))
@@ -931,7 +843,6 @@ impl Sampler {
         )
     }
 
-    /// Build items list with per-task random subset selection.
     fn create_items(&mut self) {
         self.items.clear();
 
@@ -967,8 +878,6 @@ impl Sampler {
         }
         pb.finish_and_clear();
 
-        // Shuffle the entire items list
-        // needed for EvalDataset as we eval only the first 1024 items
         let mut rng = StdRng::seed_from_u64(self.shuffle_seed);
         self.items.shuffle(&mut rng);
     }
@@ -980,33 +889,13 @@ impl Sampler {
     fn batch(&self, batch_idx: Option<usize>, step: u64, bs: usize, ctx_size: usize) -> Vecs {
         match batch_idx {
             Some(idx) => {
-                // Eval sharding: each rank takes `bs` items per global batch.
-                // DataLoader `__len__` is uniform across ranks (one value of
-                // ceil(num_items / (bs * world_size))); higher-rank offsets on
-                // the last batch may legitimately overshoot num_items. For
-                // overshooting slots we leave the slot as default-padded and
-                // mark batch_mask[i]=false, so the downstream fixed-size gather
-                // is correct and the phantom rows get filtered on rank 0.
                 let offset = self.global_rank * bs + idx * bs * self.world_size;
                 let mut vecs = Vecs::new(bs, ctx_size, self.d_text);
-                // Mark which slots are real before the build loop below —
-                // cheap sequential pass, one bool per slot.
+
                 for (i, m) in vecs.batch_mask.iter_mut().enumerate() {
                     *m = offset + i < self.items.len();
                 }
 
-                // Eval per-item build is bounded by timeout_per_item, exactly
-                // like training. Crucially, unlike training we must NOT substitute
-                // a different random item on timeout/error (that would change which
-                // entity's prediction we report); instead we mark the slot as a
-                // phantom (batch_mask[i]=false) and leave it padded, identical to an
-                // overshoot slot. The downstream fixed-size all_gather is unchanged
-                // (same row count per rank), and rank 0 filters phantom rows out of
-                // labels/preds -- so a slow/pathological item is dropped from the
-                // metric rather than stalling the synchronous collective across all
-                // ranks. At high world_size each batch covers a far wider slice of
-                // the item list, so an unbounded build on one tail item would
-                // otherwise hang every rank.
                 let timeout = Duration::from_secs_f64(self.timeout_per_item);
                 let timed_out: Vec<bool> = vecs
                     .chunks_exact_mut(ctx_size, self.d_text)
@@ -1014,8 +903,8 @@ impl Sampler {
                     .map(|(i, mut slices)| {
                         let j = offset + i;
                         if j >= self.items.len() {
-                            // Phantom slot: leave defaults (fully padded, no
-                            // target). batch_mask[i] is already false.
+
+
                             return false;
                         }
                         let item = &self.items[j];
@@ -1025,7 +914,7 @@ impl Sampler {
                         ));
                         let failed = !matches!(caught, Ok(Ok(())));
                         if failed {
-                            // Reset to a clean padded slot; it becomes a phantom.
+
                             slices.is_targets.fill(false);
                             slices.is_padding.fill(true);
                             let db_name = &self.dataset_tuples[item.dataset_idx as usize].0;
@@ -1045,15 +934,12 @@ impl Sampler {
                 vecs
             }
             None => {
-                // Distinct from the (context_seed + step) seed used to derive
-                // step_seed in seq_build, so train-mode item-index sampling
-                // doesn't share a stream with the per-item context randomness.
                 let mut rng = StdRng::seed_from_u64(
                     (self.context_seed + step).wrapping_add(0xE0E0_E0E0_E0E0_E0E0),
                 );
 
                 let mut vecs = Vecs::new(bs, ctx_size, self.d_text);
-                // Training always fills all slots; mark them all real.
+
                 vecs.batch_mask.iter_mut().for_each(|m| *m = true);
 
                 let global_bs = bs * self.world_size;
@@ -1073,11 +959,6 @@ impl Sampler {
         }
     }
 
-    /// Retries silently on an expected BuildError. Unexpected panics are
-    /// caught, a red warning is printed, and the item is also retried. A
-    /// per-item wall-clock budget bounds each `seq_build` call: when it
-    /// expires the call panics with a timeout message, which falls into the
-    /// red-warning-and-retry branch like any other panic.
     fn seq(&self, item: &Item, item_idx: usize, mut slices: Slices, step: u64, ctx_len: usize) {
         let mut current_item = item;
         let mut retry_seed = item_idx as u64;
@@ -1181,10 +1062,6 @@ impl Sampler {
         let prefer_latest =
             self.prefer_latest_list[seq_rng.random_range(0..self.prefer_latest_list.len())];
 
-        // Step 1: walk visit counts (skip when num_walks == 0; that's
-        // pure random_same_table mode — every same-table node falls through
-        // to the unvisited-tier). Also skipped when vector_db_path is set:
-        // FAISS-similarity replaces walk-based similarity entirely.
         #[cfg(feature = "vecdb")]
         let use_vector_db = self.vector_db_path.is_some();
         #[cfg(not(feature = "vecdb"))]
@@ -1204,11 +1081,6 @@ impl Sampler {
             HashMap::new()
         };
 
-        // Step 2: order visited same-table seeds. Both branches use a
-        // step_seed-derived random priority as the final tiebreak so that
-        // equal-key seeds don't cluster by HashMap iteration order.
-        // - prefer_latest=true:  (ts desc, count desc, random)
-        // - prefer_latest=false: (count desc, random)
         let mut visited_sorted: Vec<i32> = visit_counts.keys().copied().collect();
         let priority: HashMap<i32, u64> = visited_sorted
             .iter()
@@ -1243,9 +1115,6 @@ impl Sampler {
         }
         check_deadline(deadline);
 
-        // Step 3: same-table fallback iterator. Lazy — only materialized when
-        // the visited tier runs dry. Streams unvisited nodes from the target's
-        // table in random order, applying the temporal filter inline.
         let (range_start, range_end) = self.table_ranges[item.dataset_idx as usize];
         let total_table = (range_end - range_start) as usize;
         let fallback_seed = step_seed
@@ -1254,22 +1123,15 @@ impl Sampler {
 
         let mut visited_in_ctx: HashSet<i32> = HashSet::with_capacity(ctx_len);
         let mut visited_at_depth: HashMap<i32, usize> = HashMap::with_capacity(ctx_len);
-        // (node_idx, cell_i, col_idx, seed_node_idx, bfs_depth). The last two
-        // are visualization metadata: the seed whose BFS shell discovered
-        // the node, and the depth at which it was visited within that shell.
+
         let mut cells_to_add: Vec<(i32, usize, i32, i32, i32)> = Vec::with_capacity(ctx_len);
-        // Distinct stream from seq_rng / cell-mask rng / compute_visit_counts
-        // rng (which all derive from step_seed + target_node_idx) so each
-        // consumer's draws are independent rather than correlated bytes off
-        // the same ChaCha20 state.
+
         let mut bfs_rng = StdRng::seed_from_u64(
             step_seed
                 .wrapping_add(target_node_idx as u64)
                 .wrapping_add(0xB0B0_B0B0_B0B0_B0B0),
         );
 
-        // Always emit the target cell first to guarantee it's in the sequence.
-        // Seed = self, depth = 0.
         cells_to_add.push((
             target_node_idx,
             target_cell_i,
@@ -1278,10 +1140,7 @@ impl Sampler {
             0,
         ));
 
-        // Drive the fill loop with a labeled block so each tier can break out
-        // when the context is full.
         'fill_ctx: {
-            // Tier 0: target node's BFS.
             if extend_with_seed_bfs(
                 self,
                 dataset,
@@ -1303,16 +1162,6 @@ impl Sampler {
                 break 'fill_ctx;
             }
 
-            // Tier 1: similar same-table nodes. Source is either random
-            // walks (visit_counts → visited_sorted) or FAISS-similarity
-            // (vector_db_path), depending on Sampler config. Seeds with
-            // missing/NaN target labels are dropped — they carry no usable
-            // label.
-            //
-            // `tier1_seen` (random-walk path only) holds every seed Tier 1
-            // considered, so Tier 2 can avoid re-issuing BFS from a node
-            // Tier 1 already used. The vector_db path skips Tier 2 entirely
-            // and doesn't need this set.
             let mut tier1_seen: HashSet<i32> = HashSet::new();
             if use_vector_db {
                 #[cfg(feature = "vecdb")]
@@ -1385,41 +1234,22 @@ impl Sampler {
                 }
             }
             if use_vector_db {
-                // Tier 2 (random same-table fallback) is unreachable when
-                // vector_db is enabled: if the streaming iterator returned
-                // None it already exhausted the table under the same
-                // temporal filter, so any seed Tier 2 would draw is in
-                // tier1_seen and would be skipped.
                 break 'fill_ctx;
             }
             for &n in visit_counts.keys() {
                 tier1_seen.insert(n);
             }
 
-            // Tier 2: unvisited same-table nodes (visit count 0).
-            // Lazily sampled — work happens only if Tier 0+1 haven't filled ctx.
             if total_table == 0 {
                 break 'fill_ctx;
             }
-            // Upper bound on seeds we could ever consume from this tier:
-            // ctx_len cells minus what's already added, since each seed yields
-            // ≥1 cell. Capping `amount` to total_table keeps Fisher-Yates
-            // bounded; capping to remaining-cells keeps it cheap when we're
-            // close to full.
+
             let remaining_cells = ctx_len.saturating_sub(cells_to_add.len());
             let fallback_amount = std::cmp::min(remaining_cells, total_table);
             if fallback_amount == 0 {
                 break 'fill_ctx;
             }
-            // `prefer_latest` orders this tier the way it orders Tier 1: recent
-            // first, with a step_seed-derived priority breaking ties so equal
-            // timestamps do not cluster by sample order. Exact "latest eligible
-            // k" would need every candidate's timestamp, and this population is
-            // the whole task table -- 4.7M rows on rel-amazon -- which is a full
-            // scan per context in a dataloader worker. So the draw is
-            // oversampled and ordered within the pool: strongly recent, at a
-            // bounded cost. `prefer_latest=false` samples and iterates exactly
-            // as before, byte for byte.
+
             let pool_size = if prefer_latest {
                 std::cmp::min(
                     total_table,
@@ -1478,13 +1308,9 @@ impl Sampler {
                 if tier1_seen.contains(&seed_node_idx) {
                     continue;
                 }
-                // Temporal: only nodes within the target's bound (or without a
-                // timestamp) can serve as similar seeds.
+
                 let seed_node = get_node(dataset, seed_node_idx);
-                // A same-table seed is a task row, so it has to be strictly
-                // past: one at the target's own timestamp is the same forecast
-                // horizon and its row is dropped when the cells are added.
-                // Skipping it here spends the seed on a usable row instead.
+
                 if past_bound(
                     seed_node,
                     temporal_bound(target_node.timestamp.as_ref().map(|t| (*t).into()), cutoff),
@@ -1518,10 +1344,6 @@ impl Sampler {
             }
         }
 
-        // Add cells to sequence. Distinct stream from seq_rng — both pull
-        // f64s, so sharing a seed here would make the first cell's mask coin
-        // literally equal to mask_prob / mask_prob_max instead of an
-        // independent draw.
         let mut rng = StdRng::seed_from_u64(
             step_seed
                 .wrapping_add(target_node_idx as u64)
@@ -1558,8 +1380,6 @@ impl Sampler {
         Ok(())
     }
 
-    /// Run random walks from `source_idx` and return per-(same-table,
-    /// temporally-valid)-node visit counts. Excludes the source itself.
     #[allow(clippy::too_many_arguments)]
     fn compute_visit_counts(
         &self,
@@ -1572,10 +1392,6 @@ impl Sampler {
         cutoff: Option<i32>,
         deadline: Instant,
     ) -> HashMap<i32, usize> {
-        // Distinct stream from the other (step_seed + target_node_idx)
-        // RNGs in seq_build (source_idx == target_node_idx at every call
-        // site today) so random walks don't share bytes with BFS / mask
-        // / sizing draws.
         let mut rng = StdRng::seed_from_u64(
             step_seed
                 .wrapping_add(source_idx as u64)
@@ -1583,8 +1399,7 @@ impl Sampler {
         );
 
         let bound = temporal_bound(source_node.timestamp.as_ref().map(|t| (*t).into()), cutoff);
-        // The walk always starts at the target (`source_idx == target_node_idx`
-        // at every call), so the source's timestamp is the target's.
+
         let target_ts: Option<i32> = source_node.timestamp.as_ref().map(|t| (*t).into());
 
         let mut similar_node_visits: HashMap<i32, usize> = HashMap::new();
@@ -1593,18 +1408,9 @@ impl Sampler {
             check_deadline(deadline);
             let mut current_idx = source_idx;
 
-            // Perform a random walk
             for _ in 0..max_walk_length {
                 let current_node = get_node(dataset, current_idx);
 
-                // Count this step iff:
-                // - not the source
-                // - same table as the source (target)
-                // - within the source's temporal bound (or no timestamp)
-                // - not the source's own forecast horizon: a same-table row is
-                //   a task row, and one at the source's timestamp is dropped
-                //   when its cells are added, so ranking it as a similar seed
-                //   only spends a seed slot on a row that contributes nothing
                 if current_node.table_name_idx == source_node.table_name_idx
                     && current_idx != source_idx
                     && !past_bound(current_node, bound)
@@ -1613,7 +1419,6 @@ impl Sampler {
                     *similar_node_visits.entry(current_idx).or_insert(0) += 1;
                 }
 
-                // Select next node randomly
                 let next_idx = match self.select_random_neighbor(
                     dataset,
                     current_idx,
@@ -1632,7 +1437,6 @@ impl Sampler {
         similar_node_visits
     }
 
-    /// Select a random valid neighbor using binary search on sorted p2f edges.
     fn select_random_neighbor(
         &self,
         dataset: &Dataset,
@@ -1644,7 +1448,6 @@ impl Sampler {
         let current_node = get_node(dataset, current_idx);
         let p2f_edges = get_p2f_edges(dataset, current_idx);
 
-        // Filter p2f edges by temporal constraint (edges are sorted by timestamp)
         let valid_p2f_count = if bound.is_some() {
             p2f_edges
                 .as_slice()
@@ -1653,8 +1456,6 @@ impl Sampler {
             p2f_edges.len()
         };
 
-        // f2p edges are unsorted, but a row has one per foreign key -- a
-        // handful -- so the valid ones are counted and then indexed directly.
         let f2p_edges = current_node.f2p_edges.as_slice();
         let valid_f2p_count = if bound.is_some() {
             f2p_edges
@@ -1686,7 +1487,6 @@ impl Sampler {
         }
     }
 
-    /// Add a single cell from a node to the sequence.
     #[allow(clippy::too_many_arguments)]
     fn add_single_cell(
         &self,
@@ -1702,21 +1502,11 @@ impl Sampler {
         seed_node_idx: i32,
         bfs_depth: i32,
     ) {
-        // Missing values must not reach the model, so a NaN cell is dropped
-        // here, with the same semantics `pre` gives a Null/NaN input cell.
-        //
-        // NaN cells are expected, not a sign of stale data: `pre` normalizes a
-        // boolean column by its std, and a column with a single distinct value
-        // has std 0, so every one of its cells comes out as 0.0/0.0 = NaN.
-        // Dropping them here is exactly right -- a constant column says nothing
-        // about a row -- which is why `pre` is left alone rather than made to
-        // special-case zero variance. (If `pre` ever drops such columns itself,
-        // this branch becomes dead and can go.)
         let value_is_nan = match &node.sem_types[cell_i] {
             ArchivedSemType::Number => f32::from(node.number_values[cell_i]).is_nan(),
             ArchivedSemType::DateTime => f32::from(node.datetime_values[cell_i]).is_nan(),
             ArchivedSemType::Boolean => f32::from(node.boolean_values[cell_i]).is_nan(),
-            ArchivedSemType::Text => false, // text uses index, not float
+            ArchivedSemType::Text => false,
         };
         if value_is_nan {
             return;
@@ -1766,7 +1556,6 @@ impl Sampler {
         *seq_i += 1;
     }
 
-    /// Performs BFS to collect nodes for local context.
     #[allow(clippy::too_many_arguments)]
     fn bfs_collect_nodes(
         &self,
@@ -1786,15 +1575,12 @@ impl Sampler {
         let bound = temporal_bound(start_node.timestamp.as_ref().map(|t| (*t).into()), cutoff);
         let mut num_cells = 0;
 
-        // Two frontier data structures:
-        // f2p_ftr: stack of (depth, node_idx) for f2p edges
-        // p2f_ftr: vector of vectors, one per depth level, for p2f edges
         let mut f2p_ftr: Vec<(usize, i32)> = Vec::with_capacity(64);
         let mut p2f_ftr: Vec<Vec<i32>> = vec![vec![start_idx]];
 
         loop {
             check_deadline(deadline);
-            // Select node
+
             let (depth, node_idx) = if !f2p_ftr.is_empty() {
                 f2p_ftr.pop().unwrap()
             } else {
@@ -1810,7 +1596,6 @@ impl Sampler {
                 }
             };
 
-            // Check if node was visited at a depth <= current depth
             if let Some(&prev_depth) = visited_at_depth.get(&node_idx)
                 && prev_depth <= depth
             {
@@ -1819,18 +1604,15 @@ impl Sampler {
 
             let node = get_node(dataset, node_idx);
 
-            // Update number of cells collected
             num_cells += node.col_name_idxs.len();
             if num_cells >= local_ctx_size {
                 return result;
             }
 
-            // Record the depth at which this node was visited
             visited_at_depth.insert(node_idx, depth);
 
             result.push((node_idx, depth));
 
-            // Add f2p edges to f2p frontier
             for edge in node.f2p_edges.iter() {
                 if !edge_visible(edge, bound, target_ts) {
                     continue;
@@ -1838,10 +1620,8 @@ impl Sampler {
                 f2p_ftr.push((depth + 1, edge.node_idx.into()));
             }
 
-            // Get p2f edges and process them
             let p2f_edges = get_p2f_edges(dataset, node_idx);
 
-            // The edges are sorted by timestamp, so we can binary search to find valid ones
             let valid_edges = if bound.is_some() {
                 p2f_edges
                     .as_slice()
@@ -1852,35 +1632,8 @@ impl Sampler {
                     .partition_point(|edge| edge.timestamp.is_none())
             };
 
-            // Filter valid edges by table constraints
             let p2f_edges = &p2f_edges.as_slice()[..valid_edges];
 
-            // bfs_width is applied to the valid edges themselves, so the work
-            // here is O(bfs_width) rather than O(p2f degree): the sample is
-            // drawn from the index range and only the drawn edges are ever
-            // looked at. That distinction is the difference between a run and
-            // a hang. A relbench node's p2f degree reaches 44.5M
-            // (rel-event `users`) and is routinely 10^5-10^6 on the small
-            // hub tables every walk passes through (rel-avito `Category`
-            // averages 140k children over 68 rows, `Location` peaks at 1.3M),
-            // and a scan of that per visited node -- to bucket edges that were
-            // then subsampled to 32 -- is enough to stall a run entirely.
-            //
-            // The cap covers db and task edges alike: exempting task edges
-            // cannot be done without reading every edge to find out which is
-            // which. Measured across all seven relbench datasets, a node's task edges
-            // number at most 366 (rel-f1 `drivers`, summed over every task and
-            // split) and typically 1-15, against db degrees five orders of
-            // magnitude larger, so a uniform draw takes essentially every task
-            // edge anyway.
-            //
-            // Edges to *another* task's table are dropped rather than expanded,
-            // so drawing one wastes a slot. Rejection sampling recovers the
-            // full width without a scan and without a threshold to tune: draw
-            // a position, keep it if eligible, and stop at bfs_width. What
-            // makes it terminate is the budget: DRAW_BUDGET x bfs_width edge
-            // reads, whatever the degree, so the expansion is O(bfs_width) with
-            // no path through it that is not.
             let eligible = |edge: &ArchivedEdge| {
                 edge.table_type == ArchivedTableType::Db
                     || edge.table_name_idx == start_node.table_name_idx
@@ -1890,15 +1643,13 @@ impl Sampler {
             let mut chosen: Vec<i32> = Vec::with_capacity(bfs_width);
             let mut drawn: HashSet<usize> = HashSet::with_capacity(budget);
             let mut draws = 0;
-            // No p2f edges: nothing to draw from, and `random_range` panics.
+
             while !p2f_edges.is_empty() && chosen.len() < bfs_width && draws < budget {
                 if draws & (DEADLINE_CHECK_EVERY - 1) == 0 {
                     check_deadline(deadline);
                 }
                 draws += 1;
-                // Sampling is without replacement, as taking bfs_width of the
-                // eligible edges has always been: a position drawn twice would
-                // otherwise spend two slots on one node.
+
                 let i = rng.random_range(0..p2f_edges.len());
                 if !drawn.insert(i) {
                     continue;
@@ -1907,13 +1658,6 @@ impl Sampler {
                     chosen.push(p2f_edges[i].node_idx.into());
                 }
             }
-            // Coming up short is allowed, and is what buys the bound. It takes
-            // a node whose valid edges are mostly *other* tasks' rows, and
-            // those are bounded per node by the task tables loaded times the
-            // prediction timestamps per entity -- a few hundred at the relbench
-            // worst case, against db degrees five orders of magnitude larger.
-            // A node small enough for that to bite is also a node the budget
-            // covers many times over, so the draws see nearly all of it.
 
             for &node_idx in chosen.iter() {
                 if depth + 1 >= p2f_ftr.len() {
@@ -1927,14 +1671,6 @@ impl Sampler {
     }
 }
 
-/// BFS-expand around `seed_node_idx` and append cells to `cells_to_add` until
-/// `ctx_len` is reached. Returns true iff the context is now full.
-///
-/// Free-standing because seq_build mutably borrows `bfs_rng`,
-/// `visited_at_depth`, `visited_in_ctx`, `cells_to_add` simultaneously, while
-/// also borrowing `&self` to call `bfs_collect_nodes` — disjoint borrows that
-/// the borrow checker accepts cleanly when the helper is a function rather
-/// than a method.
 #[allow(clippy::too_many_arguments)]
 fn extend_with_seed_bfs(
     sampler: &Sampler,
@@ -1975,18 +1711,6 @@ fn extend_with_seed_bfs(
 
         let node = get_node(dataset, bfs_node_idx);
 
-        // Task rows are strictly past; db rows may share the timestamp.
-        //
-        // A task row at the target's timestamp is the same forecast horizon,
-        // so its label is not something the prediction could have had. Where
-        // a task's entities share the rows its label aggregates over --
-        // rel-trial `site-success` over the studies a facility hosts -- a few
-        // hundred concurrent labels reconstruct the target outright. A db row
-        // at that timestamp is not a label and is kept; `columns_to_drop`
-        // below is what strips the columns of those that encode one.
-        //
-        // The target's own row is exempt: it is what is being predicted, and
-        // its target cell is skipped separately.
         if bfs_node_idx != target_node_idx && same_horizon_task_row(node, target_node) {
             continue;
         }
@@ -1997,24 +1721,6 @@ fn extend_with_seed_bfs(
             }
             let col_idx: i32 = node.col_name_idxs[cell_i].into();
 
-            // Skip this task's leakage columns on the rows that can leak: rows sharing the
-            // target's timestamp, plus the target's own row. Same timestamp means same
-            // forecast horizon, which is exactly where the column encodes the label; a row
-            // strictly in the past carries it as legitimate history and is kept. The
-            // timestamp arm needs the target to actually have one -- `None == None`
-            // otherwise matches every timestamp-less row, stripping the column from a whole
-            // static table -- so the `node_idx` arm covers the target's own row for a
-            // timestamp-less target (an autocomplete task on a static table).
-            //
-            // `col_idx` is interned per `(table, column)` (column_index.json keys are
-            // "<col> of <table>"), so this touches exactly the pairs the manifest names and
-            // never a same-named column of another table. Kind-agnostic: it is keyed on the
-            // target's timestamp, not on how the label was produced.
-            //
-            // Deliberately tighter than relbench, whose `Dataset.get_modified_db` drops the
-            // column from the table outright. It has to: `get_db` hands back one database
-            // for every label row, so it cannot mask per row. A per-item sampler can, and
-            // keeping past values of the column is worth the divergence.
             if columns_to_drop.contains(&col_idx)
                 && (node.node_idx == target_node_idx
                     || (target_node.timestamp.is_some() && node.timestamp == target_node.timestamp))
@@ -2022,7 +1728,6 @@ fn extend_with_seed_bfs(
                 continue;
             }
 
-            // Skip target cell (already added first)
             if bfs_node_idx == target_node_idx && col_idx == target_column {
                 continue;
             }
@@ -2037,35 +1742,22 @@ fn extend_with_seed_bfs(
     false
 }
 
-/// Lazy iterator over FAISS-similarity neighbors of a target node, used as
-/// the Tier 1 seed source when `vector_db_path` is configured. Each
-/// `next()` returns the next-most-similar same-table node not yet
-/// yielded; under the hood the iterator does FAISS searches in
-/// progressively larger batches (initial size 64, doubling) so we never
-/// pre-fetch a fixed huge top-k upfront. Honors the temporal constraint
-/// (`node.ts <= target.ts`) and excludes the target itself. The full
-/// yielded set is exposed for Tier 2 dedup.
 #[cfg(feature = "vecdb")]
 struct VectorDbStream<'a> {
     entry: &'a VectorDbEntry,
     target_node_idx: i32,
     target_ts: Option<i32>,
     query: &'a [f32],
-    /// FAISS-ordered candidates already filtered through dedup + temporal.
+
     buffer: Vec<i32>,
     cursor: usize,
-    /// k used for the most recent FAISS search; doubles each `expand()`.
+
     last_k: usize,
-    /// All globally-numbered candidate node_idxs the iterator has emitted
-    /// (or filtered out as duplicates of an earlier emit). Used both
-    /// internally for dedup across expanding searches and externally by
-    /// Tier 2 to avoid redundant BFS re-expansions.
+
     yielded: HashSet<i32>,
     exhausted: bool,
 }
 
-/// Initial FAISS top-k requested. Subsequent expansions double this until
-/// either `entry.num_rows` is reached or the consumer stops pulling.
 #[cfg(feature = "vecdb")]
 const VDB_INIT_K: usize = 64;
 
@@ -2149,14 +1841,11 @@ impl<'a> VectorDbStream<'a> {
             if global_idx == self.target_node_idx {
                 continue;
             }
-            // Defensive dedup: monotone FAISS top-k means a doubling
-            // search re-emits the previous results, so skip what we've
-            // already seen.
+
             if !self.yielded.insert(global_idx) {
                 continue;
             }
-            // Temporal constraint: only nodes with ts <= target.ts (or
-            // None) are valid similar seeds.
+
             if let Some(target_ts) = self.target_ts {
                 let node = get_node(dataset, global_idx);
                 if let Some(ts) = node.timestamp.as_ref()
@@ -2174,26 +1863,6 @@ impl<'a> VectorDbStream<'a> {
     }
 }
 
-/// The tightest timestamp a row may carry and still be usable as context for a
-/// target at `target_ts`, under a database `cutoff`.
-///
-/// `cutoff` mirrors relbench's `Dataset.get_db(upto_test_timestamp=True)`,
-/// which keeps only rows at or before the dataset's test timestamp (`upto` is
-/// inclusive, so this bound is too). It composes with the target's own
-/// timestamp -- a context never sees the target's future either -- as the
-/// smaller of the two. A row without a timestamp is never cut: relbench trims
-/// only tables that designate a time column.
-///
-/// Applied to database and task rows alike. The target row itself is exempt
-/// simply by never being filtered: it is the BFS root and its cell is emitted
-/// before any traversal.
-/// How many candidates `prefer_latest` draws per seed it will keep in Tier 2.
-///
-/// The pool is sampled uniformly and then ordered by timestamp, so a larger
-/// factor is a closer approximation to the true latest-k at a proportional cost
-/// in node dereferences. Four keeps Tier 2 at ~4k lookups against a table of up
-/// to 4.7M rows -- still negligible beside the walk tier -- while making the
-/// kept seeds strongly recent.
 const PREFER_LATEST_OVERSAMPLE: usize = 4;
 
 fn temporal_bound(target_ts: Option<i32>, cutoff: Option<i32>) -> Option<i32> {
@@ -2204,17 +1873,6 @@ fn temporal_bound(target_ts: Option<i32>, cutoff: Option<i32>) -> Option<i32> {
     }
 }
 
-/// True when an edge lands on a task row sharing the target's timestamp.
-///
-/// No node dereference: the edge carries the endpoint's table type and its
-/// timestamp, and the only task table a context ever reaches is the target's
-/// own (see the `eligible` filter on p2f expansion), so a non-db edge at the
-/// target's timestamp *is* a same-horizon row of the target's task.
-///
-/// This is what makes such a row invisible rather than merely unquotable:
-/// gating the traversal here means it is never walked through and never
-/// enters the bfs frontier, so the sample is the one a graph without that row
-/// would have produced.
 fn edge_same_horizon_task(edge: &ArchivedEdge, target_ts: Option<i32>) -> bool {
     edge.table_type != ArchivedTableType::Db
         && match (edge.timestamp.as_ref(), target_ts) {
@@ -2223,25 +1881,14 @@ fn edge_same_horizon_task(edge: &ArchivedEdge, target_ts: Option<i32>) -> bool {
         }
 }
 
-/// True when an edge's endpoint may be traversed at all.
 fn edge_visible(edge: &ArchivedEdge, bound: Option<i32>, target_ts: Option<i32>) -> bool {
     !edge_past_bound(edge, bound) && !edge_same_horizon_task(edge, target_ts)
 }
 
-/// True when `node` is a task row sharing `target`'s timestamp.
-///
-/// A task row at the target's timestamp is the same forecast horizon, so its
-/// label is not something the prediction could have had. Where a task's
-/// entities share the rows its label aggregates over -- rel-trial
-/// `site-success` over the studies a facility hosts -- a few hundred
-/// concurrent labels reconstruct the target outright. Db rows at that
-/// timestamp are not labels and are kept; `columns_to_drop` is what strips the
-/// columns of those that encode one.
 fn same_horizon_task_row(node: &ArchivedNode, target: &ArchivedNode) -> bool {
     node.is_task_node && target.timestamp.is_some() && node.timestamp == target.timestamp
 }
 
-/// True when a node's timestamp puts it past `bound` (see `temporal_bound`).
 fn past_bound(node: &ArchivedNode, bound: Option<i32>) -> bool {
     match (node.timestamp.as_ref(), bound) {
         (Some(ts), Some(b)) => i32::from(*ts) > b,
@@ -2249,9 +1896,6 @@ fn past_bound(node: &ArchivedNode, bound: Option<i32>) -> bool {
     }
 }
 
-/// True when an edge's timestamp puts its endpoint past `bound`. A p2f edge
-/// carries the child's timestamp and an f2p edge the parent's, so this is the
-/// endpoint's own timestamp without dereferencing the node.
 fn edge_past_bound(edge: &ArchivedEdge, bound: Option<i32>) -> bool {
     match (edge.timestamp.as_ref(), bound) {
         (Some(ts), Some(b)) => i32::from(*ts) > b,
@@ -2259,10 +1903,6 @@ fn edge_past_bound(edge: &ArchivedEdge, bound: Option<i32>) -> bool {
     }
 }
 
-/// Returns true when the seed's target-column value is missing or NaN.
-/// Such seeds are skipped from same-table seed sampling — they carry no
-/// usable label. Text targets have no NaN concept and never report missing
-/// here.
 fn seed_label_missing(node: &ArchivedNode, target_column: i32) -> bool {
     let cell_i = match node
         .col_name_idxs
@@ -2303,7 +1943,7 @@ fn get_node(dataset: &Dataset, idx: i32) -> &ArchivedNode {
     let l = dataset.offsets[idx as usize] as usize;
     let r = dataset.offsets[(idx + 1) as usize] as usize;
     let bytes = &dataset.mmap[l..r];
-    // rkyv::access::<ArchivedNode, Error>(bytes).unwrap()
+
     unsafe { rkyv::access_unchecked::<ArchivedNode>(bytes) }
 }
 
@@ -2336,31 +1976,31 @@ pub struct Cli {
 pub fn main(cli: Cli) {
     let tic = Instant::now();
     let sampler = Sampler::new_impl(
-        vec![(cli.db_name.clone(), String::new(), 0, 100000)], // dataset_tuples
-        0,                                                     // global_rank
-        0,                                                     // local_rank
-        1,                                                     // world_size
-        vec![128],                                             // local_ctx_size_list
-        vec![16],                                              // bfs_width_list
-        0,                                                     // num_walks (random_same_table)
-        10,                                                    // walk_length
-        vec![false],                                           // prefer_latest_list
-        0.5,                                                   // mask_prob_max
-        "all-MiniLM-L12-v2",                                   // embedder
-        cli.pre_dir.clone(),                                   // pre_dir
-        384,                                                   // d_text
-        0,                                                     // shuffle_seed
-        0,                                                     // context_seed
-        vec![0_i32],                                           // target_columns
-        vec![Vec::<i32>::new()],                               // columns_to_drop
-        vec![None],                                            // cutoff_timestamps
-        -1,                                                    // items_per_task (no limit)
-        false,                                                 // quiet
-        false,                                                 // ignore_data_errors
-        0,                                                     // num_prev_skipped
-        true,                                                  // mmap_populate
-        1.0,                                                   // timeout_per_item
-        None,                                                  // vector_db_path
+        vec![(cli.db_name.clone(), String::new(), 0, 100000)],
+        0,
+        0,
+        1,
+        vec![128],
+        vec![16],
+        0,
+        10,
+        vec![false],
+        0.5,
+        "all-MiniLM-L12-v2",
+        cli.pre_dir.clone(),
+        384,
+        0,
+        0,
+        vec![0_i32],
+        vec![Vec::<i32>::new()],
+        vec![None],
+        -1,
+        false,
+        false,
+        0,
+        true,
+        1.0,
+        None,
     );
     println!("Sampler loaded in {:?}", tic.elapsed());
 

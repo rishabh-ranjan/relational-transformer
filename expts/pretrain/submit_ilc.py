@@ -1,5 +1,3 @@
-"""Submit the pretraining run on ILC. See [README.md](README.md)."""
-
 import dataclasses
 from pathlib import Path
 
@@ -7,8 +5,6 @@ from roach.slurm.clusters import ilc
 
 from roach.slurm import submit
 
-# 2026-08-23: ampere3 and ampere5 idle; two whole nodes need il-lo (il caps a100
-# at 10 per user).
 resources = dataclasses.replace(
     ilc.AMPERE_LO,
     nodes=2,
@@ -47,7 +43,7 @@ submit(
         walk_length=20,
         mask_prob_max=0.5,
         items_per_task=100_000,
-        delta_finetune=False,  # needs load_ckpt_path
+        delta_finetune=False,
         optimizer="muon",
         lr=5e-4,
         wd=0.1,
@@ -71,7 +67,7 @@ submit(
         eval_db_task_list="expts/pretrain/eval-tasks.json",
         eval_pre_dir="~/scratch/hf/stanford-star/relbench-preprocessed",
         eval_tokens_per_gpu=tokens_per_gpu,
-        eval_num_workers=1,  # per eval task: 21 loaders, each with this many workers, per rank
+        eval_num_workers=1,
         eval_prefetch_factor=2,
         eval_num_walks=10_000,
         eval_walk_length=20,

@@ -1,14 +1,3 @@
-"""Cluster sanity check: does DDP come up under srun, and do signals reach ranks?
-
-Run it through roach.slurm (see the bottom of this file). Two things are being
-checked, both of which the training jobs depend on:
-
-* every rank joins the process group and an all-reduce returns the expected sum,
-  i.e. srun's one-task-per-GPU layout is enough to bring DDP up with no launcher;
-* a SIGTERM aimed at the job reaches *every rank*, which is what lets a preempted
-  run save a checkpoint before it dies.
-"""
-
 import os
 import signal
 import time
@@ -53,7 +42,6 @@ def main(run_id: str, seconds: int, out_dir: str) -> None:
     for i in range(seconds):
         time.sleep(1)
         if caught["sig"] is not None:
-            # Stand-in for save_resume: written only if the signal arrived.
             (out / f"rank{rank}.signalled").write_text(f"{caught['sig']} at step {i}\n")
             print(f"rank {rank}: saved and exiting at step {i}", flush=True)
             break

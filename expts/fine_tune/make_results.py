@@ -1,13 +1,3 @@
-"""Build expts/fine_tune/results.md from results.csv.
-
-Run from the repo root: `pixi run python expts/fine_tune/make_results.py`.
-Rewrites results.md wholesale -- edit this script, not the markdown.
-
-`my_results.py` imports `SHORT`, `NTRAIN`, `stds`, `table` and `legend` from
-here to build the same tables with our own row in them, so the two documents
-cannot drift in ordering, bolding or units.
-"""
-
 import pandas as pd
 import json
 from huggingface_hub import hf_hub_download
@@ -98,11 +88,6 @@ def render(rows, nleft=2):
 
 
 def table(sub, split, higher, mark=None):
-    """The markdown table, and the task columns in the order it used them.
-
-    `mark` is `{(row, pair): suffix}`, appended inside a cell after the number
-    and outside the bold markers: a footnote on one value, not a value.
-    """
     mark = mark or {}
     sub = sub.copy()
     if higher:
@@ -149,7 +134,6 @@ def legend(pairs):
 
 
 def sections(frame, mark=None):
-    """The four `## ...` sections, in the order results.md gives them."""
     clf = frame[frame.task_type == "BINARY_CLASSIFICATION"]
     reg = frame[frame.task_type == "REGRESSION"]
     secs = []
