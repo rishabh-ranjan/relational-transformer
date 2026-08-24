@@ -65,7 +65,7 @@ submit(
         eval_db_task_list="expts/pretrain/eval-tasks.json",
         eval_pre_dir="~/scratch/hf/stanford-star/relbench-preprocessed",
         eval_tokens_per_gpu=2**17,
-        eval_num_workers=1,
+        eval_num_workers=3,
         eval_prefetch_factor=2,
         eval_num_walks=10_000,
         eval_walk_length=20,
