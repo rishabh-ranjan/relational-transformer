@@ -7,10 +7,10 @@ from roach.slurm.clusters import marlowe
 
 from roach.slurm import submit
 
-# 2026-08-23: two 8xH100 nodes on Marlowe's batch partition (--exclusive,
-# 1456000M each), the rt-j mixture, as a step of hold-pretrain 443431.
+# 2026-08-24: continues the from-scratch rt-j run past hold-pretrain 443431's
+# wall clock: queued to start the moment that allocation ends, however it ends.
 cluster = marlowe.MARLOWE
-resources = dataclasses.replace(marlowe.H100, nodes=2)
+resources = dataclasses.replace(marlowe.H100, nodes=2, dependency="afterany:443431")
 
 # Marlowe's gres is untyped and every card there is an H100.
 gpu = resources.gpus.rpartition(":")[0] or {"marlowe": "h100"}[cluster.name]
@@ -93,12 +93,11 @@ submit(
     ),
     resources=resources,
     name="pretrain",
-    run_id=None,
+    run_id="26-08-23_20-59-15_654509453",
     repo_root=str(Path(__file__).resolve().parents[2]),
     cluster=cluster,
     job_env="expts/job_env.sh",
     log_root="~/scratch/relational-transformer/pretrain/slurm-logs",
     clone_root="~/roach_clones",
     secrets_dir="~/scratch/.secrets",
-    inside="443431",  # hold-pretrain, 2 nodes
 )
