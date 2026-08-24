@@ -20,21 +20,12 @@ rules in
 - **Edit a submit script, do not configure it.** No arguments, no flags, no
   `--dry-run`. Expect to change the file every submission, and commit before
   submitting: the job clones that commit.
-- **Comment out to switch.** Leave the shape you are not using sitting there
-  commented; coming back to it is uncommenting.
 - **No helper wrapping the submit call.** The `submit(...)` call sits in the
   loop body, spelled out; a parameter threaded through a `submit_one(...)` puts
   the value that changes in a different place from the value that does not, and
   every knob has to be in one place to be edited in one place.
 - **What the code can prevent, it prevents** — a failure hit once is made
-  impossible, not documented. Prose is for what code cannot fix: bad hardware, a
-  preemptible queue, a rule a future change could break.
+  impossible, not documented.
 - **Research code, not a public API.** No back-compat shims, no deprecation
   paths, no defensive generality for a caller that does not exist. Delete a
   shape you replaced rather than keeping both.
-
-## Docstrings
-
-No docstring re-explains that submit scripts are edited rather than configured,
-that a job clones the commit you submit from, or what `clone_root` and `setup=`
-are for — [`README.md`](README.md) owns those.

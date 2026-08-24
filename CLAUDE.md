@@ -6,23 +6,11 @@ one day — released with the package, read by someone who arrived from the pape
 `src/`, `examples/`, `docs/`, `byod/`, `README.md` are public in that sense.
 `expts/` is private internal research and stays that way.
 
-## Comments and docs are operational
+## No comments, no docstrings
 
-A comment says what the code does, or what someone changing it has to know.
-Never how it came to be: no history, no "previously we ...", no incident
-stories, no bug a past edit fixed, no note that a value was tuned or a line
-reordered. If a comment only makes sense to someone who saw the previous
-version, delete it — git holds that.
-
-Say it once:
-
-- Every fact has one home, and the others point at it. These rules live here;
-  [`expts/README.md`](expts/README.md) covers experiment workflow; an
-  experiment's README covers that experiment; a module docstring covers that
-  module. Do not re-explain elsewhere.
-- Operational instructions only. No history, no incident stories, no fixed bugs,
-  no rationale for a settled choice. Write what to run and what to check.
-- Only what the reader cannot get from the code. Prefer a link to a summary.
+Code says what it does; git says what changed. Functional pragmas (`# noqa`,
+`# type:`, `#!`, `#SBATCH`) are tool instructions, not comments, and stay.
+Prose for humans lives in `docs/` and the READMEs, nowhere else.
 
 ## Code style
 
@@ -35,8 +23,8 @@ Outside `expts/`, write for eventual release.
   branch, no defensive default that lets a wrong config run. Every unsupported
   case must crash loudly at the point it is first knowable — a silent bug is far
   worse than a crash.
-- **Match the surrounding module** in naming, comment density and idiom rather
-  than importing a new style.
+- **Match the surrounding module** in naming and idiom rather than importing a
+  new style.
 - **Keep examples runnable and minimal.** An example shows one path end to end.
 - Public API changes ripple into `docs/` and released checkpoints — update the
   docs in the same change.
