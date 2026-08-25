@@ -149,7 +149,9 @@ RESOURCES: dict[tuple[str, str, str], Resources] = {
     # 06:30: rt-plurel/study-adverse finished on its il a100 (7h49); the slot
     # goes to the il-lo job with the most left that a requeue had put on ampere7.
     ("rt-plurel", "rel-amazon", "item-ltv"): a100("il", "7-00:00:00"),
-    ("rt", "rel-amazon", "item-ltv"): a100("il-lo", "3-00:00:00"),
+    # 07:12: rt/user-attendance finished on its il b200 (3h16); the slot goes
+    # to the il-lo selection arm with the most left (12.2k steps, biggest db).
+    ("rt", "rel-amazon", "item-ltv"): b200("il", "7-00:00:00"),
     ("rt-plurel", "rel-trial", "site-success"): a100("il-lo", "3-00:00:00"),
     ("rt", "rel-trial", "site-success"): a100("il-lo", "3-00:00:00"),
     ("rt-plurel", "rel-stack", "post-votes"): a100("il-lo", "3-00:00:00"),
