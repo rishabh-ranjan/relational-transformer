@@ -128,9 +128,11 @@ def b200(qos: str, time: str) -> Resources:
 # jobs first (the biggest database, ~6h15 on a b200 for the same grid in the
 # RT-J rerun), then down the list. ampere4 (disk 99% full) and ampere7 (a100
 # comes up with 16 MB free, CUDA OOM at the first forward) stay excluded, as
-# in fine_tune.
+# in fine_tune. 13:45: fine_tune's last 11 jobs are all running and two il
+# a100 slots stand free, so the two tuning jobs still pending on il-lo take
+# them (the human's call).
 TUNE: dict[tuple[str, str], Resources] = {
-    ("rel-amazon", "user-churn"): a100("il-lo", "2-00:00:00"),
+    ("rel-amazon", "user-churn"): a100("il", "2-00:00:00"),
     ("rel-amazon", "user-ltv"): a100("il-lo", "2-00:00:00"),
     ("rel-amazon", "item-ltv"): a100("il-lo", "2-00:00:00"),
     ("rel-amazon", "item-churn"): a100("il-lo", "2-00:00:00"),
@@ -150,7 +152,7 @@ TUNE: dict[tuple[str, str], Resources] = {
     ("rel-f1", "driver-position"): a100("il-lo", "2-00:00:00"),
     ("rel-f1", "driver-top3"): a100("il-lo", "2-00:00:00"),
     ("rel-f1", "driver-dnf"): a100("il-lo", "2-00:00:00"),
-    ("rel-event", "user-repeat"): a100("il-lo", "2-00:00:00"),
+    ("rel-event", "user-repeat"): a100("il", "2-00:00:00"),
 }
 
 # The ensemble units are submitted once tuned_configs.json holds a task; this
