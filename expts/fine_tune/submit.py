@@ -128,7 +128,9 @@ RESOURCES: dict[tuple[str, str, str], Resources] = {
     # il preempts); the il a100 job with the most left moves onto it. scancel
     # sends SIGTERM, rt.train saves at the next step, so the move costs a restart.
     ("rt-plurel", "rel-amazon", "user-churn"): b200("il", "7-00:00:00"),
-    ("rt", "rel-amazon", "user-churn"): a100("il", "7-00:00:00"),
+    # 14:45: the il b200 sub-cap has a slot again; the a100 job with the most
+    # left (selection arm at 46.8k, a ~45k-step refit ahead) moves onto it.
+    ("rt", "rel-amazon", "user-churn"): b200("il", "7-00:00:00"),
     ("rt-plurel", "rel-trial", "study-adverse"): a100("il", "7-00:00:00"),
     ("rt", "rel-trial", "study-adverse"): a100("il", "7-00:00:00"),
     ("rt-plurel", "rel-hm", "user-churn"): a100("il", "7-00:00:00"),
