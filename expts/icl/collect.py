@@ -2,6 +2,7 @@ import ast
 import csv
 import json
 import sys
+from collections import defaultdict
 from pathlib import Path
 
 import numpy as np
@@ -11,13 +12,92 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 from relbench.submit import evaluate_submission  # noqa: E402
 from relbench.submit import main as package  # noqa: E402
 
-from expts.icl.submit import OUT_ROOT, PRE_DIR, PROJECT, TASKS, stage_dir  # noqa: E402
+from expts.icl.submit import (  # noqa: E402
+    ENTITY,
+    OUT_ROOT,
+    PRE_DIR,
+    PROJECT,
+    TASKS,
+    ctx_sizes,
+    lcs_bw_pl_grid,
+    stage_dir,
+    targets_for,
+)
 
 HERE = Path(__file__).parent
 LEADERBOARD = Path(OUT_ROOT).expanduser() / "leaderboard" / PROJECT
+METRIC = {"clf": "auroc", "reg": "nmae"}
 N_CFGS = 120
 N_TOP = 4
 N_SEEDS = 4
+
+
+def grid_order() -> list[tuple[int, int, int, bool]]:
+    return [
+        (ctx, lcs, bw, pl)
+        for lcs, bw, pl in lcs_bw_pl_grid()
+        for ctx in ctx_sizes()
+        if lcs <= ctx
+    ]
+
+
+def better(task_type: str, a: float, b: float) -> bool:
+    return a > b if task_type == "clf" else a < b
+
+
+def summary_run(name: str, step: str):
+    import wandb
+
+    LEADERBOARD.mkdir(parents=True, exist_ok=True)
+    run = wandb.init(
+        project=PROJECT,
+        entity=ENTITY,
+        name=name,
+        config={"run_name": name},
+        dir=str(LEADERBOARD),
+    )
+    wandb.define_metric(step)
+    wandb.define_metric("*", step_metric=step)
+    return run
+
+
+def target_means() -> dict[str, float]:
+    by_key = defaultdict(list)
+    for db, task in TASKS:
+        for key, v in targets_for(db, task).items():
+            metric, split, _, _, *suffix = key.split("/")
+            by_key["/".join([metric, split, "mean", *suffix])].append(v)
+    return {k: float(np.mean(v)) for k, v in by_key.items()}
+
+
+def log_tuning(tuned: dict) -> None:
+    import wandb
+
+    run = summary_run("tune", "tune/idx")
+    best: dict[str, float] = {}
+    for idx, (ctx, lcs, bw, pl) in enumerate(grid_order(), 1):
+        point = {
+            "tune/idx": idx,
+            "tune/ctx_size": ctx,
+            "tune/local_ctx_size": lcs,
+            "tune/bfs_width": bw,
+            "tune/prefer_latest": int(pl),
+        }
+        now, top = defaultdict(list), defaultdict(list)
+        for key, rec in tuned.items():
+            metric = METRIC[rec["task_type"]]
+            v = rec["val_scores"][str((ctx, lcs, bw, pl))] * 100.0
+            if key not in best or better(rec["task_type"], v, best[key]):
+                best[key] = v
+            point[f"tune/{metric}/val/{key}"] = v
+            point[f"tune/best/{metric}/val/{key}"] = best[key]
+            now[metric].append(v)
+            top[metric].append(best[key])
+        for metric in now:
+            point[f"tune/{metric}/val/mean"] = float(np.mean(now[metric]))
+            point[f"tune/best/{metric}/val/mean"] = float(np.mean(top[metric]))
+        wandb.log(point)
+    run.finish()
 
 
 def collect_tuning() -> dict:
@@ -54,7 +134,40 @@ def collect_tuning() -> dict:
     dest = HERE / "tuned_configs.json"
     dest.write_text(json.dumps(out, indent=1, sort_keys=True) + "\n")
     print(f"wrote {dest} ({len(out)}/{len(TASKS)} tasks); commit it before submitting")
+    if len(out) == len(TASKS):
+        log_tuning(out)
     return out
+
+
+def log_ensemble(sums: dict, results: dict) -> None:
+    import wandb
+
+    from rt.eval import metric_for
+
+    run = summary_run("top4x4", "ens_size")
+    for k in range(1, N_TOP + 1):
+        point = {"ens_size": k * N_SEEDS}
+        by_metric = defaultdict(list)
+        for key, (task_type, labels, cfg_sums) in sums.items():
+            metric = METRIC[task_type]
+            _, v = metric_for(task_type, labels, sum(cfg_sums[:k]) / (k * N_SEEDS))
+            point[f"{metric}/test/{key}"] = v * 100.0
+            by_metric[metric].append(v * 100.0)
+        for metric, vs in by_metric.items():
+            point[f"{metric}/test/mean"] = float(np.mean(vs))
+        for db, task in TASKS:
+            point.update({f"target/{t}": v for t, v in targets_for(db, task).items()})
+        point.update({f"target/{t}": v for t, v in target_means().items()})
+        wandb.log(point)
+    official = {
+        f"relbench/{METRIC[r['task_type']]}/test/{key}": r["value"] * 100.0
+        for key, r in results.items()
+    }
+    for metric in METRIC.values():
+        vs = [v for k, v in official.items() if k.startswith(f"relbench/{metric}/")]
+        official[f"relbench/{metric}/test/mean"] = float(np.mean(vs))
+    wandb.log(official)
+    run.finish()
 
 
 def reduce(tuned: dict) -> None:
@@ -62,7 +175,7 @@ def reduce(tuned: dict) -> None:
     from rt.eval.relbench import _emit_and_score
 
     preds = LEADERBOARD / "preds"
-    results = {}
+    results, sums = {}, {}
     missing = []
     for db, task in TASKS:
         key = f"{db}/{task}"
@@ -70,20 +183,19 @@ def reduce(tuned: dict) -> None:
         if key not in tuned or not all((u / "result.json").exists() for u in units):
             missing.append(key)
             continue
-        total = labels = nodes = None
-        curves = []
+        labels = nodes = None
+        cfg_sums, curves = [], []
         for unit in units:
             st = np.load(unit / "state.npz")
             assert int(st["seeds"]) == N_SEEDS, (
                 f"{unit}: {int(st['seeds'])}/{N_SEEDS} seeds"
             )
-            if total is None:
-                total = st["sum_preds"].astype(np.float64)
+            if labels is None:
                 labels, nodes = st["labels"], st["node_idxs"]
             else:
                 assert np.array_equal(nodes, st["node_idxs"])
                 assert np.array_equal(labels, st["labels"])
-                total = total + st["sum_preds"].astype(np.float64)
+            cfg_sums.append(st["sum_preds"].astype(np.float64))
             curves.append(json.loads((unit / "result.json").read_text())["curve"])
         (rt_task,) = get_tasks(PRE_DIR, [(db, task)], ("test",))
         mname, mval, n, align, _ = _emit_and_score(
@@ -92,7 +204,7 @@ def reduce(tuned: dict) -> None:
             PRE_DIR,
             "all-MiniLM-L12-v2",
             labels,
-            total / (N_TOP * N_SEEDS),
+            sum(cfg_sums) / (N_TOP * N_SEEDS),
             nodes,
         )
         results[key] = {
@@ -105,6 +217,7 @@ def reduce(tuned: dict) -> None:
             "top_values": tuned[key]["top_values"],
             "per_cfg_test_curve": curves,
         }
+        sums[key] = (rt_task.task_type, labels, cfg_sums)
         print(f"  {key:28s} {mname}={mval:.4f} n={n} {align}", flush=True)
     for key in missing:
         print(f"  {key:28s} not all {N_TOP} units done")
@@ -115,6 +228,8 @@ def reduce(tuned: dict) -> None:
     )
     result = evaluate_submission(preds, verbose=True)
     compare(result)
+    if len(results) == len(TASKS):
+        log_ensemble(sums, results)
     if result["validated"]:
         package([str(preds), "--out", str(LEADERBOARD / "rt-plurel-icl.zip")])
 

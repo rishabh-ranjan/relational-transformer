@@ -60,8 +60,9 @@ values. `tokens_per_gpu=2**18` (32 rows per batch at ctx 8192).
 
 1. **Context search** -- `rt.eval.main` on `val` alone. Grid: ctx
    {512, 1024, 2048, 4096, 8192} x lcs {256, 512, 1024, 2048, 4096, 8192 |
-   lcs <= ctx} x bfs width {16, 64, 256} x prefer-latest {T, F} = **120
-   configurations per task**, 36 sampler passes each scored at every ctx off
+   lcs <= ctx} x bfs width {8, 32, 128} x prefer-latest {T, F} = **120
+   configurations per task** (the released default (8192, 256, 32, T) is one
+   of them), 36 sampler passes each scored at every ctx off
    a prefix of the largest. Each configuration is scored on 4096 validation
    rows (`shuffle_seed=0`; the whole split where it is smaller), the
    prediction averaged over 4 context seeds (`val_ensemble_size=4`). AUROC
@@ -78,12 +79,38 @@ values. `tokens_per_gpu=2**18` (32 rows per batch at ctx 8192).
    with `relbench.submit.evaluate_task`, and writes the leaderboard prediction
    table `<db>__<task>.csv`.
 
-Nothing here logs to wandb: `rt.eval` refuses it in tune-only mode, and the
-units' progress lines (`ens_size=k metric=... value=...`) are in the slurm
-logs. `results.json` beside the prediction tables records, per task, the
-official metric, the alignment guard, the top-4 configs with their validation
-scores, and each unit's own 1..4-seed test curve (so the ensemble can be read
-against its best single config).
+`results.json` beside the prediction tables records, per task, the official
+metric, the alignment guard, the top-4 configs with their validation scores,
+and each unit's own 1..4-seed test curve (so the ensemble can be read against
+its best single config).
+
+## Watching it on wandb
+
+Everything logs to `rtv2/2026-08-25-icl`; `workspace.py` writes the project
+view (rerun it whenever a run starts logging a key the view has no panel for):
+
+```bash
+pixi run python expts/icl/workspace.py
+```
+
+- A context-search job is the run `<db>/<task>/tune`: the validation metric of
+  every configuration against `tune/idx` (`tune/<metric>/val/<db>/<task>`,
+  the running best folded in as `tune/best/...`), and the configuration
+  itself on the same axis (`tune/ctx_size`, `tune/local_ctx_size`,
+  `tune/bfs_width`, `tune/prefer_latest`).
+- An ensemble unit is the run `<db>/<task>/cfg<k>`: the test metric of that
+  configuration against `ens_size` 1..4 (`<metric>/test/<db>/<task>`), with
+  RT-J's in-context number and RT-PluRel's fine-tuned number as `target/`
+  lines.
+- `collect.py` adds two summary runs once a stage is complete: `tune`, the
+  same tune curves for all 21 tasks plus `tune/<metric>/val/mean` and
+  `tune/best/<metric>/val/mean`; and `top4x4`, the top-k-configs x 4-seeds
+  test metric against `ens_size` 4, 8, 12, 16 per task and averaged
+  (`<metric>/test/mean`), with the official RelBench numbers as
+  `relbench/<metric>/test/...`.
+
+Values are on the leaderboard scale, in percent (AUROC %, nMAE %). Runs are
+grouped by `run_name`, so a requeued job's attempts read as one curve.
 
 ## What it costs
 

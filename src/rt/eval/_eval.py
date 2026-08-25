@@ -80,9 +80,18 @@ def main(
     wandb_disabled: bool,
 ) -> None:
     params = dict(locals())
-    assert wandb_disabled or (test_ensemble_size > 1 and "test" in splits), (
-        "the only wandb curve here is test metric vs ensemble size"
+    grid = [tuple(cfg) for cfg in lcs_bw_pl_grid]
+    ctx_sizes = sorted(ctx_size_list)
+    assert ctx_sizes, "nothing to evaluate at"
+    n_cfgs = sum(1 for lcs, _, _ in grid for c in ctx_sizes if lcs <= c)
+    assert n_cfgs, "every lcs exceeds every ctx size; no configuration survives"
+    assert val_ensemble_size >= 1 and test_ensemble_size >= 1, "sizes are seed counts"
+    assert n_cfgs > 1 or val_ensemble_size == 1, (
+        "a one-configuration grid tunes nothing, so val_ensemble_size buys nothing"
     )
+    assert (
+        wandb_disabled or n_cfgs > 1 or (test_ensemble_size > 1 and "test" in splits)
+    ), "the wandb curves here are val metric vs tune/idx and test metric vs ens_size"
     assert wandb_disabled or targets, "nothing to draw the curve against"
     csv_out_dir = (
         Path(out_root).expanduser()
@@ -101,6 +110,7 @@ def main(
             if job
             else f"{int(time.time())}"
         )
+        csv_out_dir.parent.mkdir(parents=True, exist_ok=True)
         wandb.init(
             project=project,
             entity=entity,
@@ -109,6 +119,7 @@ def main(
             group=run_id,
             resume="never",
             config=params,
+            dir=str(csv_out_dir.parent),
             settings=wandb.Settings(
                 console_multipart=True,
                 console_chunk_max_seconds=60,
@@ -182,17 +193,6 @@ def main(
     assert "test" not in splits or test_items_per_task is not None, (
         "no test_items_per_task for the test split"
     )
-    grid = [tuple(cfg) for cfg in lcs_bw_pl_grid]
-    ctx_sizes = sorted(ctx_size_list)
-    assert ctx_sizes, "nothing to evaluate at"
-    n_cfgs = sum(1 for lcs, _, _ in grid for c in ctx_sizes if lcs <= c)
-    assert n_cfgs, "every lcs exceeds every ctx size; no configuration survives"
-
-    assert val_ensemble_size >= 1 and test_ensemble_size >= 1, "sizes are seed counts"
-    assert n_cfgs > 1 or val_ensemble_size == 1, (
-        "a one-configuration grid tunes nothing, so val_ensemble_size buys nothing"
-    )
-
     if n_cfgs > 1 or test_ensemble_size > 1:
         assert n_cfgs == 1 or val_items_per_task is not None, (
             "tuning reads the val split whatever `splits` says, so it needs a "

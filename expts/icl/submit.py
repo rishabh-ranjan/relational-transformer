@@ -1,3 +1,4 @@
+import csv
 import json
 import subprocess
 from pathlib import Path
@@ -44,9 +45,27 @@ def lcs_bw_pl_grid() -> list[tuple[int, int, bool]]:
     return [
         (lcs, bw, pl)
         for lcs in (256, 512, 1024, 2048, 4096, 8192)
-        for bw in (16, 64, 256)
+        for bw in (8, 32, 128)
         for pl in (True, False)
     ]
+
+
+def ctx_sizes() -> list[int]:
+    return [512, 1024, 2048, 4096, 8192]
+
+
+def reference() -> dict[str, dict[str, str]]:
+    with open(HERE / "reference.csv", newline="") as f:
+        return {row["task"]: row for row in csv.DictReader(f)}
+
+
+def targets_for(db: str, task: str) -> dict[str, float]:
+    row = reference()[f"{db}/{task}"]
+    metric = {"roc_auc": "auroc", "nmae": "nmae"}[row["metric"]]
+    return {
+        f"{metric}/test/{db}/{task}": float(row["rt-j-icl"]),
+        f"{metric}/test/{db}/{task}/fine-tuned": float(row["rt-plurel-ft"]),
+    }
 
 
 def checkpoint(db: str, task: str) -> str:
@@ -206,7 +225,7 @@ def main() -> None:
                 walk_length=20,
                 val_items_per_task=4096,
                 test_items_per_task=None,
-                ctx_size_list=[512, 1024, 2048, 4096, 8192],
+                ctx_size_list=ctx_sizes(),
                 mmap_populate=True,
                 shuffle_seed=0,
                 context_seed=0,
@@ -215,12 +234,12 @@ def main() -> None:
                 lcs_bw_pl_grid=lcs_bw_pl_grid(),
                 val_ensemble_size=4,
                 test_ensemble_size=1,
-                run_name=None,
-                targets={},
+                run_name=f"{db}/{task}/tune",
+                targets=targets_for(db, task),
                 project=PROJECT,
                 entity=ENTITY,
                 out_root=OUT_ROOT,
-                wandb_disabled=True,
+                wandb_disabled=False,
             ),
             resources=resources,
             name=name,
@@ -276,9 +295,12 @@ def main() -> None:
                     prefetch_factor=2,
                     mmap_populate=True,
                     db_cutoff=None,
+                    run_name=f"{db}/{task}/cfg{rank}",
+                    targets=targets_for(db, task),
                     project=PROJECT,
                     entity=ENTITY,
                     out_root=OUT_ROOT,
+                    wandb_disabled=False,
                 ),
                 resources=resources,
                 name=name,

@@ -16,7 +16,7 @@ pixi run python -m expts.repaper.tune.collect    # -> tuned_configs.json; commit
 ## Protocol
 
 Grid: ctx {512, 1024, 2048, 4096, 8192} x lcs {256, 512, 1024, 2048, 4096,
-8192 | lcs <= ctx} x bw {16, 64, 256} x pl {True, False} = **120 configurations
+8192 | lcs <= ctx} x bw {8, 32, 128} x pl {True, False} = **120 configurations
 per task** (2520 total). Each configuration is scored on the task's validation
 split -- 4096 rows (shuffle_seed=0), the prediction averaged over 4 context
 seeds (`val_ensemble_size=4`), `db_cutoff=None`. AUROC ranks clf configurations,

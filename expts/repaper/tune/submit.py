@@ -29,7 +29,7 @@ TASKS = [
 GRID = [
     (lcs, bw, pl)
     for lcs in (256, 512, 1024, 2048, 4096, 8192)
-    for bw in (16, 64, 256)
+    for bw in (8, 32, 128)
     for pl in (True, False)
 ]
 
