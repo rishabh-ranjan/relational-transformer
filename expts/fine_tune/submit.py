@@ -151,7 +151,10 @@ RESOURCES: dict[tuple[str, str, str], Resources] = {
     ("rt", "rel-avito", "user-visits"): a100("il-lo", "3-00:00:00"),
     # 10:55: two il a100 slots freed (rt/study-adverse, rt-plurel/hm/user-churn
     # finished); the last two il-lo jobs move onto them.
-    ("rt-plurel", "rel-stack", "user-badge"): a100("il", "7-00:00:00"),
+    # 15:12: rt-plurel/amazon/user-ltv finished on its il-interactive b200; the
+    # slot goes to the a100 job with the most left (selection arm at 46.1k, a
+    # ~50k-step refit ahead).
+    ("rt-plurel", "rel-stack", "user-badge"): b200("il-interactive", "12:00:00"),
     # 08:32: rt-plurel/item-sales finished on its il-interactive b200 (9h34);
     # the slot goes to the il-lo selection arm with the most left (16.3k steps).
     ("rt", "rel-stack", "user-badge"): b200("il-interactive", "12:00:00"),
