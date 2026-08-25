@@ -114,13 +114,17 @@ grouped by `run_name`, so a requeued job's attempts read as one curve.
 
 ## What it costs
 
-Estimates from the RT-J rerun of the same grid on this cluster (`sacct`,
-2026-08-20/21); measurements from this round replace them as they come in.
+Measured on this round where it says so; the rest is projected from the RT-J
+rerun of the same grid on this cluster (`sacct`, 2026-08-20/21).
 
-- Context search: 6h15 on a b200 for each rel-amazon task; on an a100 1h15
-  (rel-event/user-repeat, 268 val rows), 2h (rel-f1/driver-dnf, 566), 3h30
-  (rel-trial/study-outcome, 960); the tasks with >= 4096 val rows were not
-  finished at 5h and project to 10-15h on an a100.
+- Context search, measured 2026-08-25 on a100 (14 workers): one sampler pass
+  over 4096 val rows scored at every ctx up to 8192 is ~400 s, all of it
+  predict (load 3-8 s), the same on rel-amazon and rel-avito; the first grid
+  entry (lcs 256, five ctx sizes, 4 seeds) took 27 min, so a task with 4096
+  val rows is ~12-14 h on an a100 (entries with a larger lcs score fewer ctx
+  sizes), 6h15 on a b200 in the RT-J rerun; the smaller validation splits
+  scale down with their rows (rel-event/user-repeat 1h15, rel-f1/driver-dnf
+  2h, rel-trial/study-outcome 3h30 in the RT-J rerun).
 - Test ensemble: ~30 test rows/s on an a100 at ctx 8192 including sampling
   (the 16-seed 8192-row curves ran ~1h05 on rel-amazon); a unit is four
   passes, so ~13h for each rel-amazon user task (352k rows), ~6h30 for the
