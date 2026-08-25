@@ -134,7 +134,9 @@ RESOURCES: dict[tuple[str, str, str], Resources] = {
     ("rt-plurel", "rel-trial", "study-adverse"): a100("il", "7-00:00:00"),
     ("rt", "rel-trial", "study-adverse"): a100("il", "7-00:00:00"),
     ("rt-plurel", "rel-hm", "user-churn"): a100("il", "7-00:00:00"),
-    ("rt", "rel-hm", "user-churn"): a100("il", "7-00:00:00"),
+    # 15:45: rt/stack/user-badge finished on its il-interactive b200; the slot
+    # goes to the a100 job with the most left (a 41k-step refit just begun).
+    ("rt", "rel-hm", "user-churn"): b200("il-interactive", "12:00:00"),
     ("rt-plurel", "rel-amazon", "item-churn"): a100("il", "7-00:00:00"),
     ("rt", "rel-amazon", "item-churn"): a100("il", "7-00:00:00"),
     ("rt-plurel", "rel-event", "user-attendance"): a100("il", "7-00:00:00"),
