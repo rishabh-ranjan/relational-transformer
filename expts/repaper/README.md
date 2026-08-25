@@ -16,7 +16,7 @@ are submitted, allocated and watched here, and it applies to every job below.
 | [`enscurve/`](enscurve/) | ensemble-size curves, default and tuned context |
 | [`valtest/`](valtest/) | default-vs-tuned appendix table |
 | [`submit/`](submit/) | top-4-configs x 4-seeds full-test ensemble: leaderboard CSVs and table |
-| [`pretrain_abl/`](pretrain_abl/) | five one-knob-off pretraining runs (masking rate, task mix) |
+| [`pretrain_abl/`](pretrain_abl/) | five one-knob-off variants of the base pretraining run (masking rate, task mix) |
 
 ## 0. Set up the round
 
@@ -111,10 +111,10 @@ is left in the queue.
 
 ## 3. What to know before it bites
 
-- `db_cutoff=None` everywhere: per-row temporal masking is the only trim. The
-  released pretraining run predates the knob, so the ablations match it with
-  `None` too (`"test"` would resolve every Join source through the Hub and
-  crash on databases without a test timestamp).
+- `db_cutoff=None` everywhere: per-row temporal masking is the only trim
+  (`"test"` would resolve every Join source through the Hub and crash on
+  databases without a test timestamp). The base pretraining run and its
+  ablations pass `None` too.
 - What a preemption costs: tuning resumes per grid entry, ensemble and
   leaderboard units per seed, pretraining from a checkpoint 20 minutes old;
   scaling and featurize jobs restart their task from the top, and the biggest
