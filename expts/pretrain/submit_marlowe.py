@@ -6,7 +6,7 @@ from roach.slurm.clusters import marlowe
 from roach.slurm import submit
 
 cluster = marlowe.MARLOWE
-resources = dataclasses.replace(marlowe.H100, nodes=2, dependency="afterany:443431")
+resources = dataclasses.replace(marlowe.H100, nodes=2)
 
 gpu = resources.gpus.rpartition(":")[0] or {"marlowe": "h100"}[cluster.name]
 tokens_per_gpu = {"a100": 2**17, "h100": 2**16, "b200": 2**18}[gpu]
@@ -43,7 +43,7 @@ submit(
         items_per_task=100_000,
         delta_finetune=True,
         optimizer="muon",
-        lr=5e-4,
+        lr=1e-4,
         wd=0.1,
         lr_warmup_steps=2_000,
         lr_decay_steps=0,
@@ -86,7 +86,7 @@ submit(
     ),
     resources=resources,
     name="pretrain",
-    run_id="26-08-24_12-12-46_235777614",
+    inside=443431,
     repo_root=str(Path(__file__).resolve().parents[2]),
     cluster=cluster,
     job_env="expts/job_env.sh",
