@@ -145,7 +145,9 @@ RESOURCES: dict[tuple[str, str, str], Resources] = {
     ("rt-plurel", "rel-avito", "user-visits"): a100("il-lo", "3-00:00:00"),
     ("rt", "rel-avito", "user-visits"): a100("il-lo", "3-00:00:00"),
     ("rt-plurel", "rel-stack", "user-badge"): a100("il-lo", "3-00:00:00"),
-    ("rt", "rel-stack", "user-badge"): a100("il-lo", "3-00:00:00"),
+    # 08:32: rt-plurel/item-sales finished on its il-interactive b200 (9h34);
+    # the slot goes to the il-lo selection arm with the most left (16.3k steps).
+    ("rt", "rel-stack", "user-badge"): b200("il-interactive", "12:00:00"),
     ("rt-plurel", "rel-event", "user-ignore"): a100("il-lo", "3-00:00:00"),
     ("rt", "rel-event", "user-ignore"): a100("il-lo", "3-00:00:00"),
     # 06:30: rt-plurel/study-adverse finished on its il a100 (7h49); the slot
