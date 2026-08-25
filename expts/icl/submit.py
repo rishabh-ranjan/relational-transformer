@@ -150,7 +150,12 @@ def b200(qos: str, time: str) -> Resources:
 # freed, so it moves again, to il. 15:55: the fine_tune session says nothing
 # more of its will be promoted, so the il room is this sweep's; the il-lo
 # tuning jobs with the most left move up as slots free, biggest database
-# first, each losing at most one grid entry.
+# first, each losing at most one grid entry. 16:05: five il-lo tuning jobs
+# preempted by another user's il burst sit at priority ~760 behind 40 il-lo
+# jobs while 2-hour ensemble units sail past them: the free cards are planned
+# for a big pending job and only a job that ends before it backfills in. So
+# the requeued jobs ask for 2 hours; roach requeues them at the wall clock
+# and they resume per grid entry, losing at most one entry per chunk.
 TUNE: dict[tuple[str, str], Resources] = {
     ("rel-amazon", "user-churn"): a100("il", "2-00:00:00"),
     ("rel-amazon", "user-ltv"): a100("il", "2-00:00:00"),
@@ -160,15 +165,15 @@ TUNE: dict[tuple[str, str], Resources] = {
     ("rel-stack", "post-votes"): a100("il-lo", "2-00:00:00"),
     ("rel-hm", "item-sales"): a100("il", "2-00:00:00"),
     ("rel-stack", "user-engagement"): a100("il", "2-00:00:00"),
-    ("rel-hm", "user-churn"): a100("il-lo", "2-00:00:00"),
-    ("rel-avito", "user-clicks"): a100("il-lo", "2-00:00:00"),
-    ("rel-avito", "user-visits"): a100("il-lo", "2-00:00:00"),
+    ("rel-hm", "user-churn"): a100("il-lo", "2:00:00"),
+    ("rel-avito", "user-clicks"): a100("il-lo", "2:00:00"),
+    ("rel-avito", "user-visits"): a100("il-lo", "2:00:00"),
     ("rel-trial", "site-success"): a100("il-lo", "2-00:00:00"),
-    ("rel-trial", "study-adverse"): a100("il-lo", "2-00:00:00"),
+    ("rel-trial", "study-adverse"): a100("il-lo", "2:00:00"),
     ("rel-event", "user-attendance"): a100("il-lo", "2-00:00:00"),
     ("rel-event", "user-ignore"): a100("il-lo", "2-00:00:00"),
     ("rel-avito", "ad-ctr"): a100("il-lo", "2-00:00:00"),
-    ("rel-trial", "study-outcome"): a100("il-lo", "2-00:00:00"),
+    ("rel-trial", "study-outcome"): a100("il-lo", "2:00:00"),
     ("rel-f1", "driver-position"): a100("il-lo", "2-00:00:00"),
     ("rel-f1", "driver-top3"): a100("il-lo", "2-00:00:00"),
     ("rel-f1", "driver-dnf"): a100("il-lo", "2-00:00:00"),
