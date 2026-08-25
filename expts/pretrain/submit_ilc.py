@@ -5,13 +5,13 @@ from roach.slurm.clusters import ilc
 
 from roach.slurm import submit
 
-resources = dataclasses.replace(
-    ilc.AMPERE_LO,
-    nodes=2,
-    exclusive=True,
-    cpus_per_task=16,
-    nodelist="ampere3,ampere5",
-)
+# 2026-08-24: job 136577 (2 nodes, il-lo) was preempted at step 50442 and both
+# nodes filled with 1-gpu jobs within minutes; ampere3 holds only il-lo jobs,
+# which `il` preempts, and `il` holds nothing of mine.
+resources = dataclasses.replace(ilc.AMPERE, nodelist="ampere3")
+# resources = dataclasses.replace(
+#     ilc.AMPERE_LO, nodes=2, exclusive=True, cpus_per_task=16, nodelist="ampere3,ampere5"
+# )
 
 tokens_per_gpu = {"a100": 2**17, "b200": 2**18}[resources.gpus.rpartition(":")[0]]
 
@@ -88,7 +88,7 @@ submit(
     ),
     resources=resources,
     name="pretrain",
-    run_id=None,
+    run_id="26-08-23_10-50-04_449253049",
     repo_root=str(Path(__file__).resolve().parents[2]),
     cluster=ilc.ILC,
     job_env="expts/job_env.sh",
