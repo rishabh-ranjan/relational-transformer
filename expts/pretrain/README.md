@@ -38,7 +38,7 @@ pixi run python -m expts.pretrain.submit_marlowe
 - `submit_marlowe.py` is the paper round's base run: it logs to
   `rtv2/<RUN_TAG>-repaper-pretrain` as run `base` (`RUN_TAG` from
   `expts/repaper/config.py`), and `expts/repaper/pretrain_abl` imports its
-  `ARGS` to build the one-knob-off ablations. Its `inside=` is a held
+  `args()` to build the one-knob-off ablations. Its `inside=` is a held
   allocation (`roach.slurm.hold`): the run starts there as a step instead of
   queueing, and the next run swaps in without another queue wait.
 - Ampere: whole nodes, `--exclusive`. One node fits under `il` (not

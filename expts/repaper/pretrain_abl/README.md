@@ -6,7 +6,7 @@ exactly the ablated knob, plus 10k-step early-stop patience so an arm stops
 spending nodes once its val curve flattens.
 
 The base run is [`expts/pretrain/submit_marlowe.py`](../../pretrain/submit_marlowe.py):
-its `ARGS` is imported here and each arm is `ARGS | ARMS[arm]`, so the two
+its `args()` is imported here and each arm is `args() | ARMS[arm]`, so the two
 cannot drift. The base logs to `rtv2/<RUN_TAG>-repaper-pretrain` as run
 `base`; the arms to `rtv2/<RUN_TAG>-repaper-pretrain-abl` as `mask0`, `mask25`,
 `mask75`, `mix-forecast`, `mix-autocomplete`. The task-mix lists beside this

@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from expts.pretrain.submit_marlowe import ARGS, cluster, resources
+from expts.pretrain.submit_marlowe import args, cluster, resources
 from expts.repaper.config import project
 from roach.slurm import submit
 
@@ -22,7 +22,7 @@ INSIDE = None
 
 submit(
     "rt.train:main",
-    args=ARGS
+    args=args()
     | ARMS[ARM]
     | dict(
         early_stop_after_steps=10_000,
