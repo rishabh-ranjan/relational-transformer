@@ -1,0 +1,296 @@
+import json
+import subprocess
+from pathlib import Path
+
+from roach.slurm.clusters.ilc import ILC
+
+from roach.slurm import Resources, submit
+from rt.data import get_tasks
+
+HERE = Path(__file__).parent
+
+PROJECT = "2026-08-25-icl"
+ENTITY = "rtv2"
+OUT_ROOT = "~/scratch/relational-transformer/icl"
+PRE_DIR = "~/scratch/hf/stanford-star/relbench-preprocessed"
+CKPT_ROOT = "~/scratch/hf/stanford-star/rt-plurel"
+
+TASKS = (
+    ("rel-amazon", "user-churn"),
+    ("rel-amazon", "user-ltv"),
+    ("rel-amazon", "item-ltv"),
+    ("rel-amazon", "item-churn"),
+    ("rel-stack", "user-badge"),
+    ("rel-stack", "post-votes"),
+    ("rel-hm", "item-sales"),
+    ("rel-stack", "user-engagement"),
+    ("rel-hm", "user-churn"),
+    ("rel-avito", "user-clicks"),
+    ("rel-avito", "user-visits"),
+    ("rel-trial", "site-success"),
+    ("rel-trial", "study-adverse"),
+    ("rel-event", "user-attendance"),
+    ("rel-event", "user-ignore"),
+    ("rel-avito", "ad-ctr"),
+    ("rel-trial", "study-outcome"),
+    ("rel-f1", "driver-position"),
+    ("rel-f1", "driver-top3"),
+    ("rel-f1", "driver-dnf"),
+    ("rel-event", "user-repeat"),
+)
+
+
+def lcs_bw_pl_grid() -> list[tuple[int, int, bool]]:
+    return [
+        (lcs, bw, pl)
+        for lcs in (256, 512, 1024, 2048, 4096, 8192)
+        for bw in (16, 64, 256)
+        for pl in (True, False)
+    ]
+
+
+def checkpoint(db: str, task: str) -> str:
+    (t,) = get_tasks(PRE_DIR, [(db, task)], ("val",))
+    return (
+        f"{CKPT_ROOT}/{ {'clf': 'classification', 'reg': 'regression'}[t.task_type] }"
+    )
+
+
+def stage_dir(run_id: str) -> Path:
+    return Path(OUT_ROOT).expanduser() / ENTITY / PROJECT / run_id
+
+
+def a100(qos: str, time: str) -> Resources:
+    return Resources(
+        partition="il",
+        account="infolab",
+        qos=qos,
+        time=time,
+        gpus="a100:1",
+        cpus_per_task=14,
+        ntasks=None,
+        exclusive=False,
+        mem=None,
+        mem_per_gpu=None,
+        constraint="ampere",
+        nodelist=None,
+        reservation=None,
+        dependency=None,
+        exclude="ampere4,ampere7",
+    )
+
+
+def b200(qos: str, time: str) -> Resources:
+    return Resources(
+        partition="il",
+        account="infolab",
+        qos=qos,
+        time=time,
+        gpus="b200:1",
+        cpus_per_task=36,
+        ntasks=None,
+        exclusive=False,
+        mem="375000M",
+        mem_per_gpu=None,
+        constraint=None,
+        nodelist="blackwell1",
+        reservation=None,
+        dependency=None,
+    )
+
+
+# 2026-08-25 11:30, read off the cluster: the fine_tune sweep holds every
+# high-tier slot of mine (il-interactive 2/2 on b200, il 10/10: 9 a100 + 1
+# b200), blackwell1 is 8/8 allocated (5 of them il-lo jobs of another user with
+# up to 40h left), ~13 a100 free across ampere2/6/8/9 with four 8-gpu il-lo
+# jobs of other users queued for whole nodes. So every tuning job starts on
+# il-lo a100; as fine_tune jobs finish, the freed il / il-interactive slots go
+# to the rel-amazon jobs first (the biggest database, ~6h15 on a b200 for the
+# same grid in the RT-J rerun), then down the list. ampere4 (disk 99% full)
+# and ampere7 (a100 comes up with 16 MB free, CUDA OOM at the first forward)
+# stay excluded, as in fine_tune.
+TUNE: dict[tuple[str, str], Resources] = {
+    ("rel-amazon", "user-churn"): a100("il-lo", "2-00:00:00"),
+    ("rel-amazon", "user-ltv"): a100("il-lo", "2-00:00:00"),
+    ("rel-amazon", "item-ltv"): a100("il-lo", "2-00:00:00"),
+    ("rel-amazon", "item-churn"): a100("il-lo", "2-00:00:00"),
+    ("rel-stack", "user-badge"): a100("il-lo", "2-00:00:00"),
+    ("rel-stack", "post-votes"): a100("il-lo", "2-00:00:00"),
+    ("rel-hm", "item-sales"): a100("il-lo", "2-00:00:00"),
+    ("rel-stack", "user-engagement"): a100("il-lo", "2-00:00:00"),
+    ("rel-hm", "user-churn"): a100("il-lo", "2-00:00:00"),
+    ("rel-avito", "user-clicks"): a100("il-lo", "2-00:00:00"),
+    ("rel-avito", "user-visits"): a100("il-lo", "2-00:00:00"),
+    ("rel-trial", "site-success"): a100("il-lo", "2-00:00:00"),
+    ("rel-trial", "study-adverse"): a100("il-lo", "2-00:00:00"),
+    ("rel-event", "user-attendance"): a100("il-lo", "2-00:00:00"),
+    ("rel-event", "user-ignore"): a100("il-lo", "2-00:00:00"),
+    ("rel-avito", "ad-ctr"): a100("il-lo", "2-00:00:00"),
+    ("rel-trial", "study-outcome"): a100("il-lo", "2-00:00:00"),
+    ("rel-f1", "driver-position"): a100("il-lo", "2-00:00:00"),
+    ("rel-f1", "driver-top3"): a100("il-lo", "2-00:00:00"),
+    ("rel-f1", "driver-dnf"): a100("il-lo", "2-00:00:00"),
+    ("rel-event", "user-repeat"): a100("il-lo", "2-00:00:00"),
+}
+
+# The ensemble units are submitted once tuned_configs.json holds a task; this
+# plan is rewritten against the cluster at that moment. TASKS is in test-row
+# order, which is the cost order of this stage (four full test passes per unit):
+# the two rel-amazon user tasks are ~13h per unit on an a100 at ctx 8192, the
+# rel-f1 and rel-event tasks minutes.
+ENS: dict[tuple[str, str], Resources] = {
+    ("rel-amazon", "user-churn"): a100("il-lo", "2-00:00:00"),
+    ("rel-amazon", "user-ltv"): a100("il-lo", "2-00:00:00"),
+    ("rel-amazon", "item-ltv"): a100("il-lo", "2-00:00:00"),
+    ("rel-amazon", "item-churn"): a100("il-lo", "2-00:00:00"),
+    ("rel-stack", "user-badge"): a100("il-lo", "2-00:00:00"),
+    ("rel-stack", "post-votes"): a100("il-lo", "2-00:00:00"),
+    ("rel-hm", "item-sales"): a100("il-lo", "2-00:00:00"),
+    ("rel-stack", "user-engagement"): a100("il-lo", "2-00:00:00"),
+    ("rel-hm", "user-churn"): a100("il-lo", "2-00:00:00"),
+    ("rel-avito", "user-clicks"): a100("il-lo", "2-00:00:00"),
+    ("rel-avito", "user-visits"): a100("il-lo", "2-00:00:00"),
+    ("rel-trial", "site-success"): a100("il-lo", "2-00:00:00"),
+    ("rel-trial", "study-adverse"): a100("il-lo", "2-00:00:00"),
+    ("rel-event", "user-attendance"): a100("il-lo", "2-00:00:00"),
+    ("rel-event", "user-ignore"): a100("il-lo", "2-00:00:00"),
+    ("rel-avito", "ad-ctr"): a100("il-lo", "2-00:00:00"),
+    ("rel-trial", "study-outcome"): a100("il-lo", "2-00:00:00"),
+    ("rel-f1", "driver-position"): a100("il-lo", "2-00:00:00"),
+    ("rel-f1", "driver-top3"): a100("il-lo", "2-00:00:00"),
+    ("rel-f1", "driver-dnf"): a100("il-lo", "2-00:00:00"),
+    ("rel-event", "user-repeat"): a100("il-lo", "2-00:00:00"),
+}
+
+
+def queued() -> set[str]:
+    out = subprocess.run(
+        ["squeue", "-h", "-u", "ranjanr", "-o", "%j"],
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    return set(out.stdout.split())
+
+
+def main() -> None:
+    busy = queued()
+    for db, task in TASKS:
+        run_id = f"tune-{db}-{task}"
+        name = f"icl-{run_id}"
+        if name in busy:
+            print(f"  {name:44s} queued already")
+            continue
+        if (stage_dir(run_id) / "tuning.json").exists():
+            print(f"  {name:44s} done already")
+            continue
+        resources = TUNE[db, task]
+        print(f"  {name:44s} {resources.gpus} {resources.qos:15s} {resources.time}")
+        submit(
+            "rt.eval:main",
+            args=dict(
+                load_ckpt_path=checkpoint(db, task),
+                embedder="all-MiniLM-L12-v2",
+                d_text=384,
+                num_blocks=12,
+                d_model=512,
+                num_heads=8,
+                d_ff=2048,
+                splits=["val"],
+                db_task_list=[(db, task)],
+                pre_dir=PRE_DIR,
+                tokens_per_gpu=2**18,
+                num_workers=resources.cpus_per_task,
+                prefetch_factor=2,
+                num_walks=10_000,
+                walk_length=20,
+                val_items_per_task=4096,
+                test_items_per_task=None,
+                ctx_size_list=[512, 1024, 2048, 4096, 8192],
+                mmap_populate=True,
+                shuffle_seed=0,
+                context_seed=0,
+                vector_db_path=None,
+                db_cutoff=None,
+                lcs_bw_pl_grid=lcs_bw_pl_grid(),
+                val_ensemble_size=4,
+                test_ensemble_size=1,
+                run_name=None,
+                targets={},
+                project=PROJECT,
+                entity=ENTITY,
+                out_root=OUT_ROOT,
+                wandb_disabled=True,
+            ),
+            resources=resources,
+            name=name,
+            run_id=run_id,
+            repo_root=str(HERE.parents[1]),
+            cluster=ILC,
+            job_env="expts/job_env.sh",
+            log_root=f"{OUT_ROOT}/slurm-logs",
+            clone_root="~/roach_clones",
+            secrets_dir="~/scratch/.secrets",
+        )
+
+    tuned_path = HERE / "tuned_configs.json"
+    tuned = json.loads(tuned_path.read_text()) if tuned_path.exists() else {}
+    for db, task in TASKS:
+        rec = tuned.get(f"{db}/{task}")
+        if rec is None:
+            print(f"  {db}/{task}: not in tuned_configs.json yet")
+            continue
+        for rank, (ctx, lcs, bw, pl) in enumerate(rec["top_cfgs"]):
+            run_id = f"ens-{db}-{task}-cfg{rank}"
+            name = f"icl-{run_id}"
+            if name in busy:
+                print(f"  {name:44s} queued already")
+                continue
+            if (stage_dir(run_id) / "result.json").exists():
+                print(f"  {name:44s} done already")
+                continue
+            resources = ENS[db, task]
+            print(
+                f"  {name:44s} {resources.gpus} {resources.qos:15s} {resources.time}"
+                f"  {(ctx, lcs, bw, pl)}"
+            )
+            submit(
+                "expts.icl.run:main",
+                args=dict(
+                    db=db,
+                    task=task,
+                    load_ckpt_path=checkpoint(db, task),
+                    pre_dir=PRE_DIR,
+                    ctx_size=int(ctx),
+                    local_ctx_size=int(lcs),
+                    bfs_width=int(bw),
+                    prefer_latest=bool(pl),
+                    n_seeds=4,
+                    items_per_task=1_000_000_000,
+                    num_walks=10_000,
+                    walk_length=20,
+                    shuffle_seed=0,
+                    context_seed=0,
+                    tokens_per_gpu=2**18,
+                    num_workers=resources.cpus_per_task,
+                    prefetch_factor=2,
+                    mmap_populate=True,
+                    db_cutoff=None,
+                    project=PROJECT,
+                    entity=ENTITY,
+                    out_root=OUT_ROOT,
+                ),
+                resources=resources,
+                name=name,
+                run_id=run_id,
+                repo_root=str(HERE.parents[1]),
+                cluster=ILC,
+                job_env="expts/job_env.sh",
+                log_root=f"{OUT_ROOT}/slurm-logs",
+                clone_root="~/roach_clones",
+                secrets_dir="~/scratch/.secrets",
+            )
+
+
+if __name__ == "__main__":
+    main()
