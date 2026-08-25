@@ -9,38 +9,38 @@ from roach.slurm import Resources, submit
 
 HERE = Path(__file__).parent
 
-PROJECT = "2026-08-24-fine_tune-probe"
+PROJECT = "2026-08-24-fine_tune"
 ENTITY = "rtv2"
 OUT_ROOT = "~/scratch/relational-transformer/fine_tune"
 
 MODELS = (
     ("rt-plurel", "~/scratch/hf/stanford-star/rt-plurel"),
-    # ("rt", None),
+    ("rt", None),
     # ("rt-j", "~/scratch/hf/stanford-star/rt-j"),
 )
 
 TASKS = (
+    ("rel-hm", "item-sales"),
+    ("rel-stack", "user-engagement"),
+    ("rel-amazon", "user-churn"),
+    ("rel-trial", "study-adverse"),
+    ("rel-hm", "user-churn"),
+    ("rel-amazon", "item-churn"),
+    ("rel-event", "user-attendance"),
+    ("rel-amazon", "user-ltv"),
+    ("rel-avito", "user-visits"),
+    ("rel-stack", "user-badge"),
+    ("rel-event", "user-ignore"),
+    ("rel-amazon", "item-ltv"),
+    ("rel-trial", "site-success"),
+    ("rel-stack", "post-votes"),
+    ("rel-avito", "user-clicks"),
+    ("rel-avito", "ad-ctr"),
+    ("rel-trial", "study-outcome"),
+    ("rel-event", "user-repeat"),
     ("rel-f1", "driver-dnf"),
-    # ("rel-hm", "item-sales"),
-    # ("rel-stack", "user-engagement"),
-    # ("rel-amazon", "user-churn"),
-    # ("rel-trial", "study-adverse"),
-    # ("rel-hm", "user-churn"),
-    # ("rel-amazon", "item-churn"),
-    # ("rel-event", "user-attendance"),
-    # ("rel-amazon", "user-ltv"),
-    # ("rel-avito", "user-visits"),
-    # ("rel-stack", "user-badge"),
-    # ("rel-event", "user-ignore"),
-    # ("rel-amazon", "item-ltv"),
-    # ("rel-trial", "site-success"),
-    # ("rel-stack", "post-votes"),
-    # ("rel-avito", "user-clicks"),
-    # ("rel-avito", "ad-ctr"),
-    # ("rel-trial", "study-outcome"),
-    # ("rel-event", "user-repeat"),
-    # ("rel-f1", "driver-top3"),
-    # ("rel-f1", "driver-position"),
+    ("rel-f1", "driver-top3"),
+    ("rel-f1", "driver-position"),
 )
 
 
@@ -108,11 +108,58 @@ def b200(qos: str, time: str) -> Resources:
     )
 
 
-# 2026-08-24 22:20: nothing of mine on il/il-interactive; ~30 a100 free across
-# the amperes; ampere4's local disk is 99% full, so it is kept out. One short
-# probe, top priority, on an ampere.
+# 2026-08-24 22:35, read off the cluster: nothing of mine on il/il-interactive;
+# the 8 b200 are all held by one user, 2 under il (30h left) and 6 under il-lo,
+# which il/il-interactive preempt, so a high-tier b200 request starts within
+# the grace period; ~30 a100 free across the amperes, ampere4 kept out (disk
+# 99% full; `sbatch --test-only` plans an il a100 job 8h out, which only a
+# submission can confirm or refute). Tiers top down, the longest tasks (RelArena's measured wall
+# clocks, item-sales and user-engagement first) on the fastest slots:
+# il-interactive 2 x b200, il 2 x b200 + 8 x a100, then il-lo for the 30 left.
+# TASKS is in that cost order, so the plan reads down the list.
 RESOURCES: dict[tuple[str, str, str], Resources] = {
-    ("rt-plurel", "rel-f1", "driver-dnf"): a100("il-interactive", "3:00:00"),
+    ("rt-plurel", "rel-hm", "item-sales"): b200("il-interactive", "12:00:00"),
+    ("rt", "rel-hm", "item-sales"): b200("il-interactive", "12:00:00"),
+    ("rt-plurel", "rel-stack", "user-engagement"): b200("il", "7-00:00:00"),
+    ("rt", "rel-stack", "user-engagement"): b200("il", "7-00:00:00"),
+    ("rt-plurel", "rel-amazon", "user-churn"): a100("il", "7-00:00:00"),
+    ("rt", "rel-amazon", "user-churn"): a100("il", "7-00:00:00"),
+    ("rt-plurel", "rel-trial", "study-adverse"): a100("il", "7-00:00:00"),
+    ("rt", "rel-trial", "study-adverse"): a100("il", "7-00:00:00"),
+    ("rt-plurel", "rel-hm", "user-churn"): a100("il", "7-00:00:00"),
+    ("rt", "rel-hm", "user-churn"): a100("il", "7-00:00:00"),
+    ("rt-plurel", "rel-amazon", "item-churn"): a100("il", "7-00:00:00"),
+    ("rt", "rel-amazon", "item-churn"): a100("il", "7-00:00:00"),
+    ("rt-plurel", "rel-event", "user-attendance"): a100("il-lo", "3-00:00:00"),
+    ("rt", "rel-event", "user-attendance"): a100("il-lo", "3-00:00:00"),
+    ("rt-plurel", "rel-amazon", "user-ltv"): a100("il-lo", "3-00:00:00"),
+    ("rt", "rel-amazon", "user-ltv"): a100("il-lo", "3-00:00:00"),
+    ("rt-plurel", "rel-avito", "user-visits"): a100("il-lo", "3-00:00:00"),
+    ("rt", "rel-avito", "user-visits"): a100("il-lo", "3-00:00:00"),
+    ("rt-plurel", "rel-stack", "user-badge"): a100("il-lo", "3-00:00:00"),
+    ("rt", "rel-stack", "user-badge"): a100("il-lo", "3-00:00:00"),
+    ("rt-plurel", "rel-event", "user-ignore"): a100("il-lo", "3-00:00:00"),
+    ("rt", "rel-event", "user-ignore"): a100("il-lo", "3-00:00:00"),
+    ("rt-plurel", "rel-amazon", "item-ltv"): a100("il-lo", "3-00:00:00"),
+    ("rt", "rel-amazon", "item-ltv"): a100("il-lo", "3-00:00:00"),
+    ("rt-plurel", "rel-trial", "site-success"): a100("il-lo", "3-00:00:00"),
+    ("rt", "rel-trial", "site-success"): a100("il-lo", "3-00:00:00"),
+    ("rt-plurel", "rel-stack", "post-votes"): a100("il-lo", "3-00:00:00"),
+    ("rt", "rel-stack", "post-votes"): a100("il-lo", "3-00:00:00"),
+    ("rt-plurel", "rel-avito", "user-clicks"): a100("il-lo", "3-00:00:00"),
+    ("rt", "rel-avito", "user-clicks"): a100("il-lo", "3-00:00:00"),
+    ("rt-plurel", "rel-avito", "ad-ctr"): a100("il-lo", "3-00:00:00"),
+    ("rt", "rel-avito", "ad-ctr"): a100("il-lo", "3-00:00:00"),
+    ("rt-plurel", "rel-trial", "study-outcome"): a100("il-lo", "3-00:00:00"),
+    ("rt", "rel-trial", "study-outcome"): a100("il-lo", "3-00:00:00"),
+    ("rt-plurel", "rel-event", "user-repeat"): a100("il-lo", "3-00:00:00"),
+    ("rt", "rel-event", "user-repeat"): a100("il-lo", "3-00:00:00"),
+    ("rt-plurel", "rel-f1", "driver-dnf"): a100("il-lo", "3-00:00:00"),
+    ("rt", "rel-f1", "driver-dnf"): a100("il-lo", "3-00:00:00"),
+    ("rt-plurel", "rel-f1", "driver-top3"): a100("il-lo", "3-00:00:00"),
+    ("rt", "rel-f1", "driver-top3"): a100("il-lo", "3-00:00:00"),
+    ("rt-plurel", "rel-f1", "driver-position"): a100("il-lo", "3-00:00:00"),
+    ("rt", "rel-f1", "driver-position"): a100("il-lo", "3-00:00:00"),
 }
 
 
@@ -150,13 +197,13 @@ def main() -> None:
                     else 2**17,
                     num_workers=resources.cpus_per_task,
                     eval_num_workers=2,
-                    selection_steps=300,
-                    patience_steps=200,
+                    selection_steps=50_000,
+                    patience_steps=10_000,
                     eval_freq=100,
-                    eval_rows=256,
-                    selection_ensemble_size=2,
-                    tune_rows=512,
-                    test_ensemble_size=2,
+                    eval_rows=1024,
+                    selection_ensemble_size=4,
+                    tune_rows=4096,
+                    test_ensemble_size=8,
                     seed=0,
                     targets=targets_for(db, task),
                     project=PROJECT,
