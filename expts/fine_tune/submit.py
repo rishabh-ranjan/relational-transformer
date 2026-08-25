@@ -132,7 +132,7 @@ RESOURCES: dict[tuple[str, str, str], Resources] = {
     ("rt", "rel-hm", "user-churn"): a100("il", "7-00:00:00"),
     ("rt-plurel", "rel-amazon", "item-churn"): a100("il", "7-00:00:00"),
     ("rt", "rel-amazon", "item-churn"): a100("il", "7-00:00:00"),
-    ("rt-plurel", "rel-event", "user-attendance"): a100("il-lo", "3-00:00:00"),
+    ("rt-plurel", "rel-event", "user-attendance"): a100("il", "7-00:00:00"),
     # 03:35: rt-plurel/user-engagement finished on its il b200 (4h40); the slot
     # goes to the biggest pending task with the least done (5.4k steps).
     ("rt", "rel-event", "user-attendance"): b200("il", "7-00:00:00"),
@@ -144,7 +144,9 @@ RESOURCES: dict[tuple[str, str, str], Resources] = {
     ("rt", "rel-amazon", "user-ltv"): b200("il", "7-00:00:00"),
     ("rt-plurel", "rel-avito", "user-visits"): a100("il-lo", "3-00:00:00"),
     ("rt", "rel-avito", "user-visits"): a100("il-lo", "3-00:00:00"),
-    ("rt-plurel", "rel-stack", "user-badge"): a100("il-lo", "3-00:00:00"),
+    # 10:55: two il a100 slots freed (rt/study-adverse, rt-plurel/hm/user-churn
+    # finished); the last two il-lo jobs move onto them.
+    ("rt-plurel", "rel-stack", "user-badge"): a100("il", "7-00:00:00"),
     # 08:32: rt-plurel/item-sales finished on its il-interactive b200 (9h34);
     # the slot goes to the il-lo selection arm with the most left (16.3k steps).
     ("rt", "rel-stack", "user-badge"): b200("il-interactive", "12:00:00"),
