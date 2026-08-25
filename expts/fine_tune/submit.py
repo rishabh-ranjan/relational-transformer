@@ -133,7 +133,9 @@ RESOURCES: dict[tuple[str, str, str], Resources] = {
     ("rt-plurel", "rel-amazon", "item-churn"): a100("il", "7-00:00:00"),
     ("rt", "rel-amazon", "item-churn"): a100("il", "7-00:00:00"),
     ("rt-plurel", "rel-event", "user-attendance"): a100("il-lo", "3-00:00:00"),
-    ("rt", "rel-event", "user-attendance"): a100("il-lo", "3-00:00:00"),
+    # 03:35: rt-plurel/user-engagement finished on its il b200 (4h40); the slot
+    # goes to the biggest pending task with the least done (5.4k steps).
+    ("rt", "rel-event", "user-attendance"): b200("il", "7-00:00:00"),
     ("rt-plurel", "rel-amazon", "user-ltv"): a100("il-lo", "3-00:00:00"),
     # 02:25: rt/user-engagement finished on its il b200 (3h25); the freed slot
     # goes to the pending task with the most left, which had not started.
