@@ -77,7 +77,8 @@ The log name gives the run_id; `grep -c resume_saved_at_step` and `tail` give
 the step. The run is finished when the log says so at `total_steps`
 (100_001), not when the queue is empty.
 
-On wandb, each attempt is its own run, id `<run_id>-<jobid>.<restart>`,
+On wandb, each attempt is its own run, id `<run_id>-<jobid>.<step>.<restart>`
+(the step is what tells apart attempts inside one held allocation),
 grouped under the run_id: group by `Group` and the attempts draw one curve on
 the `step` axis.
 

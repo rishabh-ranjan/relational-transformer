@@ -232,7 +232,8 @@ def main(
     if use_wandb:
         job = os.environ.get("SLURM_JOB_ID")
         attempt = (
-            f"{job}.{os.environ.get('SLURM_RESTART_COUNT', '0')}"
+            f"{job}.{os.environ.get('SLURM_STEP_ID', '0')}"
+            f".{os.environ.get('SLURM_RESTART_COUNT', '0')}"
             if job
             else f"{int(time.time())}"
         )
