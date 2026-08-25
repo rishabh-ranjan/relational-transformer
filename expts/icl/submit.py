@@ -134,7 +134,10 @@ def b200(qos: str, time: str) -> Resources:
 # stands free, so the biggest database goes there under il (b200 is ~2.2x an
 # a100 on this grid). 14:55: fine_tune needs that il b200 slot back for a
 # refit (il allows 2 b200 per user and fine_tune holds the other), so the job
-# moves to an il a100 by its run_id, losing at most one grid entry.
+# moves to an il a100 by its run_id, losing at most one grid entry. 15:05:
+# rel-stack/user-engagement was preempted off ampere9 after 3h (6 grid
+# entries saved) and would requeue at the back of the il-lo queue; il has a
+# slot free, so it resumes there, ahead of every il-lo job for the next card.
 TUNE: dict[tuple[str, str], Resources] = {
     ("rel-amazon", "user-churn"): a100("il", "2-00:00:00"),
     ("rel-amazon", "user-ltv"): a100("il-lo", "2-00:00:00"),
@@ -143,7 +146,7 @@ TUNE: dict[tuple[str, str], Resources] = {
     ("rel-stack", "user-badge"): a100("il-lo", "2-00:00:00"),
     ("rel-stack", "post-votes"): a100("il-lo", "2-00:00:00"),
     ("rel-hm", "item-sales"): a100("il-lo", "2-00:00:00"),
-    ("rel-stack", "user-engagement"): a100("il-lo", "2-00:00:00"),
+    ("rel-stack", "user-engagement"): a100("il", "2-00:00:00"),
     ("rel-hm", "user-churn"): a100("il-lo", "2-00:00:00"),
     ("rel-avito", "user-clicks"): a100("il-lo", "2-00:00:00"),
     ("rel-avito", "user-visits"): a100("il-lo", "2-00:00:00"),
