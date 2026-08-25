@@ -85,6 +85,7 @@ def a100(qos: str, time: str) -> Resources:
         nodelist=None,
         reservation=None,
         dependency=None,
+        exclude="ampere4",
     )
 
 
@@ -107,8 +108,9 @@ def b200(qos: str, time: str) -> Resources:
     )
 
 
-# 2026-08-24 22:30: nothing of mine on il/il-interactive; ~30 a100 free across
-# the amperes. One short probe, top priority, on an ampere.
+# 2026-08-24 22:20: nothing of mine on il/il-interactive; ~30 a100 free across
+# the amperes; ampere4's local disk is 99% full, so it is kept out. One short
+# probe, top priority, on an ampere.
 RESOURCES: dict[tuple[str, str, str], Resources] = {
     ("rt-plurel", "rel-f1", "driver-dnf"): a100("il-interactive", "3:00:00"),
 }
