@@ -128,13 +128,14 @@ uv = "*"
 # (rt.rustler) into `src/rt/`, and rustler/develop.sh (see
 # [tool.pixi.activation]) rebuilds it on activation whenever rustler/ changed.
 relational-transformer = { path = ".", editable = true, extras = ["dev"] }
-# rishabh-ranjan's relbench fork: `rt.eval.relbench` scores submissions through
-# `relbench.submit`, which no PyPI release carries, and `rt.data.datasets`
-# resolves split timestamps through the fork's `load_dataset`. The relarena
+# stanford-star/relbench (the fork rishabh-ranjan/relbench moved there):
+# `rt.eval.relbench` scores submissions through `relbench.submit`, which no PyPI
+# release carries, and `rt.data.datasets` resolves split timestamps through its
+# `load_dataset`. Pinned to the commit the previous lock resolved. The relarena
 # branch pins `==2.1.2` instead (the package version is relarena's data version);
 # that pin belongs to that branch, not to `main` -- rerunning relarena means
 # rerunning it from its branch.
-relbench = { git = "https://github.com/rishabh-ranjan/relbench", branch = "main" }
+relbench = { git = "https://github.com/stanford-star/relbench", rev = "fadb3477e4621edda0678b6a01698c33fdd5756f" }
 
 # Baseline featurization (expts/repaper/baselines) runs against the classic
 # relbench 2.x API (`relbench.datasets` / `relbench.tasks`), which the fork
