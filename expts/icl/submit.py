@@ -155,7 +155,8 @@ def b200(qos: str, time: str) -> Resources:
 # jobs while 2-hour ensemble units sail past them: the free cards are planned
 # for a big pending job and only a job that ends before it backfills in. So
 # the requeued jobs ask for 2 hours; roach requeues them at the wall clock
-# and they resume per grid entry, losing at most one entry per chunk.
+# and they resume per grid entry, losing at most one entry per chunk. 16:55:
+# an il slot freed; rel-avito/user-clicks, chunked with ~7h left, takes it.
 TUNE: dict[tuple[str, str], Resources] = {
     ("rel-amazon", "user-churn"): a100("il", "2-00:00:00"),
     ("rel-amazon", "user-ltv"): a100("il", "2-00:00:00"),
@@ -166,7 +167,7 @@ TUNE: dict[tuple[str, str], Resources] = {
     ("rel-hm", "item-sales"): a100("il", "2-00:00:00"),
     ("rel-stack", "user-engagement"): a100("il", "2-00:00:00"),
     ("rel-hm", "user-churn"): a100("il-lo", "2:00:00"),
-    ("rel-avito", "user-clicks"): a100("il-lo", "2:00:00"),
+    ("rel-avito", "user-clicks"): a100("il", "2-00:00:00"),
     ("rel-avito", "user-visits"): a100("il-lo", "2:00:00"),
     ("rel-trial", "site-success"): a100("il-lo", "2-00:00:00"),
     ("rel-trial", "study-adverse"): a100("il-lo", "2:00:00"),
