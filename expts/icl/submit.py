@@ -118,18 +118,19 @@ def b200(qos: str, time: str) -> Resources:
     )
 
 
-# 2026-08-25 11:30, read off the cluster: the fine_tune sweep holds every
-# high-tier slot of mine (il-interactive 2/2 on b200, il 10/10: 9 a100 + 1
-# b200), blackwell1 is 8/8 allocated (5 of them il-lo jobs of another user with
-# up to 40h left), ~13 a100 free across ampere2/6/8/9 with four 8-gpu il-lo
-# jobs of other users queued for whole nodes. So every tuning job starts on
-# il-lo a100; as fine_tune jobs finish, the freed il / il-interactive slots go
-# to the rel-amazon jobs first (the biggest database, ~6h15 on a b200 for the
-# same grid in the RT-J rerun), then down the list. ampere4 (disk 99% full)
-# and ampere7 (a100 comes up with 16 MB free, CUDA OOM at the first forward)
-# stay excluded, as in fine_tune.
+# 2026-08-25 12:20, read off the cluster: the fine_tune sweep holds
+# il-interactive 2/2 (b200) and il 9/10 (8 a100 + 1 b200), so one il slot is
+# mine to spend and goes to the biggest database; blackwell1 is 8/8 allocated
+# (5 of them il-lo jobs of another user with up to 40h left), ~17 a100 free
+# across ampere2/3/5/6/8/9 with four 8-gpu il-lo jobs of other users queued
+# for whole nodes. Every other tuning job starts on il-lo a100; as fine_tune
+# jobs finish, the freed il / il-interactive slots go to the rel-amazon jobs
+# first (the biggest database, ~6h15 on a b200 for the same grid in the RT-J
+# rerun), then down the list. ampere4 (disk 99% full) and ampere7 (a100 comes
+# up with 16 MB free, CUDA OOM at the first forward) stay excluded, as in
+# fine_tune.
 TUNE: dict[tuple[str, str], Resources] = {
-    ("rel-amazon", "user-churn"): a100("il-lo", "2-00:00:00"),
+    ("rel-amazon", "user-churn"): a100("il", "2-00:00:00"),
     ("rel-amazon", "user-ltv"): a100("il-lo", "2-00:00:00"),
     ("rel-amazon", "item-ltv"): a100("il-lo", "2-00:00:00"),
     ("rel-amazon", "item-churn"): a100("il-lo", "2-00:00:00"),
