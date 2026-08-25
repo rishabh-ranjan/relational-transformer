@@ -148,7 +148,9 @@ RESOURCES: dict[tuple[str, str, str], Resources] = {
     ("rt", "rel-event", "user-ignore"): a100("il-lo", "3-00:00:00"),
     ("rt-plurel", "rel-amazon", "item-ltv"): a100("il-lo", "3-00:00:00"),
     ("rt", "rel-amazon", "item-ltv"): a100("il-lo", "3-00:00:00"),
-    ("rt-plurel", "rel-trial", "site-success"): a100("il-lo", "3-00:00:00"),
+    # 06:27: rt-plurel/study-adverse finished on its il a100 (7h49); the slot
+    # goes to the one pending job, preempted mid test-ensemble.
+    ("rt-plurel", "rel-trial", "site-success"): a100("il", "7-00:00:00"),
     ("rt", "rel-trial", "site-success"): a100("il-lo", "3-00:00:00"),
     ("rt-plurel", "rel-stack", "post-votes"): a100("il-lo", "3-00:00:00"),
     ("rt", "rel-stack", "post-votes"): a100("il-lo", "3-00:00:00"),
