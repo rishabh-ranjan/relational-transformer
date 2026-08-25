@@ -135,7 +135,9 @@ RESOURCES: dict[tuple[str, str, str], Resources] = {
     ("rt-plurel", "rel-event", "user-attendance"): a100("il-lo", "3-00:00:00"),
     ("rt", "rel-event", "user-attendance"): a100("il-lo", "3-00:00:00"),
     ("rt-plurel", "rel-amazon", "user-ltv"): a100("il-lo", "3-00:00:00"),
-    ("rt", "rel-amazon", "user-ltv"): a100("il-lo", "3-00:00:00"),
+    # 02:25: rt/user-engagement finished on its il b200 (3h25); the freed slot
+    # goes to the pending task with the most left, which had not started.
+    ("rt", "rel-amazon", "user-ltv"): b200("il", "7-00:00:00"),
     ("rt-plurel", "rel-avito", "user-visits"): a100("il-lo", "3-00:00:00"),
     ("rt", "rel-avito", "user-visits"): a100("il-lo", "3-00:00:00"),
     ("rt-plurel", "rel-stack", "user-badge"): a100("il-lo", "3-00:00:00"),
