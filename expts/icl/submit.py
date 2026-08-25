@@ -161,7 +161,9 @@ TUNE: dict[tuple[str, str], Resources] = {
 # plan is rewritten against the cluster at that moment. TASKS is in test-row
 # order, which is the cost order of this stage (four full test passes per unit):
 # the two rel-amazon user tasks are ~13h per unit on an a100 at ctx 8192, the
-# rel-f1 and rel-event tasks minutes.
+# rel-f1 and rel-event tasks minutes. 14:40: the first task's four units are
+# the first run of run.py, so they take the one free il slot and chain through
+# it rather than queue behind other users' il-lo jobs.
 ENS: dict[tuple[str, str], Resources] = {
     ("rel-amazon", "user-churn"): a100("il-lo", "2-00:00:00"),
     ("rel-amazon", "user-ltv"): a100("il-lo", "2-00:00:00"),
@@ -180,7 +182,7 @@ ENS: dict[tuple[str, str], Resources] = {
     ("rel-event", "user-ignore"): a100("il-lo", "2-00:00:00"),
     ("rel-avito", "ad-ctr"): a100("il-lo", "2-00:00:00"),
     ("rel-trial", "study-outcome"): a100("il-lo", "2-00:00:00"),
-    ("rel-f1", "driver-position"): a100("il-lo", "2-00:00:00"),
+    ("rel-f1", "driver-position"): a100("il", "2-00:00:00"),
     ("rel-f1", "driver-top3"): a100("il-lo", "2-00:00:00"),
     ("rel-f1", "driver-dnf"): a100("il-lo", "2-00:00:00"),
     ("rel-event", "user-repeat"): a100("il-lo", "2-00:00:00"),
