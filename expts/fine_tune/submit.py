@@ -85,7 +85,7 @@ def a100(qos: str, time: str) -> Resources:
         nodelist=None,
         reservation=None,
         dependency=None,
-        exclude="ampere4",
+        exclude="ampere4,ampere7",
     )
 
 
@@ -112,7 +112,9 @@ def b200(qos: str, time: str) -> Resources:
 # the 8 b200 are all held by one user, 2 under il (30h left) and 6 under il-lo,
 # which il/il-interactive preempt, so a high-tier b200 request starts within
 # the grace period; ~30 a100 free across the amperes, ampere4 kept out (disk
-# 99% full; `sbatch --test-only` plans an il a100 job 8h out, which only a
+# 99% full) and ampere7 (a job placed there finds its a100 with 16 MB free
+# and dies in CUDA OOM at the first forward -- three jobs did on 2026-08-24;
+# `sbatch --test-only` plans an il a100 job 8h out, which only a
 # submission can confirm or refute). Tiers top down, the longest tasks (RelArena's measured wall
 # clocks, item-sales and user-engagement first) on the fastest slots:
 # il-interactive 2 x b200, il 2 x b200 + 8 x a100, then il-lo for the 30 left.
@@ -178,10 +180,20 @@ def main() -> None:
     for model, load_ckpt_root in MODELS:
         for db, task in TASKS:
             name = f"ft-{model}-{db}-{task}"
-            assert name not in busy, (
-                f"{name} is already queued or running; a second job would write "
-                f"the same stage directories under {OUT_ROOT}"
+            if name in busy:
+                print(f"  {name:44s} queued already")
+                continue
+            table = (
+                Path(OUT_ROOT).expanduser()
+                / ENTITY
+                / PROJECT
+                / f"{model}-{db}-{task}-test"
+                / "eval_out"
+                / f"{db}__{task}.csv"
             )
+            if table.exists():
+                print(f"  {name:44s} done already")
+                continue
             resources = RESOURCES[model, db, task]
             print(f"  {name:44s} {resources.gpus} {resources.qos:15s} {resources.time}")
             submit(
