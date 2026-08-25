@@ -161,9 +161,12 @@ TUNE: dict[tuple[str, str], Resources] = {
 # plan is rewritten against the cluster at that moment. TASKS is in test-row
 # order, which is the cost order of this stage (four full test passes per unit):
 # the two rel-amazon user tasks are ~13h per unit on an a100 at ctx 8192, the
-# rel-f1 and rel-event tasks minutes. 14:40: the first task's four units are
-# the first run of run.py, so they take the one free il slot and chain through
-# it rather than queue behind other users' il-lo jobs.
+# rel-f1 and rel-event tasks minutes. 14:45: an il a100 request is planned
+# 8h out (Priority, behind an 8-gpu il job) although ampere8 has 4 free cards,
+# and would preempt an il-lo job -- likely one of my own tuning jobs -- to
+# start sooner; a 2-day il-lo request cannot backfill into those cards either.
+# So the units of the tasks that finish in minutes (< 5k test rows) ask il-lo
+# for 2 hours, which backfills into any gap; the big tasks keep 2 days.
 ENS: dict[tuple[str, str], Resources] = {
     ("rel-amazon", "user-churn"): a100("il-lo", "2-00:00:00"),
     ("rel-amazon", "user-ltv"): a100("il-lo", "2-00:00:00"),
@@ -177,15 +180,15 @@ ENS: dict[tuple[str, str], Resources] = {
     ("rel-avito", "user-clicks"): a100("il-lo", "2-00:00:00"),
     ("rel-avito", "user-visits"): a100("il-lo", "2-00:00:00"),
     ("rel-trial", "site-success"): a100("il-lo", "2-00:00:00"),
-    ("rel-trial", "study-adverse"): a100("il-lo", "2-00:00:00"),
-    ("rel-event", "user-attendance"): a100("il-lo", "2-00:00:00"),
-    ("rel-event", "user-ignore"): a100("il-lo", "2-00:00:00"),
-    ("rel-avito", "ad-ctr"): a100("il-lo", "2-00:00:00"),
-    ("rel-trial", "study-outcome"): a100("il-lo", "2-00:00:00"),
-    ("rel-f1", "driver-position"): a100("il", "2-00:00:00"),
-    ("rel-f1", "driver-top3"): a100("il-lo", "2-00:00:00"),
-    ("rel-f1", "driver-dnf"): a100("il-lo", "2-00:00:00"),
-    ("rel-event", "user-repeat"): a100("il-lo", "2-00:00:00"),
+    ("rel-trial", "study-adverse"): a100("il-lo", "2:00:00"),
+    ("rel-event", "user-attendance"): a100("il-lo", "2:00:00"),
+    ("rel-event", "user-ignore"): a100("il-lo", "2:00:00"),
+    ("rel-avito", "ad-ctr"): a100("il-lo", "2:00:00"),
+    ("rel-trial", "study-outcome"): a100("il-lo", "2:00:00"),
+    ("rel-f1", "driver-position"): a100("il-lo", "2:00:00"),
+    ("rel-f1", "driver-top3"): a100("il-lo", "2:00:00"),
+    ("rel-f1", "driver-dnf"): a100("il-lo", "2:00:00"),
+    ("rel-event", "user-repeat"): a100("il-lo", "2:00:00"),
 }
 
 
