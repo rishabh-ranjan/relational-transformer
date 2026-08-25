@@ -138,9 +138,12 @@ def b200(qos: str, time: str) -> Resources:
 # rel-stack/user-engagement was preempted off ampere9 after 3h (6 grid
 # entries saved) and would requeue at the back of the il-lo queue; il has a
 # slot free, so it resumes there, ahead of every il-lo job for the next card.
+# 15:10: user-repeat's il slot freed; rel-amazon/user-ltv, the il-lo tuning job
+# with the most left (~9h), moves onto it -- one grid entry lost now against
+# a preemption that would also requeue it behind a dozen il-lo jobs.
 TUNE: dict[tuple[str, str], Resources] = {
     ("rel-amazon", "user-churn"): a100("il", "2-00:00:00"),
-    ("rel-amazon", "user-ltv"): a100("il-lo", "2-00:00:00"),
+    ("rel-amazon", "user-ltv"): a100("il", "2-00:00:00"),
     ("rel-amazon", "item-ltv"): a100("il-lo", "2-00:00:00"),
     ("rel-amazon", "item-churn"): a100("il-lo", "2-00:00:00"),
     ("rel-stack", "user-badge"): a100("il-lo", "2-00:00:00"),
