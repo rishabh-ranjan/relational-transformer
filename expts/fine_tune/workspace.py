@@ -12,7 +12,7 @@ from wandb_workspaces.workspaces.internal import execute_graphql
 HERE = Path(__file__).parent
 
 ENTITY = "rtv2"
-PROJECT = "2026-08-08-fine_tune"
+PROJECT = "2026-08-24-fine_tune"
 
 METRICS = ("auroc", "nmae")
 SPLITS = ("val", "test")

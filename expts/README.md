@@ -8,10 +8,11 @@ submit jobs and it has to be committed: jobs clone the commit you submit from.
 [repaper/README.md](repaper/README.md) is the order of operations across the
 experiments under `repaper/` that regenerate the RT-J paper's results.
 
-`fine_tune/submit.py` is the shape to copy: submit the entry point directly,
-every argument spelled out at the call, a sweep as a loop around that call.
-Keep a derived input (a curated task list, a subset) beside the file that uses
-it.
+`pretrain/submit_ilc.py` is the shape to copy: submit the entry point directly,
+every argument spelled out at the call. `fine_tune/submit.py` is that as a
+sweep -- a loop around the call -- over a driver (`fine_tune/run.py`) that
+chains the entry points one task needs. Keep a derived input (a curated task
+list, a subset) beside the file that uses it.
 
 ## Editing submit.py
 

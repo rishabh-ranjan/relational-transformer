@@ -1,102 +1,115 @@
 # Fine-tuning
 
-What a Relational Transformer gets from training on one task, and how that
-compares with the task-specific baselines.
-
-`submit.py`'s docstring says what the current arm is -- the values it lists
-change every submission, so they are described where they live, not here.
+Per-task fine-tuning of a Relational Transformer on the 21 RelBench v1 entity
+tasks, and the leaderboard submissions it produces: the RelArena-α RT-PluRel
+recipe ([arXiv:2608.16319](https://arxiv.org/abs/2608.16319), Appendix F),
+expressed with this repo's own entry points instead of the RelArena harness.
 
 ## Running it
 
-```
-pixi run python expts/fine_tune/submit.py
-```
+```bash
+# 1. one job per (model, task); edit submit.py first, commit, push
+pixi run python -m expts.fine_tune.submit
 
-One job per task, one GPU each. `RESOURCES` assigns a slot per task by hand;
-work it out again against the live cluster every submission, and write the
-reasoning into the comment above it.
+# 2. watch (the roach skill says how); progress is in wandb and the logs
+ls -t ~/scratch/relational-transformer/fine_tune/slurm-logs/*.out | head
 
-Logs and `args.json` land under
-`~/scratch/slurm-logs/rishabh-ranjan/relational-transformer/expts/fine-tune`,
-checkpoints and `params.json` under `~/scratch/ckpts/rtv2/fine-tune/<run_id>`.
-
-**Progress is in wandb, not in the log.** After `time_to_first_step` a run's
-stdout only prints `resume_saved_at_step` every `resume_save_mins`, so a quiet
-log is the normal state and says nothing either way. Read the step count per run
-from the API instead:
-
-```python
-import wandb
-for r in wandb.Api().runs("rtv2/2026-08-13-fine_tune"):
-    print(r.name, r.state, r.summary.get("step"))
+# 3. gather the prediction tables, validate them, write the leaderboard zips
+pixi run python -m expts.fine_tune.collect
 ```
 
-A run is alive when that step is higher than the one you read last round. Keep
-the log for what wandb does not carry: a traceback, `resumed_from`, a preemption.
+`submit.py` is edited every submission: `MODELS` and `TASKS` say what runs,
+`RESOURCES` says where, worked out against the live cluster
+([`../README.md`](../README.md)). It refuses a task whose job is already
+queued -- two jobs on one task would write the same directories.
 
-Neither preemption nor the wall clock needs you: both requeue and resume from
-the run's own checkpoint (see [`roach.slurm`](https://github.com/rishabh-ranjan/roach)),
-which matters most on `il-interactive`'s 12 hours.
+One job is one task end to end (`run.py`), on one GPU, and is idempotent per
+stage: a requeued or resubmitted job resumes the stage it was in (`rt.train`
+from `resume.pt`, the context search per grid entry, the test ensemble per
+seed) and skips the stages whose output exists. So to move a job, cancel it and
+resubmit it; nothing is lost but the minutes since the last checkpoint.
 
-## Ensembling the fine-tuned checkpoints
+What it costs (RelArena-α's run of the same recipe, one GPU per task, wall
+clock over all four stages): 2.5 h on the rel-f1 tasks, 3-6 h on most, 10-20 h
+on rel-hm/item-sales, rel-stack/user-engagement and rel-amazon/user-churn.
+Numbers measured here go in the table below as they come in.
 
-```
-pixi run python expts/fine_tune/submit_ens.py
-```
+Everything lands under `~/scratch/relational-transformer/fine_tune/`:
+`slurm-logs/`, one directory per stage at
+`<entity>/<project>/<model>-<db>-<task>-<stage>/`, and the submission packages
+under `leaderboard/<project>/`.
 
-One job per task, each waiting `afterok` on that task's fine-tuning job and
-loading the `latest.safetensors` it leaves behind -- `submit.py` trains on val,
-so nothing selects a checkpoint and the last step is the run. A task whose
-training has already finished is submitted with no dependency.
+## The recipe
 
-It sweeps 8 context seeds at the context `submit.py` trains under, scoring the
-running average over the **whole** test split after every seed: one job is the
-metric at every ensemble size up to 8, and the last point is a RelBench-valid
-number rather than the subsample the training curve carries. Preemption costs
-one seed -- `rt.eval` writes `ensemble_resume.pt` beside `eval_out` and a
-requeued attempt picks the sums back up.
+Four stages, all existing entry points; `run.py` only derives the values
+between them. `db_cutoff=None` throughout: per-row temporal masking is the
+only trim of the database a context is built from, as in the RT-J paper's
+runs (RelArena bounded contexts at the split timestamp instead, because its
+harness hands the model a censored database).
 
-## Workspaces
+1. **Selection arm** -- `rt.train.main` on `train`, delta-fine-tuned from the
+   warm start (or trained from scratch for `rt`): Muon, constant lr 5e-4, wd
+   0.1, batch 256, an EMA of the weights (`swa_momentum=0.9999`), up to 50k
+   steps. Every batch draws its context shape from the cross product of ctx
+   {128, 256, 512, 1024} x local ctx {128, 256, 512, 1024} x bfs width
+   {16, 64, 256} x prefer-latest {F, T}. Every 100 steps the EMA net is scored
+   on 1024 val rows under the two endpoint shapes, `(1024, 1024, 256, F)` and
+   `(128, 128, 16, T)`, each a 4-seed context ensemble; the best step by the
+   task's metric (AUROC / nMAE) is kept as `best_swa_*.safetensors`, and the
+   arm stops after 10k steps without an improvement in either shape.
+2. **Context search** -- `rt.eval.main` on `val` alone, with that checkpoint
+   frozen: the 60 shapes of the grid above (local ctx <= ctx), each a 4-seed
+   ensemble over 4096 val rows (`shuffle_seed=1`, so not the rows the step was
+   chosen on). The winner is in `tuning.json`.
+3. **Reporting arm** -- `rt.train.main` on `train + val`, same recipe, no
+   evaluation, for the selected step scaled by the row ratio
+   `(train + val) / train`; the EMA net at the last step is the model.
+4. **Test ensemble** -- `rt.eval.main` on `test` under the chosen shape, eight
+   context seeds averaged before the sigmoid / denormalization, scored through
+   `relbench.submit.evaluate_task` and written as the leaderboard prediction
+   table `<db>__<task>.csv`.
 
-`workspace.py` writes the view the project's bare URL opens on, so there is
-nothing to pick from the view menu. Rerun it whenever a task starts logging a
-key the view has no panel for; it rewrites the layout wholesale, so edit
-`workspace.py`, never the UI.
+`selection.json` beside the selection arm records the step, the row counts,
+the refit budget and the chosen context.
 
-```
-pixi run python expts/fine_tune/workspace.py --project 2026-08-13-fine_tune
-```
+`MODELS` names the warm start: `rt-plurel` is
+[`stanford-star/rt-plurel`](https://huggingface.co/stanford-star/rt-plurel)
+(mirrored at `~/scratch/hf/stanford-star/rt-plurel`, one head per task type),
+`rt` is a random initialization under the same protocol, `rt-j` the RT-J
+release. The data is `~/scratch/hf/stanford-star/relbench-preprocessed`, built
+by [`../preprocess`](../preprocess/README.md) from `stanford-star/relbench`
+(RelBench v3's `relbench-v1`).
 
-It prints the URL it wrote: <https://wandb.ai/rtv2/2026-08-13-fine_tune>.
+## Submitting to the leaderboard
 
-## What is fixed and what is not
+`collect.py` copies every finished task's prediction table into
+`~/scratch/relational-transformer/fine_tune/leaderboard/<project>/<model>/`,
+scores them with RelBench's own validator, prints ours beside the paper's
+RT-PluRel numbers, and -- once a board is complete -- runs
+`python -m relbench.submit` to write `<model>-classification.zip` and
+`<model>-regression.zip`. Attach those to a
+[submission issue](https://github.com/stanford-star/relbench/issues/new?template=submit.yml);
+"In-context?" is **No** for every model here (each trains on the target
+database).
 
-`submit.py` passes `rt.train:main` directly, with pretraining's hyperparameters
-verbatim (the released RT-J recipe, `examples/train.py`), so an arm differs from
-pretraining only in what it is trained on:
+## Reference numbers
 
-- `db_task_list` is one `(db, task)` pair instead of a mixture;
-- `pre_dir` is the *benchmark* data, not the Join -- fine-tuning trains where it
-  is evaluated, and train/eval differ only in split;
-- `load_ckpt_path` is RT-PluRel. It is mirrored at
-  `~/scratch/share/stanford-star/rt-plurel` (compute nodes have no Hub
-  access), one subdirectory per task type; refresh it with
-  `huggingface_hub.snapshot_download("stanford-star/rt-plurel", local_dir=...)`.
+`relarena_paper.csv` is Tables 4 and 5 of the RelArena-α paper (test AUROC,
+test MAE in native units) for every method it ran; `submit.py` turns the
+`rt-plurel` column and the best other column into the wandb `target/` lines.
+`results.csv` is RelArena-α's `baseline_results/results.csv` (every evaluated
+config of every method, val and test), and `results.md` is the table
+`make_results.py` builds from it:
 
-`total_steps` is the one number this experiment sets on its own: pretraining's
-100k steps is a mixture's worth of data, not one task's.
-
-## Baselines
-
-`results.csv` is the task-specific baseline sweep -- every model in RelBench's
-comparison, default config and after ~30 trials of random search -- and
-`results.md` is the table built from it:
-
-```
+```bash
 pixi run python expts/fine_tune/make_results.py
 ```
 
-That script rewrites `results.md` wholesale, so edit the script, not the
-markdown. It reads train-set sizes and regression stds from the
-`stanford-star/relbench` dataset repo at run time; `results.csv` itself is the
-committed artifact of a sweep that is expensive to reproduce.
+## Workspaces
+
+`workspace.py` writes the wandb project view; rerun it whenever a run starts
+logging a key the view has no panel for.
+
+```bash
+pixi run python expts/fine_tune/workspace.py --project 2026-08-24-fine_tune
+```

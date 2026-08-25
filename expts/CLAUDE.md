@@ -8,9 +8,11 @@ rules in
 
 ## Code style
 
-- **One file where one file will do.** `fine_tune/submit.py` is the shape to
-  copy: submit the entry point directly, every argument spelled out at the call;
-  a sweep is a loop around that call. A second file has to earn itself.
+- **One file where one file will do.** `pretrain/submit_ilc.py` is the shape
+  to copy: submit the entry point directly, every argument spelled out at the
+  call; a sweep is a loop around that call (`fine_tune/submit.py`). A second
+  file has to earn itself (`fine_tune/run.py` does: one task is four entry
+  points in sequence, with values derived between them).
 - **Comment out to switch.** Commented-out code is not commentary: leave the
   shape you are not using sitting there commented; coming back to it is
   uncommenting.
