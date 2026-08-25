@@ -130,9 +130,11 @@ def b200(qos: str, time: str) -> Resources:
 # comes up with 16 MB free, CUDA OOM at the first forward) stay excluded, as
 # in fine_tune. 13:45: fine_tune's last 11 jobs are all running and two il
 # a100 slots stand free, so the two tuning jobs still pending on il-lo take
-# them (the human's call).
+# them (the human's call). 13:50: fine_tune's il b200 job finished and a b200
+# stands free, so the biggest database goes there under il (b200 is ~2.2x an
+# a100 on this grid).
 TUNE: dict[tuple[str, str], Resources] = {
-    ("rel-amazon", "user-churn"): a100("il", "2-00:00:00"),
+    ("rel-amazon", "user-churn"): b200("il", "2-00:00:00"),
     ("rel-amazon", "user-ltv"): a100("il-lo", "2-00:00:00"),
     ("rel-amazon", "item-ltv"): a100("il-lo", "2-00:00:00"),
     ("rel-amazon", "item-churn"): a100("il-lo", "2-00:00:00"),
