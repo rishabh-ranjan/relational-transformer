@@ -132,9 +132,11 @@ def b200(qos: str, time: str) -> Resources:
 # a100 slots stand free, so the two tuning jobs still pending on il-lo take
 # them (the human's call). 13:50: fine_tune's il b200 job finished and a b200
 # stands free, so the biggest database goes there under il (b200 is ~2.2x an
-# a100 on this grid).
+# a100 on this grid). 14:55: fine_tune needs that il b200 slot back for a
+# refit (il allows 2 b200 per user and fine_tune holds the other), so the job
+# moves to an il a100 by its run_id, losing at most one grid entry.
 TUNE: dict[tuple[str, str], Resources] = {
-    ("rel-amazon", "user-churn"): b200("il", "2-00:00:00"),
+    ("rel-amazon", "user-churn"): a100("il", "2-00:00:00"),
     ("rel-amazon", "user-ltv"): a100("il-lo", "2-00:00:00"),
     ("rel-amazon", "item-ltv"): a100("il-lo", "2-00:00:00"),
     ("rel-amazon", "item-churn"): a100("il-lo", "2-00:00:00"),
