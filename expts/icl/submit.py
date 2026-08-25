@@ -145,7 +145,9 @@ def b200(qos: str, time: str) -> Resources:
 # preemption today); it resumes on the il slot that is free. 15:45: the third,
 # rel-hm/item-sales off ampere8 after 3h40; il is 10/10 and il-lo has 40
 # single-gpu jobs of other users queued ahead, so it takes the il-interactive
-# slot that stands free (12h, ~9h of grid left).
+# slot that stands free (12h, ~9h of grid left). 15:48: that slot blocked a
+# fine_tune il-interactive job (QOSMaxGRESPerUser), and two il slots had just
+# freed, so it moves again, to il.
 TUNE: dict[tuple[str, str], Resources] = {
     ("rel-amazon", "user-churn"): a100("il", "2-00:00:00"),
     ("rel-amazon", "user-ltv"): a100("il", "2-00:00:00"),
@@ -153,7 +155,7 @@ TUNE: dict[tuple[str, str], Resources] = {
     ("rel-amazon", "item-churn"): a100("il-lo", "2-00:00:00"),
     ("rel-stack", "user-badge"): a100("il-lo", "2-00:00:00"),
     ("rel-stack", "post-votes"): a100("il-lo", "2-00:00:00"),
-    ("rel-hm", "item-sales"): a100("il-interactive", "12:00:00"),
+    ("rel-hm", "item-sales"): a100("il", "2-00:00:00"),
     ("rel-stack", "user-engagement"): a100("il", "2-00:00:00"),
     ("rel-hm", "user-churn"): a100("il-lo", "2-00:00:00"),
     ("rel-avito", "user-clicks"): a100("il-lo", "2-00:00:00"),
