@@ -147,12 +147,15 @@ def b200(qos: str, time: str) -> Resources:
 # single-gpu jobs of other users queued ahead, so it takes the il-interactive
 # slot that stands free (12h, ~9h of grid left). 15:48: that slot blocked a
 # fine_tune il-interactive job (QOSMaxGRESPerUser), and two il slots had just
-# freed, so it moves again, to il.
+# freed, so it moves again, to il. 15:55: the fine_tune session says nothing
+# more of its will be promoted, so the il room is this sweep's; the il-lo
+# tuning jobs with the most left move up as slots free, biggest database
+# first, each losing at most one grid entry.
 TUNE: dict[tuple[str, str], Resources] = {
     ("rel-amazon", "user-churn"): a100("il", "2-00:00:00"),
     ("rel-amazon", "user-ltv"): a100("il", "2-00:00:00"),
     ("rel-amazon", "item-ltv"): a100("il", "2-00:00:00"),
-    ("rel-amazon", "item-churn"): a100("il-lo", "2-00:00:00"),
+    ("rel-amazon", "item-churn"): a100("il", "2-00:00:00"),
     ("rel-stack", "user-badge"): a100("il-lo", "2-00:00:00"),
     ("rel-stack", "post-votes"): a100("il-lo", "2-00:00:00"),
     ("rel-hm", "item-sales"): a100("il", "2-00:00:00"),
