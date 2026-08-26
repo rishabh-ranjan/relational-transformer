@@ -166,12 +166,12 @@ TUNE: dict[tuple[str, str, str], Resources] = {
     ("rt-j", "rel-amazon", "user-churn"): a100("il", "2-00:00:00"),
     ("rt-j", "rel-amazon", "user-ltv"): a100("il", "2-00:00:00"),
     ("rt-j", "rel-amazon", "item-ltv"): a100("il", "2-00:00:00"),
-    ("rt-j", "rel-amazon", "item-churn"): a100("il", "2-00:00:00"),
+    ("rt-j", "rel-amazon", "item-churn"): b200("il", "2-00:00:00"),
     ("rt-j", "rel-stack", "user-badge"): a100("il", "2-00:00:00"),
     ("rt-j", "rel-stack", "post-votes"): a100("il-lo", "2:00:00"),
     ("rt-j", "rel-hm", "item-sales"): a100("il", "2-00:00:00"),
     ("rt-j", "rel-stack", "user-engagement"): a100("il", "2-00:00:00"),
-    ("rt-j", "rel-hm", "user-churn"): a100("il-lo", "2:00:00"),
+    ("rt-j", "rel-hm", "user-churn"): a100("il", "2-00:00:00"),
     ("rt-j", "rel-avito", "user-clicks"): a100("il-lo", "2:00:00"),
     ("rt-j", "rel-avito", "user-visits"): a100("il-lo", "2:00:00"),
     ("rt-j", "rel-trial", "site-success"): a100("il", "2-00:00:00"),
@@ -217,7 +217,10 @@ TUNE: dict[tuple[str, str, str], Resources] = {
 # rel-stack/user-engagement (06:20), rel-trial/site-success (07:00),
 # rel-event/user-ignore (07:25, rt-plurel's last unit done), rel-amazon/
 # item-churn (08:10, off a running chunk: ~9h of grid left, one entry lost),
-# rel-amazon/item-ltv (10:45, likewise, ~5h left).
+# rel-amazon/item-ltv (10:45, likewise, ~5h left). 11:05: fine_tune's last
+# il b200 refit but one ended and it handed the slot over: rel-amazon/
+# item-churn (~10h left on its il a100) swaps onto the b200, and its a100
+# slot goes to rel-hm/user-churn off its chunks.
 ENS: dict[tuple[str, str, str], list[Resources]] = {
     ("rt-plurel", "rel-amazon", "user-churn"): [
         b200("il", "1-00:00:00"),
