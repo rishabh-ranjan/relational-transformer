@@ -197,6 +197,9 @@ TUNE: dict[tuple[str, str, str], Resources] = {
 # site-success tuned and its il a100 freed; fine_tune holds all four b200
 # slots and wants nothing more, so the slot goes to user-badge's waiting
 # unit, and site-success' four units (23k rows, ~1h each) to il-lo at 3h.
+# 02:15: rel-amazon/user-ltv and item-ltv tuned at ctx 512-1024, so their
+# units are ~2-3h on an a100, not 13h: il-lo at 6h (fine_tune took the tenth
+# il slot for its longest refit).
 ENS: dict[tuple[str, str, str], list[Resources]] = {
     ("rt-plurel", "rel-amazon", "user-churn"): [
         b200("il", "1-00:00:00"),
@@ -204,8 +207,8 @@ ENS: dict[tuple[str, str, str], list[Resources]] = {
         a100("il-lo", "1-00:00:00"),
         a100("il-lo", "1-00:00:00"),
     ],
-    ("rt-plurel", "rel-amazon", "user-ltv"): [a100("il-lo", "2-00:00:00")] * 4,
-    ("rt-plurel", "rel-amazon", "item-ltv"): [a100("il-lo", "2-00:00:00")] * 4,
+    ("rt-plurel", "rel-amazon", "user-ltv"): [a100("il-lo", "6:00:00")] * 4,
+    ("rt-plurel", "rel-amazon", "item-ltv"): [a100("il-lo", "6:00:00")] * 4,
     ("rt-plurel", "rel-amazon", "item-churn"): [a100("il-lo", "2-00:00:00")] * 4,
     ("rt-plurel", "rel-stack", "user-badge"): [
         b200("il-interactive", "12:00:00"),
