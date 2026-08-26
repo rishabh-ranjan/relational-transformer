@@ -208,7 +208,8 @@ TUNE: dict[tuple[str, str, str], Resources] = {
 # item-churn cfg1 (ctx 8192, ~6h) first, then item-sales cfg3 (8192, ~4h),
 # user-engagement cfg3 (8192, ~3h), item-sales cfg2 (4096, ~2h),
 # user-engagement cfg2 (4096), item-churn cfg3 (2048, 167k rows) -- which
-# went back to il-lo minutes later: fine_tune wanted that il slot for a b200.
+# went back to il-lo minutes later: fine_tune wanted that il slot for a b200
+# -- and moved up again at 04:20 when item-churn cfg0 freed a slot of mine.
 ENS: dict[tuple[str, str, str], list[Resources]] = {
     ("rt-plurel", "rel-amazon", "user-churn"): [
         b200("il", "1-00:00:00"),
@@ -222,7 +223,7 @@ ENS: dict[tuple[str, str, str], list[Resources]] = {
         a100("il", "12:00:00"),
         a100("il", "12:00:00"),
         a100("il-lo", "6:00:00"),
-        a100("il-lo", "6:00:00"),
+        a100("il", "12:00:00"),
     ],
     ("rt-plurel", "rel-stack", "user-badge"): [
         b200("il-interactive", "12:00:00"),
