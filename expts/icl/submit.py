@@ -199,7 +199,8 @@ TUNE: dict[tuple[str, str, str], Resources] = {
 # unit, and site-success' four units (23k rows, ~1h each) to il-lo at 3h.
 # 02:15: rel-amazon/user-ltv and item-ltv tuned at ctx 512-1024, so their
 # units are ~2-3h on an a100, not 13h: il-lo at 6h (fine_tune took the tenth
-# il slot for its longest refit).
+# il slot for its longest refit). 02:20: an il slot is free after all;
+# hm/user-churn's cfg1, preempted at 01:43 and still queued, takes it.
 ENS: dict[tuple[str, str, str], list[Resources]] = {
     ("rt-plurel", "rel-amazon", "user-churn"): [
         b200("il", "1-00:00:00"),
@@ -221,7 +222,7 @@ ENS: dict[tuple[str, str, str], list[Resources]] = {
     ("rt-plurel", "rel-stack", "user-engagement"): [a100("il-lo", "2-00:00:00")] * 4,
     ("rt-plurel", "rel-hm", "user-churn"): [
         b200("il", "12:00:00"),
-        a100("il-lo", "6:00:00"),
+        a100("il", "6:00:00"),
         a100("il-lo", "6:00:00"),
         a100("il-lo", "6:00:00"),
     ],
