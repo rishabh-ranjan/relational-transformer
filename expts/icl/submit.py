@@ -219,9 +219,18 @@ TUNE: dict[tuple[str, str], Resources] = {
 # il-interactive as tuning jobs vacate those. 22:40: user-visits tuned and its
 # il-interactive slot freed with a b200 standing free: user-badge's cfg2,
 # still pending under il-lo, takes it; user-visits' four units (36k rows,
-# ~1.5h each) go to il-lo a100s at 3h.
+# ~1.5h each) go to il-lo a100s at 3h. 23:05: rel-amazon/user-churn tuned,
+# the heaviest ensemble (352k rows: ~13h a unit on an a100, ~6h on a b200):
+# cfg0 takes the b200 under il its tuning job vacated; cfg1-3 start on il-lo
+# a100s at a day and are promoted onto il as the overnight tuning jobs end
+# (a requeued one first -- it has nothing to lose).
 ENS: dict[tuple[str, str], list[Resources]] = {
-    ("rel-amazon", "user-churn"): [a100("il-lo", "2-00:00:00")] * 4,
+    ("rel-amazon", "user-churn"): [
+        b200("il", "1-00:00:00"),
+        a100("il-lo", "1-00:00:00"),
+        a100("il-lo", "1-00:00:00"),
+        a100("il-lo", "1-00:00:00"),
+    ],
     ("rel-amazon", "user-ltv"): [a100("il-lo", "2-00:00:00")] * 4,
     ("rel-amazon", "item-ltv"): [a100("il-lo", "2-00:00:00")] * 4,
     ("rel-amazon", "item-churn"): [a100("il-lo", "2-00:00:00")] * 4,
