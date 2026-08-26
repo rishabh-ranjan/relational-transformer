@@ -5,11 +5,14 @@ task mix. Five runs, each differing from the round's base pretraining run in
 exactly the ablated knob, plus 10k-step early-stop patience so an arm stops
 spending nodes once its val curve flattens.
 
-The base run is [`expts/pretrain/submit_marlowe.py`](../../pretrain/submit_marlowe.py):
-its `args()` is imported here and each arm is `args()` with one key replaced, so the two
-cannot drift. The base logs to `rtv2/<RUN_TAG>-repaper-pretrain` as run
-`base`; the arms to `rtv2/<RUN_TAG>-repaper-pretrain-abl` as `mask0`, `mask25`,
-`mask75`, `mix-forecast`, `mix-autocomplete`. The task-mix lists beside this
+The base run is the from-scratch pretraining on the cutoff task list
+(`lr=5e-4`, `swa_momentum=0.9995`, `load_ckpt_path=None`): run
+`26-08-23_10-50-04_449253049`, in `rtv2/<RUN_TAG>-repaper-pretrain` as `base`.
+Its recipe is [`expts/pretrain/submit_marlowe.py`](../../pretrain/submit_marlowe.py):
+`args()` is imported here and each arm is `args()` with one key replaced, so
+the arms cannot drift from it. The arms log to
+`rtv2/<RUN_TAG>-repaper-pretrain-abl` as `mask0`, `mask25`, `mask75`,
+`mix-forecast`, `mix-autocomplete`. The task-mix lists beside this
 file are the base's `all_5gb_cutoff.json` intersected with the Join's
 `forecast` / `autocomplete` families (4098 / 9145 of 13243 pairs).
 
