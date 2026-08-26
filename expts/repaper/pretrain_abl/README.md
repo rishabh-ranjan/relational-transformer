@@ -6,8 +6,9 @@ exactly the ablated knob, plus 10k-step early-stop patience so an arm stops
 spending nodes once its val curve flattens.
 
 The base run is the from-scratch pretraining on the cutoff task list
-(`lr=5e-4`, `swa_momentum=0.9995`, `load_ckpt_path=None`, 50k steps at a
-constant learning rate, so its first 50k steps are the whole run): run
+(`lr=5e-4`, `swa_momentum=0.9995`, `load_ckpt_path=None`; the figures span its first 2**15
+steps, which at a constant learning rate are exactly a 2**15-step run, so the
+arms train for 2**15 + 1 steps): run
 `26-08-23_10-50-04_449253049`, in `rtv2/<RUN_TAG>-repaper-pretrain` as `base`.
 Its recipe is [`expts/pretrain/submit_marlowe.py`](../../pretrain/submit_marlowe.py):
 `args()` is imported here and each arm is `args()` with one key replaced, so
