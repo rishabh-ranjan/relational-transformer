@@ -195,7 +195,9 @@ RESOURCES: dict[tuple[str, str, str], Resources] = {
     # does fit and backfills at once; roach requeues at the limit and the job
     # resumes, so a long task just runs in 6-hour slices. Promoted onto the
     # high tiers as the shared caps free up, longest tasks first.
-    ("rt-j", "rel-hm", "item-sales"): a100("il-lo", "6:00:00"),
+    # 01:36: an il-interactive slot and a b200 card free (icl's unit ended);
+    # the longest rt-j task moves off its a100 slice.
+    ("rt-j", "rel-hm", "item-sales"): b200("il-interactive", "12:00:00"),
     # 00:55: the second il b200 (icl's job there ended) and one il slot free.
     ("rt-j", "rel-stack", "user-engagement"): b200("il", "7-00:00:00"),
     # 00:45: one il slot and one il b200 of the sub-cap free (icl holds the
