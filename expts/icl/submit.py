@@ -220,7 +220,8 @@ TUNE: dict[tuple[str, str, str], Resources] = {
 # rel-amazon/item-ltv (10:45, likewise, ~5h left). 11:05: fine_tune's last
 # il b200 refit but one ended and it handed the slot over: rel-amazon/
 # item-churn (~10h left on its il a100) swaps onto the b200, and its a100
-# slot goes to rel-hm/user-churn off its chunks.
+# slot goes to rel-hm/user-churn off its chunks. 14:50: item-churn tuned;
+# its cfg0 unit keeps that b200 under il, the rest go to il-lo at 6h.
 ENS: dict[tuple[str, str, str], list[Resources]] = {
     ("rt-plurel", "rel-amazon", "user-churn"): [
         b200("il", "1-00:00:00"),
@@ -291,7 +292,12 @@ ENS: dict[tuple[str, str, str], list[Resources]] = {
     ("rt-j", "rel-amazon", "user-churn"): [a100("il-lo", "1-00:00:00")] * 4,
     ("rt-j", "rel-amazon", "user-ltv"): [a100("il-lo", "1-00:00:00")] * 4,
     ("rt-j", "rel-amazon", "item-ltv"): [a100("il-lo", "1-00:00:00")] * 4,
-    ("rt-j", "rel-amazon", "item-churn"): [a100("il-lo", "1-00:00:00")] * 4,
+    ("rt-j", "rel-amazon", "item-churn"): [
+        b200("il", "12:00:00"),
+        a100("il-lo", "6:00:00"),
+        a100("il-lo", "6:00:00"),
+        a100("il-lo", "6:00:00"),
+    ],
     ("rt-j", "rel-stack", "user-badge"): [a100("il-lo", "1-00:00:00")] * 4,
     ("rt-j", "rel-stack", "post-votes"): [a100("il-lo", "1-00:00:00")] * 4,
     ("rt-j", "rel-hm", "item-sales"): [a100("il-lo", "1-00:00:00")] * 4,
