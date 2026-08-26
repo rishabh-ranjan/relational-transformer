@@ -14,6 +14,7 @@ from relbench.submit import main as package  # noqa: E402
 
 from expts.icl.submit import (  # noqa: E402
     ENTITY,
+    MODELS,
     OUT_ROOT,
     PRE_DIR,
     PROJECT,
@@ -70,10 +71,10 @@ def target_means() -> dict[str, float]:
     return {k: float(np.mean(v)) for k, v in by_key.items()}
 
 
-def log_tuning(tuned: dict) -> None:
+def log_tuning(model: str, tuned: dict) -> None:
     import wandb
 
-    run = summary_run("tune", "tune/idx")
+    run = summary_run(f"{model}/tune", "tune/idx")
     best: dict[str, float] = {}
     for idx, (ctx, lcs, bw, pl) in enumerate(grid_order(), 1):
         point = {
@@ -100,10 +101,10 @@ def log_tuning(tuned: dict) -> None:
     run.finish()
 
 
-def collect_tuning() -> dict:
+def collect_tuning(model: str) -> dict:
     out = {}
     for db, task in TASKS:
-        path = stage_dir(f"tune-{db}-{task}") / "tuning.json"
+        path = stage_dir(f"tune-{model}-{db}-{task}") / "tuning.json"
         if not path.exists():
             print(f"  {db}/{task:20s} tuning not finished")
             continue
@@ -129,22 +130,17 @@ def collect_tuning() -> dict:
             f"  {db}/{task:20s} "
             + "  ".join(f"{c.replace(' ', '')} {v:.4f}" for c, v in ranked[:N_TOP])
         )
-    if not out:
-        return out
-    dest = HERE / "tuned_configs.json"
-    dest.write_text(json.dumps(out, indent=1, sort_keys=True) + "\n")
-    print(f"wrote {dest} ({len(out)}/{len(TASKS)} tasks); commit it before submitting")
     if len(out) == len(TASKS):
-        log_tuning(out)
+        log_tuning(model, out)
     return out
 
 
-def log_ensemble(sums: dict, results: dict) -> None:
+def log_ensemble(model: str, sums: dict, results: dict) -> None:
     import wandb
 
     from rt.eval import metric_for
 
-    run = summary_run("top4x4", "ens_size")
+    run = summary_run(f"{model}/top4x4", "ens_size")
     for k in range(1, N_TOP + 1):
         point = {"ens_size": k * N_SEEDS}
         by_metric = defaultdict(list)
@@ -170,16 +166,18 @@ def log_ensemble(sums: dict, results: dict) -> None:
     run.finish()
 
 
-def reduce(tuned: dict) -> None:
+def reduce(model: str, tuned: dict) -> None:
     from rt.data import get_tasks
     from rt.eval.relbench import _emit_and_score
 
-    preds = LEADERBOARD / "preds"
+    preds = LEADERBOARD / model / "preds"
     results, sums = {}, {}
     missing = []
     for db, task in TASKS:
         key = f"{db}/{task}"
-        units = [stage_dir(f"ens-{db}-{task}-cfg{rank}") for rank in range(N_TOP)]
+        units = [
+            stage_dir(f"ens-{model}-{db}-{task}-cfg{rank}") for rank in range(N_TOP)
+        ]
         if key not in tuned or not all((u / "result.json").exists() for u in units):
             missing.append(key)
             continue
@@ -223,15 +221,15 @@ def reduce(tuned: dict) -> None:
         print(f"  {key:28s} not all {N_TOP} units done")
     if not results:
         return
-    (LEADERBOARD / "results.json").write_text(
+    (LEADERBOARD / model / "results.json").write_text(
         json.dumps(results, indent=1, sort_keys=True) + "\n"
     )
     result = evaluate_submission(preds, verbose=True)
     compare(result)
     if len(results) == len(TASKS):
-        log_ensemble(sums, results)
+        log_ensemble(model, sums, results)
     if result["validated"]:
-        package([str(preds), "--out", str(LEADERBOARD / "rt-plurel-icl.zip")])
+        package([str(preds), "--out", str(LEADERBOARD / model / f"{model}-icl.zip")])
 
 
 def compare(result: dict) -> None:
@@ -259,10 +257,20 @@ def compare(result: dict) -> None:
 
 
 def main() -> None:
-    print("== tuning")
-    tuned = collect_tuning()
-    print("== ensemble")
-    reduce(tuned)
+    tuned = {}
+    for model, _ in MODELS:
+        print(f"== {model}: tuning")
+        tuned[model] = collect_tuning(model)
+    dest = HERE / "tuned_configs.json"
+    dest.write_text(json.dumps(tuned, indent=1, sort_keys=True) + "\n")
+    print(
+        f"wrote {dest} ("
+        + ", ".join(f"{m}: {len(t)}/{len(TASKS)}" for m, t in tuned.items())
+        + " tasks); commit it before submitting"
+    )
+    for model, _ in MODELS:
+        print(f"== {model}: ensemble")
+        reduce(model, tuned[model])
 
 
 if __name__ == "__main__":

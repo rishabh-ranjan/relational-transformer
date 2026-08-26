@@ -1,8 +1,8 @@
 # In-context learning
 
-RT-PluRel on the 21 RelBench v1 entity tasks with no gradient step on the
-target database, and the RelBench v3 leaderboard submission it produces
-(In-context: **Yes**). Two stages, both `rt.eval` passes with the released
+RT-PluRel and RT-J on the 21 RelBench v1 entity tasks with no gradient step
+on the target database, and the RelBench v3 leaderboard submissions they
+produce (In-context: **Yes**). Two stages, both `rt.eval` passes with the released
 checkpoint pair frozen: a per-task context search on validation, then the
 top-4 contexts each run with 4 context seeds on the full test split and
 averaged. [`../fine_tune`](../fine_tune/README.md) is the same submission
@@ -43,15 +43,23 @@ an ensemble unit per context seed (`state.npz`). A preemption costs at most
 one (grid entry, seed) pass on validation or one full test pass.
 
 Everything lands under `~/scratch/relational-transformer/icl/`: `slurm-logs/`,
-one directory per job at `rtv2/2026-08-25-icl/tune-<db>-<task>/` and
-`rtv2/2026-08-25-icl/ens-<db>-<task>-cfg<k>/`, and the submission package
-under `leaderboard/2026-08-25-icl/`.
+one directory per job at `rtv2/2026-08-25-icl/tune-<model>-<db>-<task>/` and
+`rtv2/2026-08-25-icl/ens-<model>-<db>-<task>-cfg<k>/`, and the submission
+package under `leaderboard/2026-08-25-icl/<model>/`. (rt-plurel's tuning ran
+before the model was in the id; its `tune-rel-*` / `ens-rel-*` directories
+are reached through `tune-rt-plurel-rel-*` symlinks.)
 
 ## The recipe
 
-Checkpoint: [`stanford-star/rt-plurel`](https://huggingface.co/stanford-star/rt-plurel)
-(mirrored at `~/scratch/hf/stanford-star/rt-plurel`), `classification/` for
-the 12 classification tasks and `regression/` for the 9 regression tasks.
+Checkpoints (`MODELS` in `submit.py`):
+[`stanford-star/rt-plurel`](https://huggingface.co/stanford-star/rt-plurel)
+and [`stanford-star/rt-j`](https://huggingface.co/stanford-star/rt-j),
+mirrored at `~/scratch/hf/stanford-star/{rt-plurel,rt-j}` (the rt-j mirror's
+`model.safetensors` match the Hub's LFS sha256 at revision `1819386c`,
+checked 2026-08-26), `classification/` for the 12 classification tasks and
+`regression/` for the 9 regression tasks. Every run id carries the model:
+`tune-<model>-<db>-<task>`, `ens-<model>-<db>-<task>-cfg<k>`;
+`tuned_configs.json` is keyed by model, then task.
 Data: `~/scratch/hf/stanford-star/relbench-preprocessed`, built by
 [`../preprocess`](../preprocess/README.md). `db_cutoff=None` throughout:
 per-row temporal masking is the only trim of the database a context is built
@@ -93,18 +101,20 @@ view (rerun it whenever a run starts logging a key the view has no panel for):
 pixi run python expts/icl/workspace.py
 ```
 
-- A context-search job is the run `<db>/<task>/tune`: the validation metric of
+- A context-search job is the run `<model>/<db>/<task>/tune` (rt-plurel's
+  first tuning runs predate the model in the name): the validation metric of
   every configuration against `tune/idx` (`tune/<metric>/val/<db>/<task>`,
   the running best folded in as `tune/best/...`), and the configuration
   itself on the same axis (`tune/ctx_size`, `tune/local_ctx_size`,
   `tune/bfs_width`, `tune/prefer_latest`).
-- An ensemble unit is the run `<db>/<task>/cfg<k>`: the test metric of that
+- An ensemble unit is the run `<model>/<db>/<task>/cfg<k>`: the test metric of that
   configuration against `ens_size` 1..4 (`<metric>/test/<db>/<task>`), with
   RT-J's in-context number and RT-PluRel's fine-tuned number as `target/`
   lines.
-- `collect.py` adds two summary runs once a stage is complete: `tune`, the
-  same tune curves for all 21 tasks plus `tune/<metric>/val/mean` and
-  `tune/best/<metric>/val/mean`; and `top4x4`, the top-k-configs x 4-seeds
+- `collect.py` adds two summary runs per model once a stage is complete:
+  `<model>/tune`, the same tune curves for all 21 tasks plus
+  `tune/<metric>/val/mean` and `tune/best/<metric>/val/mean`; and
+  `<model>/top4x4`, the top-k-configs x 4-seeds
   test metric against `ens_size` 4, 8, 12, 16 per task and averaged
   (`<metric>/test/mean`), with the official RelBench numbers as
   `relbench/<metric>/test/...`.
@@ -161,19 +171,21 @@ cost), so a resource plan reads down the list.
 
 ## Submitting to the leaderboard
 
-`collect.py` writes the prediction tables to
-`~/scratch/relational-transformer/icl/leaderboard/2026-08-25-icl/preds/`,
-scores them with RelBench's own validator, prints ours beside RT-J's
+`collect.py` writes each model's prediction tables to
+`~/scratch/relational-transformer/icl/leaderboard/2026-08-25-icl/<model>/preds/`,
+scores them with RelBench's own validator, prints ours beside RT-J's paper
 in-context numbers and RT-PluRel's fine-tuned ones, and -- once both boards
 are complete -- runs `python -m relbench.submit` to write
-`rt-plurel-icl-classification.zip` and `rt-plurel-icl-regression.zip` beside
+`<model>-icl-classification.zip` and `<model>-icl-regression.zip` beside
 them. Attach those to a
-[submission issue](https://github.com/stanford-star/relbench/issues/new?template=submit.yml):
-Name `RT-PluRel (in-context)`, **In-context? Yes** (the checkpoint pair was
-pretrained on the Join, which holds no RelBench database; the only per-task
-choice is the context configuration, made on validation), URL
-`https://huggingface.co/stanford-star/rt-plurel`, Note the recipe in one
-line (120-config context grid tuned on 4096 val rows x 4 seeds; test = top-4
+[submission issue](https://github.com/stanford-star/relbench/issues/new?template=submit.yml)
+per model: Name `RT-PluRel (in-context)` / `RT-J (in-context)`,
+**In-context? Yes** (both checkpoint pairs were pretrained on the Join, which
+holds no RelBench database; the only per-task choice is the context
+configuration, made on validation), URL
+`https://huggingface.co/stanford-star/rt-plurel` /
+`https://huggingface.co/stanford-star/rt-j`, Note the recipe in one line
+(120-config context grid tuned on 4096 val rows x 4 seeds; test = top-4
 configs x 4 context seeds, averaged).
 
 ## Reference numbers

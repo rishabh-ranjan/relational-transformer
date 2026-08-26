@@ -189,29 +189,33 @@ RESOURCES: dict[tuple[str, str, str], Resources] = {
     # 2026-08-26 00:15, rt-j (mirror verified against the Hub, revision 1819386c):
     # every il and il-interactive slot of mine is held by the icl session
     # (8 a100 + 2 b200 on il, 2 b200 on il-interactive), blackwell1 is full, and
-    # ~6 a100 are free; so the whole sweep starts on il-lo and is promoted as
-    # the shared caps free up, longest tasks first.
-    ("rt-j", "rel-hm", "item-sales"): a100("il-lo", "3-00:00:00"),
-    ("rt-j", "rel-stack", "user-engagement"): a100("il-lo", "3-00:00:00"),
-    ("rt-j", "rel-amazon", "user-churn"): a100("il-lo", "3-00:00:00"),
-    ("rt-j", "rel-trial", "study-adverse"): a100("il-lo", "3-00:00:00"),
-    ("rt-j", "rel-hm", "user-churn"): a100("il-lo", "3-00:00:00"),
-    ("rt-j", "rel-amazon", "item-churn"): a100("il-lo", "3-00:00:00"),
-    ("rt-j", "rel-event", "user-attendance"): a100("il-lo", "3-00:00:00"),
-    ("rt-j", "rel-amazon", "user-ltv"): a100("il-lo", "3-00:00:00"),
-    ("rt-j", "rel-avito", "user-visits"): a100("il-lo", "3-00:00:00"),
-    ("rt-j", "rel-stack", "user-badge"): a100("il-lo", "3-00:00:00"),
-    ("rt-j", "rel-event", "user-ignore"): a100("il-lo", "3-00:00:00"),
-    ("rt-j", "rel-amazon", "item-ltv"): a100("il-lo", "3-00:00:00"),
-    ("rt-j", "rel-trial", "site-success"): a100("il-lo", "3-00:00:00"),
-    ("rt-j", "rel-stack", "post-votes"): a100("il-lo", "3-00:00:00"),
-    ("rt-j", "rel-avito", "user-clicks"): a100("il-lo", "3-00:00:00"),
-    ("rt-j", "rel-avito", "ad-ctr"): a100("il-lo", "3-00:00:00"),
-    ("rt-j", "rel-trial", "study-outcome"): a100("il-lo", "3-00:00:00"),
-    ("rt-j", "rel-event", "user-repeat"): a100("il-lo", "3-00:00:00"),
-    ("rt-j", "rel-f1", "driver-dnf"): a100("il-lo", "3-00:00:00"),
-    ("rt-j", "rel-f1", "driver-top3"): a100("il-lo", "3-00:00:00"),
-    ("rt-j", "rel-f1", "driver-position"): a100("il-lo", "3-00:00:00"),
+    # ~6 a100 are free but PLANNED: backfill holds them for three pending 8xa100
+    # il-lo jobs of higher priority, and a 3-day job cannot fit the gap before
+    # their start (slurm planned ours for 04:58 .. 08-28). A 6-hour wall clock
+    # does fit and backfills at once; roach requeues at the limit and the job
+    # resumes, so a long task just runs in 6-hour slices. Promoted onto the
+    # high tiers as the shared caps free up, longest tasks first.
+    ("rt-j", "rel-hm", "item-sales"): a100("il-lo", "6:00:00"),
+    ("rt-j", "rel-stack", "user-engagement"): a100("il-lo", "6:00:00"),
+    ("rt-j", "rel-amazon", "user-churn"): a100("il-lo", "6:00:00"),
+    ("rt-j", "rel-trial", "study-adverse"): a100("il-lo", "6:00:00"),
+    ("rt-j", "rel-hm", "user-churn"): a100("il-lo", "6:00:00"),
+    ("rt-j", "rel-amazon", "item-churn"): a100("il-lo", "6:00:00"),
+    ("rt-j", "rel-event", "user-attendance"): a100("il-lo", "6:00:00"),
+    ("rt-j", "rel-amazon", "user-ltv"): a100("il-lo", "6:00:00"),
+    ("rt-j", "rel-avito", "user-visits"): a100("il-lo", "6:00:00"),
+    ("rt-j", "rel-stack", "user-badge"): a100("il-lo", "6:00:00"),
+    ("rt-j", "rel-event", "user-ignore"): a100("il-lo", "6:00:00"),
+    ("rt-j", "rel-amazon", "item-ltv"): a100("il-lo", "6:00:00"),
+    ("rt-j", "rel-trial", "site-success"): a100("il-lo", "6:00:00"),
+    ("rt-j", "rel-stack", "post-votes"): a100("il-lo", "6:00:00"),
+    ("rt-j", "rel-avito", "user-clicks"): a100("il-lo", "6:00:00"),
+    ("rt-j", "rel-avito", "ad-ctr"): a100("il-lo", "6:00:00"),
+    ("rt-j", "rel-trial", "study-outcome"): a100("il-lo", "6:00:00"),
+    ("rt-j", "rel-event", "user-repeat"): a100("il-lo", "6:00:00"),
+    ("rt-j", "rel-f1", "driver-dnf"): a100("il-lo", "6:00:00"),
+    ("rt-j", "rel-f1", "driver-top3"): a100("il-lo", "6:00:00"),
+    ("rt-j", "rel-f1", "driver-position"): a100("il-lo", "6:00:00"),
 }
 
 
