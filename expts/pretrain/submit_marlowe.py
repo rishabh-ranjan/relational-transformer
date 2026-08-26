@@ -46,7 +46,7 @@ def args():
         lr_decay_steps=0,
         grad_norm_max=1.0,
         total_bs=1024,
-        total_steps=100_001,
+        total_steps=50_001,
         early_stop_after_steps=None,
         can_select_init_model=False,
         swa_momentum=0.9995,
