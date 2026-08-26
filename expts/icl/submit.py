@@ -142,7 +142,9 @@ def b200(qos: str, time: str) -> Resources:
 # back two minutes later: fine_tune's longest rt-j refit needs that tenth il
 # slot for a b200.
 # 16:50: item-churn's cfg0 unit freed the b200 under il; rel-hm/user-churn
-# (~8h left on its il a100) swaps onto it.
+# (~8h left on its il a100) swaps onto it -- and back at 17:00: the card was
+# taken by il-tier jobs slurm will not preempt (planned start 22:40), so it
+# returns to an il a100, taking the slot user-engagement's cfg0 unit had.
 TUNE: dict[tuple[str, str, str], Resources] = {
     ("rt-plurel", "rel-amazon", "user-churn"): b200("il", "2-00:00:00"),
     ("rt-plurel", "rel-amazon", "user-ltv"): a100("il", "2-00:00:00"),
@@ -173,7 +175,7 @@ TUNE: dict[tuple[str, str, str], Resources] = {
     ("rt-j", "rel-stack", "post-votes"): a100("il-lo", "2:00:00"),
     ("rt-j", "rel-hm", "item-sales"): a100("il", "2-00:00:00"),
     ("rt-j", "rel-stack", "user-engagement"): a100("il", "2-00:00:00"),
-    ("rt-j", "rel-hm", "user-churn"): b200("il", "2-00:00:00"),
+    ("rt-j", "rel-hm", "user-churn"): a100("il", "2-00:00:00"),
     ("rt-j", "rel-avito", "user-clicks"): a100("il-lo", "2:00:00"),
     ("rt-j", "rel-avito", "user-visits"): a100("il-lo", "2:00:00"),
     ("rt-j", "rel-trial", "site-success"): a100("il", "2-00:00:00"),
@@ -307,7 +309,7 @@ ENS: dict[tuple[str, str, str], list[Resources]] = {
     ("rt-j", "rel-stack", "post-votes"): [a100("il-lo", "1-00:00:00")] * 4,
     ("rt-j", "rel-hm", "item-sales"): [a100("il-lo", "1-00:00:00")] * 4,
     ("rt-j", "rel-stack", "user-engagement"): [
-        a100("il", "12:00:00"),
+        a100("il-lo", "6:00:00"),
         a100("il-lo", "6:00:00"),
         a100("il-lo", "6:00:00"),
         a100("il-lo", "6:00:00"),
