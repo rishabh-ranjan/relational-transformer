@@ -192,6 +192,8 @@ TUNE: dict[tuple[str, str, str], Resources] = {
 # a100 at ctx 8192, and a preemption loses the pass in flight), so they take
 # il / il-interactive slots as tuning jobs vacate them; a task under 5k test
 # rows finishes in minutes and asks il-lo for 2 hours so it backfills.
+# 01:45: user-badge's il-lo a100 unit was preempted after 3h with one seed
+# saved; it goes back at 6h (three passes left) so it can backfill.
 ENS: dict[tuple[str, str, str], list[Resources]] = {
     ("rt-plurel", "rel-amazon", "user-churn"): [
         b200("il", "1-00:00:00"),
@@ -206,7 +208,7 @@ ENS: dict[tuple[str, str, str], list[Resources]] = {
         b200("il-interactive", "12:00:00"),
         b200("il-lo", "12:00:00"),
         b200("il-interactive", "12:00:00"),
-        a100("il-lo", "12:00:00"),
+        a100("il-lo", "6:00:00"),
     ],
     ("rt-plurel", "rel-stack", "post-votes"): [a100("il-lo", "2-00:00:00")] * 4,
     ("rt-plurel", "rel-hm", "item-sales"): [a100("il-lo", "2-00:00:00")] * 4,
