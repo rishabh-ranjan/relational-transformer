@@ -176,6 +176,8 @@ def b200(qos: str, time: str) -> Resources:
 # (the il a100 job with the most left, ~9h) swaps onto it. 20:20: il is
 # 9/10 (all mine); rel-trial/site-success, the last 2-day il-lo job (~2h
 # left, and a preemption would strand it behind the il-lo queue), moves up.
+# 23:55: study-adverse, the last chunked job, requeued at its 4th wall clock
+# while an il slot and a b200 stand free: it finishes there (~2h on a b200).
 TUNE: dict[tuple[str, str], Resources] = {
     ("rel-amazon", "user-churn"): b200("il", "2-00:00:00"),
     ("rel-amazon", "user-ltv"): a100("il", "2-00:00:00"),
@@ -189,7 +191,7 @@ TUNE: dict[tuple[str, str], Resources] = {
     ("rel-avito", "user-clicks"): a100("il", "2-00:00:00"),
     ("rel-avito", "user-visits"): b200("il-interactive", "12:00:00"),
     ("rel-trial", "site-success"): a100("il", "2-00:00:00"),
-    ("rel-trial", "study-adverse"): a100("il-lo", "2:00:00"),
+    ("rel-trial", "study-adverse"): b200("il", "12:00:00"),
     ("rel-event", "user-attendance"): a100("il-lo", "2:00:00"),
     ("rel-event", "user-ignore"): a100("il-lo", "2:00:00"),
     ("rel-avito", "ad-ctr"): a100("il-lo", "2-00:00:00"),
