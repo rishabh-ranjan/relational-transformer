@@ -163,13 +163,15 @@ def b200(qos: str, time: str) -> Resources:
 # in the queue after their wall clock; rel-hm/user-churn takes it. 18:30: a
 # fine_tune il-interactive job ended with nothing of theirs waiting, and a
 # b200 is free: rel-avito/user-visits' chunk goes there (12h, ~3h of grid on
-# a b200); it vacates on request.
+# a b200); it vacates on request. 18:40: fine_tune's last il-interactive job
+# ended and another b200 is free; rel-stack/user-badge (2h chunks, ~6h of grid
+# left on an a100, the heaviest ensemble stage after rel-amazon) takes it.
 TUNE: dict[tuple[str, str], Resources] = {
     ("rel-amazon", "user-churn"): a100("il", "2-00:00:00"),
     ("rel-amazon", "user-ltv"): a100("il", "2-00:00:00"),
     ("rel-amazon", "item-ltv"): a100("il", "2-00:00:00"),
     ("rel-amazon", "item-churn"): a100("il", "2-00:00:00"),
-    ("rel-stack", "user-badge"): a100("il-lo", "2:00:00"),
+    ("rel-stack", "user-badge"): b200("il-interactive", "12:00:00"),
     ("rel-stack", "post-votes"): a100("il-lo", "2:00:00"),
     ("rel-hm", "item-sales"): a100("il", "2-00:00:00"),
     ("rel-stack", "user-engagement"): a100("il", "2-00:00:00"),
