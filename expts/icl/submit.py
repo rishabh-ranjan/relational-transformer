@@ -216,7 +216,10 @@ TUNE: dict[tuple[str, str], Resources] = {
 # takes the il-interactive slot its tuning job vacated (b200), cfg1/cfg2 the
 # two b200s standing free under il-lo, cfg3 an il-lo a100 at 12h (a limit
 # that fits the work and can still backfill); il-lo units move up to il /
-# il-interactive as tuning jobs vacate those.
+# il-interactive as tuning jobs vacate those. 22:40: user-visits tuned and its
+# il-interactive slot freed with a b200 standing free: user-badge's cfg2,
+# still pending under il-lo, takes it; user-visits' four units (36k rows,
+# ~1.5h each) go to il-lo a100s at 3h.
 ENS: dict[tuple[str, str], list[Resources]] = {
     ("rel-amazon", "user-churn"): [a100("il-lo", "2-00:00:00")] * 4,
     ("rel-amazon", "user-ltv"): [a100("il-lo", "2-00:00:00")] * 4,
@@ -225,7 +228,7 @@ ENS: dict[tuple[str, str], list[Resources]] = {
     ("rel-stack", "user-badge"): [
         b200("il-interactive", "12:00:00"),
         b200("il-lo", "12:00:00"),
-        b200("il-lo", "12:00:00"),
+        b200("il-interactive", "12:00:00"),
         a100("il-lo", "12:00:00"),
     ],
     ("rel-stack", "post-votes"): [a100("il-lo", "2-00:00:00")] * 4,
@@ -233,7 +236,7 @@ ENS: dict[tuple[str, str], list[Resources]] = {
     ("rel-stack", "user-engagement"): [a100("il-lo", "2-00:00:00")] * 4,
     ("rel-hm", "user-churn"): [a100("il-lo", "2-00:00:00")] * 4,
     ("rel-avito", "user-clicks"): [a100("il-lo", "2-00:00:00")] * 4,
-    ("rel-avito", "user-visits"): [a100("il-lo", "2-00:00:00")] * 4,
+    ("rel-avito", "user-visits"): [a100("il-lo", "3:00:00")] * 4,
     ("rel-trial", "site-success"): [a100("il-lo", "2-00:00:00")] * 4,
     ("rel-trial", "study-adverse"): [a100("il-lo", "2:00:00")] * 4,
     ("rel-event", "user-attendance"): [a100("il-lo", "2:00:00")] * 4,
