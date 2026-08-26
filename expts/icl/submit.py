@@ -210,28 +210,40 @@ TUNE: dict[tuple[str, str], Resources] = {
 # start sooner; a 2-day il-lo request cannot backfill into those cards either.
 # So the units of the tasks that finish in minutes (< 5k test rows) ask il-lo
 # for 2 hours, which backfills into any gap; the big tasks keep 2 days.
-ENS: dict[tuple[str, str], Resources] = {
-    ("rel-amazon", "user-churn"): a100("il-lo", "2-00:00:00"),
-    ("rel-amazon", "user-ltv"): a100("il-lo", "2-00:00:00"),
-    ("rel-amazon", "item-ltv"): a100("il-lo", "2-00:00:00"),
-    ("rel-amazon", "item-churn"): a100("il-lo", "2-00:00:00"),
-    ("rel-stack", "user-badge"): a100("il-lo", "2-00:00:00"),
-    ("rel-stack", "post-votes"): a100("il-lo", "2-00:00:00"),
-    ("rel-hm", "item-sales"): a100("il-lo", "2-00:00:00"),
-    ("rel-stack", "user-engagement"): a100("il-lo", "2-00:00:00"),
-    ("rel-hm", "user-churn"): a100("il-lo", "2-00:00:00"),
-    ("rel-avito", "user-clicks"): a100("il-lo", "2-00:00:00"),
-    ("rel-avito", "user-visits"): a100("il-lo", "2-00:00:00"),
-    ("rel-trial", "site-success"): a100("il-lo", "2-00:00:00"),
-    ("rel-trial", "study-adverse"): a100("il-lo", "2:00:00"),
-    ("rel-event", "user-attendance"): a100("il-lo", "2:00:00"),
-    ("rel-event", "user-ignore"): a100("il-lo", "2:00:00"),
-    ("rel-avito", "ad-ctr"): a100("il-lo", "2:00:00"),
-    ("rel-trial", "study-outcome"): a100("il-lo", "2:00:00"),
-    ("rel-f1", "driver-position"): a100("il-lo", "2:00:00"),
-    ("rel-f1", "driver-top3"): a100("il-lo", "2:00:00"),
-    ("rel-f1", "driver-dnf"): a100("il-lo", "2:00:00"),
-    ("rel-event", "user-repeat"): a100("il-lo", "2:00:00"),
+# 22:35 (user-badge tuned, the first big task): a unit is placed on its own
+# -- one per rank -- because the safe tiers are scarce: user-badge's four
+# passes over 255k rows are ~9h on an a100 and ~4.5h on a b200, so cfg0
+# takes the il-interactive slot its tuning job vacated (b200), cfg1/cfg2 the
+# two b200s standing free under il-lo, cfg3 an il-lo a100 at 12h (a limit
+# that fits the work and can still backfill); il-lo units move up to il /
+# il-interactive as tuning jobs vacate those.
+ENS: dict[tuple[str, str], list[Resources]] = {
+    ("rel-amazon", "user-churn"): [a100("il-lo", "2-00:00:00")] * 4,
+    ("rel-amazon", "user-ltv"): [a100("il-lo", "2-00:00:00")] * 4,
+    ("rel-amazon", "item-ltv"): [a100("il-lo", "2-00:00:00")] * 4,
+    ("rel-amazon", "item-churn"): [a100("il-lo", "2-00:00:00")] * 4,
+    ("rel-stack", "user-badge"): [
+        b200("il-interactive", "12:00:00"),
+        b200("il-lo", "12:00:00"),
+        b200("il-lo", "12:00:00"),
+        a100("il-lo", "12:00:00"),
+    ],
+    ("rel-stack", "post-votes"): [a100("il-lo", "2-00:00:00")] * 4,
+    ("rel-hm", "item-sales"): [a100("il-lo", "2-00:00:00")] * 4,
+    ("rel-stack", "user-engagement"): [a100("il-lo", "2-00:00:00")] * 4,
+    ("rel-hm", "user-churn"): [a100("il-lo", "2-00:00:00")] * 4,
+    ("rel-avito", "user-clicks"): [a100("il-lo", "2-00:00:00")] * 4,
+    ("rel-avito", "user-visits"): [a100("il-lo", "2-00:00:00")] * 4,
+    ("rel-trial", "site-success"): [a100("il-lo", "2-00:00:00")] * 4,
+    ("rel-trial", "study-adverse"): [a100("il-lo", "2:00:00")] * 4,
+    ("rel-event", "user-attendance"): [a100("il-lo", "2:00:00")] * 4,
+    ("rel-event", "user-ignore"): [a100("il-lo", "2:00:00")] * 4,
+    ("rel-avito", "ad-ctr"): [a100("il-lo", "2:00:00")] * 4,
+    ("rel-trial", "study-outcome"): [a100("il-lo", "2:00:00")] * 4,
+    ("rel-f1", "driver-position"): [a100("il-lo", "2:00:00")] * 4,
+    ("rel-f1", "driver-top3"): [a100("il-lo", "2:00:00")] * 4,
+    ("rel-f1", "driver-dnf"): [a100("il-lo", "2:00:00")] * 4,
+    ("rel-event", "user-repeat"): [a100("il-lo", "2:00:00")] * 4,
 }
 
 
@@ -321,7 +333,7 @@ def main() -> None:
             if (stage_dir(run_id) / "result.json").exists():
                 print(f"  {name:44s} done already")
                 continue
-            resources = ENS[db, task]
+            resources = ENS[db, task][rank]
             print(
                 f"  {name:44s} {resources.gpus} {resources.qos:15s} {resources.time}"
                 f"  {(ctx, lcs, bw, pl)}"
