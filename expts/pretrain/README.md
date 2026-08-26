@@ -102,6 +102,17 @@ Escalate:
   every rank holding ~2 GB at 100% util is hung in a collective. Cancel it and
   run [`smoke.py`](smoke.py) on those nodes before putting the run back there.
 
+## Workspace
+
+[`workspace.py`](workspace.py) writes the wandb project view: every metric
+panel folds in its `swa/` and `target/` lines (the targets come from
+`submit_marlowe.args()`), grouped by run name. Rerun it whenever a run starts
+logging a key the view has no panel for.
+
+```
+pixi run python -m expts.pretrain.workspace
+```
+
 ## Smoke test
 
 Write the shape into [`smoke.py`](smoke.py), commit, push, then
