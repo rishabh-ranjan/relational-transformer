@@ -228,7 +228,9 @@ TUNE: dict[tuple[str, str], Resources] = {
 # (a requeued one first -- it has nothing to lose). 23:50: rel-hm/user-churn
 # tuned; three b200s stand free and il's b200 sub-cap has room, so cfg0 takes
 # a b200 under il and cfg1/cfg2 b200s under il-lo (~1.5h units, little to
-# lose to a preemption), cfg3 an il-lo a100.
+# lose to a preemption), cfg3 an il-lo a100. 00:15: both il-lo b200 units
+# were preempted within 15 minutes and blackwell1 is full again; they go to
+# il-lo a100s at 6h instead.
 ENS: dict[tuple[str, str], list[Resources]] = {
     ("rel-amazon", "user-churn"): [
         b200("il", "1-00:00:00"),
@@ -250,8 +252,8 @@ ENS: dict[tuple[str, str], list[Resources]] = {
     ("rel-stack", "user-engagement"): [a100("il-lo", "2-00:00:00")] * 4,
     ("rel-hm", "user-churn"): [
         b200("il", "12:00:00"),
-        b200("il-lo", "6:00:00"),
-        b200("il-lo", "6:00:00"),
+        a100("il-lo", "6:00:00"),
+        a100("il-lo", "6:00:00"),
         a100("il-lo", "6:00:00"),
     ],
     ("rel-avito", "user-clicks"): [a100("il-lo", "2-00:00:00")] * 4,
