@@ -204,7 +204,8 @@ TUNE: dict[tuple[str, str, str], Resources] = {
 # item-churn tuned; its cfg0 takes the il slot its tuning job vacated, the
 # rest go to il-lo at 6h. 02:30-02:40: user-engagement, item-sales,
 # post-votes and user-clicks tuned -- rt-plurel's grid is complete -- same
-# placement.
+# placement. 03:00: as il slots free, the longest queued unit moves up:
+# item-churn cfg1 (ctx 8192, ~6h) first.
 ENS: dict[tuple[str, str, str], list[Resources]] = {
     ("rt-plurel", "rel-amazon", "user-churn"): [
         b200("il", "1-00:00:00"),
@@ -216,7 +217,7 @@ ENS: dict[tuple[str, str, str], list[Resources]] = {
     ("rt-plurel", "rel-amazon", "item-ltv"): [a100("il-lo", "6:00:00")] * 4,
     ("rt-plurel", "rel-amazon", "item-churn"): [
         a100("il", "12:00:00"),
-        a100("il-lo", "6:00:00"),
+        a100("il", "12:00:00"),
         a100("il-lo", "6:00:00"),
         a100("il-lo", "6:00:00"),
     ],
