@@ -166,8 +166,11 @@ def b200(qos: str, time: str) -> Resources:
 # a b200); it vacates on request. 18:40: fine_tune's last il-interactive job
 # ended and another b200 is free; rel-stack/user-badge (2h chunks, ~6h of grid
 # left on an a100, the heaviest ensemble stage after rel-amazon) takes it.
+# 18:55: a third b200 is free and il's b200 sub-cap has room, so
+# rel-amazon/user-churn (the most left of the il a100 jobs, ~9h) swaps its
+# a100 for it -- the same tier, twice the speed, one grid entry lost.
 TUNE: dict[tuple[str, str], Resources] = {
-    ("rel-amazon", "user-churn"): a100("il", "2-00:00:00"),
+    ("rel-amazon", "user-churn"): b200("il", "2-00:00:00"),
     ("rel-amazon", "user-ltv"): a100("il", "2-00:00:00"),
     ("rel-amazon", "item-ltv"): a100("il", "2-00:00:00"),
     ("rel-amazon", "item-churn"): a100("il", "2-00:00:00"),
