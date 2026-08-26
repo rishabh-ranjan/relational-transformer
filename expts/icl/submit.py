@@ -223,7 +223,10 @@ TUNE: dict[tuple[str, str], Resources] = {
 # the heaviest ensemble (352k rows: ~13h a unit on an a100, ~6h on a b200):
 # cfg0 takes the b200 under il its tuning job vacated; cfg1-3 start on il-lo
 # a100s at a day and are promoted onto il as the overnight tuning jobs end
-# (a requeued one first -- it has nothing to lose).
+# (a requeued one first -- it has nothing to lose). 23:50: rel-hm/user-churn
+# tuned; three b200s stand free and il's b200 sub-cap has room, so cfg0 takes
+# a b200 under il and cfg1/cfg2 b200s under il-lo (~1.5h units, little to
+# lose to a preemption), cfg3 an il-lo a100.
 ENS: dict[tuple[str, str], list[Resources]] = {
     ("rel-amazon", "user-churn"): [
         b200("il", "1-00:00:00"),
@@ -243,7 +246,12 @@ ENS: dict[tuple[str, str], list[Resources]] = {
     ("rel-stack", "post-votes"): [a100("il-lo", "2-00:00:00")] * 4,
     ("rel-hm", "item-sales"): [a100("il-lo", "2-00:00:00")] * 4,
     ("rel-stack", "user-engagement"): [a100("il-lo", "2-00:00:00")] * 4,
-    ("rel-hm", "user-churn"): [a100("il-lo", "2-00:00:00")] * 4,
+    ("rel-hm", "user-churn"): [
+        b200("il", "12:00:00"),
+        b200("il-lo", "6:00:00"),
+        b200("il-lo", "6:00:00"),
+        a100("il-lo", "6:00:00"),
+    ],
     ("rel-avito", "user-clicks"): [a100("il-lo", "2-00:00:00")] * 4,
     ("rel-avito", "user-visits"): [a100("il-lo", "3:00:00")] * 4,
     ("rel-trial", "site-success"): [a100("il-lo", "2-00:00:00")] * 4,
