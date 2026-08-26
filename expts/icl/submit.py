@@ -210,6 +210,7 @@ TUNE: dict[tuple[str, str, str], Resources] = {
 # user-engagement cfg2 (4096), item-churn cfg3 (2048, 167k rows) -- which
 # went back to il-lo minutes later: fine_tune wanted that il slot for a b200
 # -- and moved up again at 04:20 when item-churn cfg0 freed a slot of mine.
+# 04:45: user-ltv cfg3 (1024, 352k rows) next.
 ENS: dict[tuple[str, str, str], list[Resources]] = {
     ("rt-plurel", "rel-amazon", "user-churn"): [
         b200("il", "1-00:00:00"),
@@ -217,7 +218,12 @@ ENS: dict[tuple[str, str, str], list[Resources]] = {
         a100("il-lo", "1-00:00:00"),
         a100("il-lo", "1-00:00:00"),
     ],
-    ("rt-plurel", "rel-amazon", "user-ltv"): [a100("il-lo", "6:00:00")] * 4,
+    ("rt-plurel", "rel-amazon", "user-ltv"): [
+        a100("il-lo", "6:00:00"),
+        a100("il-lo", "6:00:00"),
+        a100("il-lo", "6:00:00"),
+        a100("il", "12:00:00"),
+    ],
     ("rt-plurel", "rel-amazon", "item-ltv"): [a100("il-lo", "6:00:00")] * 4,
     ("rt-plurel", "rel-amazon", "item-churn"): [
         a100("il", "12:00:00"),
