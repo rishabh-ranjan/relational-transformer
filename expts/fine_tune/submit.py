@@ -222,7 +222,10 @@ RESOURCES: dict[tuple[str, str, str], Resources] = {
     # other warm starts) moves onto it.
     ("rt-j", "rel-stack", "user-badge"): b200("il-interactive", "12:00:00"),
     ("rt-j", "rel-event", "user-ignore"): a100("il-lo", "6:00:00"),
-    ("rt-j", "rel-amazon", "item-ltv"): a100("il-lo", "6:00:00"),
+    # 10:40: rt-j/event/user-attendance finished on its il-interactive b200;
+    # the last selection arm still on an a100 slice (item-ltv, 23k steps and
+    # still improving) moves onto it.
+    ("rt-j", "rel-amazon", "item-ltv"): b200("il-interactive", "12:00:00"),
     ("rt-j", "rel-trial", "site-success"): a100("il-lo", "6:00:00"),
     ("rt-j", "rel-stack", "post-votes"): a100("il-lo", "6:00:00"),
     ("rt-j", "rel-avito", "user-clicks"): a100("il-lo", "6:00:00"),
