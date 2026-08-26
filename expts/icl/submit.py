@@ -171,13 +171,14 @@ def b200(qos: str, time: str) -> Resources:
 # a100 for it -- the same tier, twice the speed, one grid entry lost (and no
 # il slot freed: a b200 under il is still one of the ten -- post-votes, sent
 # to il on that misreading, sat on QOSMaxGRESPerUser and went back to chunks).
+# 20:00: fine_tune's last il job ended; post-votes takes the slot for real.
 TUNE: dict[tuple[str, str], Resources] = {
     ("rel-amazon", "user-churn"): b200("il", "2-00:00:00"),
     ("rel-amazon", "user-ltv"): a100("il", "2-00:00:00"),
     ("rel-amazon", "item-ltv"): a100("il", "2-00:00:00"),
     ("rel-amazon", "item-churn"): a100("il", "2-00:00:00"),
     ("rel-stack", "user-badge"): b200("il-interactive", "12:00:00"),
-    ("rel-stack", "post-votes"): a100("il-lo", "2:00:00"),
+    ("rel-stack", "post-votes"): a100("il", "2-00:00:00"),
     ("rel-hm", "item-sales"): a100("il", "2-00:00:00"),
     ("rel-stack", "user-engagement"): a100("il", "2-00:00:00"),
     ("rel-hm", "user-churn"): a100("il", "2-00:00:00"),
