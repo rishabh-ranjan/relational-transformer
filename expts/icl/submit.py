@@ -166,7 +166,7 @@ TUNE: dict[tuple[str, str, str], Resources] = {
     ("rt-j", "rel-amazon", "user-churn"): a100("il", "2-00:00:00"),
     ("rt-j", "rel-amazon", "user-ltv"): a100("il", "2-00:00:00"),
     ("rt-j", "rel-amazon", "item-ltv"): a100("il-lo", "2:00:00"),
-    ("rt-j", "rel-amazon", "item-churn"): a100("il-lo", "2:00:00"),
+    ("rt-j", "rel-amazon", "item-churn"): a100("il", "2-00:00:00"),
     ("rt-j", "rel-stack", "user-badge"): a100("il", "2-00:00:00"),
     ("rt-j", "rel-stack", "post-votes"): a100("il-lo", "2:00:00"),
     ("rt-j", "rel-hm", "item-sales"): a100("il", "2-00:00:00"),
@@ -215,7 +215,8 @@ TUNE: dict[tuple[str, str, str], Resources] = {
 # biggest database first: rel-amazon/user-churn, then user-ltv (05:20),
 # then rel-stack/user-badge and rel-hm/item-sales (05:50, two slots freed),
 # rel-stack/user-engagement (06:20), rel-trial/site-success (07:00),
-# rel-event/user-ignore (07:25, rt-plurel's last unit done).
+# rel-event/user-ignore (07:25, rt-plurel's last unit done), rel-amazon/
+# item-churn (08:10, off a running chunk: ~9h of grid left, one entry lost).
 ENS: dict[tuple[str, str, str], list[Resources]] = {
     ("rt-plurel", "rel-amazon", "user-churn"): [
         b200("il", "1-00:00:00"),
