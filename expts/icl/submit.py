@@ -202,7 +202,7 @@ TUNE: dict[tuple[str, str, str], Resources] = {
 # il slot for its longest refit). 02:20: an il slot is free after all;
 # hm/user-churn's cfg1, preempted at 01:43 and still queued, takes it. 02:25:
 # item-churn tuned; its cfg0 takes the il slot its tuning job vacated, the
-# rest go to il-lo at 6h.
+# rest go to il-lo at 6h. 02:30: user-engagement tuned, same placement.
 ENS: dict[tuple[str, str, str], list[Resources]] = {
     ("rt-plurel", "rel-amazon", "user-churn"): [
         b200("il", "1-00:00:00"),
@@ -226,7 +226,12 @@ ENS: dict[tuple[str, str, str], list[Resources]] = {
     ],
     ("rt-plurel", "rel-stack", "post-votes"): [a100("il-lo", "2-00:00:00")] * 4,
     ("rt-plurel", "rel-hm", "item-sales"): [a100("il-lo", "2-00:00:00")] * 4,
-    ("rt-plurel", "rel-stack", "user-engagement"): [a100("il-lo", "2-00:00:00")] * 4,
+    ("rt-plurel", "rel-stack", "user-engagement"): [
+        a100("il", "12:00:00"),
+        a100("il-lo", "6:00:00"),
+        a100("il-lo", "6:00:00"),
+        a100("il-lo", "6:00:00"),
+    ],
     ("rt-plurel", "rel-hm", "user-churn"): [
         b200("il", "12:00:00"),
         a100("il", "6:00:00"),
