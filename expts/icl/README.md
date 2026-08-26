@@ -188,6 +188,53 @@ configuration, made on validation), URL
 (120-config context grid tuned on 4096 val rows x 4 seeds; test = top-4
 configs x 4 context seeds, averaged).
 
+## Results
+
+RT-PluRel, 2026-08-26 (official RelBench evaluator on the full test splits;
+`leaderboard/2026-08-25-icl/rt-plurel/results.json`), beside RT-J's paper
+in-context numbers and RT-PluRel fine-tuned:
+
+| task | metric | rt-plurel icl | rt-j icl (paper) | rt-plurel fine-tuned |
+|---|---|---:|---:|---:|
+| rel-amazon/item-churn | AUROC % | 74.77 | 80.69 | 83.27 |
+| rel-amazon/user-churn | AUROC % | 65.09 | 68.78 | 71.35 |
+| rel-avito/user-clicks | AUROC % | 50.01 | 54.54 | 58.34 |
+| rel-avito/user-visits | AUROC % | 62.03 | 62.41 | 67.09 |
+| rel-event/user-ignore | AUROC % | 83.75 | 87.31 | 84.76 |
+| rel-event/user-repeat | AUROC % | 77.77 | 78.42 | 79.14 |
+| rel-f1/driver-dnf | AUROC % | 81.12 | 83.02 | 73.15 |
+| rel-f1/driver-top3 | AUROC % | 90.30 | 91.44 | 75.89 |
+| rel-hm/user-churn | AUROC % | 65.99 | 67.87 | 70.44 |
+| rel-stack/user-badge | AUROC % | 83.15 | 82.11 | 89.16 |
+| rel-stack/user-engagement | AUROC % | 88.00 | 86.71 | 89.68 |
+| rel-trial/study-outcome | AUROC % | 67.33 | 64.51 | 72.35 |
+| **mean** | AUROC % | **74.11** | 75.65 | 76.22 |
+| rel-amazon/item-ltv | nMAE % | 8.76 | 7.78 | 7.28 |
+| rel-amazon/user-ltv | nMAE % | 28.91 | 27.38 | 24.17 |
+| rel-avito/ad-ctr | nMAE % | 43.34 | 41.75 | 36.37 |
+| rel-event/user-attendance | nMAE % | 40.81 | 35.42 | 31.50 |
+| rel-f1/driver-position | nMAE % | 41.50 | 40.79 | 54.34 |
+| rel-hm/item-sales | nMAE % | 12.23 | 9.56 | 8.14 |
+| rel-stack/post-votes | nMAE % | 15.74 | 13.80 | 12.44 |
+| rel-trial/site-success | nMAE % | 89.55 | 15.23 | 86.16 |
+| rel-trial/study-adverse | nMAE % | 16.06 | 15.31 | 9.64 |
+| **mean** | nMAE % | **32.99** | 23.00 | 30.00 |
+
+Two rows need reading with care. rel-trial/site-success: every RelArena
+method scores 68-100 % nMAE on it (fine-tuned RT-PluRel 86.16), so the RT-J
+paper's 15.23 is on some other scale; against the fine-tuned number our 89.55
+is in line. rel-avito/user-clicks: chance level (50.01) despite 0.60 val
+AUROC, and each of the four tuned configs alone scores 0.48-0.51 on test with
+the labels verified aligned -- a val-to-test shift on a task where in-context
+methods sit near chance anyway (RT-J 54.5, constant-per-entity 50.4).
+
+Measured on this round: a context search over 4096 val rows is ~10.5 h on an
+a100 (rel-amazon/item-ltv 10h29, item-churn 10h27, user-ltv 10h54, each with
+one restart) and ~4 h on a b200 (rel-amazon/user-churn's last 24 entries in
+4h07); an ensemble unit is minutes on the small tasks, 20-60 min on the
+rel-amazon tasks where the tuned context was 512-2048, and 1h50-6h where it
+was 8192 (rel-stack/user-badge cfg3 5h on an a100, 3h12 on a b200).
+
 ## Reference numbers
 
 `reference.csv`, in leaderboard units (AUROC %, nMAE %): `rt-j-icl` is RT-J's
