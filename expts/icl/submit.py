@@ -163,7 +163,7 @@ TUNE: dict[tuple[str, str, str], Resources] = {
     ("rt-plurel", "rel-f1", "driver-top3"): a100("il-lo", "2-00:00:00"),
     ("rt-plurel", "rel-f1", "driver-dnf"): a100("il-lo", "2-00:00:00"),
     ("rt-plurel", "rel-event", "user-repeat"): a100("il", "2-00:00:00"),
-    ("rt-j", "rel-amazon", "user-churn"): a100("il-lo", "2:00:00"),
+    ("rt-j", "rel-amazon", "user-churn"): a100("il", "2-00:00:00"),
     ("rt-j", "rel-amazon", "user-ltv"): a100("il-lo", "2:00:00"),
     ("rt-j", "rel-amazon", "item-ltv"): a100("il-lo", "2:00:00"),
     ("rt-j", "rel-amazon", "item-churn"): a100("il-lo", "2:00:00"),
@@ -210,7 +210,9 @@ TUNE: dict[tuple[str, str, str], Resources] = {
 # user-engagement cfg2 (4096), item-churn cfg3 (2048, 167k rows) -- which
 # went back to il-lo minutes later: fine_tune wanted that il slot for a b200
 # -- and moved up again at 04:20 when item-churn cfg0 freed a slot of mine.
-# 04:45: user-ltv cfg3 (1024, 352k rows) next.
+# 04:45: user-ltv cfg3 (1024, 352k rows) next. 04:55: rt-plurel's units are
+# all placed, so the il slots its units free go to rt-j's tuning chunks,
+# biggest database first: rel-amazon/user-churn.
 ENS: dict[tuple[str, str, str], list[Resources]] = {
     ("rt-plurel", "rel-amazon", "user-churn"): [
         b200("il", "1-00:00:00"),
