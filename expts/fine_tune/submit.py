@@ -196,7 +196,8 @@ RESOURCES: dict[tuple[str, str, str], Resources] = {
     # resumes, so a long task just runs in 6-hour slices. Promoted onto the
     # high tiers as the shared caps free up, longest tasks first.
     ("rt-j", "rel-hm", "item-sales"): a100("il-lo", "6:00:00"),
-    ("rt-j", "rel-stack", "user-engagement"): a100("il-lo", "6:00:00"),
+    # 00:55: the second il b200 (icl's job there ended) and one il slot free.
+    ("rt-j", "rel-stack", "user-engagement"): b200("il", "7-00:00:00"),
     # 00:45: one il slot and one il b200 of the sub-cap free (icl holds the
     # rest), a b200 card free: the longest pending rt-j task takes it.
     ("rt-j", "rel-amazon", "user-churn"): b200("il", "7-00:00:00"),
