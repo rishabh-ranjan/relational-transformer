@@ -29,10 +29,13 @@ from `resume.pt`, the context search per grid entry, the test ensemble per
 seed) and skips the stages whose output exists. So to move a job, cancel it and
 resubmit it; nothing is lost but the minutes since the last checkpoint.
 
-What it costs (RelArena-α's run of the same recipe, one GPU per task, wall
-clock over all four stages): 2.5 h on the rel-f1 tasks, 3-6 h on most, 10-20 h
-on rel-hm/item-sales, rel-stack/user-engagement and rel-amazon/user-churn.
-Numbers measured here go in the table below as they come in.
+What it costs, measured on the 2026-08-24 sweep (one GPU per task, all four
+stages, every attempt of every job summed, restarts included): 345 GPU-hours
+for the 42 jobs; 2.7-3.7 h on the rel-f1 tasks, 3-7 h on most, 10-21 h on the
+tasks whose selection arm ran to its 50k-step ceiling (rel-amazon/user-churn,
+rel-hm/user-churn, rel-hm/item-sales, rel-stack/user-badge). A b200 is ~2.5x
+an a100 per step. The whole sweep took 21.5 h of wall clock with 12
+high-priority slots plus the `il-lo` pool. The per-task table is at the end.
 
 Everything lands under `~/scratch/relational-transformer/fine_tune/`:
 `slurm-logs/`, one directory per stage at
@@ -91,6 +94,102 @@ RT-PluRel numbers, and -- once a board is complete -- runs
 [submission issue](https://github.com/stanford-star/relbench/issues/new?template=submit.yml);
 "In-context?" is **No** for every model here (each trains on the target
 database).
+
+## Results (2026-08-24 sweep)
+
+8-seed test ensembles scored by `relbench.submit`, beside the RelArena-α
+paper's RT-PluRel and its best other method (AUROC higher is better, MAE in
+native units lower is better). The 18 non-rel-f1 tasks are comparable to the
+paper: their val and test splits have a single timestamp, so the per-row bound
+`db_cutoff=None` applies is the split timestamp RelArena bounded at. The three
+rel-f1 tasks are not: 26-33 horizons over 3-6 years past the cutoff, so a
+context reaches later races and earlier test horizons, and the numbers are far
+higher than the paper's.
+
+| task | metric | rt-plurel | rt (scratch) | paper RT-PluRel | best paper baseline |
+|---|---|---|---|---|---|
+| rel-hm/item-sales | mae | 0.03977 | 0.03839 | 0.0403 | 0.0532 |
+| rel-stack/user-engagement | auroc | 0.9094 | 0.9074 | 0.8968 | 0.9067 |
+| rel-amazon/user-churn | auroc | 0.7130 | 0.7130 | 0.7135 | 0.7086 |
+| rel-trial/study-adverse | mae | 39.81 | 40.9 | 32.7 | 39.8 |
+| rel-hm/user-churn | auroc | 0.7036 | 0.7024 | 0.7044 | 0.7057 |
+| rel-amazon/item-churn | auroc | 0.8318 | 0.8296 | 0.8327 | 0.8305 |
+| rel-event/user-attendance | mae | 0.2435 | 0.2488 | 0.241 | 0.239 |
+| rel-amazon/user-ltv | mae | 14.23 | 13.89 | 13.9 | 14.4 |
+| rel-avito/user-visits | auroc | 0.6684 | 0.6621 | 0.6709 | 0.6688 |
+| rel-stack/user-badge | auroc | 0.8928 | 0.8933 | 0.8916 | 0.8887 |
+| rel-event/user-ignore | auroc | 0.8124 | 0.8141 | 0.8476 | 0.8787 |
+| rel-amazon/item-ltv | mae | 42.61 | 44.32 | 43 | 46.8 |
+| rel-trial/site-success | mae | 0.3835 | 0.3729 | 0.41 | 0.325 |
+| rel-stack/post-votes | mae | 0.0684 | 0.07029 | 0.0635 | 0.0649 |
+| rel-avito/user-clicks | auroc | 0.6901 | 0.6859 | 0.5834 | 0.6788 |
+| rel-avito/ad-ctr | mae | 0.03519 | 0.03686 | 0.0348 | 0.0311 |
+| rel-trial/study-outcome | auroc | 0.7319 | 0.6955 | 0.7235 | 0.7647 |
+| rel-event/user-repeat | auroc | 0.8113 | 0.7897 | 0.7914 | 0.7846 |
+| rel-f1/driver-dnf | auroc | 0.8031 | 0.7993 | 0.7315 | 0.7322 |
+| rel-f1/driver-top3 | auroc | 0.9069 | 0.8384 | 0.7589 | 0.8108 |
+| rel-f1/driver-position | mae | 2.736 | 3.425 | 3.818 | 3.762 |
+
+`rt` is the same protocol from a random initialization -- the no-pretraining
+control. The submission packages are
+`~/scratch/relational-transformer/fine_tune/leaderboard/2026-08-24-fine_tune/{rt-plurel,rt}-{classification,regression}.zip`,
+validated by `python -m relbench.submit` (12/12 and 9/9 tasks).
+
+## What bit
+
+- **ampere7's a100 comes up with a foreign process holding 22 GB**, so a job
+  placed there dies in CUDA OOM at its first forward. Six attempts died that
+  way (three at submission, three requeued onto it); `a100()` excludes it,
+  as does ampere4 (local disk 99% full). A requeue keeps the original
+  submission's flags, so `scontrol update ExcNodeList=` on every pending job
+  is what stops a preempted job landing there.
+- **A node without the `~/scratch` symlink fails every job at startup**:
+  slurm creates the log path as a real directory before `ilc.env.sh` can make
+  the link, and the env script then refuses the real directory. ampere1, 2, 4,
+  7 and 9 were like that; a one-line job per node (`rm -rf` the stray tree,
+  `ln -s /dfs/user/$USER ~/scratch`) fixed them.
+- **A job preempted in the seconds after it wrote its prediction table is
+  requeued anyway**; the requeued attempt finds every stage done and exits in a
+  minute, so it only costs a card briefly.
+- **Moving a job is nearly free**: `scancel` delivers SIGTERM, `rt.train`
+  saves `resume.pt` at the next step, and the resubmission resumes at exactly
+  that step; the only cost is the restart (clone check, page-cache populate,
+  compile: 1-10 min). Every one of the eleven moves resumed at its cancel step.
+- **`il`'s ten count across sessions**, and its b200 sub-cap of two too: a
+  second session's job on `il` blocks a promotion with `QOSMaxGRESPerUser`.
+
+## Per-task record
+
+Selected step, refit steps, chosen context `(ctx, local_ctx, bfs_width,
+prefer_latest)` and wall clock (all attempts; the cards it ran on).
+
+| task | rt-plurel: step / refit / context / wall clock | rt: step / refit / context / wall clock |
+|---|---|---|
+| rel-hm/item-sales | 46400 / 47293 / (1024, 128, 16, True) / 9.6 h (b200) | 44800 / 45662 / (1024, 128, 16, True) / 9.2 h (b200) |
+| rel-stack/user-engagement | 16000 / 17010 / (1024, 1024, 64, True) / 4.7 h (b200) | 9800 / 10419 / (128, 128, 64, False) / 3.4 h (b200) |
+| rel-amazon/user-churn | 49000 / 53265 / (512, 128, 16, True) / 19.4 h (a100+b200) | 50000 / 54352 / (512, 128, 16, True) / 21.4 h (a100+b200) |
+| rel-trial/study-adverse | 8400 / 9098 / (1024, 512, 256, True) / 7.8 h (a100) | 17100 / 18519 / (1024, 1024, 256, True) / 12.1 h (a100) |
+| rel-hm/user-churn | 27400 / 27948 / (1024, 1024, 256, False) / 18.2 h (a100) | 40300 / 41105 / (1024, 1024, 256, False) / 19.9 h (a100+b200) |
+| rel-amazon/item-churn | 20800 / 22258 / (512, 512, 64, True) / 17.1 h (a100) | 16400 / 17550 / (1024, 512, 64, True) / 14.8 h (a100) |
+| rel-event/user-attendance | 13900 / 15355 / (256, 128, 16, False) / 11.0 h (a100) | 14300 / 15797 / (512, 512, 16, False) / 5.1 h (a100+b200) |
+| rel-amazon/user-ltv | 31900 / 34677 / (1024, 1024, 16, True) / 13.3 h (a100+b200) | 50000 / 54352 / (1024, 1024, 256, False) / 11.6 h (a100+b200) |
+| rel-avito/user-visits | 3900 / 5250 / (1024, 1024, 256, True) / 6.5 h (a100) | 3900 / 5250 / (512, 512, 256, True) / 6.2 h (a100) |
+| rel-stack/user-badge | 33600 / 36055 / (128, 128, 256, False) / 16.2 h (a100+b200) | 40900 / 43889 / (512, 128, 256, True) / 11.9 h (a100+b200) |
+| rel-event/user-ignore | 2600 / 2873 / (512, 512, 64, False) / 5.0 h (a100) | 4300 / 4750 / (1024, 128, 64, True) / 5.5 h (a100) |
+| rel-amazon/item-ltv | 21500 / 22826 / (1024, 512, 16, False) / 16.9 h (a100) | 12900 / 13696 / (1024, 256, 16, False) / 7.3 h (a100+b200) |
+| rel-trial/site-success | 1500 / 1696 / (1024, 1024, 64, False) / 4.7 h (a100) | 2200 / 2487 / (1024, 1024, 256, True) / 4.9 h (a100) |
+| rel-stack/post-votes | 2400 / 2553 / (128, 128, 16, False) / 5.1 h (a100) | 6000 / 6382 / (128, 128, 16, True) / 6.7 h (a100) |
+| rel-avito/user-clicks | 1400 / 1899 / (1024, 1024, 256, False) / 5.6 h (a100) | 1000 / 1357 / (1024, 1024, 256, False) / 4.9 h (a100) |
+| rel-avito/ad-ctr | 600 / 808 / (1024, 1024, 256, False) / 4.4 h (a100) | 500 / 674 / (1024, 1024, 256, False) / 3.7 h (a100) |
+| rel-trial/study-outcome | 200 / 217 / (1024, 1024, 64, True) / 3.2 h (a100) | 500 / 541 / (1024, 1024, 64, True) / 3.2 h (a100) |
+| rel-event/user-repeat | 300 / 321 / (1024, 1024, 256, True) / 3.2 h (a100) | 400 / 428 / (512, 256, 64, True) / 3.4 h (a100) |
+| rel-f1/driver-dnf | 1500 / 1575 / (1024, 1024, 64, True) / 3.7 h (a100) | 100 / 105 / (512, 512, 256, True) / 2.7 h (a100) |
+| rel-f1/driver-top3 | 100 / 144 / (512, 256, 64, False) / 2.9 h (a100) | 100 / 144 / (128, 128, 256, True) / 2.7 h (a100) |
+| rel-f1/driver-position | 1000 / 1067 / (1024, 512, 256, True) / 3.1 h (a100) | 400 / 427 / (1024, 1024, 16, True) / 2.8 h (a100) |
+
+The probe that preceded the sweep (rel-f1/driver-dnf at reduced budgets,
+15 min) left its checkpoints under
+`~/scratch/relational-transformer/fine_tune/rtv2/2026-08-24-fine_tune-probe/`.
 
 ## Reference numbers
 
