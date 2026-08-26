@@ -16,11 +16,12 @@ the RT arms need nothing but the released checkpoints mirrored under
 ## Running it
 
 ```bash
-# 1. the semantics-ablated data (once; needs only cpu + disk)
-#    submit make_nosem_data:main via submit.py if not already derived
+# 1. the semantics-ablated data (once; needs only cpu + disk): uncomment the
+#    make_nosem_data call in submit.py, comment out the arm loop, run
 
-# 2. submit arms; edit the __main__ block, commit, run. Jobs are idempotent
-#    per (arm, task): resubmitting fills in missing task JSONs only.
+# 2. submit arms: write the arm list and the resources into submit.py, commit,
+#    run. Jobs are idempotent per (arm, task): resubmitting fills in missing
+#    task JSONs only.
 pixi run python -m expts.repaper.scaling.submit
 
 # 3. when an arm is complete, aggregate it into its wandb run

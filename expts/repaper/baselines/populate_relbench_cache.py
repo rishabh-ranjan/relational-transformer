@@ -20,15 +20,10 @@ def main() -> None:
         rb_db = ds.get_db(upto_test_timestamp=False)
         print(f"{db}: {len(rb_db.table_dict)} tables materialized", flush=True)
         for task_name in get_task_names(db):
-            try:
-                task = get_task(db, task_name, download=True)
-                for split in ("train", "val", "test"):
-                    task.get_table(split)
-                print(f"{db}/{task_name}: extracted", flush=True)
-            except Exception as e:
-                print(
-                    f"{db}/{task_name}: SKIPPED ({type(e).__name__}: {e})", flush=True
-                )
+            task = get_task(db, task_name, download=True)
+            for split in ("train", "val", "test"):
+                task.get_table(split)
+            print(f"{db}/{task_name}: extracted", flush=True)
         _orig_get_db = relbench.base.Dataset.get_db
 
         def _full_get_db(self, *a, **kw):

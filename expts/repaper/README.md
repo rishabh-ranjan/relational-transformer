@@ -64,15 +64,15 @@ are submitted, allocated and watched here, and it applies to every job below.
 ## 1. Submit, in dependency order
 
 Each stage is `pixi run python -m expts.repaper.<experiment>.submit` after
-editing that script's `__main__` block to the stage it names and writing the
-resource plan against the live cluster. Every job is idempotent per output
+uncommenting the stage's loop in that script (and commenting out the others)
+and writing the resource plan against the live cluster. Every job is idempotent per output
 file, so a script is resubmitted to fill gaps.
 
 | stage | experiment | waits for |
 |---|---|---|
 | features | `baselines` (sql, rdblearn, rt) | fetches |
-| FAISS indices | `baselines` (`submit_vecdb`) | a feature set's 21 blobs |
-| semantics-ablated data | `scaling` (`submit_nosem_data`) | nothing |
+| FAISS indices | `baselines` (the vector-db loop) | a feature set's 21 blobs |
+| semantics-ablated data | `scaling` (the `make_nosem_data` call) | nothing |
 | RT arms + ablations | `scaling` (rt, rand, bfs*) | checkpoint only |
 | `nosem` arm | `scaling` | the ablated data |
 | baseline arms | `scaling` (sql/rdblearn x tabicl/lgbm) | feature blobs |

@@ -21,7 +21,8 @@ pixi run install-rdblearn
 RELBENCH_CACHE_DIR=~/scratch/hf/relational-transformer/repaper/relbench-cache \
     pixi run -e featurize python -m expts.repaper.baselines.check_alignment
 
-# 3. featurize (edit the __main__ block to pick stages), then the indices
+# 3. featurize (comment out the stages not wanted in submit.py), then the
+#    indices (the commented-out vector-db loop)
 pixi run python -m expts.repaper.baselines.submit
 ```
 

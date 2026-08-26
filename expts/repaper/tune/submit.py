@@ -15,10 +15,6 @@ from expts.repaper.config import (
 )
 from roach.slurm import Resources, submit
 
-REPO_ROOT = Path(__file__).resolve().parents[3]
-PROJECT = project("tune")
-LOG_ROOT = f"{LOG_ROOT}/repaper/tune/slurm-logs"
-
 TASKS = [
     tuple(p)
     for p in json.loads(
@@ -33,46 +29,75 @@ GRID = [
     for pl in (True, False)
 ]
 
-MEM = {
-    "rel-amazon": "120G",
-    "rel-avito": "48G",
-    "rel-event": "48G",
-    "rel-f1": "24G",
-    "rel-hm": "64G",
-    "rel-stack": "64G",
-    "rel-trial": "48G",
+CLF = {
+    ("rel-amazon", "item-churn"),
+    ("rel-amazon", "user-churn"),
+    ("rel-avito", "user-clicks"),
+    ("rel-avito", "user-visits"),
+    ("rel-event", "user-ignore"),
+    ("rel-event", "user-repeat"),
+    ("rel-f1", "driver-dnf"),
+    ("rel-f1", "driver-top3"),
+    ("rel-hm", "user-churn"),
+    ("rel-stack", "user-badge"),
+    ("rel-stack", "user-engagement"),
+    ("rel-trial", "study-outcome"),
 }
 
 
-def resources(db: str, qos: str, gpu: str = "a100:1") -> Resources:
-    b200 = gpu.startswith("b200")
+def resources(db: str) -> Resources:
     return Resources(
         partition="il",
         account="infolab",
-        qos=qos,
-        time="12:00:00" if qos == "il-interactive" else "2-00:00:00",
-        gpus=gpu,
-        cpus_per_task=36 if b200 else 8,
+        qos="il-lo",
+        time="2-00:00:00",
+        gpus="a100:1",
+        cpus_per_task=8,
         ntasks=None,
         exclusive=False,
-        mem=None if b200 else MEM[db],
+        mem={
+            "rel-amazon": "120G",
+            "rel-avito": "48G",
+            "rel-event": "48G",
+            "rel-f1": "24G",
+            "rel-hm": "64G",
+            "rel-stack": "64G",
+            "rel-trial": "48G",
+        }[db],
         mem_per_gpu=None,
-        constraint=None if b200 else "ampere",
-        nodelist="blackwell1" if b200 else None,
+        constraint="ampere",
+        nodelist=None,
         reservation=None,
         dependency=None,
     )
+    # return Resources(
+    #     partition="il",
+    #     account="infolab",
+    #     qos="il-lo",
+    #     time="2-00:00:00",
+    #     gpus="b200:1",
+    #     cpus_per_task=36,
+    #     ntasks=None,
+    #     exclusive=False,
+    #     mem=None,
+    #     mem_per_gpu=None,
+    #     constraint=None,
+    #     nodelist="blackwell1",
+    #     reservation=None,
+    #     dependency=None,
+    # )
 
 
-def submit_task(db: str, table: str, qos: str, gpu: str = "a100:1") -> None:
+for db, table in TASKS:
     run_id = f"tune--{db}--{table}"
-    tuning = Path(CKPT_ROOT).expanduser() / "rtv2" / PROJECT / run_id / "tuning.json"
-    if tuning.exists():
-        return
+    if (
+        Path(CKPT_ROOT).expanduser() / "rtv2" / project("tune") / run_id / "tuning.json"
+    ).exists():
+        continue
     submit(
         "rt.eval:main",
         args=dict(
-            load_ckpt_path=None,
+            load_ckpt_path=CKPT_CLF if (db, table) in CLF else CKPT_REG,
             embedder="all-MiniLM-L12-v2",
             d_text=384,
             num_blocks=12,
@@ -100,39 +125,18 @@ def submit_task(db: str, table: str, qos: str, gpu: str = "a100:1") -> None:
             test_ensemble_size=1,
             run_name=None,
             targets={},
-            project=PROJECT,
+            project=project("tune"),
             entity="rtv2",
             out_root=CKPT_ROOT,
             wandb_disabled=True,
-        )
-        | {"load_ckpt_path": (CKPT_CLF if (db, table) in CLF else CKPT_REG)},
-        resources=resources(db, qos, gpu),
+        ),
+        resources=resources(db),
         name=f"tune-{db}-{table}",
         run_id=run_id,
-        repo_root=str(REPO_ROOT),
+        repo_root=str(Path(__file__).resolve().parents[3]),
         cluster=ILC,
         job_env="expts/job_env.sh",
-        log_root=LOG_ROOT,
+        log_root=f"{LOG_ROOT}/repaper/tune/slurm-logs",
         clone_root=CLONE_ROOT,
         secrets_dir=SECRETS_DIR,
     )
-
-
-CLF = {
-    ("rel-amazon", "item-churn"),
-    ("rel-amazon", "user-churn"),
-    ("rel-avito", "user-clicks"),
-    ("rel-avito", "user-visits"),
-    ("rel-event", "user-ignore"),
-    ("rel-event", "user-repeat"),
-    ("rel-f1", "driver-dnf"),
-    ("rel-f1", "driver-top3"),
-    ("rel-hm", "user-churn"),
-    ("rel-stack", "user-badge"),
-    ("rel-stack", "user-engagement"),
-    ("rel-trial", "study-outcome"),
-}
-
-if __name__ == "__main__":
-    for db, table in TASKS:
-        submit_task(db, table, "il-lo")

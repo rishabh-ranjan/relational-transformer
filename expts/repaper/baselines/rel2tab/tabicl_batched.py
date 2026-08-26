@@ -7,25 +7,14 @@ from pathlib import Path
 import numpy as np
 import torch
 
-import importlib as _importlib  # noqa: E402
-import sys as _sys  # noqa: E402
+import importlib  # noqa: E402
+import sys  # noqa: E402
 
-try:  # pragma: no cover - import-time environment shim
-    _importlib.import_module("tabicl.model")
-except ModuleNotFoundError:
-    try:
-        _priv = _importlib.import_module("tabicl._model")
-        _sys.modules.setdefault("tabicl.model", _priv)
-        for _sub in ("attention", "layers", "ssmax", "tabicl"):
-            try:
-                _sys.modules.setdefault(
-                    f"tabicl.model.{_sub}",
-                    _importlib.import_module(f"tabicl._model.{_sub}"),
-                )
-            except ModuleNotFoundError:
-                pass
-    except ModuleNotFoundError:
-        pass
+sys.modules.setdefault("tabicl.model", importlib.import_module("tabicl._model"))
+for _sub in ("attention", "layers", "ssmax", "tabicl"):
+    sys.modules.setdefault(
+        f"tabicl.model.{_sub}", importlib.import_module(f"tabicl._model.{_sub}")
+    )
 
 CLF_CHECKPOINT = "tabicl-classifier-v2-20260212.ckpt"
 REG_CHECKPOINT = "tabicl-regressor-v2-20260212.ckpt"
