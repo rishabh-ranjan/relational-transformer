@@ -177,7 +177,7 @@ TUNE: dict[tuple[str, str, str], Resources] = {
     ("rt-j", "rel-trial", "site-success"): a100("il", "2-00:00:00"),
     ("rt-j", "rel-trial", "study-adverse"): a100("il-lo", "2:00:00"),
     ("rt-j", "rel-event", "user-attendance"): a100("il-lo", "2:00:00"),
-    ("rt-j", "rel-event", "user-ignore"): a100("il-lo", "2:00:00"),
+    ("rt-j", "rel-event", "user-ignore"): a100("il", "2-00:00:00"),
     ("rt-j", "rel-avito", "ad-ctr"): a100("il-lo", "2:00:00"),
     ("rt-j", "rel-trial", "study-outcome"): a100("il-lo", "2:00:00"),
     ("rt-j", "rel-f1", "driver-position"): a100("il-lo", "2:00:00"),
@@ -214,7 +214,8 @@ TUNE: dict[tuple[str, str, str], Resources] = {
 # all placed, so the il slots its units free go to rt-j's tuning chunks,
 # biggest database first: rel-amazon/user-churn, then user-ltv (05:20),
 # then rel-stack/user-badge and rel-hm/item-sales (05:50, two slots freed),
-# rel-stack/user-engagement (06:20), rel-trial/site-success (07:00).
+# rel-stack/user-engagement (06:20), rel-trial/site-success (07:00),
+# rel-event/user-ignore (07:25, rt-plurel's last unit done).
 ENS: dict[tuple[str, str, str], list[Resources]] = {
     ("rt-plurel", "rel-amazon", "user-churn"): [
         b200("il", "1-00:00:00"),
