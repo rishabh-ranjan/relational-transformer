@@ -213,7 +213,10 @@ RESOURCES: dict[tuple[str, str, str], Resources] = {
     # 02:10: one il slot free across sessions; the longest pending task takes it.
     ("rt-j", "rel-amazon", "user-ltv"): a100("il", "7-00:00:00"),
     ("rt-j", "rel-avito", "user-visits"): a100("il-lo", "6:00:00"),
-    ("rt-j", "rel-stack", "user-badge"): a100("il-lo", "6:00:00"),
+    # 07:12: rt-j/item-sales finished on its il-interactive b200; the il-lo
+    # selection arm with the most left (user-badge ran 33-41k steps for the
+    # other warm starts) moves onto it.
+    ("rt-j", "rel-stack", "user-badge"): b200("il-interactive", "12:00:00"),
     ("rt-j", "rel-event", "user-ignore"): a100("il-lo", "6:00:00"),
     ("rt-j", "rel-amazon", "item-ltv"): a100("il-lo", "6:00:00"),
     ("rt-j", "rel-trial", "site-success"): a100("il-lo", "6:00:00"),
