@@ -157,13 +157,16 @@ def b200(qos: str, time: str) -> Resources:
 # the requeued jobs ask for 2 hours; roach requeues them at the wall clock
 # and they resume per grid entry, losing at most one entry per chunk. 16:55:
 # an il slot freed; rel-avito/user-clicks, chunked with ~7h left, takes it.
+# 17:35: four more preempted off ampere5/6 (user-attendance and user-ignore
+# with ~1h left, user-badge and post-votes with ~6h); il is full, so they
+# go into 2-hour chunks too.
 TUNE: dict[tuple[str, str], Resources] = {
     ("rel-amazon", "user-churn"): a100("il", "2-00:00:00"),
     ("rel-amazon", "user-ltv"): a100("il", "2-00:00:00"),
     ("rel-amazon", "item-ltv"): a100("il", "2-00:00:00"),
     ("rel-amazon", "item-churn"): a100("il", "2-00:00:00"),
-    ("rel-stack", "user-badge"): a100("il-lo", "2-00:00:00"),
-    ("rel-stack", "post-votes"): a100("il-lo", "2-00:00:00"),
+    ("rel-stack", "user-badge"): a100("il-lo", "2:00:00"),
+    ("rel-stack", "post-votes"): a100("il-lo", "2:00:00"),
     ("rel-hm", "item-sales"): a100("il", "2-00:00:00"),
     ("rel-stack", "user-engagement"): a100("il", "2-00:00:00"),
     ("rel-hm", "user-churn"): a100("il-lo", "2:00:00"),
@@ -171,8 +174,8 @@ TUNE: dict[tuple[str, str], Resources] = {
     ("rel-avito", "user-visits"): a100("il-lo", "2:00:00"),
     ("rel-trial", "site-success"): a100("il-lo", "2-00:00:00"),
     ("rel-trial", "study-adverse"): a100("il-lo", "2:00:00"),
-    ("rel-event", "user-attendance"): a100("il-lo", "2-00:00:00"),
-    ("rel-event", "user-ignore"): a100("il-lo", "2-00:00:00"),
+    ("rel-event", "user-attendance"): a100("il-lo", "2:00:00"),
+    ("rel-event", "user-ignore"): a100("il-lo", "2:00:00"),
     ("rel-avito", "ad-ctr"): a100("il-lo", "2-00:00:00"),
     ("rel-trial", "study-outcome"): a100("il-lo", "2:00:00"),
     ("rel-f1", "driver-position"): a100("il-lo", "2-00:00:00"),
