@@ -164,7 +164,7 @@ TUNE: dict[tuple[str, str, str], Resources] = {
     ("rt-plurel", "rel-f1", "driver-dnf"): a100("il-lo", "2-00:00:00"),
     ("rt-plurel", "rel-event", "user-repeat"): a100("il", "2-00:00:00"),
     ("rt-j", "rel-amazon", "user-churn"): a100("il", "2-00:00:00"),
-    ("rt-j", "rel-amazon", "user-ltv"): a100("il-lo", "2:00:00"),
+    ("rt-j", "rel-amazon", "user-ltv"): a100("il", "2-00:00:00"),
     ("rt-j", "rel-amazon", "item-ltv"): a100("il-lo", "2:00:00"),
     ("rt-j", "rel-amazon", "item-churn"): a100("il-lo", "2:00:00"),
     ("rt-j", "rel-stack", "user-badge"): a100("il-lo", "2:00:00"),
@@ -212,7 +212,7 @@ TUNE: dict[tuple[str, str, str], Resources] = {
 # -- and moved up again at 04:20 when item-churn cfg0 freed a slot of mine.
 # 04:45: user-ltv cfg3 (1024, 352k rows) next. 04:55: rt-plurel's units are
 # all placed, so the il slots its units free go to rt-j's tuning chunks,
-# biggest database first: rel-amazon/user-churn.
+# biggest database first: rel-amazon/user-churn, then user-ltv (05:20).
 ENS: dict[tuple[str, str, str], list[Resources]] = {
     ("rt-plurel", "rel-amazon", "user-churn"): [
         b200("il", "1-00:00:00"),
