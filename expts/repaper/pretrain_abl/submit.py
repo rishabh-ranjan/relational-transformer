@@ -7,8 +7,8 @@ from roach.slurm import submit
 submit(
     "rt.train:main",
     args=args()
-    | dict(run_name="mask0", mask_prob_max=0.0)
-    # | dict(run_name="mask25", mask_prob_max=0.25)
+    # | dict(run_name="mask0", mask_prob_max=0.0)
+    | dict(run_name="mask25", mask_prob_max=0.25)
     # | dict(run_name="mask75", mask_prob_max=0.75)
     # | dict(
     #     run_name="mix-forecast",
