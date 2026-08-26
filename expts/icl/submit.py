@@ -172,6 +172,8 @@ def b200(qos: str, time: str) -> Resources:
 # il slot freed: a b200 under il is still one of the ten -- post-votes, sent
 # to il on that misreading, sat on QOSMaxGRESPerUser and went back to chunks).
 # 20:00: fine_tune's last il job ended; post-votes takes the slot for real.
+# 20:08: another b200 free with il's b200 sub-cap at 1/2: rel-hm/user-churn
+# (the il a100 job with the most left, ~9h) swaps onto it.
 TUNE: dict[tuple[str, str], Resources] = {
     ("rel-amazon", "user-churn"): b200("il", "2-00:00:00"),
     ("rel-amazon", "user-ltv"): a100("il", "2-00:00:00"),
@@ -181,7 +183,7 @@ TUNE: dict[tuple[str, str], Resources] = {
     ("rel-stack", "post-votes"): a100("il", "2-00:00:00"),
     ("rel-hm", "item-sales"): a100("il", "2-00:00:00"),
     ("rel-stack", "user-engagement"): a100("il", "2-00:00:00"),
-    ("rel-hm", "user-churn"): a100("il", "2-00:00:00"),
+    ("rel-hm", "user-churn"): b200("il", "2-00:00:00"),
     ("rel-avito", "user-clicks"): a100("il", "2-00:00:00"),
     ("rel-avito", "user-visits"): b200("il-interactive", "12:00:00"),
     ("rel-trial", "site-success"): a100("il-lo", "2-00:00:00"),
