@@ -204,7 +204,8 @@ RESOURCES: dict[tuple[str, str, str], Resources] = {
     # rest), a b200 card free: the longest pending rt-j task takes it.
     ("rt-j", "rel-amazon", "user-churn"): b200("il", "7-00:00:00"),
     ("rt-j", "rel-trial", "study-adverse"): a100("il-lo", "6:00:00"),
-    ("rt-j", "rel-hm", "user-churn"): a100("il-lo", "6:00:00"),
+    # 01:52: the second il-interactive slot and a b200 card free.
+    ("rt-j", "rel-hm", "user-churn"): b200("il-interactive", "12:00:00"),
     ("rt-j", "rel-amazon", "item-churn"): a100("il-lo", "6:00:00"),
     ("rt-j", "rel-event", "user-attendance"): a100("il-lo", "6:00:00"),
     ("rt-j", "rel-amazon", "user-ltv"): a100("il-lo", "6:00:00"),
