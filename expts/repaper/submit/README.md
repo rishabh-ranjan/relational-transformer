@@ -15,11 +15,11 @@ pixi run python -m expts.repaper.submit.reduce   # -> CSVs + results.json; print
 
 # validate + package (writes the leaderboard zips next to the CSVs)
 pixi run python -m relbench.submit \
-    ~/scratch/share/relational-transformer/repaper/leaderboard/preds
+    ~/scratch/hf/relational-transformer/repaper/leaderboard/preds
 ```
 
 The zips + validation report are the submission package; it stays under
-`~/scratch/share/relational-transformer/repaper/leaderboard/`. Submit
+`~/scratch/hf/relational-transformer/repaper/leaderboard/`. Submit
 by opening the issue form on `rishabh-ranjan/relbench` and attaching the
 zips, per that repo's README.
 

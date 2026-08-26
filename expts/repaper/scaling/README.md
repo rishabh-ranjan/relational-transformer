@@ -11,7 +11,7 @@ ablates exactly that.
 Prerequisites: the feature blobs, FAISS indices, and TabICL checkpoints from
 [`../baselines`](../baselines) (baseline and vdb arms only;
 the RT arms need nothing but the released checkpoints mirrored under
-`~/scratch/share/stanford-star/rt-j`).
+`~/scratch/hf/stanford-star/rt-j`).
 
 ## Running it
 
