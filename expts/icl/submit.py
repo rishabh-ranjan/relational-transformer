@@ -138,7 +138,9 @@ def b200(qos: str, time: str) -> Resources:
 # mine finish, so rt-j's tuning runs on il-lo a100s in 2-hour chunks, and
 # rt-plurel's remaining ensemble units keep the il a100 slots its tuning
 # jobs vacate. 00:45: an il a100 freed with no rt-plurel unit waiting, so an
-# rt-j tuning job (rel-hm/item-sales) takes it off its chunks.
+# rt-j tuning job (rel-hm/item-sales) took it off its chunks -- and gave it
+# back two minutes later: fine_tune's longest rt-j refit needs that tenth il
+# slot for a b200.
 TUNE: dict[tuple[str, str, str], Resources] = {
     ("rt-plurel", "rel-amazon", "user-churn"): b200("il", "2-00:00:00"),
     ("rt-plurel", "rel-amazon", "user-ltv"): a100("il", "2-00:00:00"),
@@ -167,7 +169,7 @@ TUNE: dict[tuple[str, str, str], Resources] = {
     ("rt-j", "rel-amazon", "item-churn"): a100("il-lo", "2:00:00"),
     ("rt-j", "rel-stack", "user-badge"): a100("il-lo", "2:00:00"),
     ("rt-j", "rel-stack", "post-votes"): a100("il-lo", "2:00:00"),
-    ("rt-j", "rel-hm", "item-sales"): a100("il", "2-00:00:00"),
+    ("rt-j", "rel-hm", "item-sales"): a100("il-lo", "2:00:00"),
     ("rt-j", "rel-stack", "user-engagement"): a100("il-lo", "2:00:00"),
     ("rt-j", "rel-hm", "user-churn"): a100("il-lo", "2:00:00"),
     ("rt-j", "rel-avito", "user-clicks"): a100("il-lo", "2:00:00"),
