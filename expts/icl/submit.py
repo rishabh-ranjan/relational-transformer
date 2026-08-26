@@ -160,7 +160,10 @@ def b200(qos: str, time: str) -> Resources:
 # 17:35: four more preempted off ampere5/6 (user-attendance and user-ignore
 # with ~1h left, user-badge and post-votes with ~6h); il is full, so they
 # go into 2-hour chunks too. 18:20: an il slot freed while two chunks sat
-# in the queue after their wall clock; rel-hm/user-churn takes it.
+# in the queue after their wall clock; rel-hm/user-churn takes it. 18:30: a
+# fine_tune il-interactive job ended with nothing of theirs waiting, and a
+# b200 is free: rel-avito/user-visits' chunk goes there (12h, ~3h of grid on
+# a b200); it vacates on request.
 TUNE: dict[tuple[str, str], Resources] = {
     ("rel-amazon", "user-churn"): a100("il", "2-00:00:00"),
     ("rel-amazon", "user-ltv"): a100("il", "2-00:00:00"),
@@ -172,7 +175,7 @@ TUNE: dict[tuple[str, str], Resources] = {
     ("rel-stack", "user-engagement"): a100("il", "2-00:00:00"),
     ("rel-hm", "user-churn"): a100("il", "2-00:00:00"),
     ("rel-avito", "user-clicks"): a100("il", "2-00:00:00"),
-    ("rel-avito", "user-visits"): a100("il-lo", "2:00:00"),
+    ("rel-avito", "user-visits"): b200("il-interactive", "12:00:00"),
     ("rel-trial", "site-success"): a100("il-lo", "2-00:00:00"),
     ("rel-trial", "study-adverse"): a100("il-lo", "2:00:00"),
     ("rel-event", "user-attendance"): a100("il-lo", "2:00:00"),
