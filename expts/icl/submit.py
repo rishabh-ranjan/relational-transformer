@@ -165,7 +165,7 @@ TUNE: dict[tuple[str, str, str], Resources] = {
     ("rt-plurel", "rel-event", "user-repeat"): a100("il", "2-00:00:00"),
     ("rt-j", "rel-amazon", "user-churn"): a100("il", "2-00:00:00"),
     ("rt-j", "rel-amazon", "user-ltv"): a100("il", "2-00:00:00"),
-    ("rt-j", "rel-amazon", "item-ltv"): a100("il", "2-00:00:00"),
+    ("rt-j", "rel-amazon", "item-ltv"): b200("il-interactive", "12:00:00"),
     ("rt-j", "rel-amazon", "item-churn"): b200("il", "2-00:00:00"),
     ("rt-j", "rel-stack", "user-badge"): a100("il", "2-00:00:00"),
     ("rt-j", "rel-stack", "post-votes"): a100("il-lo", "2:00:00"),
@@ -175,7 +175,7 @@ TUNE: dict[tuple[str, str, str], Resources] = {
     ("rt-j", "rel-avito", "user-clicks"): a100("il-lo", "2:00:00"),
     ("rt-j", "rel-avito", "user-visits"): a100("il-lo", "2:00:00"),
     ("rt-j", "rel-trial", "site-success"): a100("il", "2-00:00:00"),
-    ("rt-j", "rel-trial", "study-adverse"): a100("il-lo", "2:00:00"),
+    ("rt-j", "rel-trial", "study-adverse"): a100("il", "2-00:00:00"),
     ("rt-j", "rel-event", "user-attendance"): a100("il-lo", "2:00:00"),
     ("rt-j", "rel-event", "user-ignore"): a100("il", "2-00:00:00"),
     ("rt-j", "rel-avito", "ad-ctr"): a100("il-lo", "2:00:00"),
@@ -221,7 +221,10 @@ TUNE: dict[tuple[str, str, str], Resources] = {
 # il b200 refit but one ended and it handed the slot over: rel-amazon/
 # item-churn (~10h left on its il a100) swaps onto the b200, and its a100
 # slot goes to rel-hm/user-churn off its chunks. 14:50: item-churn tuned;
-# its cfg0 unit keeps that b200 under il, the rest go to il-lo at 6h.
+# its cfg0 unit keeps that b200 under il, the rest go to il-lo at 6h. 15:25:
+# fine_tune released an il-interactive b200: rel-amazon/item-ltv (~9h left on
+# its il a100) swaps onto it, and its il a100 goes to rel-trial/study-adverse
+# off its chunks.
 ENS: dict[tuple[str, str, str], list[Resources]] = {
     ("rt-plurel", "rel-amazon", "user-churn"): [
         b200("il", "1-00:00:00"),
