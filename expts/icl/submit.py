@@ -145,6 +145,8 @@ def b200(qos: str, time: str) -> Resources:
 # (~8h left on its il a100) swaps onto it -- and back at 17:00: the card was
 # taken by il-tier jobs slurm will not preempt (planned start 22:40), so it
 # returns to an il a100, taking the slot user-engagement's cfg0 unit had.
+# 17:10: user-badge tuned with il at 8/10 and nothing long left on il-lo, so
+# two of its four units (255k rows, hours each) take the free il a100s.
 TUNE: dict[tuple[str, str, str], Resources] = {
     ("rt-plurel", "rel-amazon", "user-churn"): b200("il", "2-00:00:00"),
     ("rt-plurel", "rel-amazon", "user-ltv"): a100("il", "2-00:00:00"),
@@ -305,7 +307,12 @@ ENS: dict[tuple[str, str, str], list[Resources]] = {
         a100("il-lo", "6:00:00"),
         a100("il-lo", "6:00:00"),
     ],
-    ("rt-j", "rel-stack", "user-badge"): [a100("il-lo", "1-00:00:00")] * 4,
+    ("rt-j", "rel-stack", "user-badge"): [
+        a100("il", "12:00:00"),
+        a100("il", "12:00:00"),
+        a100("il-lo", "12:00:00"),
+        a100("il-lo", "12:00:00"),
+    ],
     ("rt-j", "rel-stack", "post-votes"): [a100("il-lo", "1-00:00:00")] * 4,
     ("rt-j", "rel-hm", "item-sales"): [a100("il-lo", "1-00:00:00")] * 4,
     ("rt-j", "rel-stack", "user-engagement"): [
