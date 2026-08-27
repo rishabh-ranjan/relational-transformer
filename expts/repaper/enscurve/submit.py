@@ -50,12 +50,14 @@ def cfg(variant: str, db: str, table: str) -> tuple[int, int, int, bool]:
 # (scaling/submit.py); a curve resumes per seed, so it takes il-lo with a
 # limit that backfills -- 16 seeds over 8192 rows ran ~1h05 on an a100 in the
 # 2026-08-19 round whatever the database, under 20 min on the tasks with fewer
-# test rows than that.
+# test rows than that. 03:35: the fairshare is spent and il-lo no longer
+# starts a job of mine (scaling/submit.py says why); whatever is resubmitted
+# from here queues under il behind my own jobs.
 def resources(db: str, table: str) -> Resources:
     return Resources(
         partition="il",
         account="infolab",
-        qos="il-lo",
+        qos="il",
         time="1:00:00" if (db, table) in SMALL else "3:00:00",
         gpus="a100:1",
         cpus_per_task=8,

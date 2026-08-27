@@ -167,24 +167,24 @@ for db in DBS:
         resources=Resources(
             partition="il",
             account="infolab",
-            qos=FEAT_RT.get(db, ("il-lo", "a100", 3))[0],
-            time=f"{FEAT_RT.get(db, ('il-lo', 'a100', 3))[2]}:00:00",
-            gpus=f"{FEAT_RT.get(db, ('il-lo', 'a100', 3))[1]}:1",
+            qos=FEAT_RT.get(db, ("il", "a100", 3))[0],
+            time=f"{FEAT_RT.get(db, ('il', 'a100', 3))[2]}:00:00",
+            gpus=f"{FEAT_RT.get(db, ('il', 'a100', 3))[1]}:1",
             cpus_per_task=8,
             ntasks=None,
             exclusive=False,
             mem=min(mem(db), "240G", key=lambda m: int(m.rstrip("G"))),
             mem_per_gpu=None,
             constraint="ampere"
-            if FEAT_RT.get(db, ("il-lo", "a100", 3))[1] == "a100"
+            if FEAT_RT.get(db, ("il", "a100", 3))[1] == "a100"
             else None,
             nodelist="blackwell1"
-            if FEAT_RT.get(db, ("il-lo", "a100", 3))[1] == "b200"
+            if FEAT_RT.get(db, ("il", "a100", 3))[1] == "b200"
             else None,
             reservation=None,
             dependency=None,
             exclude="ampere4,ampere7"
-            if FEAT_RT.get(db, ("il-lo", "a100", 3))[1] == "a100"
+            if FEAT_RT.get(db, ("il", "a100", 3))[1] == "a100"
             else None,
         ),
         name=f"repaper-feat-rt-{db}",

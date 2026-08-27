@@ -194,7 +194,7 @@ def cpu(hours: int, db: str) -> Resources:
     return Resources(
         partition="il",
         account="infolab",
-        qos="il-lo",
+        qos="il",
         time=f"{hours}:00:00",
         gpus="0",
         cpus_per_task=16,
@@ -271,6 +271,15 @@ HIGH = {
 }
 
 
+# 03:35: three hours of ~50 concurrent jobs spent the fairshare that had put
+# this sweep's il-lo jobs first (priority ~5700 at 00:15, ~730 now, under the
+# ~1020 of the other il-lo work in the queue), so an il-lo job of mine no
+# longer starts, and the ones running are being preempted. What is left --
+# ~35 short RT passes, two full-test TabICL passes and 36 LightGBM fits --
+# queues under il instead: the gpu jobs beyond the tier's ten wait on
+# QOSMaxGRESPerUser behind my own and start as those finish, which keeps the
+# tier full without a resubmission per slot; the zero-gres LightGBM jobs do
+# not count against the gpu cap and start on free cores at il priority.
 def resources(arm: str, db: str, table: str) -> Resources:
     if (arm, db, table) in HIGH:
         qos, card, hours = HIGH[arm, db, table]
@@ -304,10 +313,10 @@ def resources(arm: str, db: str, table: str) -> Resources:
             )
         else:
             hours = 6 if rows >= 100_000 else 3 if rows >= 20_000 else 2
-        return a100("il-lo", hours, db)
+        return a100("il", hours, db)
     if full:
-        return a100("il-lo", 3 if rows >= 30_000 else 2 if rows >= 10_000 else 1, db)
-    return a100("il-lo", 2 if ARMS[arm][1].get("vector_db_path") else 1, db)
+        return a100("il", 3 if rows >= 30_000 else 2 if rows >= 10_000 else 1, db)
+    return a100("il", 2 if ARMS[arm][1].get("vector_db_path") else 1, db)
 
 
 def nosem_ready() -> bool:
