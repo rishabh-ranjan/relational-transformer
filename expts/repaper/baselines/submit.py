@@ -76,6 +76,7 @@ FEAT_RT = {
     "rel-amazon": ("il", "b200", 12),
     "rel-stack": ("il", "b200", 12),
     "rel-hm": ("il", "a100", 6),
+    "rel-avito": ("il", "a100", 6),
 }
 
 
@@ -159,7 +160,8 @@ for db in DBS:
         # high-tier slots as scaling's passes free them: 02:22 rel-amazon (~5 h
         # on an a100 in the 2026-08-19 round) onto the il b200 rel-hm/item-sales'
         # TabICL pass freed, 02:56 rel-stack onto the il b200 post-votes' freed,
-        # 03:08 rel-hm onto the il a100 post-votes' full-test RT pass freed.
+        # 03:08 rel-hm onto the il a100 post-votes' full-test RT pass freed,
+        # 03:10 rel-avito onto the il a100 rel-amazon/item-churn's freed.
         resources=Resources(
             partition="il",
             account="infolab",
