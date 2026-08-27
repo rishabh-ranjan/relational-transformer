@@ -286,14 +286,9 @@ HIGH = {
     ("abl/vdb_rdblearn", "rel-stack", "post-votes"): ("il", "b200", 2),
     ("abl/vdb_rdblearn", "rel-hm", "item-sales"): ("il", "b200", 2),
     ("abl/vdb_rdblearn", "rel-stack", "user-engagement"): ("il", "b200", 2),
-    # 06:26: the rt index is built; the vdb_rt arm's six largest passes take
-    # the b200 sub-cap two at a time, the rest il a100s.
-    ("abl/vdb_rt", "rel-amazon", "user-churn"): ("il", "b200", 2),
-    ("abl/vdb_rt", "rel-amazon", "user-ltv"): ("il", "b200", 2),
-    ("abl/vdb_rt", "rel-stack", "user-badge"): ("il", "b200", 2),
-    ("abl/vdb_rt", "rel-stack", "post-votes"): ("il", "b200", 2),
-    ("abl/vdb_rt", "rel-hm", "item-sales"): ("il", "b200", 2),
-    ("abl/vdb_rt", "rel-stack", "user-engagement"): ("il", "b200", 2),
+    # 06:26: the rt index is built and the vdb_rt arm is submitted; 06:27: all
+    # eight b200s are taken by other users' il jobs, so its passes run on il
+    # a100s like the rest.
 }
 
 
