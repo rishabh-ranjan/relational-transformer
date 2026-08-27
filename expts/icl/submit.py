@@ -245,6 +245,8 @@ TUNE: dict[tuple[str, str, str], Resources] = {
 # backfilled onto il-lo a100s, so they stay there.
 # 18:15: fine_tune is done and three b200s sit idle with nothing of mine
 # queued: item-sales' units take them (il, il-interactive, il-lo).
+# 19:30: the rolling 12 h il b200 array is back and preempts il-lo b200 jobs within
+# minutes: post-votes cfg1-s1 goes back to an il-lo a100.
 # 19:15: the rolling 12 h b200 jobs ended early and a b200 is idle again: post-votes
 # cfg1-s1 (its ctx 8192 seed, ~2 h on a b200) takes it under il-lo.
 # 19:10: post-votes tuned to ctx 4096/8192/1024/2048 over 161k rows -- 3.5 h /
@@ -383,7 +385,7 @@ ENS: dict[tuple[str, str, str], list[Resources | list[Resources]]] = {
         [a100("il-lo", "6:00:00")] * 4,
         [
             a100("il", "6:00:00"),
-            b200("il-lo", "4:00:00"),
+            a100("il-lo", "6:00:00"),
             a100("il-lo", "6:00:00"),
             a100("il-lo", "6:00:00"),
         ],
