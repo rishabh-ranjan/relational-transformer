@@ -313,6 +313,14 @@ HIGH = {
     # 06:26: the rt index is built and the vdb_rt arm is submitted; 06:27: all
     # eight b200s are taken by other users' il jobs, so its passes run on il
     # a100s like the rest.
+    # 12:27: two b200s idle; the two longest RDBLearn extension pieces ask
+    # for them (moved back to a100s if they read ReqNodeNotAvail).
+    ("fulltest_ext/rdblearn_tabicl/131072", "rel-hm", "item-sales"): ("il", "b200", 60),
+    ("fulltest_ext/rdblearn_tabicl/131072", "rel-stack", "post-votes"): (
+        "il",
+        "b200",
+        60,
+    ),
 }
 
 
