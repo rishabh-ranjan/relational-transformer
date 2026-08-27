@@ -280,6 +280,12 @@ HIGH = {
     # two largest vdb_rdblearn passes still queued take them.
     ("abl/vdb_rdblearn", "rel-amazon", "user-churn"): ("il", "b200", 2),
     ("abl/vdb_rdblearn", "rel-amazon", "user-ltv"): ("il", "b200", 2),
+    # 04:55: those two took 7 min on a b200 and the cards are idle again; the
+    # next four largest queue on the b200 sub-cap and run two at a time.
+    ("abl/vdb_rdblearn", "rel-stack", "user-badge"): ("il", "b200", 2),
+    ("abl/vdb_rdblearn", "rel-stack", "post-votes"): ("il", "b200", 2),
+    ("abl/vdb_rdblearn", "rel-hm", "item-sales"): ("il", "b200", 2),
+    ("abl/vdb_rdblearn", "rel-stack", "user-engagement"): ("il", "b200", 2),
 }
 
 
