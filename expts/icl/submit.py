@@ -261,6 +261,8 @@ TUNE: dict[tuple[str, str, str], Resources] = {
 # il a100 slot user-visits' tuning left free.
 # 19:35: user-ltv cfg3-s0 was preempted off the il-lo b200 twice in 40 minutes by
 # the il b200 array: back to an il-lo a100 like its siblings.
+# 20:20: user-ltv cfg1 finished on il-interactive: the one job still queued,
+# user-visits cfg3-s3, takes that b200.
 # 20:15: user-visits tuned last (21/21): 36129 rows at ctx 4096/2048/8192/8192,
 # up to ~47 min a seed pass on an a100. Its own tuning and post-votes
 # cfg1-s0 left two il slots: the first two ranks run whole there under 12 h;
@@ -424,7 +426,12 @@ ENS: dict[tuple[str, str, str], list[Resources | list[Resources]]] = {
         a100("il", "12:00:00"),
         a100("il", "12:00:00"),
         [a100("il-lo", "4:00:00")] * 4,
-        [a100("il-lo", "4:00:00")] * 4,
+        [
+            a100("il-lo", "4:00:00"),
+            a100("il-lo", "4:00:00"),
+            a100("il-lo", "4:00:00"),
+            b200("il-interactive", "4:00:00"),
+        ],
     ],
     ("rt-j", "rel-trial", "site-success"): [a100("il-lo", "3:00:00")] * 4,
     ("rt-j", "rel-trial", "study-adverse"): [a100("il-lo", "2:00:00")] * 4,
