@@ -31,22 +31,27 @@ def reduce_arm(
         return False
     recs = [json.loads(p.read_text()) for p in paths]
     if ext_dir:
-        ext_paths = sorted(Path(ext_dir).expanduser().glob("*__*.json"))
-        if len(ext_paths) != n_ext_tasks:
+        # two layouts: <ext_dir>/<db>__<table>.json with every extension
+        # context size, or <ext_dir>/<ctx>/<db>__<table>.json with one each
+        ext: dict[str, dict] = {}
+        for p in sorted(Path(ext_dir).expanduser().glob("**/*__*.json")):
+            rec = json.loads(p.read_text())
+            per_ctx = ext.setdefault(rec["task"], {})
+            assert not set(per_ctx) & set(rec["per_ctx"]), f"{p}: duplicate context"
+            per_ctx.update(rec["per_ctx"])
+        n_ctx = max((len(v) for v in ext.values()), default=0)
+        complete = [t for t, v in ext.items() if len(v) == n_ctx]
+        if len(complete) != n_ext_tasks or n_ctx == 0:
             print(
-                f"{run_name}: {len(ext_paths)}/{n_ext_tasks} extension JSONs, "
-                f"not reduced",
+                f"{run_name}: {len(complete)}/{n_ext_tasks} tasks have all "
+                f"{n_ctx} extension context sizes, not reduced",
                 flush=True,
             )
             return False
-        ext = {
-            json.loads(p.read_text())["task"]: json.loads(p.read_text())
-            for p in ext_paths
-        }
         for r in recs:
             if r["task"] in ext:
-                assert not set(r["per_ctx"]) & set(ext[r["task"]]["per_ctx"])
-                r["per_ctx"].update(ext[r["task"]]["per_ctx"])
+                assert not set(r["per_ctx"]) & set(ext[r["task"]])
+                r["per_ctx"].update(ext[r["task"]])
 
     ctxs = sorted({int(c) for r in recs for c in r["per_ctx"]})
     run = wandb.init(
