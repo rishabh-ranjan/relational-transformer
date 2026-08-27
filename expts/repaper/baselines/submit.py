@@ -72,6 +72,12 @@ def queued() -> set[str]:
 
 busy = queued()
 
+FEAT_RT = {
+    "rel-amazon": ("il", "b200", 12),
+    "rel-stack": ("il", "b200", 12),
+    "rel-hm": ("il", "a100", 6),
+}
+
 
 for db in DBS:
     if featurized(db, "sql_features", TABLES[db]) or f"repaper-feat-sql-{db}" in busy:
@@ -149,26 +155,33 @@ for db in DBS:
             db_cutoff=None,
             batch_size=1024,
         ),
-        # 02:22: the rt features gate the vdb_rt arm and its index, so the
-        # rel-amazon pass (~5 h on an a100 in the 2026-08-19 round) takes the
-        # il b200 rel-hm/item-sales' TabICL pass freed; 02:56: rel-stack takes
-        # the il b200 post-votes' TabICL pass freed; the rest stay il-lo.
+        # The rt features gate the vdb_rt arm and its index, so they take the
+        # high-tier slots as scaling's passes free them: 02:22 rel-amazon (~5 h
+        # on an a100 in the 2026-08-19 round) onto the il b200 rel-hm/item-sales'
+        # TabICL pass freed, 02:56 rel-stack onto the il b200 post-votes' freed,
+        # 03:08 rel-hm onto the il a100 post-votes' full-test RT pass freed.
         resources=Resources(
             partition="il",
             account="infolab",
-            qos="il" if db in ("rel-amazon", "rel-stack") else "il-lo",
-            time="12:00:00" if db in ("rel-amazon", "rel-stack") else "3:00:00",
-            gpus="b200:1" if db in ("rel-amazon", "rel-stack") else "a100:1",
+            qos=FEAT_RT.get(db, ("il-lo", "a100", 3))[0],
+            time=f"{FEAT_RT.get(db, ('il-lo', 'a100', 3))[2]}:00:00",
+            gpus=f"{FEAT_RT.get(db, ('il-lo', 'a100', 3))[1]}:1",
             cpus_per_task=8,
             ntasks=None,
             exclusive=False,
             mem=min(mem(db), "240G", key=lambda m: int(m.rstrip("G"))),
             mem_per_gpu=None,
-            constraint=None if db in ("rel-amazon", "rel-stack") else "ampere",
-            nodelist="blackwell1" if db in ("rel-amazon", "rel-stack") else None,
+            constraint="ampere"
+            if FEAT_RT.get(db, ("il-lo", "a100", 3))[1] == "a100"
+            else None,
+            nodelist="blackwell1"
+            if FEAT_RT.get(db, ("il-lo", "a100", 3))[1] == "b200"
+            else None,
             reservation=None,
             dependency=None,
-            exclude=None if db in ("rel-amazon", "rel-stack") else "ampere4,ampere7",
+            exclude="ampere4,ampere7"
+            if FEAT_RT.get(db, ("il-lo", "a100", 3))[1] == "a100"
+            else None,
         ),
         name=f"repaper-feat-rt-{db}",
         repo_root=str(Path(__file__).resolve().parents[3]),
