@@ -262,6 +262,7 @@ HIGH = {
     # queued any more, so the subsampled RT passes il-lo preempted once move
     # up as slots free.
     ("subsampled/rt", "rel-stack", "user-badge"): ("il", "a100", 2),
+    ("subsampled/rt", "rel-hm", "user-churn"): ("il", "a100", 2),
 }
 
 
