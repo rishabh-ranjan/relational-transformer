@@ -239,6 +239,9 @@ HIGH = {
     ("fulltest/rt", "rel-hm", "user-churn"): ("il", "a100", 4),
     ("subsampled/rdblearn_tabicl", "rel-stack", "user-badge"): ("il", "a100", 12),
     ("subsampled/sql_tabicl", "rel-stack", "user-badge"): ("il", "a100", 10),
+    # 00:54: icl's il b200 ended and shows free; the longest pending pass
+    # (~3 h on an a100) takes it under il.
+    ("subsampled/rdblearn_tabicl", "rel-hm", "item-sales"): ("il", "b200", 6),
 }
 
 
