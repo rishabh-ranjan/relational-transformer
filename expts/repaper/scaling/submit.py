@@ -77,15 +77,18 @@ ARMS = {
     # The intro figure's baseline curves run past RT-J's training context on
     # the full test splits (as the 2026-07-15 round's did): the TabICL arms
     # over the 9 regression tasks at 16k-131k cells, merged into the fulltest
-    # runs by reduce.py.
-    "fulltest_ext/rdblearn_tabicl": (
-        "rdblearn_tabicl",
-        dict(ctx_size_list=BASELINE_CTX[6:], items_per_task=FULL),
-    ),
-    "fulltest_ext/sql_tabicl": (
-        "sql_tabicl",
-        dict(ctx_size_list=BASELINE_CTX[6:], items_per_task=FULL),
-    ),
+    # runs by reduce.py. One job per context size (11:10: a single pass over
+    # all four was 15-50 h on an a100, too long for il-interactive's 12 h and
+    # one card per task; the 16k-64k pieces fit that tier and the 131k piece
+    # is half the work), each writing <arm>/<ctx>/<db>__<table>.json.
+    **{
+        f"fulltest_ext/{method}/{ctx}": (
+            method,
+            dict(ctx_size_list=[ctx], items_per_task=FULL),
+        )
+        for method in ("rdblearn_tabicl", "sql_tabicl")
+        for ctx in BASELINE_CTX[6:]
+    },
     "subsampled/rt": ("rt", dict(ctx_size_list=RT_CTX, items_per_task=8192)),
     "subsampled/rdblearn_tabicl": (
         "rdblearn_tabicl",
@@ -330,12 +333,38 @@ def resources(arm: str, db: str, table: str) -> Resources:
     rows = TEST_ROWS[f"{db}/{table}"]
     full = arm.startswith("fulltest/")
     if arm.startswith("fulltest_ext/"):
-        # 2026-08-27 10:30: a 131k-cell TabICL pass costs ~20-40x the 8192-row
-        # subsampled one on the same task (post-votes 49 min on a b200, item-sales
-        # 3h07 and user-ltv 41 min on an a100 for 8192 rows), so the four big
-        # regression tasks are days on an a100 and take il with room to spare;
-        # the two longest get the il b200 sub-cap.
-        return a100("il", 120 if rows >= 100_000 else 48 if rows >= 20_000 else 8, db)
+        # 11:10, measured on the single-pass attempt (batches/min on an a100 at
+        # 16k-131k cells, all four sizes scored per batch): user-ltv and
+        # item-ltv ~100, post-votes ~30, item-sales ~20, site-success ~155,
+        # 2 rows per batch. A context size's share of the pass is proportional
+        # to its cells, and the limit is twice the projection.
+        rate = {
+            "rel-amazon/user-ltv": 60,
+            "rel-amazon/item-ltv": 95,
+            "rel-stack/post-votes": 28,
+            "rel-hm/item-sales": 18,
+        }.get(f"{db}/{table}", 150)
+        ctx = ARMS[arm][1]["ctx_size_list"][0]
+        hours = max(2, int(2 * rows / 2 / rate / 60 * ctx / sum(BASELINE_CTX[6:]) + 1))
+        if hours <= 11:
+            return Resources(
+                partition="il",
+                account="infolab",
+                qos="il-interactive",
+                time=f"{hours}:00:00",
+                gpus="a100:1",
+                cpus_per_task=8,
+                ntasks=None,
+                exclusive=False,
+                mem=mem(db),
+                mem_per_gpu=None,
+                constraint="ampere",
+                nodelist=None,
+                reservation=None,
+                dependency=None,
+                exclude="ampere4,ampere7",
+            )
+        return a100("il", hours, db)
     if method.endswith("_lgbm"):
         if full:
             return cpu(
@@ -425,8 +454,11 @@ nosem = (
 # with the feature; the vector-db path is only taken when vector_db_path is
 # set, and enscurve/ and baselines/ ask for the same build.
 for arm in [
-    "fulltest_ext/rdblearn_tabicl",
-    "fulltest_ext/sql_tabicl",
+    *[
+        f"fulltest_ext/{m}/{c}"
+        for c in reversed(BASELINE_CTX[6:])
+        for m in ("rdblearn_tabicl", "sql_tabicl")
+    ],
     "fulltest/rt",
     "subsampled/rt",
     "abl/rand",
@@ -452,6 +484,21 @@ for arm in [
             continue
         if name in busy:
             continue
+        if arm.startswith("fulltest_ext/"):
+            # the single-pass layout of the first attempt: <arm>/<db>__<table>.json
+            # holding every context size, and its job still running
+            whole = Path(out_dir).expanduser().parent / f"{db}__{table}.json"
+            if (
+                whole.exists()
+                and str(overrides["ctx_size_list"][0])
+                in json.loads(whole.read_text())["per_ctx"]
+            ):
+                continue
+            if (
+                f"repaper-scal-{arm.rsplit('/', 1)[0].replace('/', '-')}-{db}-{table}"
+                in busy
+            ):
+                continue
         submit(
             "expts.repaper.scaling.run:main",
             args=dict(
