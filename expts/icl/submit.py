@@ -235,6 +235,10 @@ TUNE: dict[tuple[str, str, str], Resources] = {
 # fine_tune released an il-interactive b200: rel-amazon/item-ltv (~9h left on
 # its il a100) swaps onto it, and its il a100 goes to rel-trial/study-adverse
 # off its chunks.
+# 17:45: a b200 that shows free is gone by the time a job asks, and the il-tier
+# holders are not preempted (planned start 22:40 twice today); user-ltv's cfg0
+# goes back to an il a100 -- no more b200 requests from this sweep unless
+# fine_tune hands one over explicitly.
 ENS: dict[tuple[str, str, str], list[Resources]] = {
     ("rt-plurel", "rel-amazon", "user-churn"): [
         b200("il", "1-00:00:00"),
@@ -309,7 +313,7 @@ ENS: dict[tuple[str, str, str], list[Resources]] = {
         a100("il-lo", "6:00:00"),
     ],
     ("rt-j", "rel-amazon", "user-ltv"): [
-        b200("il", "12:00:00"),
+        a100("il", "12:00:00"),
         a100("il-lo", "6:00:00"),
         a100("il-lo", "6:00:00"),
         a100("il-lo", "6:00:00"),
