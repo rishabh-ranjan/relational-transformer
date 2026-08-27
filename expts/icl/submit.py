@@ -180,7 +180,7 @@ TUNE: dict[tuple[str, str, str], Resources] = {
     ("rt-j", "rel-amazon", "item-ltv"): b200("il-interactive", "12:00:00"),
     ("rt-j", "rel-amazon", "item-churn"): b200("il", "2-00:00:00"),
     ("rt-j", "rel-stack", "user-badge"): a100("il", "2-00:00:00"),
-    ("rt-j", "rel-stack", "post-votes"): a100("il-lo", "2:00:00"),
+    ("rt-j", "rel-stack", "post-votes"): a100("il", "2:00:00"),
     ("rt-j", "rel-hm", "item-sales"): a100("il", "2-00:00:00"),
     ("rt-j", "rel-stack", "user-engagement"): a100("il", "2-00:00:00"),
     ("rt-j", "rel-hm", "user-churn"): b200("il", "2-00:00:00"),
@@ -245,6 +245,11 @@ TUNE: dict[tuple[str, str, str], Resources] = {
 # backfilled onto il-lo a100s, so they stay there.
 # 18:15: fine_tune is done and three b200s sit idle with nothing of mine
 # queued: item-sales' units take them (il, il-interactive, il-lo).
+# 19:05: a b200 is idle and my il-b200 and il-interactive slots are full: an
+# il-lo b200 seed job (~3.3 h, 5 h limit) ends before the rolling 12 h il
+# b200 jobs rotate at ~06:30 and could preempt it. post-votes' last tuning
+# entry keeps being preempted off il-lo (by my own il jobs), so it takes the
+# il a100 slot user-visits' tuning left free.
 # 18:55: study-adverse's tuning handed an il slot back; cfg2-s2 backfilled onto
 # il-lo before it could take it, so user-churn-cfg2-s3 does.
 # 18:45: only my own four b200 slots ever free up (the other four are held by
@@ -343,7 +348,12 @@ ENS: dict[tuple[str, str, str], list[Resources | list[Resources]]] = {
         b200("il", "2-00:00:00"),
         b200("il-interactive", "12:00:00"),
         b200("il-interactive", "12:00:00"),
-        [a100("il-lo", "10:00:00")] * 4,
+        [
+            b200("il-lo", "5:00:00"),
+            a100("il-lo", "10:00:00"),
+            a100("il-lo", "10:00:00"),
+            a100("il-lo", "10:00:00"),
+        ],
     ],
     ("rt-j", "rel-amazon", "item-ltv"): [
         b200("il-interactive", "12:00:00"),
