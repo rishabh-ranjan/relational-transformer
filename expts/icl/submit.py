@@ -151,6 +151,8 @@ def b200(qos: str, time: str) -> Resources:
 # this sweep: rel-hm/user-churn (~7h left on its il a100) swaps onto it.
 # 17:20: item-ltv tuned on the il-interactive b200; its cfg0 unit keeps that
 # slot, cfg1 takes an il a100, the rest il-lo at 6h.
+# 18:25: item-ltv cfg1 handed an il slot back with nothing queued; user-visits
+# (112/120, the tuning job with the most left) takes it off its il-lo chunks.
 TUNE: dict[tuple[str, str, str], Resources] = {
     ("rt-plurel", "rel-amazon", "user-churn"): b200("il", "2-00:00:00"),
     ("rt-plurel", "rel-amazon", "user-ltv"): a100("il", "2-00:00:00"),
@@ -183,7 +185,7 @@ TUNE: dict[tuple[str, str, str], Resources] = {
     ("rt-j", "rel-stack", "user-engagement"): a100("il", "2-00:00:00"),
     ("rt-j", "rel-hm", "user-churn"): b200("il", "2-00:00:00"),
     ("rt-j", "rel-avito", "user-clicks"): a100("il-lo", "2:00:00"),
-    ("rt-j", "rel-avito", "user-visits"): a100("il-lo", "2:00:00"),
+    ("rt-j", "rel-avito", "user-visits"): a100("il", "1-00:00:00"),
     ("rt-j", "rel-trial", "site-success"): a100("il", "2-00:00:00"),
     ("rt-j", "rel-trial", "study-adverse"): a100("il", "2-00:00:00"),
     ("rt-j", "rel-event", "user-attendance"): a100("il-lo", "2:00:00"),
