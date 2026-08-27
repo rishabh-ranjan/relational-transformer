@@ -310,7 +310,7 @@ ENS: dict[tuple[str, str, str], list[Resources]] = {
     ("rt-j", "rel-stack", "user-badge"): [
         a100("il", "12:00:00"),
         a100("il", "12:00:00"),
-        a100("il-lo", "12:00:00"),
+        a100("il", "12:00:00"),
         a100("il-lo", "12:00:00"),
     ],
     ("rt-j", "rel-stack", "post-votes"): [a100("il-lo", "1-00:00:00")] * 4,
