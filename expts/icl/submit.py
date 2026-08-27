@@ -149,6 +149,8 @@ def b200(qos: str, time: str) -> Resources:
 # two of its four units (255k rows, hours each) take the free il a100s.
 # 17:20: fine_tune's il b200 refit ended and the sub-cap slot is released to
 # this sweep: rel-hm/user-churn (~7h left on its il a100) swaps onto it.
+# 17:20: item-ltv tuned on the il-interactive b200; its cfg0 unit keeps that
+# slot, cfg1 takes an il a100, the rest il-lo at 6h.
 TUNE: dict[tuple[str, str, str], Resources] = {
     ("rt-plurel", "rel-amazon", "user-churn"): b200("il", "2-00:00:00"),
     ("rt-plurel", "rel-amazon", "user-ltv"): a100("il", "2-00:00:00"),
@@ -302,7 +304,12 @@ ENS: dict[tuple[str, str, str], list[Resources]] = {
     ("rt-plurel", "rel-event", "user-repeat"): [a100("il-lo", "2:00:00")] * 4,
     ("rt-j", "rel-amazon", "user-churn"): [a100("il-lo", "1-00:00:00")] * 4,
     ("rt-j", "rel-amazon", "user-ltv"): [a100("il-lo", "1-00:00:00")] * 4,
-    ("rt-j", "rel-amazon", "item-ltv"): [a100("il-lo", "1-00:00:00")] * 4,
+    ("rt-j", "rel-amazon", "item-ltv"): [
+        b200("il-interactive", "12:00:00"),
+        a100("il", "12:00:00"),
+        a100("il-lo", "6:00:00"),
+        a100("il-lo", "6:00:00"),
+    ],
     ("rt-j", "rel-amazon", "item-churn"): [
         b200("il", "12:00:00"),
         a100("il-lo", "6:00:00"),
