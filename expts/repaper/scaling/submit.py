@@ -264,8 +264,31 @@ def queued() -> dict[str, str]:
 # Per-(arm, db, table) placements that override the rule below. Emptied
 # 2026-08-27 13:15: blackwell1 is DOWN and every arm rerun for the RDBLearn
 # fix goes to il a100s; git holds the round's earlier b200 / il-interactive
-# placements and the reasons for each.
-HIGH: dict[tuple[str, str, str], tuple[str, str, int]] = {}
+# placements and the reasons for each. 16:20: blackwell1 is back (all eight
+# cards on il-lo work, which il and il-interactive preempt: sbatch --test-only
+# starts at once on either). A b200 counts against the same ten-gpu il total
+# as an a100, so the sub-cap of two buys speed, not slots: it goes to the two
+# longest pieces left (2d05h each on an a100 by the rate table, ~1d on a b200,
+# 36h limit), moved to the top of my il queue with `scontrol top`; the two
+# il-interactive slots take the two 14h pieces on a b200 within its 12h wall.
+HIGH: dict[tuple[str, str, str], tuple[str, str, int]] = {
+    ("fulltest_ext/rdblearn_tabicl/131072", "rel-amazon", "user-ltv"): (
+        "il",
+        "b200",
+        36,
+    ),
+    ("fulltest_ext/rdblearn_tabicl/131072", "rel-hm", "item-sales"): ("il", "b200", 36),
+    ("fulltest_ext/rdblearn_tabicl/32768", "rel-amazon", "user-ltv"): (
+        "il-interactive",
+        "b200",
+        12,
+    ),
+    ("fulltest_ext/rdblearn_tabicl/32768", "rel-hm", "item-sales"): (
+        "il-interactive",
+        "b200",
+        12,
+    ),
+}
 
 
 # 03:35: three hours of ~50 concurrent jobs spent the fairshare that had put
