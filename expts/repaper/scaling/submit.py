@@ -267,7 +267,15 @@ HIGH = {
     # had meanwhile preempted rel-stack's two full-test rdblearn TabICL
     # passes (2 h and 1.5 h from the top), so they move up as slots free.
     ("fulltest/rdblearn_tabicl", "rel-stack", "user-badge"): ("il", "a100", 6),
-    ("fulltest/rdblearn_tabicl", "rel-stack", "post-votes"): ("il", "a100", 6),
+    # 03:59: the two rel-amazon user passes finished on their il-interactive
+    # b200s (3h21 each) and three b200s show free: the two full-test TabICL
+    # passes still queued take the il-interactive slots.
+    ("fulltest/rdblearn_tabicl", "rel-stack", "post-votes"): (
+        "il-interactive",
+        "b200",
+        12,
+    ),
+    ("fulltest/sql_tabicl", "rel-stack", "user-badge"): ("il-interactive", "b200", 12),
 }
 
 
