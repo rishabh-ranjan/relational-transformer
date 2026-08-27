@@ -245,6 +245,9 @@ HIGH = {
     # 00:54: icl's il b200 ended and shows free; the longest pending pass
     # (~3 h on an a100) takes it under il.
     ("subsampled/rdblearn_tabicl", "rel-hm", "item-sales"): ("il", "b200", 6),
+    # 01:46: rel-hm/user-churn's full-test pass handed an il a100 back; the
+    # longest pass still queued (2h35 in the 2026-08-19 round) takes it.
+    ("subsampled/rdblearn_tabicl", "rel-stack", "post-votes"): ("il", "a100", 6),
 }
 
 
