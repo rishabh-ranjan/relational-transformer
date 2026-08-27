@@ -13,9 +13,10 @@ into prediction CSVs scored by RelBench's own evaluator.
 pixi run python -m expts.repaper.submit.submit   # 84 one-GPU units (21 tasks x 4 cfgs)
 pixi run python -m expts.repaper.submit.reduce   # -> CSVs + results.json; prints next step
 
-# validate + package (writes the leaderboard zips next to the CSVs)
+# validate + package (writes rt-j-{classification,regression}.zip next to the CSVs)
 pixi run python -m relbench.submit \
-    ~/scratch/hf/relational-transformer/repaper/leaderboard/preds
+    ~/scratch/hf/relational-transformer/repaper/leaderboard/preds \
+    --out ~/scratch/hf/relational-transformer/repaper/leaderboard/rt-j.zip
 ```
 
 The 2026-08-19 round did not submit: its units are the rt-j ensemble units

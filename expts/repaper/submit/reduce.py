@@ -119,7 +119,7 @@ def main() -> None:
         f"\nmean clf: {summary['mean_clf']:.4f}  mean reg: {summary['mean_reg']:.4f}"
         f"\nwrote {out}"
         f"\n\nnow validate + package for the leaderboard:"
-        f"\n  pixi run python -m relbench.submit {CSV_DIR}",
+        f"\n  pixi run python -m relbench.submit {CSV_DIR} --out {CSV_DIR.parent}/rt-j.zip",
         flush=True,
     )
 
