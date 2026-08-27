@@ -245,6 +245,13 @@ TUNE: dict[tuple[str, str, str], Resources] = {
 # backfilled onto il-lo a100s, so they stay there.
 # 18:15: fine_tune is done and three b200s sit idle with nothing of mine
 # queued: item-sales' units take them (il, il-interactive, il-lo).
+# 18:35: rt-j's amazon user tasks tuned to ctx 8192/4096, where one seed pass
+# over the 352k test rows is ~7.2 h / ~4.8 h on an a100 (tuning: ~300 s /
+# ~200 s per 4096 rows): a 6 h or 12 h chunk cannot even finish a seed, so
+# those eight units go to b200s (~3.3 h / ~2.2 h a pass) with 2-day limits --
+# il-b200 for the two that already hold il slots, il-interactive for the two
+# 4096 units (8.8 h fits the 12 h limit), il-lo for the rest -- and the two
+# that cannot get a b200 yet run on a 2-day il-lo a100 until one frees.
 ENS: dict[tuple[str, str, str], list[Resources]] = {
     ("rt-plurel", "rel-amazon", "user-churn"): [
         b200("il", "1-00:00:00"),
@@ -313,16 +320,16 @@ ENS: dict[tuple[str, str, str], list[Resources]] = {
     ("rt-plurel", "rel-f1", "driver-dnf"): [a100("il-lo", "2:00:00")] * 4,
     ("rt-plurel", "rel-event", "user-repeat"): [a100("il-lo", "2:00:00")] * 4,
     ("rt-j", "rel-amazon", "user-churn"): [
-        a100("il", "12:00:00"),
-        a100("il-lo", "6:00:00"),
-        a100("il-lo", "6:00:00"),
-        a100("il-lo", "6:00:00"),
+        b200("il", "2-00:00:00"),
+        b200("il-lo", "2-00:00:00"),
+        b200("il-lo", "2-00:00:00"),
+        a100("il-lo", "2-00:00:00"),
     ],
     ("rt-j", "rel-amazon", "user-ltv"): [
-        a100("il", "12:00:00"),
-        a100("il-lo", "6:00:00"),
-        a100("il-lo", "6:00:00"),
-        a100("il-lo", "6:00:00"),
+        b200("il", "2-00:00:00"),
+        b200("il-interactive", "12:00:00"),
+        b200("il-interactive", "12:00:00"),
+        a100("il-lo", "2-00:00:00"),
     ],
     ("rt-j", "rel-amazon", "item-ltv"): [
         b200("il-interactive", "12:00:00"),
