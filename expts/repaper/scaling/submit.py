@@ -281,10 +281,19 @@ def resources(arm: str, db: str, table: str) -> Resources:
     return a100("il-lo", 2 if ARMS[arm][1].get("vector_db_path") else 1, db)
 
 
+def nosem_ready() -> bool:
+    root = Path(f"{SHARE}/relbench-preprocessed-nosem").expanduser()
+    links = [root / "db-task-lists"] + [
+        p for db in {db for db, _ in TASKS} for p in (root / db).glob("*")
+    ]
+    return bool(links) and all(p.exists() for p in links)
+
+
 busy = queued()
 
 nosem = (
     busy.get("repaper-nosem-data")
+    or nosem_ready()
     or submit(
         "expts.repaper.scaling.make_nosem_data:main",
         args=dict(
@@ -387,5 +396,5 @@ for arm in [
             setup=("pixi run maturin develop --uv --release --features vecdb",)
             if overrides.get("vector_db_path")
             else (),
-            after=nosem if arm == "abl/nosem" else None,
+            after=nosem if arm == "abl/nosem" and nosem is not True else None,
         )
