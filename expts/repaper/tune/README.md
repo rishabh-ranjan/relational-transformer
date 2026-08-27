@@ -25,7 +25,7 @@ normalized MAE ranks reg.
 A job is `rt.eval:main` in tune-only mode (`splits=["val"]`), one per task,
 resumable per grid entry (`ensemble_resume.pt`); a preemption costs at most
 one (grid entry, seed) pass. `tuning.json` lands under
-`~/scratch/ckpts/rtv2/2026-08-19-repaper-tune/tune--<db>--<table>/`.
+`~/scratch/ckpts/rtv2/<RUN_TAG>-repaper-tune/tune--<db>--<table>/`.
 
 `tuned_configs.json` (committed once the grid finishes) holds, per task: the
 best configuration and its val score, the top-4 configurations by val score,

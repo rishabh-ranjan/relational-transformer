@@ -2,13 +2,12 @@ import json
 import os
 from pathlib import Path
 
+from expts.repaper.baselines.featurize_rdblearn import rdb_dataset
 from expts.repaper.config import PRE_DIR
 
 
 def main() -> None:
     assert os.environ.get("RELBENCH_CACHE_DIR"), "set RELBENCH_CACHE_DIR"
-    import relbench.base
-    from rdblearn.datasets import RDBDataset
     from relbench.datasets import get_dataset
     from relbench.tasks import get_task, get_task_names
 
@@ -24,17 +23,7 @@ def main() -> None:
             for split in ("train", "val", "test"):
                 task.get_table(split)
             print(f"{db}/{task_name}: extracted", flush=True)
-        _orig_get_db = relbench.base.Dataset.get_db
-
-        def _full_get_db(self, *a, **kw):
-            return _orig_get_db(self, upto_test_timestamp=False)
-
-        _full_get_db.cache_clear = lambda: None
-        relbench.base.Dataset.get_db = _full_get_db
-        try:
-            dataset = RDBDataset.from_relbench(db)
-        finally:
-            relbench.base.Dataset.get_db = _orig_get_db
+        dataset = rdb_dataset(db)
         print(f"{db}: rdblearn tasks {sorted(dataset.tasks)}", flush=True)
     for db, task_name in pairs:
         task = get_task(db, task_name, download=True)

@@ -6,7 +6,6 @@ import wandb
 
 from expts.repaper.config import OUT_ROOT, project
 
-ENTITY = "rtv2"
 KEY = "ctx_scaling/steps=0/test"
 
 
@@ -20,7 +19,7 @@ def reduce_arm(*, project: str, run_name: str, arm_dir: str, n_tasks: int) -> No
 
     ctxs = sorted({int(c) for r in recs for c in r["per_ctx"]})
     run = wandb.init(
-        entity=ENTITY,
+        entity="rtv2",
         project=project,
         name=run_name,
         config={"arm_dir": str(arm_dir), "ctx_sizes": ctxs, "n_tasks": n_tasks},
@@ -33,15 +32,12 @@ def reduce_arm(*, project: str, run_name: str, arm_dir: str, n_tasks: int) -> No
             "reg": {"metric": [], "labels": []},
         }
         for r in recs:
-            entry = r["per_ctx"].get(str(ctx))
-            if entry is None:
-                continue
+            entry = r["per_ctx"][str(ctx)]
             mkey = "auc" if r["task_type"] == "clf" else "mae"
             base = f"per_task/{KEY.removesuffix('/test')}/relbench/{r['db']}/{r['table']}/test"
             row[f"{base}/{mkey}"] = entry["metric_value"]
             row[f"{base}/mean_labels"] = entry["mean_labels"]
-            if entry["metric_value"] is not None:
-                by_type[r["task_type"]]["metric"].append(entry["metric_value"])
+            by_type[r["task_type"]]["metric"].append(entry["metric_value"])
             by_type[r["task_type"]]["labels"].append(entry["mean_labels"])
         row[f"{KEY}/avg_auc"] = float(np.mean(by_type["clf"]["metric"]))
         row[f"{KEY}/avg_mae"] = float(np.mean(by_type["reg"]["metric"]))

@@ -1,5 +1,4 @@
 import json
-from abc import ABC, abstractmethod
 from pathlib import Path
 
 
@@ -32,13 +31,3 @@ def table_offset_and_len(pre_dir: str, db: str, table_name: str) -> tuple[int, i
     min_offset = sorted_offsets[0][0]
     total = sum(n for _, n in sorted_offsets)
     return min_offset, total
-
-
-class Featurizer(ABC):
-    @abstractmethod
-    def compute_features(self, task, node_idxs, device): ...
-
-    @abstractmethod
-    def featurize(
-        self, train_labels, train_f2ps, target_f2p, train_feats, test_feat
-    ): ...

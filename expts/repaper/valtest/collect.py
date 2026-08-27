@@ -6,22 +6,20 @@ import wandb
 
 from expts.repaper.config import OUT_ROOT, project
 
-DEFAULT_DIR = Path(OUT_ROOT).expanduser() / "repaper-scaling" / "subsampled" / "rt"
-TUNED_DIR = Path(OUT_ROOT).expanduser() / "repaper-valtest" / "tuned"
-N_TASKS = 21
-
 
 def main() -> None:
     cfgs = json.loads(
         (Path(__file__).parents[1] / "tune" / "tuned_configs.json").read_text()
     )
-    assert len(cfgs) == N_TASKS
+    assert len(cfgs) == 21, f"{len(cfgs)} tuned configs, expected 21"
+    default_dir = Path(OUT_ROOT).expanduser() / "repaper-scaling" / "subsampled" / "rt"
+    tuned_dir = Path(OUT_ROOT).expanduser() / "repaper-valtest" / "tuned"
     rows = []
     out = {}
     for task_key, rec in sorted(cfgs.items()):
         db, table = task_key.split("/")
-        default = json.loads((DEFAULT_DIR / f"{db}__{table}.json").read_text())
-        tuned = json.loads((TUNED_DIR / f"{db}__{table}.json").read_text())
+        default = json.loads((default_dir / f"{db}__{table}.json").read_text())
+        tuned = json.loads((tuned_dir / f"{db}__{table}.json").read_text())
         ctx, lcs, bw, pl = rec["best_cfg"]
         d_val = default["per_ctx"]["8192"]["metric_value"]
         t_val = tuned["per_ctx"][str(ctx)]["metric_value"]

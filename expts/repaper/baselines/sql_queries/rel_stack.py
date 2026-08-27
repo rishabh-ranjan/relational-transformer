@@ -76,55 +76,43 @@ SELECT
     t.timestamp,
     t."OwnerUserId",
 
-    -- 1. Recency: min days since any activity (exp decay, half-life ~45d)
     EXP(-LEAST(
         COALESCE(lp.days_since_last_post, 9999),
         COALESCE(lc.days_since_last_comment, 9999),
         COALESCE(lv.days_since_last_vote, 9999)
     ) / 65.0)                                          AS activity_recency,
 
-    -- 2. Post recency (exp decay, half-life ~60d)
     EXP(-COALESCE(lp.days_since_last_post, 9999) / 87.0)
                                                         AS post_recency,
 
-    -- 3. Recent contributions (log-scaled, cap at ~50)
     LEAST(LN(1 + COALESCE(lp.posts_90d, 0)
                + COALESCE(lc.comments_90d, 0)
                + COALESCE(lv.votes_90d, 0)) / LN(51), 1.0)
                                                         AS log_contributions_90d_norm,
 
-    -- 4. Post frequency in 90d (log-scaled, cap at ~30)
     LEAST(LN(1 + COALESCE(lp.posts_90d, 0)) / LN(31), 1.0)
                                                         AS log_posts_90d_norm,
 
-    -- 5. Had recent post burst (posted in last 30d, binary)
     CASE WHEN COALESCE(lp.posts_30d, 0) > 0
          THEN 1.0 ELSE 0.0 END                        AS has_recent_post,
 
-    -- 6. Total posts (log-scaled, cap at ~500)
     LEAST(LN(1 + COALESCE(lp.posts_total, 0)) / LN(501), 1.0)
                                                         AS log_posts_total_norm,
 
-    -- 7. Answer ratio (fraction of posts that are answers, [0,1])
     COALESCE(lp.answer_ratio, 0.0)                     AS answer_ratio,
 
-    -- 8. Badge count (log-scaled, cap at ~200)
     LEAST(LN(1 + COALESCE(ba.badges_total, 0)) / LN(201), 1.0)
                                                         AS log_badges_norm,
 
-    -- 9. Account age (log-scaled, cap at ~3650 days / 10 yrs)
     LEAST(LN(1 + GREATEST(0, DATE_DIFF('day', u."CreationDate", t.timestamp))) / LN(3651), 1.0)
                                                         AS log_account_age_norm,
 
-    -- 10. Edits in last 90d (log-scaled, cap at ~50)
     LEAST(LN(1 + COALESCE(ea.edits_90d, 0)) / LN(51), 1.0)
                                                         AS log_edits_90d_norm,
 
-    -- 11. Received upvotes (log-scaled, reputation proxy, cap at ~5000)
     LEAST(LN(1 + COALESCE(rv.received_upvotes, 0)) / LN(5001), 1.0)
                                                         AS log_received_upvotes_norm,
 
-    -- 12. Votes cast in last 90d (log-scaled, cap at ~200)
     LEAST(LN(1 + COALESCE(lv.votes_90d, 0)) / LN(201), 1.0)
                                                         AS log_votes_90d_norm
 
@@ -168,7 +156,6 @@ vote_agg AS (
         COUNT(*) FILTER (WHERE v."VoteTypeId" = 2 AND DATE_DIFF('day', v."CreationDate", t.timestamp) <= 90)  AS upvotes_90d,
         COUNT(*) FILTER (WHERE v."VoteTypeId" = 2)                     AS upvotes_total,
         COUNT(*) FILTER (WHERE v."VoteTypeId" = 3)                     AS downvotes_total,
-        -- Trend: upvotes in 30d minus prev 30d
         COUNT(*) FILTER (WHERE v."VoteTypeId" = 2 AND DATE_DIFF('day', v."CreationDate", t.timestamp) <= 30)
             - COUNT(*) FILTER (WHERE v."VoteTypeId" = 2
                                AND DATE_DIFF('day', v."CreationDate", t.timestamp) > 30
@@ -204,7 +191,6 @@ owner_reputation AS (
     GROUP BY pi.task_ts, pi."PostId"
 ),
 accepted_answer AS (
-    -- For questions: check if any child answer was accepted (VoteTypeId=1 = AcceptedByOriginator)
     SELECT
         pi.task_ts, pi."PostId",
         MAX(CASE WHEN v."VoteTypeId" = 1 THEN 1 ELSE 0 END) AS has_accepted
@@ -232,53 +218,41 @@ SELECT
     t.timestamp,
     t."PostId",
 
-    -- 1. Log upvotes in last 90d (cap at ~50)
     LEAST(LN(1 + COALESCE(va.upvotes_90d, 0)) / LN(51), 1.0)
                                                         AS log_upvotes_90d_norm,
 
-    -- 2. Log upvotes total (cap at ~500)
     LEAST(LN(1 + COALESCE(va.upvotes_total, 0)) / LN(501), 1.0)
                                                         AS log_upvotes_total_norm,
 
-    -- 3. Upvote velocity (upvotes per day of age, cap at 1.0)
     CASE WHEN COALESCE(pi.post_age_days, 0) > 0
          THEN LEAST(COALESCE(va.upvotes_total, 0)::DOUBLE / pi.post_age_days, 1.0)
          ELSE 0.0 END                                 AS upvote_velocity,
 
-    -- 4. Upvote trend (30d vs prev 30d, shifted to [0,1])
     LEAST(GREATEST(
         0.5 + COALESCE(va.upvote_trend_30d, 0) / 10.0,
         0.0), 1.0)                                     AS upvote_trend_norm,
 
-    -- 5. Upvote ratio (upvotes / (upvotes + downvotes), [0,1])
     CASE WHEN COALESCE(va.upvotes_total, 0) + COALESCE(va.downvotes_total, 0) > 0
          THEN va.upvotes_total::DOUBLE / (va.upvotes_total + va.downvotes_total)
          ELSE 0.5 END                                  AS upvote_ratio,
 
-    -- 6. Post age (inverse: newer posts get more votes; exp decay, half-life ~180d)
     EXP(-COALESCE(pi.post_age_days, 0) / 260.0)
                                                         AS age_freshness,
 
-    -- 7. Comments on post (log-scaled, cap at ~50)
     LEAST(LN(1 + COALESCE(pca.comments_total, 0)) / LN(51), 1.0)
                                                         AS log_comments_norm,
 
-    -- 8. Is answer (binary, answers and questions get votes differently)
     CASE WHEN COALESCE(pi."PostTypeId", 0) = 2 THEN 1.0 ELSE 0.0 END
                                                         AS is_answer,
 
-    -- 9. Post age days (log-scaled, cap at ~3650 days)
     LEAST(LN(1 + GREATEST(COALESCE(pi.post_age_days, 0), 0)) / LN(3651), 1.0)
                                                         AS log_post_age_norm,
 
-    -- 10. Owner reputation (log upvotes received by post author, cap at ~10000)
     LEAST(LN(1 + COALESCE(orep.owner_upvotes, 0)) / LN(10001), 1.0)
                                                         AS log_owner_reputation_norm,
 
-    -- 11. Has accepted answer (for questions; 0 for answers/unknown)
     COALESCE(aa.has_accepted, 0)::DOUBLE               AS has_accepted_answer,
 
-    -- 12. Edits on post (log-scaled, cap at ~30)
     LEAST(LN(1 + COALESCE(eda.edits_total, 0)) / LN(31), 1.0)
                                                         AS log_edits_norm
 
@@ -375,54 +349,42 @@ SELECT
     t.timestamp,
     t."UserId",
 
-    -- 1. Activity recency (exp decay, half-life ~45d)
     EXP(-LEAST(
         COALESCE(lp.days_since_last_post, 9999),
         COALESCE(lc.days_since_last_comment, 9999)
     ) / 65.0)                                          AS activity_recency,
 
-    -- 2. Recent contributions (log-scaled, cap at ~50)
     LEAST(LN(1 + COALESCE(lp.posts_90d, 0)
                + COALESCE(lc.comments_90d, 0)) / LN(51), 1.0)
                                                         AS log_contributions_90d_norm,
 
-    -- 3. Had recent post (posted in last 30d, binary)
     CASE WHEN COALESCE(lp.posts_30d, 0) > 0
          THEN 1.0 ELSE 0.0 END                        AS has_recent_post,
 
-    -- 4. Badge momentum (recent badges in 90d, capped at 5)
     LEAST(COALESCE(ba.badges_90d, 0) / 5.0, 1.0)
                                                         AS badge_momentum,
 
-    -- 5. Total badges (log-scaled, cap at ~200)
     LEAST(LN(1 + COALESCE(ba.badges_total, 0)) / LN(201), 1.0)
                                                         AS log_badges_total_norm,
 
-    -- 6. Has gold badge (binary, strong predictor of badge earning)
     CASE WHEN COALESCE(ba.gold_badges, 0) > 0
          THEN 1.0 ELSE 0.0 END                        AS gold_badge_flag,
 
-    -- 7. Received upvotes (log-scaled, reputation proxy, cap at ~5000)
     LEAST(LN(1 + COALESCE(rv.received_upvotes, 0)) / LN(5001), 1.0)
                                                         AS log_received_upvotes_norm,
 
-    -- 8. Total posts (log-scaled, cap at ~500)
     LEAST(LN(1 + COALESCE(lp.posts_total, 0)) / LN(501), 1.0)
                                                         AS log_posts_total_norm,
 
-    -- 9. Account age (log-scaled, cap at ~3650 days / 10 yrs)
     LEAST(LN(1 + GREATEST(0, DATE_DIFF('day', u."CreationDate", t.timestamp))) / LN(3651), 1.0)
                                                         AS log_account_age_norm,
 
-    -- 10. Edits in last 90d (log-scaled, cap at ~50)
     LEAST(LN(1 + COALESCE(ea.edits_90d, 0)) / LN(51), 1.0)
                                                         AS log_edits_90d_norm,
 
-    -- 11. Votes cast in last 90d (log-scaled, cap at ~200)
     LEAST(LN(1 + COALESCE(lv.votes_90d, 0)) / LN(201), 1.0)
                                                         AS log_votes_90d_norm,
 
-    -- 12. Comments in last 90d (log-scaled, cap at ~50)
     LEAST(LN(1 + COALESCE(lc.comments_90d, 0)) / LN(51), 1.0)
                                                         AS log_comments_90d_norm
 

@@ -4,6 +4,23 @@ import time
 from pathlib import Path
 
 
+def rdb_dataset(db: str):
+    import relbench.base
+    from rdblearn.datasets import RDBDataset
+
+    orig_get_db = relbench.base.Dataset.get_db
+
+    def full_get_db(self, *a, **kw):
+        return orig_get_db(self, upto_test_timestamp=False)
+
+    full_get_db.cache_clear = lambda: None
+    relbench.base.Dataset.get_db = full_get_db
+    try:
+        return RDBDataset.from_relbench(db)
+    finally:
+        relbench.base.Dataset.get_db = orig_get_db
+
+
 def featurize_table(
     *,
     db: str,
@@ -20,10 +37,8 @@ def featurize_table(
     import fastdfs
     import numpy as np
     import pandas as pd
-    import relbench.base
     from fastdfs import DFSConfig
     from rdblearn.config import RDBLearnConfig
-    from rdblearn.datasets import RDBDataset
     from rdblearn.estimator import RDBLearnEstimator
     from sklearn.impute import SimpleImputer
     from sklearn.linear_model import LogisticRegression, Ridge
@@ -50,22 +65,12 @@ def featurize_table(
             engine="dfs2sql",
         ),
         enable_target_augmentation=False,
-        max_train_samples=(max_train_samples if max_train_samples > 0 else 10**9),
+        max_train_samples=max_train_samples,
         predict_batch_size=5000,
     )
 
     tic = time.time()
-    _orig_get_db = relbench.base.Dataset.get_db
-
-    def _full_get_db(self, *a, **kw):
-        return _orig_get_db(self, upto_test_timestamp=False)
-
-    _full_get_db.cache_clear = lambda: None
-    relbench.base.Dataset.get_db = _full_get_db
-    try:
-        dataset = RDBDataset.from_relbench(db)
-    finally:
-        relbench.base.Dataset.get_db = _orig_get_db
+    dataset = rdb_dataset(db)
 
     assert table in dataset.tasks, (
         f"no rdblearn task {table!r} in {db!r}; available: {list(dataset.tasks)}"

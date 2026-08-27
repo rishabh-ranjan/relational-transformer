@@ -22,7 +22,8 @@ RELBENCH_CACHE_DIR=~/scratch/hf/relational-transformer/repaper/relbench-cache \
     pixi run -e featurize python -m expts.repaper.baselines.check_alignment
 
 # 3. featurize (comment out the stages not wanted in submit.py), then the
-#    indices (the commented-out vector-db loop)
+#    indices (the commented-out vector-db loop); a finished table is skipped at
+#    submit time, so resubmitting fills in the missing blobs only
 pixi run python -m expts.repaper.baselines.submit
 ```
 
@@ -31,7 +32,7 @@ Feature blobs land under
 FAISS indices under `.../repaper/vector_db/{rdblearn,rt}/`, one
 `<table>_vectors.bin` + `<table>_meta.json` (and `.index`) per task table.
 Logs land under
-`~/scratch/slurm-logs/rishabh-ranjan/relational-transformer/expts/repaper/baselines`.
+`~/scratch/relational-transformer/repaper/baselines/slurm-logs`.
 
 ## What each featurizer is
 

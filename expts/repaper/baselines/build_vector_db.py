@@ -11,7 +11,6 @@ def build_all(
     features_subdir: str,
     vector_db_root: str,
     ivf_threshold: int,
-    nprobe: int,
 ) -> None:
     import faiss
     import numpy as np
@@ -52,13 +51,13 @@ def build_all(
         t0 = time.perf_counter()
         if num_nodes > ivf_threshold:
             nlist = min(max(int(4 * np.sqrt(num_nodes)), 16), 65536)
-            chosen_nprobe = nprobe if nprobe > 0 else max(8, int(np.sqrt(nlist)))
+            nprobe = max(8, int(np.sqrt(nlist)))
             index = faiss.index_factory(
                 dim, f"IVF{nlist},Flat", faiss.METRIC_INNER_PRODUCT
             )
             index.train(vectors[: min(nlist * 40, num_nodes)])
             index.add(vectors)
-            faiss.ParameterSpace().set_index_parameter(index, "nprobe", chosen_nprobe)
+            faiss.ParameterSpace().set_index_parameter(index, "nprobe", nprobe)
             index.own_invlists = False
             old_invlists = index.invlists
             new_invlists = faiss.OnDiskInvertedLists(
@@ -68,7 +67,7 @@ def build_all(
             index.replace_invlists(new_invlists, True)
             new_invlists.this.disown()
             del old_invlists
-            kind = f"IVF{nlist},Flat (ondisk, nprobe={chosen_nprobe})"
+            kind = f"IVF{nlist},Flat (ondisk, nprobe={nprobe})"
         else:
             index = faiss.index_factory(dim, "Flat", faiss.METRIC_INNER_PRODUCT)
             index.add(vectors)

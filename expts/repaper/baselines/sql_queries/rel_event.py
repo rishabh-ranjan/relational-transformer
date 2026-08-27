@@ -16,25 +16,20 @@ attend_agg AS (
     SELECT
         task_ts, "user",
 
-        -- Recency (yes/maybe attendance, separately for invitations)
         MIN(days_ago) FILTER (WHERE status IN ('yes','maybe')) AS days_since_last_attend,
         MIN(days_ago) FILTER (WHERE status = 'invited')        AS days_since_last_invite,
 
-        -- Yes/maybe attendance volume
         COUNT(*) FILTER (WHERE status IN ('yes','maybe') AND days_ago <= 7)  AS attend_7d,
         COUNT(*) FILTER (WHERE status IN ('yes','maybe') AND days_ago <= 14) AS attend_14d,
         COUNT(*) FILTER (WHERE status IN ('yes','maybe') AND days_ago <= 90) AS attend_90d,
 
-        -- Trend: yes/maybe in 7d minus prev 7d
         COUNT(*) FILTER (WHERE status IN ('yes','maybe') AND days_ago <= 7)
             - COUNT(*) FILTER (WHERE status IN ('yes','maybe')
                                AND days_ago > 7 AND days_ago <= 14) AS attend_trend_7d,
 
-        -- Invitation volume
         COUNT(*) FILTER (WHERE status = 'invited' AND days_ago <= 7)  AS invites_7d,
         COUNT(*) FILTER (WHERE status = 'invited' AND days_ago <= 90) AS invites_90d,
 
-        -- Yes ratio among non-invited responses (yes/maybe/no)
         COUNT(*) FILTER (WHERE status = 'yes')::DOUBLE
             / NULLIF(COUNT(*) FILTER (WHERE status IN ('yes','maybe','no')), 0)
             AS yes_ratio
@@ -77,61 +72,44 @@ SELECT
     t.timestamp,
     t."user",
 
-    -- 1. Recency of last yes/maybe attendance (exp decay, half-life ~14d)
     EXP(-COALESCE(aa.days_since_last_attend, 9999) / 20.0)
                                                         AS attend_recency,
 
-    -- 2. Recency of last invitation (exp decay, half-life ~14d)
     EXP(-COALESCE(aa.days_since_last_invite, 9999) / 20.0)
                                                         AS invite_recency,
 
-    -- 3. Yes/maybe attendance in last 7d (log-scaled, cap at ~30)
     LEAST(LN(1 + COALESCE(aa.attend_7d, 0)) / LN(31), 1.0)
                                                         AS log_attend_7d_norm,
 
-    -- 4. Yes/maybe attendance in last 14d (log-scaled, cap at ~50)
-    --    This is the conditioning window for user-repeat.
     LEAST(LN(1 + COALESCE(aa.attend_14d, 0)) / LN(51), 1.0)
                                                         AS log_attend_14d_norm,
 
-    -- 5. Yes/maybe attendance in last 90d (log-scaled, cap at ~200)
     LEAST(LN(1 + COALESCE(aa.attend_90d, 0)) / LN(201), 1.0)
                                                         AS log_attend_90d_norm,
 
-    -- 6. Attendance trend (7d vs prev 7d, shifted to [0,1])
     LEAST(GREATEST(
         0.5 + COALESCE(aa.attend_trend_7d, 0) / 10.0,
         0.0), 1.0)                                     AS attend_trend_7d_norm,
 
-    -- 7. Yes ratio among yes/maybe/no responses (already [0,1])
     COALESCE(aa.yes_ratio, 0.5)                         AS yes_ratio,
 
-    -- 8. Invitations in last 7d (log-scaled, cap at ~30)
-    --    Direct prior for user-ignore (target window is invites in next 7d).
     LEAST(LN(1 + COALESCE(aa.invites_7d, 0)) / LN(31), 1.0)
                                                         AS log_invites_7d_norm,
 
-    -- 9. Invitations in last 90d (log-scaled, cap at ~200)
     LEAST(LN(1 + COALESCE(aa.invites_90d, 0)) / LN(201), 1.0)
                                                         AS log_invites_90d_norm,
 
-    -- 10. Interest rate (fraction of invitations marked interested, [0,1])
     COALESCE(ia.interest_rate, 0.3)                     AS interest_rate,
 
-    -- 11. Ignore rate (fraction of invitations marked not_interested, [0,1])
-    --     Strong prior for user-ignore.
     COALESCE(ia.ignore_rate, 0.1)                       AS ignore_rate,
 
-    -- 12. Friend count (log-scaled, cap at ~5000)
     LEAST(LN(1 + COALESCE(fc.num_friends, 0)) / LN(5001), 1.0)
                                                         AS log_friends_norm,
 
-    -- 13. Account age (log-scaled, cap at ~3650 days / 10 yrs)
     LEAST(LN(1 + GREATEST(0, COALESCE(
             DATE_DIFF('day', up.joined_at, t.timestamp), 0))) / LN(3651), 1.0)
                                                         AS log_account_age_norm,
 
-    -- 14. Is new user (no attendance and no invitation history, binary)
     CASE WHEN aa."user" IS NULL AND ia."user" IS NULL
          THEN 1.0 ELSE 0.0 END                         AS is_new_user
 

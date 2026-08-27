@@ -1,4 +1,3 @@
-import math
 import threading
 from collections import defaultdict
 from contextlib import contextmanager
@@ -6,15 +5,6 @@ from pathlib import Path
 
 import numpy as np
 import torch
-
-import importlib  # noqa: E402
-import sys  # noqa: E402
-
-sys.modules.setdefault("tabicl.model", importlib.import_module("tabicl._model"))
-for _sub in ("attention", "layers", "ssmax", "tabicl"):
-    sys.modules.setdefault(
-        f"tabicl.model.{_sub}", importlib.import_module(f"tabicl._model.{_sub}")
-    )
 
 CLF_CHECKPOINT = "tabicl-classifier-v2-20260212.ckpt"
 REG_CHECKPOINT = "tabicl-regressor-v2-20260212.ckpt"
@@ -27,7 +17,7 @@ _patch_lock = threading.Lock()
 
 
 def _per_item_ssmax(ssmax_layer, q, n_tensor):
-    from tabicl.model.ssmax import QASSMaxMLP, SSMax, SSMaxMLP
+    from tabicl._model.ssmax import QASSMaxMLP, SSMax, SSMaxMLP
 
     logn = torch.log(n_tensor.clamp(min=1).to(q.dtype)).reshape(-1, 1)
     flat_bs, nh, _, hs = q.shape
@@ -59,8 +49,8 @@ def _install_attention_patch():
             return
         from torch.nn import functional as F
 
-        from tabicl.model import attention as _attn_mod
-        from tabicl.model.layers import MultiheadAttentionBlock
+        from tabicl._model import attention as _attn_mod
+        from tabicl._model.layers import MultiheadAttentionBlock
 
         orig_block_forward = MultiheadAttentionBlock.forward
         orig_sdpa = _attn_mod.sdpa_with_flattened_batch
@@ -205,12 +195,12 @@ class TabICLBatchedPredictor:
         return cfg
 
     def _load_model(self, filename):
-        from tabicl.model.tabicl import TabICL
+        from tabicl._model.tabicl import TabICL
 
         path = self.checkpoint_dir / filename
         assert path.exists(), (
             f"TabICL checkpoint {path} not found; fetch it once with "
-            f"scripts/fetch_tabicl.py (see expts/repaper/baselines/README.md)"
+            f"`pixi run python -m expts.repaper.baselines.fetch_tabicl`"
         )
         ckpt = torch.load(path, map_location="cpu", weights_only=True)
         model = TabICL(**ckpt["config"])
@@ -230,7 +220,7 @@ class TabICLBatchedPredictor:
 
     @staticmethod
     def _trivial_pred(train_features, train_labels, test_features, task_type):
-        if train_features is None or len(train_labels) < 2:
+        if len(train_labels) < 2:
             return 0.5 if task_type == "clf" else 0.0
 
         X_train = train_features.float()
@@ -238,7 +228,7 @@ class TabICLBatchedPredictor:
 
         if not torch.isfinite(y_train).any():
             return 0.5 if task_type == "clf" else 0.0
-        if test_features is not None and not torch.isfinite(test_features).any():
+        if not torch.isfinite(test_features).any():
             return (
                 0.5
                 if task_type == "clf"
@@ -349,11 +339,6 @@ class TabICLBatchedPredictor:
         y_n = (y_train - y_mean.unsqueeze(-1)) / y_std.unsqueeze(-1)
         return y_n, y_mean, y_std
 
-    def predict(self, train_features, train_labels, test_features, task_type):
-        return self.predict_batch(
-            [(train_features, train_labels, test_features, task_type)]
-        )[0]
-
     @staticmethod
     def _bin_size(n_train, min_bin_size):
         n = max(n_train, min_bin_size)
@@ -376,14 +361,13 @@ class TabICLBatchedPredictor:
         groups = defaultdict(list)
 
         for i, (tf, tl, xf, tt) in enumerate(work_items):
-            if tf is not None:
-                tf = tf.float()
-                xf = xf.float()
-                col_means = torch.nan_to_num(
-                    torch.nanmean(tf, dim=0, keepdim=True), nan=0.0
-                )
-                tf = torch.where(torch.isnan(tf), col_means.expand_as(tf), tf)
-                xf = torch.where(torch.isnan(xf), col_means.squeeze(0), xf)
+            tf = tf.float()
+            xf = xf.float()
+            col_means = torch.nan_to_num(
+                torch.nanmean(tf, dim=0, keepdim=True), nan=0.0
+            )
+            tf = torch.where(torch.isnan(tf), col_means.expand_as(tf), tf)
+            xf = torch.where(torch.isnan(xf), col_means.squeeze(0), xf)
             tl = torch.nan_to_num(tl.float(), nan=0.0)
 
             triv = self._trivial_pred(tf, tl, xf, tt)
@@ -397,12 +381,11 @@ class TabICLBatchedPredictor:
             if tt == "clf":
                 y_int = (tl > 0).long()
                 num_classes = max(int(y_int.max().item()) + 1, 2)
-                fallback = float(y_int.float().mean().item())
                 key = (tt, bin_size, num_classes, d)
-                groups[key].append((i, n_train, tf, y_int.float(), xf, fallback))
+                groups[key].append((i, n_train, tf, y_int.float(), xf))
             else:
                 key = (tt, bin_size, None, d)
-                groups[key].append((i, n_train, tf, tl, xf, 0.0))
+                groups[key].append((i, n_train, tf, tl, xf))
 
         for key, items in groups.items():
             tt, bin_size, num_classes, d = key
@@ -467,7 +450,9 @@ class TabICLBatchedPredictor:
                         probs = torch.softmax(
                             logits.float() / self.softmax_temperature, dim=-1
                         )
-                        pred_np = probs[:, 0, 1].detach().cpu().numpy()
+                        pred_np = (
+                            probs[:, 0, 1].detach().cpu().numpy().astype(np.float64)
+                        )
                     else:
                         means = model.predict_stats(
                             X=X_full,
@@ -476,28 +461,19 @@ class TabICLBatchedPredictor:
                             inference_config=cfg,
                         )
                         pred_np = means[:, 0].float().detach().cpu().numpy()
-
-                finite_mask = np.isfinite(pred_np)
-                if tt == "reg":
-                    y_means_np = y_means.detach().cpu().numpy()
-                    y_stds_np = y_stds.detach().cpu().numpy()
-
-                for j, item in enumerate(chunk):
-                    out_idx = item[0]
-                    fallback = item[5]
-                    if tt == "reg":
-                        fallback = float(y_means_np[j])
-                    if not finite_mask[j]:
-                        results[out_idx] = float(fallback)
-                        continue
-                    if tt == "reg":
-                        out = float(pred_np[j]) * float(y_stds_np[j]) + float(
-                            y_means_np[j]
+                        pred_np = pred_np.astype(np.float64)
+                        pred_np = pred_np * y_stds.detach().cpu().numpy().astype(
+                            np.float64
                         )
-                        if not math.isfinite(out):
-                            out = float(fallback)
-                        results[out_idx] = out
-                    else:
-                        results[out_idx] = float(pred_np[j])
+                        pred_np = pred_np + y_means.detach().cpu().numpy().astype(
+                            np.float64
+                        )
+
+                assert np.isfinite(pred_np).all(), (
+                    f"{int((~np.isfinite(pred_np)).sum())} of {bs} TabICL predictions "
+                    f"are not finite ({tt}, bin {bin_size})"
+                )
+                for j, item in enumerate(chunk):
+                    results[item[0]] = float(pred_np[j])
 
         return results

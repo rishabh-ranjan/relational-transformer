@@ -6,22 +6,21 @@ import wandb
 
 from expts.repaper.config import OUT_ROOT, project
 
-ENTITY = "rtv2"
-PROJECT = project("enscurve")
-OUT_ROOT = f"{OUT_ROOT}/repaper-enscurve"
 N_TASKS = 21
 N_SEEDS = 16
 
 
 def reduce_variant(variant: str) -> None:
-    paths = sorted((Path(OUT_ROOT).expanduser() / variant).glob("*.json"))
+    paths = sorted(
+        (Path(OUT_ROOT).expanduser() / "repaper-enscurve" / variant).glob("*.json")
+    )
     assert len(paths) == N_TASKS, (
         f"{variant}: {len(paths)} task curves, expected {N_TASKS}"
     )
     recs = [json.loads(p.read_text()) for p in paths]
     run = wandb.init(
-        entity=ENTITY,
-        project=PROJECT,
+        entity="rtv2",
+        project=project("enscurve"),
         name=variant,
         config={"n_tasks": N_TASKS, "n_seeds": N_SEEDS},
         reinit="finish_previous",
@@ -47,3 +46,4 @@ def reduce_variant(variant: str) -> None:
 
 if __name__ == "__main__":
     reduce_variant("default")
+    # reduce_variant("tuned")

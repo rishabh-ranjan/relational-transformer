@@ -1,4 +1,3 @@
-import json
 from pathlib import Path
 
 from roach.slurm import Resources, submit
@@ -14,26 +13,13 @@ from expts.repaper.config import (
     SECRETS_DIR,
     SHARE,
 )
+from rt.data import get_tasks
 
 DB_TASK_LIST = f"{PRE_DIR}/db-task-lists/forecast.json"
 
-PAIRS = [tuple(p) for p in json.loads(Path(DB_TASK_LIST).expanduser().read_text())]
-DBS = sorted({db for db, _ in PAIRS})
-
-CLF = {
-    ("rel-amazon", "item-churn"),
-    ("rel-amazon", "user-churn"),
-    ("rel-avito", "user-clicks"),
-    ("rel-avito", "user-visits"),
-    ("rel-event", "user-ignore"),
-    ("rel-event", "user-repeat"),
-    ("rel-f1", "driver-dnf"),
-    ("rel-f1", "driver-top3"),
-    ("rel-hm", "user-churn"),
-    ("rel-stack", "user-badge"),
-    ("rel-stack", "user-engagement"),
-    ("rel-trial", "study-outcome"),
-}
+TASKS = get_tasks(PRE_DIR, DB_TASK_LIST, ("test",))
+DBS = sorted({t.db_name for t in TASKS})
+TABLES = {db: sorted(t.table_name for t in TASKS if t.db_name == db) for db in DBS}
 
 
 def mem(db: str) -> str:
@@ -67,7 +53,14 @@ def cpu_resources(mem: str, cpus: int) -> Resources:
     )
 
 
+def featurized(db: str, subdir: str, tables: list[str]) -> bool:
+    feat_dir = Path(SHARE).expanduser() / "features" / db / subdir
+    return all((feat_dir / f"{table}_meta.json").exists() for table in tables)
+
+
 for db in DBS:
+    if featurized(db, "sql_features", TABLES[db]):
+        continue
     submit(
         "expts.repaper.baselines.featurize_sql:featurize_db",
         args=dict(
@@ -90,13 +83,16 @@ for db in DBS:
         setup=("pixi install -e featurize", "pixi run install-rdblearn"),
     )
 
-for db, table in PAIRS:
+for task in TASKS:
+    db, table = task.db_name, task.table_name
+    if featurized(db, "rdblearn_features", [table]):
+        continue
     submit(
         "expts.repaper.baselines.featurize_rdblearn:featurize_table",
         args=dict(
             db=db,
             table=table,
-            task_type="clf" if (db, table) in CLF else "reg",
+            task_type=task.task_type,
             pre_dir=PRE_DIR,
             raw_dir=RAW_DIR,
             features_root=f"{SHARE}/features",
@@ -117,6 +113,8 @@ for db, table in PAIRS:
     )
 
 for db in DBS:
+    if featurized(db, "rt_features", TABLES[db]):
+        continue
     submit(
         "expts.repaper.baselines.featurize_rt:featurize_db",
         args=dict(
@@ -162,6 +160,11 @@ for db in DBS:
 #     ("rdblearn_features", f"{SHARE}/vector_db/rdblearn"),
 #     ("rt_features", f"{SHARE}/vector_db/rt"),
 # ]:
+#     if all(
+#         (Path(root).expanduser() / t.db_name / f"{t.table_name}.index").exists()
+#         for t in TASKS
+#     ):
+#         continue
 #     submit(
 #         "expts.repaper.baselines.build_vector_db:build_all",
 #         args=dict(
@@ -171,7 +174,6 @@ for db in DBS:
 #             features_subdir=subdir,
 #             vector_db_root=root,
 #             ivf_threshold=50_000,
-#             nprobe=0,
 #         ),
 #         resources=cpu_resources("250G", 16),
 #         name=f"vecdb-{subdir.removesuffix('_features')}",

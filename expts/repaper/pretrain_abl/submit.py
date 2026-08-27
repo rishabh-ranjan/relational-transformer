@@ -1,7 +1,7 @@
 from pathlib import Path
 
 from expts.pretrain.submit_marlowe import args, cluster, resources
-from expts.repaper.config import project
+from expts.repaper.config import CLONE_ROOT, LOG_ROOT, SECRETS_DIR, project
 from roach.slurm import submit
 
 submit(
@@ -30,7 +30,7 @@ submit(
     repo_root=str(Path(__file__).resolve().parents[3]),
     cluster=cluster,
     job_env="expts/job_env.sh",
-    log_root="~/scratch/relational-transformer/repaper/pretrain_abl/slurm-logs",
-    clone_root="~/roach_clones",
-    secrets_dir="~/scratch/.secrets",
+    log_root=f"{LOG_ROOT}/repaper/pretrain_abl/slurm-logs",
+    clone_root=CLONE_ROOT,
+    secrets_dir=SECRETS_DIR,
 )

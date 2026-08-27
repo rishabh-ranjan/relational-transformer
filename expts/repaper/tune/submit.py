@@ -1,4 +1,3 @@
-import json
 from pathlib import Path
 
 from roach.slurm.clusters.ilc import ILC
@@ -14,35 +13,7 @@ from expts.repaper.config import (
     project,
 )
 from roach.slurm import Resources, submit
-
-TASKS = [
-    tuple(p)
-    for p in json.loads(
-        (Path(PRE_DIR).expanduser() / "db-task-lists" / "forecast.json").read_text()
-    )
-]
-
-GRID = [
-    (lcs, bw, pl)
-    for lcs in (256, 512, 1024, 2048, 4096, 8192)
-    for bw in (8, 32, 128)
-    for pl in (True, False)
-]
-
-CLF = {
-    ("rel-amazon", "item-churn"),
-    ("rel-amazon", "user-churn"),
-    ("rel-avito", "user-clicks"),
-    ("rel-avito", "user-visits"),
-    ("rel-event", "user-ignore"),
-    ("rel-event", "user-repeat"),
-    ("rel-f1", "driver-dnf"),
-    ("rel-f1", "driver-top3"),
-    ("rel-hm", "user-churn"),
-    ("rel-stack", "user-badge"),
-    ("rel-stack", "user-engagement"),
-    ("rel-trial", "study-outcome"),
-}
+from rt.data import get_tasks
 
 
 def resources(db: str) -> Resources:
@@ -88,7 +59,8 @@ def resources(db: str) -> Resources:
     # )
 
 
-for db, table in TASKS:
+for task in get_tasks(PRE_DIR, f"{PRE_DIR}/db-task-lists/forecast.json", ("val",)):
+    db, table = task.db_name, task.table_name
     run_id = f"tune--{db}--{table}"
     if (
         Path(CKPT_ROOT).expanduser() / "rtv2" / project("tune") / run_id / "tuning.json"
@@ -97,7 +69,7 @@ for db, table in TASKS:
     submit(
         "rt.eval:main",
         args=dict(
-            load_ckpt_path=CKPT_CLF if (db, table) in CLF else CKPT_REG,
+            load_ckpt_path={"clf": CKPT_CLF, "reg": CKPT_REG}[task.task_type],
             embedder="all-MiniLM-L12-v2",
             d_text=384,
             num_blocks=12,
@@ -120,7 +92,12 @@ for db, table in TASKS:
             context_seed=0,
             vector_db_path=None,
             db_cutoff=None,
-            lcs_bw_pl_grid=GRID,
+            lcs_bw_pl_grid=[
+                (lcs, bw, pl)
+                for lcs in (256, 512, 1024, 2048, 4096, 8192)
+                for bw in (8, 32, 128)
+                for pl in (True, False)
+            ],
             val_ensemble_size=4,
             test_ensemble_size=1,
             run_name=None,

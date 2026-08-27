@@ -32,7 +32,7 @@ Per-task results land under
 `~/scratch/ckpts/rtv2/repaper-scaling/<arm>/<db>__<table>.json`
 (metric on the normalized scale + mean in-context labels per ctx size); logs
 under
-`~/scratch/slurm-logs/rishabh-ranjan/relational-transformer/expts/repaper/scaling`.
+`~/scratch/relational-transformer/repaper/scaling/slurm-logs`.
 
 ## Protocol
 
@@ -65,9 +65,9 @@ ctx size under the `ctx_scaling/steps=0/test/*` keys (aggregates) and
 
 | wandb project | arms |
 |---|---|
-| `rtv2/2026-08-19-repaper-fulltest` | the five fulltest arms |
-| `rtv2/2026-08-19-repaper-subsampled` | the five subsampled arms |
-| `rtv2/2026-08-19-repaper-abl` | the six ablation arms + `abl/rw`,`abl/sem` re-logged from `subsampled/rt` |
+| `rtv2/<RUN_TAG>-repaper-fulltest` | the five fulltest arms |
+| `rtv2/<RUN_TAG>-repaper-subsampled` | the five subsampled arms |
+| `rtv2/<RUN_TAG>-repaper-abl` | the six ablation arms + `abl/rw`,`abl/sem` re-logged from `subsampled/rt` |
 
 ## Placement
 

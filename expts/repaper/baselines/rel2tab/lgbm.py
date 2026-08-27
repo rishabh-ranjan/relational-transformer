@@ -22,7 +22,7 @@ class LGBMPredictor:
         self.params = dict(n_jobs=1, verbose=-1)
 
     def _prep(self, train_features, train_labels, test_features, task_type):
-        if train_features is None or len(train_labels) < 2:
+        if len(train_labels) < 2:
             return 0.5 if task_type == "clf" else 0.0
         return (
             train_features.float().cpu().numpy(),
@@ -30,12 +30,6 @@ class LGBMPredictor:
             test_features.float().cpu().numpy().reshape(1, -1),
             task_type,
         )
-
-    def predict(self, train_features, train_labels, test_features, task_type):
-        prepped = self._prep(train_features, train_labels, test_features, task_type)
-        if not isinstance(prepped, tuple):
-            return prepped
-        return _fit_predict(*prepped, self.params)
 
     def predict_batch(self, work_items):
         from joblib import Parallel, delayed

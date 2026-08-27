@@ -5,9 +5,7 @@ import numpy as np
 
 from expts.repaper.config import OUT_ROOT, PRE_DIR, SHARE, project
 
-OUT_ROOT = Path(OUT_ROOT).expanduser() / "repaper-submit"
 CSV_DIR = Path(SHARE).expanduser() / "leaderboard" / "preds"
-EMBEDDER = "all-MiniLM-L12-v2"
 N_CFGS = 4
 N_SEEDS = 4
 
@@ -24,7 +22,12 @@ def main() -> None:
         db, table = task_key.split("/")
         total = labels = nodes = None
         for rank in range(N_CFGS):
-            st = np.load(OUT_ROOT / f"cfg{rank}" / f"{db}__{table}.state.npz")
+            st = np.load(
+                Path(OUT_ROOT).expanduser()
+                / "repaper-submit"
+                / f"cfg{rank}"
+                / f"{db}__{table}.state.npz"
+            )
             assert int(st["seeds"]) == N_SEEDS, (
                 f"{task_key} cfg{rank}: {int(st['seeds'])}/{N_SEEDS} seeds done"
             )
@@ -39,7 +42,7 @@ def main() -> None:
 
         (task,) = get_tasks(PRE_DIR, [(db, table)], ("test",))
         mname, mval, n, align, csv = _emit_and_score(
-            CSV_DIR, task, PRE_DIR, EMBEDDER, labels, mean_pred, nodes
+            CSV_DIR, task, PRE_DIR, "all-MiniLM-L12-v2", labels, mean_pred, nodes
         )
         results[task_key] = {
             "task_type": task.task_type,

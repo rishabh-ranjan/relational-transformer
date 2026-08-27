@@ -27,6 +27,6 @@ a mean of per-seed scores. Jobs resume per seed
 
 Curves land under
 `~/scratch/ckpts/rtv2/repaper-enscurve/<variant>/<db>__<table>.json`;
-`reduce.py` aggregates them into `rtv2/2026-08-19-repaper-enscurve` runs
+`reduce.py` aggregates them into `rtv2/<RUN_TAG>-repaper-enscurve` runs
 `default` / `tuned` (keys `ens_size`, `test/avg_mae`, `test/avg_auc`,
 `per_task/relbench/<db>/<table>/test/{mae,auc}`).

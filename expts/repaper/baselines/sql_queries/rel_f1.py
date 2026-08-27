@@ -74,54 +74,42 @@ SELECT
     t.timestamp AS date,
     t."driverId",
 
-    -- 1. Avg finish position last year (normalized to [0,1], 1st=best → 0.05, 20th → 1.0)
     LEAST(COALESCE(ra.avg_finish_order_1y, 13.0) / 20.0, 1.0)
                                                         AS avg_finish_1y_norm,
 
-    -- 2. Avg grid position last year (normalized)
     LEAST(COALESCE(ra.avg_grid_1y, 13.0) / 20.0, 1.0)
                                                         AS avg_grid_1y_norm,
 
-    -- 3. Podium rate (all-time, [0,1])
     CASE WHEN COALESCE(ra.races_total, 0) > 0
          THEN ra.podiums_total::DOUBLE / ra.races_total
          ELSE 0.0 END                                  AS podium_rate,
 
-    -- 4. Podium rate last year ([0,1])
     CASE WHEN COALESCE(ra.races_1y, 0) > 0
          THEN ra.podiums_1y::DOUBLE / ra.races_1y
          ELSE 0.0 END                                  AS podium_rate_1y,
 
-    -- 5. DNF rate (all-time, [0,1])
     CASE WHEN COALESCE(ra.races_total, 0) > 0
          THEN ra.dnf_total::DOUBLE / ra.races_total
          ELSE 0.5 END                                  AS dnf_rate,
 
-    -- 6. DNF rate last year ([0,1])
     CASE WHEN COALESCE(ra.races_1y, 0) > 0
          THEN ra.dnf_1y::DOUBLE / ra.races_1y
          ELSE 0.5 END                                  AS dnf_rate_1y,
 
-    -- 7. Last race position (normalized)
     LEAST(COALESCE(ra.last_race_position, 13.0) / 20.0, 1.0)
                                                         AS last_race_pos_norm,
 
-    -- 8. Last race DNF (binary)
     COALESCE(ra.last_race_dnf, 0)::DOUBLE              AS last_race_dnf,
 
-    -- 9. Avg qualifying position last year (normalized)
     LEAST(COALESCE(qa.avg_qual_position_1y, 13.0) / 20.0, 1.0)
                                                         AS avg_qual_1y_norm,
 
-    -- 10. Constructor standing (normalized, 1=best → 0.1, 10=worst → 1.0)
     LEAST(COALESCE(cst.constructor_standing, 6.0) / 10.0, 1.0)
                                                         AS constructor_standing_norm,
 
-    -- 11. Team avg position last year (normalized)
     LEAST(COALESCE(cp.team_avg_position_1y, 13.0) / 20.0, 1.0)
                                                         AS team_avg_pos_1y_norm,
 
-    -- 12. Driver vs team (relative skill, shifted to [0,1], 0.5=neutral)
     LEAST(GREATEST(
         0.5 + (COALESCE(ra.avg_finish_order_1y, 13) - COALESCE(cp.team_avg_position_1y, 13)) / 20.0,
         0.0), 1.0)                                     AS driver_vs_team_norm

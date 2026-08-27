@@ -52,42 +52,33 @@ SELECT
     t.timestamp,
     t."AdID",
 
-    -- 1. Historical CTR (ratio, [0,1])
     CASE WHEN COALESCE(ash.impressions_total, 0) > 0
          THEN LEAST(ash.clicks_total::DOUBLE / ash.impressions_total, 1.0)
          ELSE 0.02 END                                 AS hist_ctr,
 
-    -- 2. Platform historical CTR (avg_hist_ctr, already ~[0,1])
     LEAST(GREATEST(COALESCE(ash.avg_hist_ctr, 0.02), 0.0), 1.0)
                                                         AS avg_hist_ctr,
 
-    -- 3. Category CTR (already [0,1])
     LEAST(GREATEST(COALESCE(cc.cat_avg_ctr, 0.02), 0.0), 1.0)
                                                         AS cat_avg_ctr,
 
-    -- 4. Log price (normalized, cap at ~1M → LN(1M)≈13.8)
     LEAST(LN(1 + COALESCE(ai."Price", 0)) / 13.8, 1.0)
                                                         AS log_price_norm,
 
-    -- 5. Relative price (ad vs category median, capped at 5x)
     CASE WHEN COALESCE(cp.cat_median_price, 0) > 0
          THEN LEAST(COALESCE(ai."Price", 0) / cp.cat_median_price / 5.0, 1.0)
          ELSE 0.2 END                                  AS relative_price_norm,
 
-    -- 6. Log impressions (capped at ~10K → LN(10001)≈9.2)
     LEAST(LN(1 + COALESCE(ash.impressions_total, 0)) / 9.2, 1.0)
                                                         AS log_impressions_norm,
 
-    -- 7. Average position (normalized, lower=better, cap at 20)
     LEAST(COALESCE(ash.avg_position, 10.0) / 20.0, 1.0)
                                                         AS avg_position_norm,
 
-    -- 8. Visit rate (visits / impressions, [0,1])
     CASE WHEN COALESCE(ash.impressions_total, 0) > 0
          THEN LEAST(COALESCE(avh.visits_total, 0)::DOUBLE / ash.impressions_total, 1.0)
          ELSE 0.0 END                                  AS visit_rate,
 
-    -- 9. CTR trend (recent 3d vs all-time, shifted to [0,1] with 0.5=neutral)
     CASE WHEN COALESCE(ash.impressions_total, 0) > 5 AND COALESCE(ash.impressions_3d, 0) > 2
          THEN LEAST(GREATEST(
              0.5 + (ash.clicks_3d::DOUBLE / ash.impressions_3d
@@ -95,7 +86,6 @@ SELECT
              0.0), 1.0)
          ELSE 0.5 END                                  AS ctr_trend_norm,
 
-    -- 10. Is new ad (no search history, binary)
     CASE WHEN ash."AdID" IS NULL THEN 1.0 ELSE 0.0 END AS is_new_ad
 
 FROM task t
@@ -154,43 +144,33 @@ SELECT
     t.timestamp,
     t."UserID",
 
-    -- 1. Log visit count (capped at ~5K → LN(5001)≈8.5)
     LEAST(LN(1 + COALESCE(uv.visits_total, 0)) / 8.5, 1.0)
                                                         AS log_visits_norm,
 
-    -- 2. Recent visit intensity (visits in 3d, log-scaled, cap ~100)
     LEAST(LN(1 + COALESCE(uv.visits_3d, 0)) / 4.6, 1.0)
                                                         AS log_visits_3d_norm,
 
-    -- 3. Visit recency (exponential decay, 3-day half-life)
     EXP(-COALESCE(uv.days_since_last_visit, 9999) / 4.3)
                                                         AS visit_recency,
 
-    -- 4. Unique ads visited (diversity, log-scaled, cap ~2K)
     LEAST(LN(1 + COALESCE(uv.unique_ads_visited, 0)) / 7.6, 1.0)
                                                         AS log_unique_ads_norm,
 
-    -- 5. Log search count (cap ~10K)
     LEAST(LN(1 + COALESCE(us.searches_total, 0)) / 9.2, 1.0)
                                                         AS log_searches_norm,
 
-    -- 6. Search recency (exponential decay, 3-day half-life)
     EXP(-COALESCE(us.days_since_last_search, 9999) / 4.3)
                                                         AS search_recency,
 
-    -- 7. User CTR (clicks / impressions, [0,1])
     CASE WHEN COALESCE(uc.stream_impressions, 0) > 0
          THEN LEAST(uc.clicks_total::DOUBLE / uc.stream_impressions, 1.0)
          ELSE 0.0 END                                  AS user_ctr,
 
-    -- 8. Log stream impressions (cap ~50K → LN(50001)≈10.8)
     LEAST(LN(1 + COALESCE(uc.stream_impressions, 0)) / 10.8, 1.0)
                                                         AS log_impressions_norm,
 
-    -- 9. Avg logged on (already [0,1])
     COALESCE(us.avg_logged_on, 0.0)                    AS avg_logged_on,
 
-    -- 10. Is new user (binary)
     CASE WHEN us."UserID" IS NULL AND uv."UserID" IS NULL
          THEN 1.0 ELSE 0.0 END                        AS is_new_user
 

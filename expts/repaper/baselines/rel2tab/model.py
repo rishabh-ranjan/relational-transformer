@@ -31,7 +31,6 @@ class Rel2TabModel(nn.Module):
                 empty_long,
                 torch.empty(0, dtype=torch.float),
                 torch.empty(0, dtype=torch.bool),
-                torch.empty((0, batch["f2p_nbr_idxs"].shape[-1]), dtype=torch.long),
             )
         target_col = col_name_idxs[b_idxs[0], s_idxs[0]]
         target_node_per_b = torch.full((B,), -1, dtype=node_idxs.dtype)
@@ -54,7 +53,6 @@ class Rel2TabModel(nn.Module):
             node_idxs[lc_b, lc_s],
             vals[lc_b, lc_s].float(),
             node_idxs[lc_b, lc_s] == target_node_per_b[lc_b],
-            batch["f2p_nbr_idxs"][lc_b, lc_s],
         )
 
     def _predict_per_ctx(
@@ -66,12 +64,10 @@ class Rel2TabModel(nn.Module):
         positions,
         labels,
         is_target,
-        f2ps,
         features,
     ):
         preds = {ctx: torch.zeros(true_bs) for ctx in eval_ctx_sizes}
         default = 0.5 if task_type == "clf" else 0.0
-        has_feats = features is not None
 
         work_items = []
         for b in range(true_bs):
@@ -83,8 +79,7 @@ class Rel2TabModel(nn.Module):
             b_positions = positions[b_mask]
             b_labels = labels[b_mask]
             b_is_target = is_target[b_mask]
-            b_f2ps = f2ps[b_mask]
-            b_feats = features[b_mask] if has_feats else None
+            b_feats = features[b_mask]
 
             target_idx = b_is_target.nonzero(as_tuple=True)[0]
             if len(target_idx) == 0:
@@ -92,8 +87,6 @@ class Rel2TabModel(nn.Module):
                     preds[ctx][b] = default
                 continue
             target_idx = target_idx[0].item()
-            target_f2p = b_f2ps[target_idx]
-            test_feat = b_feats[target_idx] if has_feats else None
 
             for ctx in eval_ctx_sizes:
                 visible = b_positions < ctx
@@ -101,30 +94,24 @@ class Rel2TabModel(nn.Module):
                     preds[ctx][b] = default
                     continue
                 train_mask = visible & ~b_is_target
-                train_feats = (
-                    b_feats[train_mask] if has_feats and train_mask.any() else None
+                work_items.append(
+                    (
+                        ctx,
+                        b,
+                        b_feats[train_mask],
+                        b_labels[train_mask],
+                        b_feats[target_idx],
+                    )
                 )
-                ft, lt, tt = self.featurizer.featurize(
-                    b_labels[train_mask],
-                    b_f2ps[train_mask],
-                    target_f2p,
-                    train_feats,
-                    test_feat,
-                )
-                work_items.append((ctx, b, ft, lt, tt))
 
         if not work_items:
             return preds
 
-        if hasattr(self.predictor, "predict_batch"):
-            results = self.predictor.predict_batch(
-                [(ft, lt, tt, task_type) for _ctx, _b, ft, lt, tt in work_items]
-            )
-            for (ctx, b, _ft, _lt, _tt), pred_val in zip(work_items, results):
-                preds[ctx][b] = pred_val
-        else:
-            for ctx, b, ft, lt, tt in work_items:
-                preds[ctx][b] = self.predictor.predict(ft, lt, tt, task_type)
+        results = self.predictor.predict_batch(
+            [(ft, lt, tt, task_type) for _ctx, _b, ft, lt, tt in work_items]
+        )
+        for (ctx, b, _ft, _lt, _tt), pred_val in zip(work_items, results):
+            preds[ctx][b] = pred_val
         return preds
 
     def predict(self, batch, eval_ctx_size_list, device, task):
@@ -141,13 +128,12 @@ class Rel2TabModel(nn.Module):
                 "sem_types",
                 "boolean_values",
                 "number_values",
-                "f2p_nbr_idxs",
             )
         }
 
         tic = time.time()
-        item_idxs, positions, node_idxs, labels, is_target, f2ps = (
-            self._extract_task_nodes(cpu_batch)
+        item_idxs, positions, node_idxs, labels, is_target = self._extract_task_nodes(
+            cpu_batch
         )
         t_extract = time.time() - tic
 
@@ -167,7 +153,6 @@ class Rel2TabModel(nn.Module):
             positions,
             labels,
             is_target,
-            f2ps,
             features,
         )
         preds = {}

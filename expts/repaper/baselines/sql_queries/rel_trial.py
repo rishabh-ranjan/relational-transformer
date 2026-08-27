@@ -63,37 +63,28 @@ SELECT
     t.timestamp,
     t.nct_id,
 
-    -- 1. Sponsor track record (p-value already in [0,1])
     COALESCE(sh.sponsor_avg_p_value, 0.5)              AS sponsor_avg_p,
 
-    -- 2. Sponsor experience (log-scaled, capped)
     LEAST(LN(1 + COALESCE(sh.sponsor_num_studies, 0)) / LN(500), 1.0)
                                                         AS sponsor_experience,
 
-    -- 3. Condition area difficulty (p-value in [0,1])
     COALESCE(ch.condition_avg_p_value, 0.5)            AS condition_avg_p,
 
-    -- 4. Condition historical success rate
     CASE WHEN COALESCE(ch.condition_num_studies, 0) > 0
          THEN LEAST(ch.condition_num_significant::DOUBLE
                      / ch.condition_num_studies, 1.0)
          ELSE 0.3 END                                  AS condition_sig_rate,
 
-    -- 5. Log enrollment (capped at ~50K → LN(50001)≈10.8)
     LEAST(LN(1 + COALESCE(si.enrollment, 0)) / 10.8, 1.0)
                                                         AS log_enrollment_norm,
 
-    -- 6. Study age (recency, exponential decay with 2-year half-life)
     EXP(-COALESCE(si.study_age_days, 0) / 730.0)      AS study_recency,
 
-    -- 7. Late phase indicator (Phase 3/4 → 1, else 0)
     CASE WHEN si.phase IN ('Phase 3', 'Phase 4', 'Phase 2/Phase 3')
          THEN 1.0 ELSE 0.0 END                        AS is_late_phase,
 
-    -- 8. Has DMC (binary)
     CASE WHEN si.has_dmc = 'Yes' THEN 1.0 ELSE 0.0 END AS has_dmc,
 
-    -- 9. Masking level (normalized 0-4 → 0-1)
     CASE di.masking
         WHEN 'None (Open Label)' THEN 0.0
         WHEN 'Single' THEN 0.25
@@ -102,7 +93,6 @@ SELECT
         WHEN 'Quadruple' THEN 1.0
         ELSE 0.0 END                                  AS masking_norm,
 
-    -- 10. Scale: log num_sites (capped at ~1000 → LN(1001)≈6.9)
     LEAST(LN(1 + COALESCE(sc.num_sites, 0)) / 6.9, 1.0)
                                                         AS log_sites_norm
 
@@ -168,34 +158,26 @@ SELECT
     t.timestamp,
     t.facility_id,
 
-    -- 1. Historical significance rate (ratio in [0,1])
     CASE WHEN COALESCE(fo.total_analyses, 0) > 0
          THEN fo.num_significant::DOUBLE / fo.total_analyses
          ELSE 0.44 END                                 AS significance_rate,
 
-    -- 2. Study volume (log-scaled, capped at ~500)
     LEAST(LN(1 + COALESCE(stc.total_studies, 0)) / 6.2, 1.0)
                                                         AS log_studies_norm,
 
-    -- 3. Recent activity (studies in last year / total)
     CASE WHEN COALESCE(stc.total_studies, 0) > 0
          THEN stc.studies_1y::DOUBLE / stc.total_studies
          ELSE 0.0 END                                  AS recent_study_frac,
 
-    -- 4. Fraction late-phase studies (already [0,1])
     COALESCE(sa.frac_late_phase, 0.0)                  AS frac_late_phase,
 
-    -- 5. Fraction interventional (already [0,1])
     COALESCE(sa.frac_interventional, 0.0)              AS frac_interventional,
 
-    -- 6. Has industry sponsor (binary)
     COALESCE(fsp.has_industry_sponsor, 0)::DOUBLE      AS has_industry_sponsor,
 
-    -- 7. Has any outcome data (binary)
     CASE WHEN fo.facility_id IS NOT NULL THEN 1.0 ELSE 0.0 END
                                                         AS has_outcome_data,
 
-    -- 8. Is new facility (no prior studies)
     CASE WHEN stc.facility_id IS NULL THEN 1.0 ELSE 0.0 END
                                                         AS is_new_facility
 

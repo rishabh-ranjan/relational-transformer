@@ -15,9 +15,14 @@ def featurize_db(
     os.environ["RELBENCH_CACHE_DIR"] = relbench_cache_dir
     import duckdb
     import numpy as np
+    import pandas as pd
     from relbench.datasets import get_dataset
 
-    from expts.repaper.baselines.rel2tab.featurizer import table_offset_and_len
+    from expts.repaper.baselines.rel2tab.featurizer import (
+        get_table_splits,
+        load_table_info,
+        table_offset_and_len,
+    )
     from expts.repaper.baselines.sql_queries import SQL_REGISTRY
 
     tables = sorted(
@@ -41,13 +46,6 @@ def featurize_db(
         sql, entity_col, time_col = entry["sql"], entry["entity_col"], entry["time_col"]
 
         min_offset, total_nodes = table_offset_and_len(pre_dir, db, table)
-        import pandas as pd
-
-        from expts.repaper.baselines.rel2tab.featurizer import (
-            get_table_splits,
-            load_table_info,
-        )
-
         splits_info = get_table_splits(load_table_info(pre_dir, db), table)
         ordered = sorted(splits_info.items(), key=lambda kv: kv[1]["node_idx_offset"])
         combined = pd.concat(

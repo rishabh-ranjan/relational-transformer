@@ -4,16 +4,6 @@ import uuid
 from collections import OrderedDict
 from pathlib import Path
 
-BASELINE_EMBEDDER = "all-MiniLM-L12-v2"
-BASELINE_D_TEXT = 384
-
-FEATURES_SUBDIR = {
-    "rdblearn_tabicl": "rdblearn_features",
-    "rdblearn_lgbm": "rdblearn_features",
-    "sql_tabicl": "sql_features",
-    "sql_lgbm": "sql_features",
-}
-
 
 def _atomic_write_json(path: Path, obj: dict) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -83,7 +73,14 @@ def main(
         from expts.repaper.baselines.rel2tab.precomputed import PrecomputedFeaturizer
 
         featurizer = PrecomputedFeaturizer(
-            features_root, FEATURES_SUBDIR[method], [(db, table)]
+            features_root,
+            {
+                "rdblearn_tabicl": "rdblearn_features",
+                "rdblearn_lgbm": "rdblearn_features",
+                "sql_tabicl": "sql_features",
+                "sql_lgbm": "sql_features",
+            }[method],
+            [(db, table)],
         )
         if method.endswith("_tabicl"):
             from expts.repaper.baselines.rel2tab.tabicl_batched import (
@@ -104,7 +101,7 @@ def main(
             device = "cpu"
             predictor = LGBMPredictor(n_jobs=lgbm_n_jobs)
         model = Rel2TabModel(featurizer, predictor)
-        embedder, d_text = BASELINE_EMBEDDER, BASELINE_D_TEXT
+        embedder, d_text = "all-MiniLM-L12-v2", 384
 
     ev = build_evaluator(
         [task],
@@ -136,9 +133,12 @@ def main(
         metric_name, metric_value = metric_for(
             task.task_type, labels, preds_by_prefix[""]
         )
+        assert np.isfinite(metric_value), (
+            f"{db}/{table} ctx={ctx}: {metric_name}={metric_value}"
+        )
         per_ctx[int(ctx)] = {
             "metric_name": metric_name,
-            "metric_value": metric_value if np.isfinite(metric_value) else None,
+            "metric_value": metric_value,
             "n": int(labels.shape[0]),
             "mean_labels": float(np.mean(num_labels)),
         }

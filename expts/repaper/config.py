@@ -5,7 +5,6 @@ CKPT_REG = "~/scratch/hf/stanford-star/rt-j/regression"
 
 PRE_DIR = "~/scratch/hf/stanford-star/relbench-preprocessed"
 RAW_DIR = "~/scratch/hf/stanford-star/relbench"
-JOIN_PRE_DIR = "~/scratch/hf/stanford-star/the-join-preprocessed"
 
 SHARE = "~/scratch/hf/relational-transformer/repaper"
 
