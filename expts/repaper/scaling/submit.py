@@ -305,8 +305,8 @@ HIGH = {
     ("abl/vdb_rdblearn", "rel-stack", "post-votes"): ("il", "b200", 2),
     ("abl/vdb_rdblearn", "rel-hm", "item-sales"): ("il", "b200", 2),
     ("abl/vdb_rdblearn", "rel-stack", "user-engagement"): ("il", "b200", 2),
-    ("fulltest_ext/rdblearn_tabicl", "rel-hm", "item-sales"): ("il", "b200", 120),
-    ("fulltest_ext/sql_tabicl", "rel-amazon", "user-ltv"): ("il", "b200", 120),
+    # 10:59: the two b200 placements sat on ReqNodeNotAvail with the cap open
+    # (every b200 held by other users' il jobs), so they run on a100s too.
     # 06:26: the rt index is built and the vdb_rt arm is submitted; 06:27: all
     # eight b200s are taken by other users' il jobs, so its passes run on il
     # a100s like the rest.
