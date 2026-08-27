@@ -263,6 +263,11 @@ HIGH = {
     # up as slots free.
     ("subsampled/rt", "rel-stack", "user-badge"): ("il", "a100", 2),
     ("subsampled/rt", "rel-hm", "user-churn"): ("il", "a100", 2),
+    # 03:30: user-badge's subsampled RT pass handed an il a100 back; il-lo
+    # had meanwhile preempted rel-stack's two full-test rdblearn TabICL
+    # passes (2 h and 1.5 h from the top), so they move up as slots free.
+    ("fulltest/rdblearn_tabicl", "rel-stack", "user-badge"): ("il", "a100", 6),
+    ("fulltest/rdblearn_tabicl", "rel-stack", "post-votes"): ("il", "a100", 6),
 }
 
 
