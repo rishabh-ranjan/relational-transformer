@@ -276,6 +276,10 @@ HIGH = {
         12,
     ),
     ("fulltest/sql_tabicl", "rel-stack", "user-badge"): ("il-interactive", "b200", 12),
+    # 04:47: two b200s idle with the il cap at 8/10 and every a100 busy; the
+    # two largest vdb_rdblearn passes still queued take them.
+    ("abl/vdb_rdblearn", "rel-amazon", "user-churn"): ("il", "b200", 2),
+    ("abl/vdb_rdblearn", "rel-amazon", "user-ltv"): ("il", "b200", 2),
 }
 
 
