@@ -241,6 +241,8 @@ TUNE: dict[tuple[str, str, str], Resources] = {
 # fine_tune hands one over explicitly.
 # 18:05: two b200s freed with il full, but user-churn's cfg1/cfg2 had just
 # backfilled onto il-lo a100s, so they stay there.
+# 18:15: fine_tune is done and three b200s sit idle with nothing of mine
+# queued: item-sales' units take them (il, il-interactive, il-lo).
 ENS: dict[tuple[str, str, str], list[Resources]] = {
     ("rt-plurel", "rel-amazon", "user-churn"): [
         b200("il", "1-00:00:00"),
@@ -339,7 +341,12 @@ ENS: dict[tuple[str, str, str], list[Resources]] = {
         a100("il-lo", "12:00:00"),
     ],
     ("rt-j", "rel-stack", "post-votes"): [a100("il-lo", "1-00:00:00")] * 4,
-    ("rt-j", "rel-hm", "item-sales"): [a100("il-lo", "1-00:00:00")] * 4,
+    ("rt-j", "rel-hm", "item-sales"): [
+        b200("il", "12:00:00"),
+        b200("il-interactive", "12:00:00"),
+        b200("il-lo", "6:00:00"),
+        a100("il-lo", "6:00:00"),
+    ],
     ("rt-j", "rel-stack", "user-engagement"): [
         a100("il-lo", "6:00:00"),
         a100("il-lo", "6:00:00"),
