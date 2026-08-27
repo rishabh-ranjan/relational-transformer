@@ -307,7 +307,7 @@ ENS: dict[tuple[str, str, str], list[Resources]] = {
     ("rt-j", "rel-amazon", "item-ltv"): [
         b200("il-interactive", "12:00:00"),
         a100("il", "12:00:00"),
-        a100("il-lo", "6:00:00"),
+        a100("il", "12:00:00"),
         a100("il-lo", "6:00:00"),
     ],
     ("rt-j", "rel-amazon", "item-churn"): [
