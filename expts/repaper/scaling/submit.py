@@ -22,6 +22,30 @@ TASKS = [
     )
 ]
 
+TEST_ROWS = {
+    "rel-amazon/user-churn": 351_885,
+    "rel-amazon/user-ltv": 351_885,
+    "rel-amazon/item-ltv": 178_334,
+    "rel-amazon/item-churn": 166_842,
+    "rel-stack/user-badge": 255_360,
+    "rel-stack/post-votes": 160_903,
+    "rel-hm/item-sales": 105_542,
+    "rel-stack/user-engagement": 88_137,
+    "rel-hm/user-churn": 74_575,
+    "rel-avito/user-clicks": 47_996,
+    "rel-avito/user-visits": 36_129,
+    "rel-trial/site-success": 22_617,
+    "rel-trial/study-adverse": 3_098,
+    "rel-event/user-attendance": 1_958,
+    "rel-event/user-ignore": 1_958,
+    "rel-avito/ad-ctr": 1_816,
+    "rel-trial/study-outcome": 825,
+    "rel-f1/driver-position": 760,
+    "rel-f1/driver-top3": 726,
+    "rel-f1/driver-dnf": 702,
+    "rel-event/user-repeat": 246,
+}
+
 RT_CTX = [256, 512, 1024, 2048, 4096, 8192]
 BASELINE_CTX = RT_CTX + [16384, 32768, 65536, 131072]
 FULL = 10_000_000
@@ -118,12 +142,12 @@ def mem(db: str) -> str:
     }[db]
 
 
-def gpu_resources(db: str) -> Resources:
+def a100(qos: str, hours: int, db: str) -> Resources:
     return Resources(
         partition="il",
         account="infolab",
-        qos="il-lo",
-        time="2-00:00:00",
+        qos=qos,
+        time=f"{hours}:00:00",
         gpus="a100:1",
         cpus_per_task=8,
         ntasks=None,
@@ -134,15 +158,35 @@ def gpu_resources(db: str) -> Resources:
         nodelist=None,
         reservation=None,
         dependency=None,
+        exclude="ampere4",
     )
 
 
-def cpu_resources(db: str) -> Resources:
+def b200(qos: str, hours: int, db: str) -> Resources:
+    return Resources(
+        partition="il",
+        account="infolab",
+        qos=qos,
+        time=f"{hours}:00:00",
+        gpus="b200:1",
+        cpus_per_task=8,
+        ntasks=None,
+        exclusive=False,
+        mem=mem(db),
+        mem_per_gpu=None,
+        constraint=None,
+        nodelist="blackwell1",
+        reservation=None,
+        dependency=None,
+    )
+
+
+def cpu(hours: int, db: str) -> Resources:
     return Resources(
         partition="il",
         account="infolab",
         qos="il-lo",
-        time="2-00:00:00",
+        time=f"{hours}:00:00",
         gpus="0",
         cpus_per_task=32,
         ntasks=1,
@@ -156,42 +200,122 @@ def cpu_resources(db: str) -> Resources:
     )
 
 
-# submit(
-#     "expts.repaper.scaling.make_nosem_data:main",
-#     args=dict(
-#         pre_dir=PRE_DIR,
-#         out_dir=f"{SHARE}/relbench-preprocessed-nosem",
-#         embedder="all-MiniLM-L12-v2",
-#         d_text=384,
-#         seed=0,
-#     ),
-#     resources=Resources(
-#         partition="il",
-#         account="infolab",
-#         qos="il-lo",
-#         time="4:00:00",
-#         gpus="0",
-#         cpus_per_task=4,
-#         ntasks=1,
-#         exclusive=False,
-#         mem="32G",
-#         mem_per_gpu=None,
-#         constraint=None,
-#         nodelist=None,
-#         reservation=None,
-#         dependency=None,
-#     ),
-#     name="nosem-data",
-#     repo_root=str(Path(__file__).resolve().parents[3]),
-#     cluster=ILC,
-#     job_env="expts/job_env.sh",
-#     log_root=f"{LOG_ROOT}/repaper/scaling/slurm-logs",
-#     clone_root=CLONE_ROOT,
-#     secrets_dir=SECRETS_DIR,
-# )
+# 2026-08-27 00:30, read off the live cluster: every a100 but ampere2's seven
+# is allocated and those are planned for a whole-node il-lo job at 11:45, two
+# b200s show free but are planned; il-interactive starts now on either card
+# (sbatch --test-only), il and il-lo report a day and eleven days out, though
+# my fairshare puts my jobs ahead of every other pending il-lo job. So: the
+# two il-interactive slots and the il b200 sub-cap go to the four rel-amazon
+# full-test RT passes (~6 h on an a100 by the 2026-08-19 round's rate, ~3 h on
+# a b200), the il a100 slots to the next-longest non-resumable passes, and
+# everything else is il-lo with a limit that fits ampere2's backfill window.
+# ilc-icl holds the tenth il slot (a b200) until ~01:05.
+HIGH = {
+    ("fulltest/rt", "rel-amazon", "user-churn"): ("il-interactive", "b200", 12),
+    ("fulltest/rt", "rel-amazon", "user-ltv"): ("il-interactive", "b200", 12),
+    ("fulltest/rt", "rel-amazon", "item-ltv"): ("il", "b200", 12),
+    ("fulltest/rt", "rel-amazon", "item-churn"): ("il", "a100", 12),
+    ("fulltest/rt", "rel-stack", "user-badge"): ("il", "a100", 12),
+    ("fulltest/rt", "rel-stack", "post-votes"): ("il", "a100", 8),
+    ("fulltest/rt", "rel-hm", "item-sales"): ("il", "a100", 6),
+    ("fulltest/rt", "rel-stack", "user-engagement"): ("il", "a100", 6),
+    ("fulltest/rt", "rel-hm", "user-churn"): ("il", "a100", 4),
+    ("subsampled/rdblearn_tabicl", "rel-stack", "user-badge"): ("il", "a100", 12),
+    ("subsampled/sql_tabicl", "rel-stack", "user-badge"): ("il", "a100", 10),
+}
 
-for arm in ["fulltest/rt", "subsampled/rt", "abl/rand", "abl/bfs32", "abl/bfs256"]:
-    # for arm in ["abl/vdb_rdblearn", "abl/vdb_rt", "abl/nosem"]:
+
+def resources(arm: str, db: str, table: str) -> Resources:
+    if (arm, db, table) in HIGH:
+        qos, card, hours = HIGH[arm, db, table]
+        return {"a100": a100, "b200": b200}[card](qos, hours, db)
+    method = ARMS[arm][0]
+    rows = TEST_ROWS[f"{db}/{table}"]
+    full = arm.startswith("fulltest/")
+    if method.endswith("_lgbm"):
+        if full:
+            return cpu(
+                16
+                if rows >= 150_000
+                else 10
+                if rows >= 50_000
+                else 4
+                if rows >= 10_000
+                else 1,
+                db,
+            )
+        return cpu(12 if rows >= 20_000 else 4, db)
+    if method.endswith("_tabicl"):
+        if full:
+            hours = (
+                6
+                if rows >= 150_000
+                else 4
+                if rows >= 50_000
+                else 2
+                if rows >= 10_000
+                else 1
+            )
+        else:
+            hours = 6 if rows >= 100_000 else 3 if rows >= 20_000 else 2
+        return a100("il-lo", hours, db)
+    if full:
+        return a100("il-lo", 3 if rows >= 30_000 else 2 if rows >= 10_000 else 1, db)
+    return a100("il-lo", 2 if ARMS[arm][1].get("vector_db_path") else 1, db)
+
+
+nosem = submit(
+    "expts.repaper.scaling.make_nosem_data:main",
+    args=dict(
+        pre_dir=PRE_DIR,
+        out_dir=f"{SHARE}/relbench-preprocessed-nosem",
+        embedder="all-MiniLM-L12-v2",
+        d_text=384,
+        seed=0,
+    ),
+    resources=Resources(
+        partition="il",
+        account="infolab",
+        qos="il-lo",
+        time="2:00:00",
+        gpus="0",
+        cpus_per_task=4,
+        ntasks=1,
+        exclusive=False,
+        mem="32G",
+        mem_per_gpu=None,
+        constraint=None,
+        nodelist=None,
+        reservation=None,
+        dependency=None,
+    ),
+    name="repaper-nosem-data",
+    repo_root=str(Path(__file__).resolve().parents[3]),
+    cluster=ILC,
+    job_env="expts/job_env.sh",
+    log_root=f"{LOG_ROOT}/repaper/scaling/slurm-logs",
+    clone_root=CLONE_ROOT,
+    secrets_dir=SECRETS_DIR,
+)
+
+for arm in [
+    "fulltest/rt",
+    "subsampled/rt",
+    "abl/rand",
+    "abl/bfs32",
+    "abl/bfs256",
+    "abl/vdb_rdblearn",
+    "abl/nosem",
+    "fulltest/rdblearn_tabicl",
+    "fulltest/sql_tabicl",
+    "subsampled/rdblearn_tabicl",
+    "subsampled/sql_tabicl",
+    "fulltest/rdblearn_lgbm",
+    "fulltest/sql_lgbm",
+    "subsampled/rdblearn_lgbm",
+    "subsampled/sql_lgbm",
+    # "abl/vdb_rt",
+]:
     method, overrides = ARMS[arm]
     for db, table in TASKS:
         out_dir = f"{OUT_ROOT}/repaper-scaling/{arm}"
@@ -226,9 +350,8 @@ for arm in ["fulltest/rt", "subsampled/rt", "abl/rand", "abl/bfs32", "abl/bfs256
             )
             | overrides
             | dict(method=method, db=db, table=table, out_dir=out_dir),
-            resources=gpu_resources(db),
-            # resources=cpu_resources(db),
-            name=f"scal-{arm.replace('/', '-')}-{db}-{table}",
+            resources=resources(arm, db, table),
+            name=f"repaper-scal-{arm.replace('/', '-')}-{db}-{table}",
             repo_root=str(Path(__file__).resolve().parents[3]),
             cluster=ILC,
             job_env="expts/job_env.sh",
@@ -238,4 +361,5 @@ for arm in ["fulltest/rt", "subsampled/rt", "abl/rand", "abl/bfs32", "abl/bfs256
             setup=("pixi run maturin develop --uv --release --features vecdb",)
             if overrides.get("vector_db_path")
             else (),
+            after=nosem.id if arm == "abl/nosem" else None,
         )

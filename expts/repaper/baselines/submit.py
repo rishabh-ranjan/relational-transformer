@@ -72,7 +72,7 @@ for db in DBS:
             relbench_cache_dir=f"{SHARE}/relbench-cache",
         ),
         resources=cpu_resources(mem(db), 4),
-        name=f"feat-sql-{db}",
+        name=f"repaper-feat-sql-{db}",
         repo_root=str(Path(__file__).resolve().parents[3]),
         cluster=ILC,
         job_env="expts/job_env.sh",
@@ -101,7 +101,7 @@ for task in TASKS:
             max_train_samples=1000,
         ),
         resources=cpu_resources(mem(db), 16),
-        name=f"feat-rdbl-{db}-{table}",
+        name=f"repaper-feat-rdbl-{db}-{table}",
         repo_root=str(Path(__file__).resolve().parents[3]),
         cluster=ILC,
         job_env="expts/job_env.sh",
@@ -135,7 +135,7 @@ for db in DBS:
             partition="il",
             account="infolab",
             qos="il-lo",
-            time="1-00:00:00",
+            time="8:00:00" if db == "rel-amazon" else "3:00:00",
             gpus="a100:1",
             cpus_per_task=8,
             ntasks=None,
@@ -146,8 +146,9 @@ for db in DBS:
             nodelist=None,
             reservation=None,
             dependency=None,
+            exclude="ampere4",
         ),
-        name=f"feat-rt-{db}",
+        name=f"repaper-feat-rt-{db}",
         repo_root=str(Path(__file__).resolve().parents[3]),
         cluster=ILC,
         job_env="expts/job_env.sh",
@@ -157,7 +158,7 @@ for db in DBS:
     )
 
 # for subdir, root in [
-#     ("rdblearn_features", f"{SHARE}/vector_db/rdblearn"),
+#     # ("rdblearn_features", f"{SHARE}/vector_db/rdblearn"),
 #     ("rt_features", f"{SHARE}/vector_db/rt"),
 # ]:
 #     if all(
@@ -176,7 +177,7 @@ for db in DBS:
 #             ivf_threshold=50_000,
 #         ),
 #         resources=cpu_resources("250G", 16),
-#         name=f"vecdb-{subdir.removesuffix('_features')}",
+#         name=f"repaper-vecdb-{subdir.removesuffix('_features')}",
 #         repo_root=str(Path(__file__).resolve().parents[3]),
 #         cluster=ILC,
 #         job_env="expts/job_env.sh",

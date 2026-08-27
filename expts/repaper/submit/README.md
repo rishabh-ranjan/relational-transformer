@@ -18,6 +18,17 @@ pixi run python -m relbench.submit \
     ~/scratch/hf/relational-transformer/repaper/leaderboard/preds
 ```
 
+The 2026-08-19 round did not submit: its units are the rt-j ensemble units
+of [`../../icl`](../../icl/README.md) (`ens-rt-j-<db>-<table>-cfg<k>/`, or
+one `-s<j>/` directory per seed where a rank ran as four jobs, under
+`~/scratch/relational-transformer/icl/rtv2/2026-08-25-icl/`), run 2026-08-26
+on the same checkpoint pair, data, configurations and seed family
+(`member_context_seed(0, j)`, j = 0..3) as `../enscurve/run.py` at
+`n_seeds=4` on the full split. `reduce.py`'s `units()` names that path (the
+repaper layout is the commented alternative) and asserts every unit's
+configuration against `tuned_configs.json`, its checkpoint, seeds and
+protocol before summing it.
+
 The zips + validation report are the submission package; it stays under
 `~/scratch/hf/relational-transformer/repaper/leaderboard/`. Submit
 by opening the issue form on `rishabh-ranjan/relbench` and attaching the

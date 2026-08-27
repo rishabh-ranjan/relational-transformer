@@ -7,22 +7,42 @@ import wandb
 from expts.repaper.config import OUT_ROOT, project
 
 
+def curve(variant: str, db: str, table: str) -> dict:
+    return json.loads(
+        (
+            Path(OUT_ROOT).expanduser()
+            / "repaper-enscurve"
+            / variant
+            / f"{db}__{table}.json"
+        ).read_text()
+    )
+
+
 def main() -> None:
     cfgs = json.loads(
         (Path(__file__).parents[1] / "tune" / "tuned_configs.json").read_text()
     )
     assert len(cfgs) == 21, f"{len(cfgs)} tuned configs, expected 21"
-    default_dir = Path(OUT_ROOT).expanduser() / "repaper-scaling" / "subsampled" / "rt"
-    tuned_dir = Path(OUT_ROOT).expanduser() / "repaper-valtest" / "tuned"
     rows = []
     out = {}
     for task_key, rec in sorted(cfgs.items()):
         db, table = task_key.split("/")
-        default = json.loads((default_dir / f"{db}__{table}.json").read_text())
-        tuned = json.loads((tuned_dir / f"{db}__{table}.json").read_text())
+        default = curve("default", db, table)
+        tuned = curve("tuned", db, table)
         ctx, lcs, bw, pl = rec["best_cfg"]
-        d_val = default["per_ctx"]["8192"]["metric_value"]
-        t_val = tuned["per_ctx"][str(ctx)]["metric_value"]
+        keys = ("ctx_size", "local_ctx_size", "bfs_width", "prefer_latest")
+        assert [default["config"][k] for k in keys] == [8192, 256, 32, True], (
+            f"{task_key}: default curve config {default['config']}"
+        )
+        assert [tuned["config"][k] for k in keys] == [ctx, lcs, bw, bool(pl)], (
+            f"{task_key}: tuned curve config {tuned['config']} != {rec['best_cfg']}"
+        )
+        for c in (default, tuned):
+            assert (
+                c["config"]["items_per_task"] == 8192 and c["config"]["n_seeds"] == 16
+            )
+        d_val = default["curve"]["1"]
+        t_val = tuned["curve"]["1"]
         out[task_key] = {
             "task_type": rec["task_type"],
             "tuned_cfg": rec["best_cfg"],

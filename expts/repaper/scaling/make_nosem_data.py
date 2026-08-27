@@ -18,6 +18,12 @@ def derange(indices: list[int], seed_material: str) -> dict[int, int]:
     return dict(zip(indices, shuffled))
 
 
+def relink(link: Path, target: Path) -> None:
+    if link.is_symlink() or link.exists():
+        link.unlink()
+    link.symlink_to(target)
+
+
 def main(*, pre_dir: str, out_dir: str, embedder: str, d_text: int, seed: int) -> None:
     import numpy as np
 
@@ -25,9 +31,7 @@ def main(*, pre_dir: str, out_dir: str, embedder: str, d_text: int, seed: int) -
     out = Path(out_dir).expanduser()
     out.mkdir(parents=True, exist_ok=True)
 
-    lists = out / "db-task-lists"
-    if not lists.exists():
-        lists.symlink_to(pre / "db-task-lists")
+    relink(out / "db-task-lists", pre / "db-task-lists")
 
     pairs = json.loads((pre / "db-task-lists" / "forecast.json").read_text())
     for db in sorted({db for db, _ in pairs}):
@@ -36,10 +40,9 @@ def main(*, pre_dir: str, out_dir: str, embedder: str, d_text: int, seed: int) -
         dst.mkdir(exist_ok=True)
         emb_name = f"text_emb_{embedder}.bin"
         for f in src.iterdir():
-            link = dst / f.name
-            if f.name == emb_name or link.exists():
+            if f.name == emb_name:
                 continue
-            link.symlink_to(f)
+            relink(dst / f.name, f)
 
         col_index = json.loads((src / "column_index.json").read_text())
         perm = derange(sorted(col_index.values()), f"{db}:{seed}")

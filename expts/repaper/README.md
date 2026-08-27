@@ -81,13 +81,18 @@ file, so a script is resubmitted to fill gaps.
 | ensemble curves, default | `enscurve` | checkpoint only |
 | `tuned_configs.json` | `tune` (`collect`, commit) | all 21 grids |
 | ensemble curves, tuned | `enscurve` | `tuned_configs.json` |
-| default-vs-tuned table | `valtest` | `tuned_configs.json`, `subsampled/rt` |
+| default-vs-tuned table | `valtest` (`collect` only) | both `enscurve` variants |
 | leaderboard ensemble | `submit` | `tuned_configs.json` |
 | pretraining ablations | `pretrain_abl` | nothing; lowest priority |
 
 Submit the checkpoint-only stages together; they are the bulk of the GPU work
 and the tuning grids and the rel-amazon full-test passes are their longest
-poles, so that is where the high tiers go. Each README's "Measured runtimes"
+poles, so that is where the high tiers go. In the 2026-08-19 round the
+tuning grids and the leaderboard units were not submitted here: `expts/icl`
+had just run both for RT-J on the same checkpoint pair, data and protocol,
+and `tune/collect.py` and `submit/reduce.py` read its directories by path
+(each README says which); `valtest` submits nothing in any round -- its table
+is the single-seed point of the two ensemble curves. Each README's "Measured runtimes"
 is what the last round measured on this cluster; project the round's ETA from
 the first finished jobs of this one and fill those sections in. A pretraining
 ablation is days on an exclusive node and stops itself.
@@ -111,6 +116,10 @@ is left in the queue.
 
 ## 3. What to know before it bites
 
+- The semantics-ablated data is a directory of symlinks into `PRE_DIR` plus
+  deranged embedding files; a moved `PRE_DIR` leaves the links dangling and
+  every `abl/nosem` job crashing at start. `make_nosem_data` relinks, so
+  `scaling/submit.py` submits it first and the `nosem` arm `after=` it.
 - `db_cutoff=None` everywhere: per-row temporal masking is the only trim
   (`"test"` would resolve every Join source through the Hub and crash on
   databases without a test timestamp). The base pretraining run and its
