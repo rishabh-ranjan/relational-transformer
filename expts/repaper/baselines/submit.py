@@ -41,9 +41,9 @@ def mem(db: str) -> str:
 # no node-local home.
 def cpu_resources(mem: str, cpus: int) -> Resources:
     return Resources(
-        partition="il",
+        partition="il-cpu",
         account="infolab",
-        qos="il",
+        qos="il-cpu",
         time="1-00:00:00",
         gpus="0",
         cpus_per_task=cpus,
@@ -55,7 +55,10 @@ def cpu_resources(mem: str, cpus: int) -> Resources:
         nodelist=None,
         reservation=None,
         dependency=None,
-        exclude="turing1,turing2,turing3,hyperion1,hyperion3,hyperturing2",
+        exclude=(
+            "hyperion1,hyperion3,hyperturing1,hyperturing2,madmax1,madmax2,"
+            "madmax3,madmax4,madmax6,madmax7,trinity,turing1,turing2,turing3"
+        ),
     )
 
 
@@ -232,9 +235,9 @@ for subdir, root in [
             ivf_threshold=50_000,
         ),
         resources=Resources(
-            partition="il",
+            partition="il-cpu",
             account="infolab",
-            qos="il",
+            qos="il-cpu",
             time="6:00:00",
             gpus="0",
             cpus_per_task=16,
@@ -246,7 +249,10 @@ for subdir, root in [
             nodelist=None,
             reservation=None,
             dependency=None,
-            exclude="turing1,turing2,turing3,hyperion1,hyperion3,hyperturing2",
+            exclude=(
+                "hyperion1,hyperion3,hyperturing1,hyperturing2,madmax1,madmax2,"
+                "madmax3,madmax4,madmax6,madmax7,trinity,turing1,turing2,turing3"
+            ),
         ),
         name=f"repaper-vecdb-{subdir.removesuffix('_features')}",
         repo_root=str(Path(__file__).resolve().parents[3]),

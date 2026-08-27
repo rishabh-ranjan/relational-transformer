@@ -211,15 +211,21 @@ def b200(qos: str, hours: int, db: str) -> Resources:
 # A zero-gres job lands on any node with the cpus, and turing1-3, hyperion1,
 # hyperion3 and hyperturing2 have no node-local home for this user (2026-08-27
 # 00:17: 63 LightGBM jobs and the nosem-data job died in under two seconds
-# there, before roach could even open the log).
+# there, before roach could even open the log). 15:05: LightGBM moves to the
+# cpu-only partition (`il-cpu`, qos `il-cpu`: no cap, 31d, nothing else queues
+# there) instead of saturating hyperturing1, the interactive node (252/252
+# cpus at 14:50). Only rambo (288 cpus) and furiosa (144) are allowed: the
+# other il-cpu nodes are the six above, hyperturing1 itself, and madmax*/
+# trinity, which have never been set up (a first job would bootstrap the node
+# before doing anything; trinity's local disk is also 94% full).
 def cpu(hours: int, db: str) -> Resources:
     return Resources(
-        partition="il",
+        partition="il-cpu",
         account="infolab",
-        qos="il",
+        qos="il-cpu",
         time=f"{hours}:00:00",
         gpus="0",
-        cpus_per_task=16,
+        cpus_per_task=24,
         ntasks=1,
         exclusive=False,
         mem=mem(db),
@@ -228,7 +234,10 @@ def cpu(hours: int, db: str) -> Resources:
         nodelist=None,
         reservation=None,
         dependency=None,
-        exclude="turing1,turing2,turing3,hyperion1,hyperion3,hyperturing2",
+        exclude=(
+            "hyperion1,hyperion3,hyperturing1,hyperturing2,madmax1,madmax2,"
+            "madmax3,madmax4,madmax6,madmax7,trinity,turing1,turing2,turing3"
+        ),
     )
 
 
@@ -467,7 +476,7 @@ for arm in [
                 tabicl_max_batch_size=1024,
                 tabicl_min_bin_size=48,
                 tabicl_softmax_temperature=0.9,
-                lgbm_n_jobs=16,
+                lgbm_n_jobs=24,
             )
             | overrides
             | dict(method=method, db=db, table=table, out_dir=out_dir),
