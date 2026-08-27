@@ -261,6 +261,13 @@ TUNE: dict[tuple[str, str, str], Resources] = {
 # il a100 slot user-visits' tuning left free.
 # 19:35: user-ltv cfg3-s0 was preempted off the il-lo b200 twice in 40 minutes by
 # the il b200 array: back to an il-lo a100 like its siblings.
+# 20:30: the b200 units calibrate a ctx 8192 seed pass over 352k rows at ~1.05 h
+# (a100 ~2.3 h), a third of the tuning-based estimate, so the a100 seed jobs
+# end ~22:30 and the long pole is user-badge cfg0-2 (1.95 h a seed on an a100,
+# done ~01:00). user-visits cfg3-s3 freed an il-interactive b200 with nothing
+# queued: user-badge cfg0 moves there now (one seed saved; the pass in flight
+# is lost, but an idle b200 gets taken by the il array within minutes); cfg1
+# and cfg2 follow onto b200s as user-ltv cfg2 / cfg0 finish theirs.
 # 20:20: user-ltv cfg1 finished on il-interactive: the one job still queued,
 # user-visits cfg3-s3, takes that b200.
 # 20:15: user-visits tuned last (21/21): 36129 rows at ctx 4096/2048/8192/8192,
@@ -387,7 +394,7 @@ ENS: dict[tuple[str, str, str], list[Resources | list[Resources]]] = {
         a100("il-lo", "6:00:00"),
     ],
     ("rt-j", "rel-stack", "user-badge"): [
-        a100("il", "12:00:00"),
+        b200("il-interactive", "6:00:00"),
         a100("il", "12:00:00"),
         a100("il", "12:00:00"),
         a100("il-lo", "12:00:00"),
