@@ -30,3 +30,10 @@ Curves land under
 `reduce.py` aggregates them into `rtv2/<RUN_TAG>-repaper-enscurve` runs
 `default` / `tuned` (keys `ens_size`, `test/avg_mae`, `test/avg_auc`,
 `per_task/relbench/<db>/<table>/test/{mae,auc}`).
+
+## Measured runtimes
+
+2026-08-27, one a100: 1h05 for a 16-seed curve over 8192 rows whatever the
+database (rel-amazon/user-ltv tuned 1h05), under 20 min on the tasks with
+fewer test rows than that; both variants, 42 jobs, finished within 1h30 of
+starting on il.

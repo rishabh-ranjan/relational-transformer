@@ -94,7 +94,11 @@ and `tune/collect.py` and `submit/reduce.py` read its directories by path
 (each README says which); `valtest` submits nothing in any round -- its table
 is the single-seed point of the two ensemble curves. Each README's "Measured runtimes"
 is what the last round measured on this cluster; project the round's ETA from
-the first finished jobs of this one and fill those sections in. A pretraining
+the first finished jobs of this one and fill those sections in. The 2026-08-19
+round's checkpoint-dependent stages (every scaling arm, both ensemble curves,
+the RT features and indices) ran 2026-08-27 00:16-09:01 on 12 high-tier
+slots plus il-lo, the last three hours of it on il alone once the fairshare
+was spent (`scaling/submit.py` says how). A pretraining
 ablation is days on an exclusive node and stops itself.
 
 ## 2. Reduce and regenerate

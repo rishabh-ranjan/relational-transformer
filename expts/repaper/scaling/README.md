@@ -80,8 +80,17 @@ full-test passes are the longest poles and where the high tiers go;
 
 ## Measured runtimes
 
-One a100, startup (clone build + compile) included, full-test RT arm:
-rel-f1 tasks 1:27-2:58, rel-avito/ad-ctr 4:06, rel-event tasks 3:45-5:34
-(700-2000 test rows each). The four rel-amazon tasks (167k-352k rows) are the
-long poles, projected 5-12 h each at the measured ~8-45 rows/s. Subsampled
-arms are bounded by 8192 rows/task.
+2026-08-27 (`sacct`), startup included. Full-test RT arm: rel-amazon
+user-churn / user-ltv 3h21 each on a b200, item-ltv 1h42 on a b200,
+item-churn 2h53 on an a100; rel-stack user-badge 4h24, post-votes 2h48,
+user-engagement 1h32, rel-hm item-sales 1h53, user-churn 1h25, rel-avito
+user-clicks 0h53, user-visits 0h40, rel-trial site-success 0h24, everything
+under 2000 test rows 2-6 min (a100). Full-test TabICL arms (a100): rel-amazon
+user tasks ~1h50, item tasks ~1h, rel-stack user-badge 1h22 on a b200
+(sql) and 5h29 on an a100 (rdblearn), post-votes 1h00-1h19, rel-hm item-sales
+1h10-1h31; full-test LightGBM at 16 cpus: rel-amazon user tasks ~1h30.
+Subsampled RT and every RT ablation pass: 5-15 min. Subsampled TabICL at
+131k cells: rel-stack user-badge 7h07 (rdblearn) / 5h30 (sql) on an a100,
+rel-hm item-sales and rel-stack post-votes 1-3 h, the rest under an hour;
+subsampled LightGBM at 16 cpus under 1h15. The whole scaling stage ran
+00:16-09:01 on up to 12 high-tier slots plus il-lo.

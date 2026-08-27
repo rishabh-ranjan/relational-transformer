@@ -73,3 +73,10 @@ setup=("pixi run maturin develop --uv --release --features vecdb",)
 ```
 
 cmake / g++ / openblas for that build ship in the default environment.
+
+## Measured runtimes
+
+2026-08-27: RT featurize rel-amazon 2h16 on a b200, rel-hm 2h40 and
+rel-stack 1h01 (b200), rel-avito 7 min, rel-trial 5 min, rel-event and
+rel-f1 about a minute (a100); FAISS build 8 min (rdblearn) and 36 min (rt)
+on 16 cpus.
