@@ -258,6 +258,10 @@ HIGH = {
     # preemptions have started (two subsampled RT passes requeued), so the
     # longest non-resumable pass still queued moves up.
     ("fulltest/rdblearn_tabicl", "rel-amazon", "item-churn"): ("il", "a100", 6),
+    # 03:18: rel-avito's featurize handed an il a100 back; nothing long is
+    # queued any more, so the subsampled RT passes il-lo preempted once move
+    # up as slots free.
+    ("subsampled/rt", "rel-stack", "user-badge"): ("il", "a100", 2),
 }
 
 
