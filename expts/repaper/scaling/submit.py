@@ -252,76 +252,11 @@ def queued() -> dict[str, str]:
 # a b200), the il a100 slots to the next-longest non-resumable passes, and
 # everything else is il-lo with a limit that fits ampere2's backfill window.
 # ilc-icl holds the tenth il slot (a b200) until ~01:05.
-HIGH = {
-    ("fulltest/rt", "rel-amazon", "user-churn"): ("il-interactive", "b200", 12),
-    ("fulltest/rt", "rel-amazon", "user-ltv"): ("il-interactive", "b200", 12),
-    ("fulltest/rt", "rel-amazon", "item-ltv"): ("il", "b200", 12),
-    ("fulltest/rt", "rel-amazon", "item-churn"): ("il", "a100", 12),
-    ("fulltest/rt", "rel-stack", "user-badge"): ("il", "a100", 12),
-    ("fulltest/rt", "rel-stack", "post-votes"): ("il", "a100", 8),
-    ("fulltest/rt", "rel-hm", "item-sales"): ("il", "a100", 6),
-    ("fulltest/rt", "rel-stack", "user-engagement"): ("il", "a100", 6),
-    ("fulltest/rt", "rel-hm", "user-churn"): ("il", "a100", 4),
-    ("subsampled/rdblearn_tabicl", "rel-stack", "user-badge"): ("il", "a100", 12),
-    ("subsampled/sql_tabicl", "rel-stack", "user-badge"): ("il", "a100", 10),
-    # 00:54: icl's il b200 ended and shows free; the longest pending pass
-    # (~3 h on an a100) takes it under il.
-    ("subsampled/rdblearn_tabicl", "rel-hm", "item-sales"): ("il", "b200", 6),
-    # 01:46: rel-hm/user-churn's full-test pass handed an il a100 back; the
-    # longest pass still queued (2h35 in the 2026-08-19 round) takes it.
-    ("subsampled/rdblearn_tabicl", "rel-stack", "post-votes"): ("il", "a100", 6),
-    # 01:52: rel-stack/user-engagement's full-test pass handed an il a100 back;
-    # rel-hm/item-sales' other subsampled TabICL pass (~3 h) takes it.
-    ("subsampled/sql_tabicl", "rel-hm", "item-sales"): ("il", "a100", 6),
-    # 02:02: rel-amazon/item-ltv's full-test pass freed the il b200 (1h41 on
-    # it); the longest pass still queued, post-votes' sql TabICL, takes it.
-    ("subsampled/sql_tabicl", "rel-stack", "post-votes"): ("il", "b200", 6),
-    # 02:10: rel-hm/item-sales' full-test pass freed an il a100; il-lo
-    # preemptions have started (two subsampled RT passes requeued), so the
-    # longest non-resumable pass still queued moves up.
-    ("fulltest/rdblearn_tabicl", "rel-amazon", "item-churn"): ("il", "a100", 6),
-    # 03:18: rel-avito's featurize handed an il a100 back; nothing long is
-    # queued any more, so the subsampled RT passes il-lo preempted once move
-    # up as slots free.
-    ("subsampled/rt", "rel-stack", "user-badge"): ("il", "a100", 2),
-    ("subsampled/rt", "rel-hm", "user-churn"): ("il", "a100", 2),
-    # 03:30: user-badge's subsampled RT pass handed an il a100 back; il-lo
-    # had meanwhile preempted rel-stack's two full-test rdblearn TabICL
-    # passes (2 h and 1.5 h from the top), so they move up as slots free.
-    ("fulltest/rdblearn_tabicl", "rel-stack", "user-badge"): ("il", "a100", 6),
-    # 03:59: the two rel-amazon user passes finished on their il-interactive
-    # b200s (3h21 each) and three b200s show free: the two full-test TabICL
-    # passes still queued take the il-interactive slots.
-    ("fulltest/rdblearn_tabicl", "rel-stack", "post-votes"): (
-        "il-interactive",
-        "b200",
-        12,
-    ),
-    ("fulltest/sql_tabicl", "rel-stack", "user-badge"): ("il-interactive", "b200", 12),
-    # 04:47: two b200s idle with the il cap at 8/10 and every a100 busy; the
-    # two largest vdb_rdblearn passes still queued take them.
-    ("abl/vdb_rdblearn", "rel-amazon", "user-churn"): ("il", "b200", 2),
-    ("abl/vdb_rdblearn", "rel-amazon", "user-ltv"): ("il", "b200", 2),
-    # 04:55: those two took 7 min on a b200 and the cards are idle again; the
-    # next four largest queue on the b200 sub-cap and run two at a time.
-    ("abl/vdb_rdblearn", "rel-stack", "user-badge"): ("il", "b200", 2),
-    ("abl/vdb_rdblearn", "rel-stack", "post-votes"): ("il", "b200", 2),
-    ("abl/vdb_rdblearn", "rel-hm", "item-sales"): ("il", "b200", 2),
-    ("abl/vdb_rdblearn", "rel-stack", "user-engagement"): ("il", "b200", 2),
-    # 10:59: the two b200 placements sat on ReqNodeNotAvail with the cap open
-    # (every b200 held by other users' il jobs), so they run on a100s too.
-    # 06:26: the rt index is built and the vdb_rt arm is submitted; 06:27: all
-    # eight b200s are taken by other users' il jobs, so its passes run on il
-    # a100s like the rest.
-    # 12:27: two b200s idle; the two longest RDBLearn extension pieces ask
-    # for them (moved back to a100s if they read ReqNodeNotAvail).
-    ("fulltest_ext/rdblearn_tabicl/131072", "rel-hm", "item-sales"): ("il", "b200", 60),
-    ("fulltest_ext/rdblearn_tabicl/131072", "rel-stack", "post-votes"): (
-        "il",
-        "b200",
-        60,
-    ),
-}
+# Per-(arm, db, table) placements that override the rule below. Emptied
+# 2026-08-27 13:15: blackwell1 is DOWN and every arm rerun for the RDBLearn
+# fix goes to il a100s; git holds the round's earlier b200 / il-interactive
+# placements and the reasons for each.
+HIGH: dict[tuple[str, str, str], tuple[str, str, int]] = {}
 
 
 # 03:35: three hours of ~50 concurrent jobs spent the fairshare that had put
