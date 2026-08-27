@@ -123,8 +123,32 @@ def featurize_table(
         cutoff_time_column=estimator.cutoff_time_column_,
         config=estimator.config.dfs or DFSConfig(),
     )
-    feats = estimator.preprocessor_.transform(X_dfs).fillna(0).values.astype(np.float32)
+    # RDBLearn's TabularPreprocessor hands its (tree-based) estimator the raw
+    # entity key as an integer, the cutoff time as int64 nanoseconds (~1e18)
+    # and the temporal diffs in nanoseconds (~1e17). Fed to TabICL as they are,
+    # the id is noise, the absolute time extrapolates past every context row,
+    # and the ~1e18 columns blow up the float32 per-context standardization
+    # (2026-08-19 blobs: nMAE rose from 40 to 80 with context size while the
+    # LightGBM arm on the same blobs was fine). So: drop the key and cutoff
+    # columns and z-score every feature over all rows in float64, as the SQL
+    # featurizer does.
+    frame = estimator.preprocessor_.transform(X_dfs)
+    keys = set(estimator.key_mappings_) | set(X.columns)
+    keys.discard(estimator.cutoff_time_column_)
+    dropped = [
+        c for c in frame.columns if c in keys or c == estimator.cutoff_time_column_
+    ]
+    frame = frame.drop(columns=dropped)
+    arr = frame.to_numpy(dtype=np.float64)
+    arr = np.where(np.isfinite(arr), arr, np.nan)
+    mean = np.nanmean(arr, axis=0, keepdims=True)
+    std = np.nanstd(arr, axis=0, keepdims=True)
+    std = np.where(std < 1e-8, 1.0, std)
+    arr = np.nan_to_num((arr - mean) / std, nan=0.0)
+    feats = arr.astype(np.float32)
     assert feats.shape[0] == total_nodes
+    assert np.isfinite(feats).all()
+    print(f"[{db}] {table}: dropped {dropped}; kept {list(frame.columns)}", flush=True)
 
     feats.tofile(vectors_path)
     meta_path.write_text(

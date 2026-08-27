@@ -36,11 +36,14 @@ def mem(db: str) -> str:
     }[db]
 
 
+# 2026-08-27: zero-gres jobs take il (they do not count against its gpu cap)
+# since this user's il-lo priority is spent, and keep off the six nodes with
+# no node-local home.
 def cpu_resources(mem: str, cpus: int) -> Resources:
     return Resources(
         partition="il",
         account="infolab",
-        qos="il-lo",
+        qos="il",
         time="1-00:00:00",
         gpus="0",
         cpus_per_task=cpus,
@@ -52,6 +55,7 @@ def cpu_resources(mem: str, cpus: int) -> Resources:
         nodelist=None,
         reservation=None,
         dependency=None,
+        exclude="turing1,turing2,turing3,hyperion1,hyperion3,hyperturing2",
     )
 
 
@@ -213,6 +217,9 @@ for subdir, root in [
         )
         or f"repaper-vecdb-{subdir.removesuffix('_features')}" in busy
     ):
+        continue
+    if not all(featurized(db, subdir, TABLES[db]) for db in DBS):
+        print(f"{subdir}: not every table is featurized yet, no index build")
         continue
     submit(
         "expts.repaper.baselines.build_vector_db:build_all",

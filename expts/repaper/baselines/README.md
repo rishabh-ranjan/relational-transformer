@@ -43,7 +43,11 @@ Logs land under
 - **`featurize_rdblearn.py`** -- RDBLearn's fastdfs depth-2 DFS features
   (agg primitives max/min/mean/count/mode/std, `dfs2sql` engine, per-row
   temporal cutoffs from the task's time column), transformed by the fitted
-  RDBLearn preprocessor.
+  RDBLearn preprocessor, minus the raw entity key and cutoff-time columns it
+  keeps for its own tree estimator, and z-scored over all rows in float64
+  (the preprocessor's int64-nanosecond time columns, ~1e18, otherwise blow
+  up TabICL's float32 per-context standardization: the 2026-08-19 blobs made
+  RDBLearn + TabICLv2's nMAE climb from 40 to 80 with context size).
 - **`featurize_rt.py`** -- RT-J row embeddings (the masked target cell's
   final-layer state over a walk-free 256-cell local context), one file per
   table, for the RT-similarity retriever arm.
