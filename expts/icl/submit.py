@@ -302,7 +302,12 @@ ENS: dict[tuple[str, str, str], list[Resources]] = {
     ("rt-plurel", "rel-f1", "driver-top3"): [a100("il-lo", "2:00:00")] * 4,
     ("rt-plurel", "rel-f1", "driver-dnf"): [a100("il-lo", "2:00:00")] * 4,
     ("rt-plurel", "rel-event", "user-repeat"): [a100("il-lo", "2:00:00")] * 4,
-    ("rt-j", "rel-amazon", "user-churn"): [a100("il-lo", "1-00:00:00")] * 4,
+    ("rt-j", "rel-amazon", "user-churn"): [
+        a100("il", "12:00:00"),
+        a100("il-lo", "6:00:00"),
+        a100("il-lo", "6:00:00"),
+        a100("il-lo", "6:00:00"),
+    ],
     ("rt-j", "rel-amazon", "user-ltv"): [a100("il-lo", "1-00:00:00")] * 4,
     ("rt-j", "rel-amazon", "item-ltv"): [
         b200("il-interactive", "12:00:00"),
