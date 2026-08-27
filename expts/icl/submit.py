@@ -147,6 +147,8 @@ def b200(qos: str, time: str) -> Resources:
 # returns to an il a100, taking the slot user-engagement's cfg0 unit had.
 # 17:10: user-badge tuned with il at 8/10 and nothing long left on il-lo, so
 # two of its four units (255k rows, hours each) take the free il a100s.
+# 17:20: fine_tune's il b200 refit ended and the sub-cap slot is released to
+# this sweep: rel-hm/user-churn (~7h left on its il a100) swaps onto it.
 TUNE: dict[tuple[str, str, str], Resources] = {
     ("rt-plurel", "rel-amazon", "user-churn"): b200("il", "2-00:00:00"),
     ("rt-plurel", "rel-amazon", "user-ltv"): a100("il", "2-00:00:00"),
@@ -177,7 +179,7 @@ TUNE: dict[tuple[str, str, str], Resources] = {
     ("rt-j", "rel-stack", "post-votes"): a100("il-lo", "2:00:00"),
     ("rt-j", "rel-hm", "item-sales"): a100("il", "2-00:00:00"),
     ("rt-j", "rel-stack", "user-engagement"): a100("il", "2-00:00:00"),
-    ("rt-j", "rel-hm", "user-churn"): a100("il", "2-00:00:00"),
+    ("rt-j", "rel-hm", "user-churn"): b200("il", "2-00:00:00"),
     ("rt-j", "rel-avito", "user-clicks"): a100("il-lo", "2:00:00"),
     ("rt-j", "rel-avito", "user-visits"): a100("il-lo", "2:00:00"),
     ("rt-j", "rel-trial", "site-success"): a100("il", "2-00:00:00"),
