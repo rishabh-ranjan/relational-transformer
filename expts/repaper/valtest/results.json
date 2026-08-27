@@ -1,0 +1,241 @@
+{
+ "mean_clf": {
+  "default": 0.7222912197178699,
+  "tuned": 0.7221973488255368
+ },
+ "mean_reg": {
+  "default": 0.32466108054724807,
+  "tuned": 0.3199395072714897
+ },
+ "rel-amazon/item-churn": {
+  "default": 0.782316297958471,
+  "task_type": "clf",
+  "tuned": 0.7870809756917725,
+  "tuned_cfg": [
+   8192,
+   256,
+   128,
+   true
+  ]
+ },
+ "rel-amazon/item-ltv": {
+  "default": 0.09366799776762491,
+  "task_type": "reg",
+  "tuned": 0.08353630382771371,
+  "tuned_cfg": [
+   8192,
+   2048,
+   8,
+   false
+  ]
+ },
+ "rel-amazon/user-churn": {
+  "default": 0.6739513128205461,
+  "task_type": "clf",
+  "tuned": 0.6739513128205461,
+  "tuned_cfg": [
+   8192,
+   256,
+   32,
+   true
+  ]
+ },
+ "rel-amazon/user-ltv": {
+  "default": 0.28940240712836385,
+  "task_type": "reg",
+  "tuned": 0.2789974494371563,
+  "tuned_cfg": [
+   8192,
+   2048,
+   8,
+   false
+  ]
+ },
+ "rel-avito/ad-ctr": {
+  "default": 0.4262712684496909,
+  "task_type": "reg",
+  "tuned": 0.42443386363563035,
+  "tuned_cfg": [
+   8192,
+   1024,
+   128,
+   false
+  ]
+ },
+ "rel-avito/user-clicks": {
+  "default": 0.5220965597429094,
+  "task_type": "clf",
+  "tuned": 0.5366074360368411,
+  "tuned_cfg": [
+   8192,
+   512,
+   32,
+   false
+  ]
+ },
+ "rel-avito/user-visits": {
+  "default": 0.5946364160184385,
+  "task_type": "clf",
+  "tuned": 0.6011473926822242,
+  "tuned_cfg": [
+   4096,
+   512,
+   128,
+   true
+  ]
+ },
+ "rel-event/user-attendance": {
+  "default": 0.3696658569897037,
+  "task_type": "reg",
+  "tuned": 0.3872642633985572,
+  "tuned_cfg": [
+   8192,
+   1024,
+   128,
+   true
+  ]
+ },
+ "rel-event/user-ignore": {
+  "default": 0.830454906566267,
+  "task_type": "clf",
+  "tuned": 0.7977467675267406,
+  "tuned_cfg": [
+   1024,
+   1024,
+   32,
+   false
+  ]
+ },
+ "rel-event/user-repeat": {
+  "default": 0.7336898395721925,
+  "task_type": "clf",
+  "tuned": 0.7579211229946524,
+  "tuned_cfg": [
+   2048,
+   256,
+   8,
+   false
+  ]
+ },
+ "rel-f1/driver-dnf": {
+  "default": 0.8144829941931391,
+  "task_type": "clf",
+  "tuned": 0.7921875762455473,
+  "tuned_cfg": [
+   2048,
+   2048,
+   128,
+   false
+  ]
+ },
+ "rel-f1/driver-position": {
+  "default": 0.3895330027530068,
+  "task_type": "reg",
+  "tuned": 0.3879342932450144,
+  "tuned_cfg": [
+   4096,
+   256,
+   8,
+   true
+  ]
+ },
+ "rel-f1/driver-top3": {
+  "default": 0.9232794209866221,
+  "task_type": "clf",
+  "tuned": 0.9074323265050168,
+  "tuned_cfg": [
+   8192,
+   512,
+   8,
+   true
+  ]
+ },
+ "rel-hm/item-sales": {
+  "default": 0.12187013012589887,
+  "task_type": "reg",
+  "tuned": 0.12228843965567648,
+  "tuned_cfg": [
+   4096,
+   256,
+   128,
+   true
+  ]
+ },
+ "rel-hm/user-churn": {
+  "default": 0.6361697069110777,
+  "task_type": "clf",
+  "tuned": 0.6440628537023326,
+  "tuned_cfg": [
+   8192,
+   1024,
+   128,
+   true
+  ]
+ },
+ "rel-stack/post-votes": {
+  "default": 0.157871566247195,
+  "task_type": "reg",
+  "tuned": 0.15391131775686517,
+  "tuned_cfg": [
+   4096,
+   4096,
+   8,
+   false
+  ]
+ },
+ "rel-stack/user-badge": {
+  "default": 0.7767860135136877,
+  "task_type": "clf",
+  "tuned": 0.7740192135662782,
+  "tuned_cfg": [
+   8192,
+   512,
+   128,
+   false
+  ]
+ },
+ "rel-stack/user-engagement": {
+  "default": 0.8457451247196427,
+  "task_type": "clf",
+  "tuned": 0.8397150643934942,
+  "tuned_cfg": [
+   4096,
+   256,
+   8,
+   false
+  ]
+ },
+ "rel-trial/site-success": {
+  "default": 0.9154583906056359,
+  "task_type": "reg",
+  "tuned": 0.882136077620089,
+  "tuned_cfg": [
+   8192,
+   512,
+   128,
+   false
+  ]
+ },
+ "rel-trial/study-adverse": {
+  "default": 0.15820910485811276,
+  "task_type": "reg",
+  "tuned": 0.15895355686670432,
+  "tuned_cfg": [
+   8192,
+   512,
+   128,
+   true
+  ]
+ },
+ "rel-trial/study-outcome": {
+  "default": 0.5338860436114441,
+  "task_type": "clf",
+  "tuned": 0.554496143740995,
+  "tuned_cfg": [
+   4096,
+   4096,
+   32,
+   true
+  ]
+ }
+}

@@ -56,9 +56,10 @@ def main() -> None:
             flush=True,
         )
 
+    tasks = list(out.values())
     for tt in ("clf", "reg"):
-        d = float(np.mean([r["default"] for r in out.values() if r["task_type"] == tt]))
-        t = float(np.mean([r["tuned"] for r in out.values() if r["task_type"] == tt]))
+        d = float(np.mean([r["default"] for r in tasks if r["task_type"] == tt]))
+        t = float(np.mean([r["tuned"] for r in tasks if r["task_type"] == tt]))
         out[f"mean_{tt}"] = {"default": d, "tuned": t}
         print(f"mean {tt}: default={d:.4f} tuned={t:.4f}", flush=True)
 
