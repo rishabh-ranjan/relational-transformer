@@ -254,6 +254,10 @@ HIGH = {
     # 02:02: rel-amazon/item-ltv's full-test pass freed the il b200 (1h41 on
     # it); the longest pass still queued, post-votes' sql TabICL, takes it.
     ("subsampled/sql_tabicl", "rel-stack", "post-votes"): ("il", "b200", 6),
+    # 02:10: rel-hm/item-sales' full-test pass freed an il a100; il-lo
+    # preemptions have started (two subsampled RT passes requeued), so the
+    # longest non-resumable pass still queued moves up.
+    ("fulltest/rdblearn_tabicl", "rel-amazon", "item-churn"): ("il", "a100", 6),
 }
 
 
