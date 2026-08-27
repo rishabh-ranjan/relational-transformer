@@ -245,6 +245,7 @@ TUNE: dict[tuple[str, str, str], Resources] = {
 # backfilled onto il-lo a100s, so they stay there.
 # 18:15: fine_tune is done and three b200s sit idle with nothing of mine
 # queued: item-sales' units take them (il, il-interactive, il-lo).
+# 18:50: study-adverse's tuning handed an il slot back: user-churn cfg2-s2 takes it.
 # 18:45: only my own four b200 slots ever free up (the other four are held by
 # 7-day and rolling 12-hour il jobs), so an il-lo b200 request never starts,
 # and a 2-day il-lo a100 job cannot backfill either: the free a100s are planned
@@ -329,7 +330,12 @@ ENS: dict[tuple[str, str, str], list[Resources | list[Resources]]] = {
     ("rt-j", "rel-amazon", "user-churn"): [
         b200("il", "2-00:00:00"),
         [a100("il-lo", "10:00:00")] * 4,
-        [a100("il-lo", "10:00:00")] * 4,
+        [
+            a100("il-lo", "10:00:00"),
+            a100("il-lo", "10:00:00"),
+            a100("il", "10:00:00"),
+            a100("il-lo", "10:00:00"),
+        ],
         [a100("il-lo", "10:00:00")] * 4,
     ],
     ("rt-j", "rel-amazon", "user-ltv"): [
