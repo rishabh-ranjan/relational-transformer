@@ -286,6 +286,14 @@ HIGH = {
     ("abl/vdb_rdblearn", "rel-stack", "post-votes"): ("il", "b200", 2),
     ("abl/vdb_rdblearn", "rel-hm", "item-sales"): ("il", "b200", 2),
     ("abl/vdb_rdblearn", "rel-stack", "user-engagement"): ("il", "b200", 2),
+    # 06:26: the rt index is built; the vdb_rt arm's six largest passes take
+    # the b200 sub-cap two at a time, the rest il a100s.
+    ("abl/vdb_rt", "rel-amazon", "user-churn"): ("il", "b200", 2),
+    ("abl/vdb_rt", "rel-amazon", "user-ltv"): ("il", "b200", 2),
+    ("abl/vdb_rt", "rel-stack", "user-badge"): ("il", "b200", 2),
+    ("abl/vdb_rt", "rel-stack", "post-votes"): ("il", "b200", 2),
+    ("abl/vdb_rt", "rel-hm", "item-sales"): ("il", "b200", 2),
+    ("abl/vdb_rt", "rel-stack", "user-engagement"): ("il", "b200", 2),
 }
 
 
@@ -409,7 +417,7 @@ for arm in [
     "fulltest/sql_lgbm",
     "subsampled/rdblearn_lgbm",
     "subsampled/sql_lgbm",
-    # "abl/vdb_rt",
+    "abl/vdb_rt",
 ]:
     method, overrides = ARMS[arm]
     for db, table in TASKS:
