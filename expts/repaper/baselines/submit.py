@@ -77,6 +77,7 @@ FEAT_RT = {
     "rel-stack": ("il", "b200", 12),
     "rel-hm": ("il", "a100", 6),
     "rel-avito": ("il", "a100", 6),
+    "rel-trial": ("il", "a100", 6),
 }
 
 
@@ -161,7 +162,8 @@ for db in DBS:
         # on an a100 in the 2026-08-19 round) onto the il b200 rel-hm/item-sales'
         # TabICL pass freed, 02:56 rel-stack onto the il b200 post-votes' freed,
         # 03:08 rel-hm onto the il a100 post-votes' full-test RT pass freed,
-        # 03:10 rel-avito onto the il a100 rel-amazon/item-churn's freed.
+        # 03:10 rel-avito onto the il a100 rel-amazon/item-churn's freed,
+        # 03:14 rel-trial onto the il a100 item-churn's TabICL pass freed.
         resources=Resources(
             partition="il",
             account="infolab",
