@@ -1,4 +1,6 @@
 import json
+import os
+import subprocess
 from pathlib import Path
 
 from roach.slurm.clusters.ilc import ILC
@@ -181,6 +183,10 @@ def b200(qos: str, hours: int, db: str) -> Resources:
     )
 
 
+# A zero-gres job lands on any node with the cpus, and turing1-3, hyperion1,
+# hyperion3 and hyperturing2 have no node-local home for this user (2026-08-27
+# 00:17: 63 LightGBM jobs and the nosem-data job died in under two seconds
+# there, before roach could even open the log).
 def cpu(hours: int, db: str) -> Resources:
     return Resources(
         partition="il",
@@ -188,7 +194,7 @@ def cpu(hours: int, db: str) -> Resources:
         qos="il-lo",
         time=f"{hours}:00:00",
         gpus="0",
-        cpus_per_task=32,
+        cpus_per_task=16,
         ntasks=1,
         exclusive=False,
         mem=mem(db),
@@ -197,7 +203,18 @@ def cpu(hours: int, db: str) -> Resources:
         nodelist=None,
         reservation=None,
         dependency=None,
+        exclude="turing1,turing2,turing3,hyperion1,hyperion3,hyperturing2",
     )
+
+
+def queued() -> dict[str, str]:
+    out = subprocess.run(
+        ["squeue", "-h", "-u", os.environ["USER"], "-o", "%j %i"],
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    return dict(line.split() for line in out.stdout.splitlines())
 
 
 # 2026-08-27 00:30, read off the live cluster: every a100 but ampere2's seven
@@ -264,38 +281,44 @@ def resources(arm: str, db: str, table: str) -> Resources:
     return a100("il-lo", 2 if ARMS[arm][1].get("vector_db_path") else 1, db)
 
 
-nosem = submit(
-    "expts.repaper.scaling.make_nosem_data:main",
-    args=dict(
-        pre_dir=PRE_DIR,
-        out_dir=f"{SHARE}/relbench-preprocessed-nosem",
-        embedder="all-MiniLM-L12-v2",
-        d_text=384,
-        seed=0,
-    ),
-    resources=Resources(
-        partition="il",
-        account="infolab",
-        qos="il-lo",
-        time="2:00:00",
-        gpus="0",
-        cpus_per_task=4,
-        ntasks=1,
-        exclusive=False,
-        mem="32G",
-        mem_per_gpu=None,
-        constraint=None,
-        nodelist=None,
-        reservation=None,
-        dependency=None,
-    ),
-    name="repaper-nosem-data",
-    repo_root=str(Path(__file__).resolve().parents[3]),
-    cluster=ILC,
-    job_env="expts/job_env.sh",
-    log_root=f"{LOG_ROOT}/repaper/scaling/slurm-logs",
-    clone_root=CLONE_ROOT,
-    secrets_dir=SECRETS_DIR,
+busy = queued()
+
+nosem = (
+    busy.get("repaper-nosem-data")
+    or submit(
+        "expts.repaper.scaling.make_nosem_data:main",
+        args=dict(
+            pre_dir=PRE_DIR,
+            out_dir=f"{SHARE}/relbench-preprocessed-nosem",
+            embedder="all-MiniLM-L12-v2",
+            d_text=384,
+            seed=0,
+        ),
+        resources=Resources(
+            partition="il",
+            account="infolab",
+            qos="il-lo",
+            time="2:00:00",
+            gpus="0",
+            cpus_per_task=4,
+            ntasks=1,
+            exclusive=False,
+            mem="32G",
+            mem_per_gpu=None,
+            constraint=None,
+            nodelist=None,
+            reservation=None,
+            dependency=None,
+            exclude="turing1,turing2,turing3,hyperion1,hyperion3,hyperturing2",
+        ),
+        name="repaper-nosem-data",
+        repo_root=str(Path(__file__).resolve().parents[3]),
+        cluster=ILC,
+        job_env="expts/job_env.sh",
+        log_root=f"{LOG_ROOT}/repaper/scaling/slurm-logs",
+        clone_root=CLONE_ROOT,
+        secrets_dir=SECRETS_DIR,
+    ).id
 )
 
 for arm in [
@@ -319,7 +342,10 @@ for arm in [
     method, overrides = ARMS[arm]
     for db, table in TASKS:
         out_dir = f"{OUT_ROOT}/repaper-scaling/{arm}"
+        name = f"repaper-scal-{arm.replace('/', '-')}-{db}-{table}"
         if (Path(out_dir).expanduser() / f"{db}__{table}.json").exists():
+            continue
+        if name in busy:
             continue
         submit(
             "expts.repaper.scaling.run:main",
@@ -346,12 +372,12 @@ for arm in [
                 tabicl_max_batch_size=1024,
                 tabicl_min_bin_size=48,
                 tabicl_softmax_temperature=0.9,
-                lgbm_n_jobs=32,
+                lgbm_n_jobs=16,
             )
             | overrides
             | dict(method=method, db=db, table=table, out_dir=out_dir),
             resources=resources(arm, db, table),
-            name=f"repaper-scal-{arm.replace('/', '-')}-{db}-{table}",
+            name=name,
             repo_root=str(Path(__file__).resolve().parents[3]),
             cluster=ILC,
             job_env="expts/job_env.sh",
@@ -361,5 +387,5 @@ for arm in [
             setup=("pixi run maturin develop --uv --release --features vecdb",)
             if overrides.get("vector_db_path")
             else (),
-            after=nosem.id if arm == "abl/nosem" else None,
+            after=nosem if arm == "abl/nosem" else None,
         )

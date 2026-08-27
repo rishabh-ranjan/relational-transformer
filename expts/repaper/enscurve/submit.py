@@ -1,4 +1,6 @@
 import json
+import os
+import subprocess
 from pathlib import Path
 
 from roach.slurm.clusters.ilc import ILC
@@ -77,11 +79,26 @@ def resources(db: str, table: str) -> Resources:
     )
 
 
+def queued() -> set[str]:
+    out = subprocess.run(
+        ["squeue", "-h", "-u", os.environ["USER"], "-o", "%j"],
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    return set(out.stdout.split())
+
+
+busy = queued()
+
 for variant in ["default", "tuned"]:
     for db, table in TASKS:
         ctx, lcs, bw, pl = cfg(variant, db, table)
         out_dir = f"{OUT_ROOT}/repaper-enscurve/{variant}"
+        name = f"repaper-ens-{variant}-{db}-{table}"
         if (Path(out_dir).expanduser() / f"{db}__{table}.json").exists():
+            continue
+        if name in busy:
             continue
         submit(
             "expts.repaper.enscurve.run:main",
@@ -111,7 +128,7 @@ for variant in ["default", "tuned"]:
                 ckpt_reg=CKPT_REG,
             ),
             resources=resources(db, table),
-            name=f"repaper-ens-{variant}-{db}-{table}",
+            name=name,
             repo_root=str(Path(__file__).resolve().parents[3]),
             cluster=ILC,
             job_env="expts/job_env.sh",

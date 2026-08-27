@@ -1,3 +1,5 @@
+import os
+import subprocess
 from pathlib import Path
 
 from roach.slurm import Resources, submit
@@ -58,8 +60,21 @@ def featurized(db: str, subdir: str, tables: list[str]) -> bool:
     return all((feat_dir / f"{table}_meta.json").exists() for table in tables)
 
 
+def queued() -> set[str]:
+    out = subprocess.run(
+        ["squeue", "-h", "-u", os.environ["USER"], "-o", "%j"],
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    return set(out.stdout.split())
+
+
+busy = queued()
+
+
 for db in DBS:
-    if featurized(db, "sql_features", TABLES[db]):
+    if featurized(db, "sql_features", TABLES[db]) or f"repaper-feat-sql-{db}" in busy:
         continue
     submit(
         "expts.repaper.baselines.featurize_sql:featurize_db",
@@ -85,7 +100,10 @@ for db in DBS:
 
 for task in TASKS:
     db, table = task.db_name, task.table_name
-    if featurized(db, "rdblearn_features", [table]):
+    if (
+        featurized(db, "rdblearn_features", [table])
+        or f"repaper-feat-rdbl-{db}-{table}" in busy
+    ):
         continue
     submit(
         "expts.repaper.baselines.featurize_rdblearn:featurize_table",
@@ -113,7 +131,7 @@ for task in TASKS:
     )
 
 for db in DBS:
-    if featurized(db, "rt_features", TABLES[db]):
+    if featurized(db, "rt_features", TABLES[db]) or f"repaper-feat-rt-{db}" in busy:
         continue
     submit(
         "expts.repaper.baselines.featurize_rt:featurize_db",
