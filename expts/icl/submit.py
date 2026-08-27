@@ -259,6 +259,8 @@ TUNE: dict[tuple[str, str, str], Resources] = {
 # b200 jobs rotate at ~06:30 and could preempt it. post-votes' last tuning
 # entry keeps being preempted off il-lo (by my own il jobs), so it takes the
 # il a100 slot user-visits' tuning left free.
+# 19:35: user-ltv cfg3-s0 was preempted off the il-lo b200 twice in 40 minutes by
+# the il b200 array: back to an il-lo a100 like its siblings.
 # 18:55: study-adverse's tuning handed an il slot back; cfg2-s2 backfilled onto
 # il-lo before it could take it, so user-churn-cfg2-s3 does.
 # 18:45: only my own four b200 slots ever free up (the other four are held by
@@ -358,7 +360,7 @@ ENS: dict[tuple[str, str, str], list[Resources | list[Resources]]] = {
         b200("il-interactive", "12:00:00"),
         b200("il-interactive", "12:00:00"),
         [
-            b200("il-lo", "5:00:00"),
+            a100("il-lo", "10:00:00"),
             a100("il-lo", "10:00:00"),
             a100("il-lo", "10:00:00"),
             a100("il-lo", "10:00:00"),
