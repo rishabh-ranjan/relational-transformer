@@ -245,6 +245,13 @@ TUNE: dict[tuple[str, str, str], Resources] = {
 # backfilled onto il-lo a100s, so they stay there.
 # 18:15: fine_tune is done and three b200s sit idle with nothing of mine
 # queued: item-sales' units take them (il, il-interactive, il-lo).
+# 18:45: only my own four b200 slots ever free up (the other four are held by
+# 7-day and rolling 12-hour il jobs), so an il-lo b200 request never starts,
+# and a 2-day il-lo a100 job cannot backfill either: the free a100s are planned
+# for a whole-node job at 06:27 tomorrow. A rank placed as four Resources runs
+# one seed per job (run.py seed_offset), so the four 8192 units without a b200
+# become sixteen ~7.2 h a100 jobs that fit the backfill window as 10 h il-lo.
+# user-clicks (48k rows, ~1 h a pass): 6 h il-lo units.
 # 18:35: rt-j's amazon user tasks tuned to ctx 8192/4096, where one seed pass
 # over the 352k test rows is ~7.2 h / ~4.8 h on an a100 (tuning: ~300 s /
 # ~200 s per 4096 rows): a 6 h or 12 h chunk cannot even finish a seed, so
@@ -252,7 +259,7 @@ TUNE: dict[tuple[str, str, str], Resources] = {
 # il-b200 for the two that already hold il slots, il-interactive for the two
 # 4096 units (8.8 h fits the 12 h limit), il-lo for the rest -- and the two
 # that cannot get a b200 yet run on a 2-day il-lo a100 until one frees.
-ENS: dict[tuple[str, str, str], list[Resources]] = {
+ENS: dict[tuple[str, str, str], list[Resources | list[Resources]]] = {
     ("rt-plurel", "rel-amazon", "user-churn"): [
         b200("il", "1-00:00:00"),
         a100("il-lo", "1-00:00:00"),
@@ -321,15 +328,15 @@ ENS: dict[tuple[str, str, str], list[Resources]] = {
     ("rt-plurel", "rel-event", "user-repeat"): [a100("il-lo", "2:00:00")] * 4,
     ("rt-j", "rel-amazon", "user-churn"): [
         b200("il", "2-00:00:00"),
-        b200("il-lo", "2-00:00:00"),
-        b200("il-lo", "2-00:00:00"),
-        a100("il-lo", "2-00:00:00"),
+        [a100("il-lo", "10:00:00")] * 4,
+        [a100("il-lo", "10:00:00")] * 4,
+        [a100("il-lo", "10:00:00")] * 4,
     ],
     ("rt-j", "rel-amazon", "user-ltv"): [
         b200("il", "2-00:00:00"),
         b200("il-interactive", "12:00:00"),
         b200("il-interactive", "12:00:00"),
-        a100("il-lo", "2-00:00:00"),
+        [a100("il-lo", "10:00:00")] * 4,
     ],
     ("rt-j", "rel-amazon", "item-ltv"): [
         b200("il-interactive", "12:00:00"),
@@ -368,7 +375,7 @@ ENS: dict[tuple[str, str, str], list[Resources]] = {
         a100("il-lo", "6:00:00"),
         a100("il-lo", "6:00:00"),
     ],
-    ("rt-j", "rel-avito", "user-clicks"): [a100("il-lo", "1-00:00:00")] * 4,
+    ("rt-j", "rel-avito", "user-clicks"): [a100("il-lo", "6:00:00")] * 4,
     ("rt-j", "rel-avito", "user-visits"): [a100("il-lo", "1-00:00:00")] * 4,
     ("rt-j", "rel-trial", "site-success"): [a100("il-lo", "3:00:00")] * 4,
     ("rt-j", "rel-trial", "study-adverse"): [a100("il-lo", "2:00:00")] * 4,
@@ -462,58 +469,65 @@ def main() -> None:
                 print(f"  {model}/{db}/{task}: not in tuned_configs.json yet")
                 continue
             for rank, (ctx, lcs, bw, pl) in enumerate(rec["top_cfgs"]):
-                run_id = f"ens-{model}-{db}-{task}-cfg{rank}"
-                name = f"icl-{run_id}"
-                if name in busy:
-                    print(f"  {name:48s} queued already")
-                    continue
-                if (stage_dir(run_id) / "result.json").exists():
-                    print(f"  {name:48s} done already")
-                    continue
-                resources = ENS[model, db, task][rank]
-                print(
-                    f"  {name:48s} {resources.gpus} {resources.qos:15s} {resources.time}"
-                    f"  {(ctx, lcs, bw, pl)}"
+                placement = ENS[model, db, task][rank]
+                jobs = (
+                    [(f"cfg{rank}", 0, 4, placement)]
+                    if isinstance(placement, Resources)
+                    else [(f"cfg{rank}-s{k}", k, 1, r) for k, r in enumerate(placement)]
                 )
-                submit(
-                    "expts.icl.run:main",
-                    args=dict(
-                        db=db,
-                        task=task,
-                        load_ckpt_path=checkpoint(ckpt_root, db, task),
-                        pre_dir=PRE_DIR,
-                        ctx_size=int(ctx),
-                        local_ctx_size=int(lcs),
-                        bfs_width=int(bw),
-                        prefer_latest=bool(pl),
-                        n_seeds=4,
-                        items_per_task=1_000_000_000,
-                        num_walks=10_000,
-                        walk_length=20,
-                        shuffle_seed=0,
-                        context_seed=0,
-                        tokens_per_gpu=2**18,
-                        num_workers=resources.cpus_per_task,
-                        prefetch_factor=2,
-                        mmap_populate=True,
-                        db_cutoff=None,
-                        run_name=f"{model}/{db}/{task}/cfg{rank}",
-                        targets=targets_for(db, task),
-                        project=PROJECT,
-                        entity=ENTITY,
-                        out_root=OUT_ROOT,
-                        wandb_disabled=False,
-                    ),
-                    resources=resources,
-                    name=name,
-                    run_id=run_id,
-                    repo_root=str(HERE.parents[1]),
-                    cluster=ILC,
-                    job_env="expts/job_env.sh",
-                    log_root=f"{OUT_ROOT}/slurm-logs",
-                    clone_root="~/roach_clones",
-                    secrets_dir="~/scratch/.secrets",
-                )
+                for unit, seed_offset, n_seeds, resources in jobs:
+                    run_id = f"ens-{model}-{db}-{task}-{unit}"
+                    name = f"icl-{run_id}"
+                    if name in busy:
+                        print(f"  {name:48s} queued already")
+                        continue
+                    if (stage_dir(run_id) / "result.json").exists():
+                        print(f"  {name:48s} done already")
+                        continue
+                    print(
+                        f"  {name:48s} {resources.gpus} {resources.qos:15s} {resources.time}"
+                        f"  {(ctx, lcs, bw, pl)}"
+                    )
+                    submit(
+                        "expts.icl.run:main",
+                        args=dict(
+                            db=db,
+                            task=task,
+                            load_ckpt_path=checkpoint(ckpt_root, db, task),
+                            pre_dir=PRE_DIR,
+                            ctx_size=int(ctx),
+                            local_ctx_size=int(lcs),
+                            bfs_width=int(bw),
+                            prefer_latest=bool(pl),
+                            n_seeds=n_seeds,
+                            seed_offset=seed_offset,
+                            items_per_task=1_000_000_000,
+                            num_walks=10_000,
+                            walk_length=20,
+                            shuffle_seed=0,
+                            context_seed=0,
+                            tokens_per_gpu=2**18,
+                            num_workers=resources.cpus_per_task,
+                            prefetch_factor=2,
+                            mmap_populate=True,
+                            db_cutoff=None,
+                            run_name=f"{model}/{db}/{task}/{unit}",
+                            targets=targets_for(db, task),
+                            project=PROJECT,
+                            entity=ENTITY,
+                            out_root=OUT_ROOT,
+                            wandb_disabled=False,
+                        ),
+                        resources=resources,
+                        name=name,
+                        run_id=run_id,
+                        repo_root=str(HERE.parents[1]),
+                        cluster=ILC,
+                        job_env="expts/job_env.sh",
+                        log_root=f"{OUT_ROOT}/slurm-logs",
+                        clone_root="~/roach_clones",
+                        secrets_dir="~/scratch/.secrets",
+                    )
 
 
 if __name__ == "__main__":

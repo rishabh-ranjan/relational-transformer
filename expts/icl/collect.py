@@ -168,6 +168,7 @@ def log_ensemble(model: str, sums: dict, results: dict) -> None:
 
 def reduce(model: str, tuned: dict) -> None:
     from rt.data import get_tasks
+    from rt.eval import metric_for
     from rt.eval.relbench import _emit_and_score
 
     preds = LEADERBOARD / model / "preds"
@@ -175,27 +176,52 @@ def reduce(model: str, tuned: dict) -> None:
     missing = []
     for db, task in TASKS:
         key = f"{db}/{task}"
-        units = [
-            stage_dir(f"ens-{model}-{db}-{task}-cfg{rank}") for rank in range(N_TOP)
-        ]
-        if key not in tuned or not all((u / "result.json").exists() for u in units):
+        units = []
+        for rank in range(N_TOP):
+            whole = stage_dir(f"ens-{model}-{db}-{task}-cfg{rank}")
+            units.append(
+                [whole]
+                if (whole / "result.json").exists()
+                else [
+                    stage_dir(f"ens-{model}-{db}-{task}-cfg{rank}-s{k}")
+                    for k in range(N_SEEDS)
+                ]
+            )
+        if key not in tuned or not all(
+            (p / "result.json").exists() for parts in units for p in parts
+        ):
             missing.append(key)
             continue
+        (rt_task,) = get_tasks(PRE_DIR, [(db, task)], ("test",))
         labels = nodes = None
         cfg_sums, curves = [], []
-        for unit in units:
-            st = np.load(unit / "state.npz")
-            assert int(st["seeds"]) == N_SEEDS, (
-                f"{unit}: {int(st['seeds'])}/{N_SEEDS} seeds"
-            )
-            if labels is None:
-                labels, nodes = st["labels"], st["node_idxs"]
+        for parts in units:
+            seed_sums = []
+            for part in parts:
+                st = np.load(part / "state.npz")
+                assert int(st["seeds"]) * len(parts) == N_SEEDS, (
+                    f"{part}: {int(st['seeds'])} seeds in {len(parts)} parts"
+                )
+                if labels is None:
+                    labels, nodes = st["labels"], st["node_idxs"]
+                else:
+                    assert np.array_equal(nodes, st["node_idxs"])
+                    assert np.array_equal(labels, st["labels"])
+                seed_sums.append(st["sum_preds"].astype(np.float64))
+            cfg_sums.append(sum(seed_sums))
+            if len(parts) == 1:
+                curves.append(
+                    json.loads((parts[0] / "result.json").read_text())["curve"]
+                )
             else:
-                assert np.array_equal(nodes, st["node_idxs"])
-                assert np.array_equal(labels, st["labels"])
-            cfg_sums.append(st["sum_preds"].astype(np.float64))
-            curves.append(json.loads((unit / "result.json").read_text())["curve"])
-        (rt_task,) = get_tasks(PRE_DIR, [(db, task)], ("test",))
+                curves.append(
+                    {
+                        str(k): metric_for(
+                            rt_task.task_type, labels, sum(seed_sums[:k]) / k
+                        )[1]
+                        for k in range(1, N_SEEDS + 1)
+                    }
+                )
         mname, mval, n, align, _ = _emit_and_score(
             preds,
             rt_task,

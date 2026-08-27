@@ -17,6 +17,7 @@ def main(
     bfs_width: int,
     prefer_latest: bool,
     n_seeds: int,
+    seed_offset: int,
     items_per_task: int,
     num_walks: int,
     walk_length: int,
@@ -99,6 +100,7 @@ def main(
         log(stage=run_id, resumed_from=str(state_path), seeds=start)
 
     for seed in range(start, n_seeds):
+        member = seed_offset + seed
         ev = build_evaluator(
             [rt_task],
             pre_dir,
@@ -115,7 +117,7 @@ def main(
             items_per_task=items_per_task,
             num_workers=num_workers,
             prefetch_factor=prefetch_factor,
-            context_seed=member_context_seed(context_seed, seed),
+            context_seed=member_context_seed(context_seed, member),
             shuffle_seed=shuffle_seed,
             mmap_populate=mmap_populate,
             vector_db_path=None,
@@ -136,6 +138,7 @@ def main(
             indent=1,
             task=f"{db}/{task}",
             cfg=str(cfg).replace(" ", ""),
+            member=member,
             ens_size=k,
             metric=mname,
             value=f"{mval:.4f}",
@@ -176,6 +179,7 @@ def main(
             "bfs_width": bfs_width,
             "prefer_latest": prefer_latest,
             "n_seeds": n_seeds,
+            "seed_offset": seed_offset,
             "shuffle_seed": shuffle_seed,
             "context_seed": context_seed,
             "db_cutoff": db_cutoff,
