@@ -22,8 +22,8 @@ ls -t ~/scratch/relational-transformer/icl/slurm-logs/*.out | head
 # 3. rank the grids -> tuned_configs.json; commit it
 pixi run python -m expts.icl.collect
 
-# 4. 84 ensemble units (21 tasks x top-4 configs); rewrite ENS in submit.py
-#    against the live cluster first, commit, push
+# 4. ensemble units (21 tasks x top-4 configs, one job each or one per seed);
+#    rewrite ENS in submit.py against the live cluster first, commit, push
 pixi run python -m expts.icl.submit
 
 # 5. average the 16 predictions per task, write and validate the prediction
@@ -36,7 +36,12 @@ task without a `tuning.json`, an ensemble unit for every `(task, config)` in
 `tuned_configs.json` without a `result.json`. So steps 1 and 4 are the same
 command, and re-running it fills gaps. `TUNE` and `ENS` are the resource
 plans, worked out against the live cluster at each submission
-([`../README.md`](../README.md)).
+([`../README.md`](../README.md)). A rank in `ENS` is one `Resources` (one job
+runs the four seeds in sequence) or a list of four (one job per seed,
+`run.py` `seed_offset`), for the units no wall clock would hold whole: a
+ctx-8192 seed pass over the 352k rel-amazon user rows is ~2.3 h on an a100,
+so those units were sixteen 10 h jobs, and the il-lo backfill windows fit
+them.
 
 Both stages resume: the context search per grid entry (`ensemble_resume.pt`),
 an ensemble unit per context seed (`state.npz`). A preemption costs at most
@@ -44,7 +49,9 @@ one (grid entry, seed) pass on validation or one full test pass.
 
 Everything lands under `~/scratch/relational-transformer/icl/`: `slurm-logs/`,
 one directory per job at `rtv2/2026-08-25-icl/tune-<model>-<db>-<task>/` and
-`rtv2/2026-08-25-icl/ens-<model>-<db>-<task>-cfg<k>/`, and the submission
+`rtv2/2026-08-25-icl/ens-<model>-<db>-<task>-cfg<k>/` (`-cfg<k>-s<j>/` for a
+rank run one job per seed; `collect.py` reads whichever shape has a
+`result.json`), and the submission
 package under `leaderboard/2026-08-25-icl/<model>/`. (rt-plurel's tuning ran
 before the model was in the id; its `tune-rel-*` / `ens-rel-*` directories
 are reached through `tune-rt-plurel-rel-*` symlinks.)
@@ -80,7 +87,9 @@ values. `tokens_per_gpu=2**18` (32 rows per batch at ctx 8192).
 2. **Test ensemble** -- `run.py`, one unit per (task, config): the config's
    context sampled with 4 seeds (`member_context_seed(0, k)`, k = 0..3) on
    the full test split, the raw per-row predictions (logits / normalized
-   values) summed into `state.npz`. `collect.py` averages the 16 predictions
+   values) summed into `state.npz`; a rank placed as four `Resources` runs
+   as four jobs of one seed each (`seed_offset=k`, `n_seeds=1`), whose sums
+   `collect.py` adds. `collect.py` averages the 16 predictions
    of a task's 4 units, then sigmoids (clf) / denormalizes (reg) through
    `rt.eval.relbench._emit_and_score`, which also proves the node-index join
    against relbench's ground truth (`cls=1.000` / `|dy|`), scores the table
@@ -124,23 +133,23 @@ grouped by `run_name`, so a requeued job's attempts read as one curve.
 
 ## What it costs
 
-Measured on this round where it says so; the rest is projected from the RT-J
-rerun of the same grid on this cluster (`sacct`, 2026-08-20/21).
+Measured on this round (2026-08-25/27, both models).
 
-- Context search, measured 2026-08-25 on a100 (14 workers): one sampler pass
-  over 4096 val rows scored at every ctx up to 8192 is ~400 s, all of it
-  predict (load 3-8 s), the same on rel-amazon and rel-avito; the first grid
-  entry (lcs 256, five ctx sizes, 4 seeds) took 27 min, so a task with 4096
-  val rows is ~12-14 h on an a100 (entries with a larger lcs score fewer ctx
-  sizes), 6h15 on a b200 in the RT-J rerun; the smaller validation splits
-  scale down with their rows (rel-event/user-repeat 1h15, rel-f1/driver-dnf
-  2h, rel-trial/study-outcome 3h30 in the RT-J rerun).
-- Test ensemble: ~30 test rows/s on an a100 at ctx 8192 including sampling
-  (the 16-seed 8192-row curves ran ~1h05 on rel-amazon); a unit is four
-  passes, so ~13h for each rel-amazon user task (352k rows), ~6h30 for the
-  item tasks, ~9h30 rel-stack/user-badge, ~6h post-votes, ~4h rel-hm/item-sales,
-  ~3h user-engagement, under 2h for everything else; ~280 a100-hours in all,
-  less wherever the tuned ctx is below 8192.
+- Context search: one sampler pass over 4096 val rows scored at every ctx up
+  to 8192 is ~300 s on an a100 (14 workers) at bfs width 128, ~200 s at
+  width 32 and ~140 s at width 8, all of it predict (load 3-8 s); a task
+  with 4096 val rows is ~10.5 h on an a100 (rel-amazon/item-ltv 10h29,
+  item-churn 10h27, user-ltv 10h54, each with one restart), ~4 h on a b200
+  (rel-amazon/user-churn's last 24 entries in 4h07); the smaller validation
+  splits scale down with their rows.
+- Test ensemble, per seed pass (a unit is four): the 352k-row rel-amazon
+  user tasks at ctx 8192 ~2.3 h on an a100 and ~1.05 h on a b200, at ctx
+  4096 ~25 min on a b200; rel-stack/user-badge (255k rows, ctx 8192) ~1.6-2 h
+  on an a100, ~50 min on a b200; rel-amazon/item-churn (167k, 8192) ~70 min
+  on an a100; rel-stack/post-votes (161k, ctx 1024-8192 at width 8) 10-75
+  min on an a100; rel-hm/item-sales (106k, ctx 2048-4096) 15-30 min on a
+  b200; everything else minutes. The bfs width matters as much as the ctx:
+  the width-8 configs run 2-3x faster than width 128 at the same ctx.
 
 | task | val rows | test rows |
 |---|---:|---:|
@@ -190,50 +199,57 @@ configs x 4 context seeds, averaged).
 
 ## Results
 
-RT-PluRel, 2026-08-26 (official RelBench evaluator on the full test splits;
-`leaderboard/2026-08-25-icl/rt-plurel/results.json`), beside RT-J's paper
-in-context numbers and RT-PluRel fine-tuned:
+Official RelBench evaluator on the full test splits
+(`leaderboard/2026-08-25-icl/<model>/results.json`; RT-PluRel 2026-08-26,
+RT-J 2026-08-27), beside RT-J's paper in-context numbers and RT-PluRel
+fine-tuned:
 
-| task | metric | rt-plurel icl | rt-j icl (paper) | rt-plurel fine-tuned |
-|---|---|---:|---:|---:|
-| rel-amazon/item-churn | AUROC % | 74.77 | 80.69 | 83.27 |
-| rel-amazon/user-churn | AUROC % | 65.09 | 68.78 | 71.35 |
-| rel-avito/user-clicks | AUROC % | 50.01 | 54.54 | 58.34 |
-| rel-avito/user-visits | AUROC % | 62.03 | 62.41 | 67.09 |
-| rel-event/user-ignore | AUROC % | 83.75 | 87.31 | 84.76 |
-| rel-event/user-repeat | AUROC % | 77.77 | 78.42 | 79.14 |
-| rel-f1/driver-dnf | AUROC % | 81.12 | 83.02 | 73.15 |
-| rel-f1/driver-top3 | AUROC % | 90.30 | 91.44 | 75.89 |
-| rel-hm/user-churn | AUROC % | 65.99 | 67.87 | 70.44 |
-| rel-stack/user-badge | AUROC % | 83.15 | 82.11 | 89.16 |
-| rel-stack/user-engagement | AUROC % | 88.00 | 86.71 | 89.68 |
-| rel-trial/study-outcome | AUROC % | 67.33 | 64.51 | 72.35 |
-| **mean** | AUROC % | **74.11** | 75.65 | 76.22 |
-| rel-amazon/item-ltv | nMAE % | 8.76 | 7.78 | 7.28 |
-| rel-amazon/user-ltv | nMAE % | 28.91 | 27.38 | 24.17 |
-| rel-avito/ad-ctr | nMAE % | 43.34 | 41.75 | 36.37 |
-| rel-event/user-attendance | nMAE % | 40.81 | 35.42 | 31.50 |
-| rel-f1/driver-position | nMAE % | 41.50 | 40.79 | 54.34 |
-| rel-hm/item-sales | nMAE % | 12.23 | 9.56 | 8.14 |
-| rel-stack/post-votes | nMAE % | 15.74 | 13.80 | 12.44 |
-| rel-trial/site-success | nMAE % | 89.55 | 15.23 | 86.16 |
-| rel-trial/study-adverse | nMAE % | 16.06 | 15.31 | 9.64 |
-| **mean** | nMAE % | **32.99** | 23.00 | 30.00 |
+| task | metric | rt-plurel icl | rt-j icl | rt-j icl (paper) | rt-plurel fine-tuned |
+|---|---|---:|---:|---:|---:|
+| rel-amazon/item-churn | AUROC % | 74.77 | 80.19 | 80.69 | 83.27 |
+| rel-amazon/user-churn | AUROC % | 65.09 | 67.48 | 68.78 | 71.35 |
+| rel-avito/user-clicks | AUROC % | 50.01 | 53.20 | 54.54 | 58.34 |
+| rel-avito/user-visits | AUROC % | 62.03 | 62.68 | 62.41 | 67.09 |
+| rel-event/user-ignore | AUROC % | 83.75 | 82.69 | 87.31 | 84.76 |
+| rel-event/user-repeat | AUROC % | 77.77 | 76.76 | 78.42 | 79.14 |
+| rel-f1/driver-dnf | AUROC % | 81.12 | 80.64 | 83.02 | 73.15 |
+| rel-f1/driver-top3 | AUROC % | 90.30 | 91.79 | 91.44 | 75.89 |
+| rel-hm/user-churn | AUROC % | 65.99 | 66.17 | 67.87 | 70.44 |
+| rel-stack/user-badge | AUROC % | 83.15 | 82.20 | 82.11 | 89.16 |
+| rel-stack/user-engagement | AUROC % | 88.00 | 87.70 | 86.71 | 89.68 |
+| rel-trial/study-outcome | AUROC % | 67.33 | 56.03 | 64.51 | 72.35 |
+| **mean** | AUROC % | **74.11** | **73.96** | 75.65 | 76.22 |
+| rel-amazon/item-ltv | nMAE % | 8.76 | 8.02 | 7.78 | 7.28 |
+| rel-amazon/user-ltv | nMAE % | 28.91 | 27.57 | 27.38 | 24.17 |
+| rel-avito/ad-ctr | nMAE % | 43.34 | 41.83 | 41.75 | 36.37 |
+| rel-event/user-attendance | nMAE % | 40.81 | 37.47 | 35.42 | 31.50 |
+| rel-f1/driver-position | nMAE % | 41.50 | 38.13 | 40.79 | 54.34 |
+| rel-hm/item-sales | nMAE % | 12.23 | 10.21 | 9.56 | 8.14 |
+| rel-stack/post-votes | nMAE % | 15.74 | 14.26 | 13.80 | 12.44 |
+| rel-trial/site-success | nMAE % | 89.55 | 87.62 | 15.23 | 86.16 |
+| rel-trial/study-adverse | nMAE % | 16.06 | 15.43 | 15.31 | 9.64 |
+| **mean** | nMAE % | **32.99** | **31.17** | 23.00 | 30.00 |
+
+RT-J here reproduces the RT-J paper's in-context board: 15 of the 21 tasks
+land within a point of the paper, the regression mean without
+rel-trial/site-success is 24.1 vs the paper's 24.0, and the AUROC mean is
+1.7 points under the paper's, most of it two tiny test splits
+(rel-trial/study-outcome 56.0 vs 64.5 on 825 rows, rel-event/user-ignore
+82.7 vs 87.3 on 1,958) plus rel-amazon/user-churn (67.5 vs 68.8). The paper's
+grid had bfs width {8, 32} and this one {8, 32, 128}; the tuned contexts
+differ from the paper's on most tasks, and each task's four configs are
+within 0.001-0.005 of each other on validation, so the ranking is close to a
+tie-break. RT-PluRel in-context sits ~1 AUROC point and ~2 nMAE points
+behind RT-J.
 
 Two rows need reading with care. rel-trial/site-success: every RelArena
 method scores 68-100 % nMAE on it (fine-tuned RT-PluRel 86.16), so the RT-J
-paper's 15.23 is on some other scale; against the fine-tuned number our 89.55
-is in line. rel-avito/user-clicks: chance level (50.01) despite 0.60 val
-AUROC, and each of the four tuned configs alone scores 0.48-0.51 on test with
-the labels verified aligned -- a val-to-test shift on a task where in-context
-methods sit near chance anyway (RT-J 54.5, constant-per-entity 50.4).
-
-Measured on this round: a context search over 4096 val rows is ~10.5 h on an
-a100 (rel-amazon/item-ltv 10h29, item-churn 10h27, user-ltv 10h54, each with
-one restart) and ~4 h on a b200 (rel-amazon/user-churn's last 24 entries in
-4h07); an ensemble unit is minutes on the small tasks, 20-60 min on the
-rel-amazon tasks where the tuned context was 512-2048, and 1h50-6h where it
-was 8192 (rel-stack/user-badge cfg3 5h on an a100, 3h12 on a b200).
+paper's 15.23 is on some other scale; against the fine-tuned number our
+87.6-89.6 is in line. rel-avito/user-clicks: RT-PluRel at chance level
+(50.01) despite 0.60 val AUROC, each of its four tuned configs alone scoring
+0.48-0.51 on test with the labels verified aligned -- a val-to-test shift on
+a task where in-context methods sit near chance anyway (RT-J 53.2 here, 54.5
+in the paper, constant-per-entity 50.4).
 
 ## Reference numbers
 
