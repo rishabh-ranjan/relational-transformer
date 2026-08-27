@@ -135,4 +135,5 @@ for variant in ["default", "tuned"]:
             log_root=f"{LOG_ROOT}/repaper/enscurve/slurm-logs",
             clone_root=CLONE_ROOT,
             secrets_dir=SECRETS_DIR,
+            setup=("pixi run maturin develop --uv --release --features vecdb",),
         )

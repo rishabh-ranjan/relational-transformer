@@ -173,6 +173,7 @@ for db in DBS:
         log_root=f"{LOG_ROOT}/repaper/baselines/slurm-logs",
         clone_root=CLONE_ROOT,
         secrets_dir=SECRETS_DIR,
+        setup=("pixi run maturin develop --uv --release --features vecdb",),
     )
 
 # for subdir, root in [
@@ -202,4 +203,5 @@ for db in DBS:
 #         log_root=f"{LOG_ROOT}/repaper/baselines/slurm-logs",
 #         clone_root=CLONE_ROOT,
 #         secrets_dir=SECRETS_DIR,
+#         setup=("pixi run maturin develop --uv --release --features vecdb",),
 #     )

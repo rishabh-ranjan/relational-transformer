@@ -339,6 +339,13 @@ nosem = (
     ).id
 )
 
+# roach builds a clone once per commit per node, by whichever job lands first,
+# and `setup` runs only then -- so a vecdb rebuild asked for by the vdb arms
+# alone is skipped whenever another job of the same commit built the clone
+# (01:46: all 21 vdb_rdblearn jobs died on "rustler was built without the
+# 'vecdb' feature"). Every job of this round therefore builds the sampler
+# with the feature; the vector-db path is only taken when vector_db_path is
+# set, and enscurve/ and baselines/ ask for the same build.
 for arm in [
     "fulltest/rt",
     "subsampled/rt",
@@ -402,8 +409,6 @@ for arm in [
             log_root=f"{LOG_ROOT}/repaper/scaling/slurm-logs",
             clone_root=CLONE_ROOT,
             secrets_dir=SECRETS_DIR,
-            setup=("pixi run maturin develop --uv --release --features vecdb",)
-            if overrides.get("vector_db_path")
-            else (),
+            setup=("pixi run maturin develop --uv --release --features vecdb",),
             after=nosem if arm == "abl/nosem" and nosem is not True else None,
         )
