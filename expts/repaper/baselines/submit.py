@@ -151,23 +151,24 @@ for db in DBS:
         ),
         # 02:22: the rt features gate the vdb_rt arm and its index, so the
         # rel-amazon pass (~5 h on an a100 in the 2026-08-19 round) takes the
-        # il b200 rel-hm/item-sales' TabICL pass freed; the rest stay il-lo.
+        # il b200 rel-hm/item-sales' TabICL pass freed; 02:56: rel-stack takes
+        # the il b200 post-votes' TabICL pass freed; the rest stay il-lo.
         resources=Resources(
             partition="il",
             account="infolab",
-            qos="il" if db == "rel-amazon" else "il-lo",
-            time="12:00:00" if db == "rel-amazon" else "3:00:00",
-            gpus="b200:1" if db == "rel-amazon" else "a100:1",
+            qos="il" if db in ("rel-amazon", "rel-stack") else "il-lo",
+            time="12:00:00" if db in ("rel-amazon", "rel-stack") else "3:00:00",
+            gpus="b200:1" if db in ("rel-amazon", "rel-stack") else "a100:1",
             cpus_per_task=8,
             ntasks=None,
             exclusive=False,
             mem=min(mem(db), "240G", key=lambda m: int(m.rstrip("G"))),
             mem_per_gpu=None,
-            constraint=None if db == "rel-amazon" else "ampere",
-            nodelist="blackwell1" if db == "rel-amazon" else None,
+            constraint=None if db in ("rel-amazon", "rel-stack") else "ampere",
+            nodelist="blackwell1" if db in ("rel-amazon", "rel-stack") else None,
             reservation=None,
             dependency=None,
-            exclude=None if db == "rel-amazon" else "ampere4,ampere7",
+            exclude=None if db in ("rel-amazon", "rel-stack") else "ampere4,ampere7",
         ),
         name=f"repaper-feat-rt-{db}",
         repo_root=str(Path(__file__).resolve().parents[3]),
