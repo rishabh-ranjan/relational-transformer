@@ -261,6 +261,10 @@ TUNE: dict[tuple[str, str, str], Resources] = {
 # il a100 slot user-visits' tuning left free.
 # 19:35: user-ltv cfg3-s0 was preempted off the il-lo b200 twice in 40 minutes by
 # the il b200 array: back to an il-lo a100 like its siblings.
+# 20:15: user-visits tuned last (21/21): 36129 rows at ctx 4096/2048/8192/8192,
+# up to ~47 min a seed pass on an a100. Its own tuning and post-votes
+# cfg1-s0 left two il slots: the first two ranks run whole there under 12 h;
+# the two ctx 8192 ranks run one job per seed on il-lo, sized to backfill.
 # 20:05: hm/user-churn cfg0 handed an il slot back: user-ltv cfg3-s0, the only job
 # still queued, takes it.
 # 18:55: study-adverse's tuning handed an il slot back; cfg2-s2 backfilled onto
@@ -416,7 +420,12 @@ ENS: dict[tuple[str, str, str], list[Resources | list[Resources]]] = {
         a100("il-lo", "6:00:00"),
     ],
     ("rt-j", "rel-avito", "user-clicks"): [a100("il-lo", "6:00:00")] * 4,
-    ("rt-j", "rel-avito", "user-visits"): [a100("il-lo", "1-00:00:00")] * 4,
+    ("rt-j", "rel-avito", "user-visits"): [
+        a100("il", "12:00:00"),
+        a100("il", "12:00:00"),
+        [a100("il-lo", "4:00:00")] * 4,
+        [a100("il-lo", "4:00:00")] * 4,
+    ],
     ("rt-j", "rel-trial", "site-success"): [a100("il-lo", "3:00:00")] * 4,
     ("rt-j", "rel-trial", "study-adverse"): [a100("il-lo", "2:00:00")] * 4,
     ("rt-j", "rel-event", "user-attendance"): [a100("il-lo", "2:00:00")] * 4,
