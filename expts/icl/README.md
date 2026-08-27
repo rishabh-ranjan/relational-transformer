@@ -230,17 +230,16 @@ fine-tuned:
 | rel-trial/study-adverse | nMAE % | 16.06 | 15.43 | 15.31 | 9.64 |
 | **mean** | nMAE % | **32.99** | **31.17** | 23.00 | 30.00 |
 
-RT-J here reproduces the RT-J paper's in-context board: 15 of the 21 tasks
-land within a point of the paper, the regression mean without
-rel-trial/site-success is 24.1 vs the paper's 24.0, and the AUROC mean is
-1.7 points under the paper's, most of it two tiny test splits
+RT-J here reproduces the RT-J paper's in-context board: of the 20 comparable
+tasks, 11 land within a point of the paper and 15 within two, the regression
+mean without rel-trial/site-success is 24.1 vs the paper's 24.0, and the
+AUROC mean is 1.7 points under the paper's, most of it two tiny test splits
 (rel-trial/study-outcome 56.0 vs 64.5 on 825 rows, rel-event/user-ignore
-82.7 vs 87.3 on 1,958) plus rel-amazon/user-churn (67.5 vs 68.8). The paper's
-grid had bfs width {8, 32} and this one {8, 32, 128}; the tuned contexts
-differ from the paper's on most tasks, and each task's four configs are
-within 0.001-0.005 of each other on validation, so the ranking is close to a
-tie-break. RT-PluRel in-context sits ~1 AUROC point and ~2 nMAE points
-behind RT-J.
+82.7 vs 87.3 on 1,958) and rel-f1/driver-dnf (80.6 vs 83.0 on 702). The
+top-4 validation scores of a task span 0.0005-0.008 on 18 tasks (0.01-0.023
+on user-clicks, user-badge, study-outcome), so which four contexts make the
+ensemble is close to a tie-break and moves with the grid. RT-PluRel
+in-context sits ~1 AUROC point and ~2 nMAE points behind RT-J.
 
 Two rows need reading with care. rel-trial/site-success: every RelArena
 method scores 68-100 % nMAE on it (fine-tuned RT-PluRel 86.16), so the RT-J
