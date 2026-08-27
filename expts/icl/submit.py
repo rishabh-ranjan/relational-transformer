@@ -261,6 +261,8 @@ TUNE: dict[tuple[str, str, str], Resources] = {
 # il a100 slot user-visits' tuning left free.
 # 19:35: user-ltv cfg3-s0 was preempted off the il-lo b200 twice in 40 minutes by
 # the il b200 array: back to an il-lo a100 like its siblings.
+# 21:20: item-churn cfg1 was preempted off il-lo a second time, minutes before its
+# last seed finished; il has room, so it resumes there.
 # 21:05: user-ltv cfg2 finished on il-interactive: user-badge cfg1 moves there
 # right after its second seed saved.
 # 20:30: the b200 units calibrate a ctx 8192 seed pass over 352k rows at ~1.05 h
@@ -391,7 +393,7 @@ ENS: dict[tuple[str, str, str], list[Resources | list[Resources]]] = {
     ],
     ("rt-j", "rel-amazon", "item-churn"): [
         b200("il", "12:00:00"),
-        a100("il-lo", "6:00:00"),
+        a100("il", "6:00:00"),
         a100("il-lo", "6:00:00"),
         a100("il-lo", "6:00:00"),
     ],
