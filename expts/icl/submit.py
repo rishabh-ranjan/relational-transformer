@@ -239,9 +239,8 @@ TUNE: dict[tuple[str, str, str], Resources] = {
 # holders are not preempted (planned start 22:40 twice today); user-ltv's cfg0
 # goes back to an il a100 -- no more b200 requests from this sweep unless
 # fine_tune hands one over explicitly.
-# 18:05: two b200s free with il full: user-churn's cfg1/cfg2 (352k rows at
-# ctx 8192, ~3h on an a100) ask il-lo for them at 6h; a preemption costs a
-# ~45-min pass.
+# 18:05: two b200s freed with il full, but user-churn's cfg1/cfg2 had just
+# backfilled onto il-lo a100s, so they stay there.
 ENS: dict[tuple[str, str, str], list[Resources]] = {
     ("rt-plurel", "rel-amazon", "user-churn"): [
         b200("il", "1-00:00:00"),
@@ -311,8 +310,8 @@ ENS: dict[tuple[str, str, str], list[Resources]] = {
     ("rt-plurel", "rel-event", "user-repeat"): [a100("il-lo", "2:00:00")] * 4,
     ("rt-j", "rel-amazon", "user-churn"): [
         a100("il", "12:00:00"),
-        b200("il-lo", "6:00:00"),
-        b200("il-lo", "6:00:00"),
+        a100("il-lo", "6:00:00"),
+        a100("il-lo", "6:00:00"),
         a100("il-lo", "6:00:00"),
     ],
     ("rt-j", "rel-amazon", "user-ltv"): [
