@@ -7,6 +7,7 @@ from roach.slurm import submit
 submit(
     "rt.train:main",
     args=args()
+    | dict(run_name="base")
     # | dict(run_name="mask0", mask_prob_max=0.0)
     # | dict(run_name="mask25", mask_prob_max=0.25)
     # | dict(run_name="mask75", mask_prob_max=0.75)
@@ -14,10 +15,10 @@ submit(
     #     run_name="mix-forecast",
     #     db_task_list="expts/repaper/pretrain_abl/cutoff-forecast.json",
     # )
-    | dict(
-        run_name="mix-autocomplete",
-        db_task_list="expts/repaper/pretrain_abl/cutoff-autocomplete.json",
-    )
+    # | dict(
+    #     run_name="mix-autocomplete",
+    #     db_task_list="expts/repaper/pretrain_abl/cutoff-autocomplete.json",
+    # )
     | dict(
         early_stop_after_steps=10_000,
         keep_all_ckpts=False,
@@ -26,7 +27,7 @@ submit(
     resources=resources,
     name="pretrain-abl",
     run_id=None,
-    inside=447208,
+    inside=451447,
     repo_root=str(Path(__file__).resolve().parents[3]),
     cluster=cluster,
     job_env="expts/job_env.sh",
