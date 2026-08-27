@@ -261,6 +261,10 @@ TUNE: dict[tuple[str, str, str], Resources] = {
 # il a100 slot user-visits' tuning left free.
 # 19:35: user-ltv cfg3-s0 was preempted off the il-lo b200 twice in 40 minutes by
 # the il b200 array: back to an il-lo a100 like its siblings.
+# 22:20: user-churn cfg0 finished on its il b200 and two b200s are idle: user-badge
+# cfg2 (restarted on an il a100 at 21:02 after a botched move, one seed saved)
+# takes one now rather than gamble on a card still being free at its next
+# seed save; its three remaining seeds are ~2.7 h on a b200.
 # 21:20: item-churn cfg1 was preempted off il-lo a second time, minutes before its
 # last seed finished; il has room, so it resumes there.
 # 21:05: user-ltv cfg2 finished on il-interactive: user-badge cfg1 moves there
@@ -400,7 +404,7 @@ ENS: dict[tuple[str, str, str], list[Resources | list[Resources]]] = {
     ("rt-j", "rel-stack", "user-badge"): [
         b200("il-interactive", "6:00:00"),
         b200("il-interactive", "6:00:00"),
-        a100("il", "12:00:00"),
+        b200("il", "6:00:00"),
         a100("il-lo", "12:00:00"),
     ],
     ("rt-j", "rel-stack", "post-votes"): [
