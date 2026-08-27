@@ -33,7 +33,7 @@ def featurize_table(
     max_depth: int,
     max_train_samples: int,
 ) -> None:
-    os.environ["RELBENCH_CACHE_DIR"] = relbench_cache_dir
+    os.environ["RELBENCH_CACHE_DIR"] = str(Path(relbench_cache_dir).expanduser())
     import fastdfs
     import numpy as np
     import pandas as pd
@@ -84,7 +84,7 @@ def featurize_table(
     combined = pd.concat(
         [
             pd.read_parquet(
-                Path(raw_dir) / db / "tasks" / table / f"{s}.parquet"
+                Path(raw_dir).expanduser() / db / "tasks" / table / f"{s}.parquet"
             ).reset_index(drop=True)
             for s, _ in ordered
         ],
