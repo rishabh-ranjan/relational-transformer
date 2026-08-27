@@ -258,9 +258,6 @@ HIGH = {
     # preemptions have started (two subsampled RT passes requeued), so the
     # longest non-resumable pass still queued moves up.
     ("fulltest/rdblearn_tabicl", "rel-amazon", "item-churn"): ("il", "a100", 6),
-    # 02:20: rel-hm/item-sales' rdblearn TabICL pass freed the il b200 (1h25
-    # on it); rel-amazon/user-churn's subsampled sql TabICL pass takes it.
-    ("subsampled/sql_tabicl", "rel-amazon", "user-churn"): ("il", "b200", 6),
 }
 
 
