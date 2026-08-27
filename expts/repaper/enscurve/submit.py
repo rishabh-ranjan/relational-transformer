@@ -75,7 +75,7 @@ def resources(db: str, table: str) -> Resources:
         nodelist=None,
         reservation=None,
         dependency=None,
-        exclude="ampere4",
+        exclude="ampere4,ampere7",
     )
 
 

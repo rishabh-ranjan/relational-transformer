@@ -164,7 +164,7 @@ for db in DBS:
             nodelist=None,
             reservation=None,
             dependency=None,
-            exclude="ampere4",
+            exclude="ampere4,ampere7",
         ),
         name=f"repaper-feat-rt-{db}",
         repo_root=str(Path(__file__).resolve().parents[3]),

@@ -144,6 +144,9 @@ def mem(db: str) -> str:
     }[db]
 
 
+# ampere7's seventh a100 comes up with no free memory (01:10: four RT passes
+# died there at the first forward, as expts/icl saw on 2026-08-25) and ampere4's
+# local disk was full on 2026-08-25; both stay out of every gpu job.
 def a100(qos: str, hours: int, db: str) -> Resources:
     return Resources(
         partition="il",
@@ -160,7 +163,7 @@ def a100(qos: str, hours: int, db: str) -> Resources:
         nodelist=None,
         reservation=None,
         dependency=None,
-        exclude="ampere4",
+        exclude="ampere4,ampere7",
     )
 
 
