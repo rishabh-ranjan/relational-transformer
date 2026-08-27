@@ -317,7 +317,7 @@ ENS: dict[tuple[str, str, str], list[Resources]] = {
     ("rt-j", "rel-hm", "user-churn"): [a100("il-lo", "1-00:00:00")] * 4,
     ("rt-j", "rel-avito", "user-clicks"): [a100("il-lo", "1-00:00:00")] * 4,
     ("rt-j", "rel-avito", "user-visits"): [a100("il-lo", "1-00:00:00")] * 4,
-    ("rt-j", "rel-trial", "site-success"): [a100("il-lo", "1-00:00:00")] * 4,
+    ("rt-j", "rel-trial", "site-success"): [a100("il-lo", "3:00:00")] * 4,
     ("rt-j", "rel-trial", "study-adverse"): [a100("il-lo", "2:00:00")] * 4,
     ("rt-j", "rel-event", "user-attendance"): [a100("il-lo", "2:00:00")] * 4,
     ("rt-j", "rel-event", "user-ignore"): [a100("il-lo", "2:00:00")] * 4,
