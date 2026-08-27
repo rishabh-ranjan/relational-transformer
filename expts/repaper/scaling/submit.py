@@ -16,12 +16,19 @@ from expts.repaper.config import (
     SHARE,
 )
 from roach.slurm import Resources, submit
+from rt.data import get_tasks
 
 TASKS = [
     tuple(p)
     for p in json.loads(
         (Path(PRE_DIR).expanduser() / "db-task-lists" / "forecast.json").read_text()
     )
+]
+
+REG_TASKS = [
+    (t.db_name, t.table_name)
+    for t in get_tasks(PRE_DIR, f"{PRE_DIR}/db-task-lists/forecast.json", ("test",))
+    if t.task_type == "reg"
 ]
 
 TEST_ROWS = {
@@ -67,6 +74,18 @@ ARMS = {
         dict(ctx_size_list=RT_CTX, items_per_task=FULL),
     ),
     "fulltest/sql_lgbm": ("sql_lgbm", dict(ctx_size_list=RT_CTX, items_per_task=FULL)),
+    # The intro figure's baseline curves run past RT-J's training context on
+    # the full test splits (as the 2026-07-15 round's did): the TabICL arms
+    # over the 9 regression tasks at 16k-131k cells, merged into the fulltest
+    # runs by reduce.py.
+    "fulltest_ext/rdblearn_tabicl": (
+        "rdblearn_tabicl",
+        dict(ctx_size_list=BASELINE_CTX[6:], items_per_task=FULL),
+    ),
+    "fulltest_ext/sql_tabicl": (
+        "sql_tabicl",
+        dict(ctx_size_list=BASELINE_CTX[6:], items_per_task=FULL),
+    ),
     "subsampled/rt": ("rt", dict(ctx_size_list=RT_CTX, items_per_task=8192)),
     "subsampled/rdblearn_tabicl": (
         "rdblearn_tabicl",
@@ -286,6 +305,8 @@ HIGH = {
     ("abl/vdb_rdblearn", "rel-stack", "post-votes"): ("il", "b200", 2),
     ("abl/vdb_rdblearn", "rel-hm", "item-sales"): ("il", "b200", 2),
     ("abl/vdb_rdblearn", "rel-stack", "user-engagement"): ("il", "b200", 2),
+    ("fulltest_ext/rdblearn_tabicl", "rel-hm", "item-sales"): ("il", "b200", 120),
+    ("fulltest_ext/sql_tabicl", "rel-amazon", "user-ltv"): ("il", "b200", 120),
     # 06:26: the rt index is built and the vdb_rt arm is submitted; 06:27: all
     # eight b200s are taken by other users' il jobs, so its passes run on il
     # a100s like the rest.
@@ -308,6 +329,13 @@ def resources(arm: str, db: str, table: str) -> Resources:
     method = ARMS[arm][0]
     rows = TEST_ROWS[f"{db}/{table}"]
     full = arm.startswith("fulltest/")
+    if arm.startswith("fulltest_ext/"):
+        # 2026-08-27 10:30: a 131k-cell TabICL pass costs ~20-40x the 8192-row
+        # subsampled one on the same task (post-votes 49 min on a b200, item-sales
+        # 3h07 and user-ltv 41 min on an a100 for 8192 rows), so the four big
+        # regression tasks are days on an a100 and take il with room to spare;
+        # the two longest get the il b200 sub-cap.
+        return a100("il", 120 if rows >= 100_000 else 48 if rows >= 20_000 else 8, db)
     if method.endswith("_lgbm"):
         if full:
             return cpu(
@@ -397,6 +425,8 @@ nosem = (
 # with the feature; the vector-db path is only taken when vector_db_path is
 # set, and enscurve/ and baselines/ ask for the same build.
 for arm in [
+    "fulltest_ext/rdblearn_tabicl",
+    "fulltest_ext/sql_tabicl",
     "fulltest/rt",
     "subsampled/rt",
     "abl/rand",
@@ -415,7 +445,7 @@ for arm in [
     "abl/vdb_rt",
 ]:
     method, overrides = ARMS[arm]
-    for db, table in TASKS:
+    for db, table in REG_TASKS if arm.startswith("fulltest_ext/") else TASKS:
         out_dir = f"{OUT_ROOT}/repaper-scaling/{arm}"
         name = f"repaper-scal-{arm.replace('/', '-')}-{db}-{table}"
         if (Path(out_dir).expanduser() / f"{db}__{table}.json").exists():
