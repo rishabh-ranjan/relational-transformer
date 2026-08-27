@@ -116,6 +116,11 @@ is left in the queue.
 
 ## 3. What to know before it bites
 
+- A FAISS on-disk IVF index (every task table over 50k rows) bakes the
+  absolute path of its `.ivfdata` file at build time, so the `vector_db`
+  indices survive a checkpoint change but not a move of `SHARE`: after a
+  move, `rm -rf $S/vector_db` and rebuild them (`baselines/submit.py`, the
+  vecdb loop), or every `vdb_*` pass on a large table dies at index load.
 - The semantics-ablated data is a directory of symlinks into `PRE_DIR` plus
   deranged embedding files; a moved `PRE_DIR` leaves the links dangling and
   every `abl/nosem` job crashing at start. `make_nosem_data` relinks, so

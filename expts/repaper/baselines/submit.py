@@ -197,32 +197,56 @@ for db in DBS:
         setup=("pixi run maturin develop --uv --release --features vecdb",),
     )
 
-# for subdir, root in [
-#     # ("rdblearn_features", f"{SHARE}/vector_db/rdblearn"),
-#     ("rt_features", f"{SHARE}/vector_db/rt"),
-# ]:
-#     if all(
-#         (Path(root).expanduser() / t.db_name / f"{t.table_name}.index").exists()
-#         for t in TASKS
-#     ):
-#         continue
-#     submit(
-#         "expts.repaper.baselines.build_vector_db:build_all",
-#         args=dict(
-#             db_task_list=DB_TASK_LIST,
-#             pre_dir=PRE_DIR,
-#             features_root=f"{SHARE}/features",
-#             features_subdir=subdir,
-#             vector_db_root=root,
-#             ivf_threshold=50_000,
-#         ),
-#         resources=cpu_resources("250G", 16),
-#         name=f"repaper-vecdb-{subdir.removesuffix('_features')}",
-#         repo_root=str(Path(__file__).resolve().parents[3]),
-#         cluster=ILC,
-#         job_env="expts/job_env.sh",
-#         log_root=f"{LOG_ROOT}/repaper/baselines/slurm-logs",
-#         clone_root=CLONE_ROOT,
-#         secrets_dir=SECRETS_DIR,
-#         setup=("pixi run maturin develop --uv --release --features vecdb",),
-#     )
+# A FAISS on-disk IVF index bakes the absolute path of its .ivfdata file at
+# build time (the 2026-08-19 indices named /dfs/user/ranjanr/share/..., and
+# every vdb_rdblearn pass on a table over the IVF threshold died at load once
+# the share had moved), so an index is rebuilt after any move of SHARE. The
+# build is zero-gres and takes il so it starts at once (see scaling/submit.py).
+for subdir, root in [
+    ("rdblearn_features", f"{SHARE}/vector_db/rdblearn"),
+    # ("rt_features", f"{SHARE}/vector_db/rt"),
+]:
+    if (
+        all(
+            (Path(root).expanduser() / t.db_name / f"{t.table_name}.index").exists()
+            for t in TASKS
+        )
+        or f"repaper-vecdb-{subdir.removesuffix('_features')}" in busy
+    ):
+        continue
+    submit(
+        "expts.repaper.baselines.build_vector_db:build_all",
+        args=dict(
+            db_task_list=DB_TASK_LIST,
+            pre_dir=PRE_DIR,
+            features_root=f"{SHARE}/features",
+            features_subdir=subdir,
+            vector_db_root=root,
+            ivf_threshold=50_000,
+        ),
+        resources=Resources(
+            partition="il",
+            account="infolab",
+            qos="il",
+            time="6:00:00",
+            gpus="0",
+            cpus_per_task=16,
+            ntasks=1,
+            exclusive=False,
+            mem="250G",
+            mem_per_gpu=None,
+            constraint=None,
+            nodelist=None,
+            reservation=None,
+            dependency=None,
+            exclude="turing1,turing2,turing3,hyperion1,hyperion3,hyperturing2",
+        ),
+        name=f"repaper-vecdb-{subdir.removesuffix('_features')}",
+        repo_root=str(Path(__file__).resolve().parents[3]),
+        cluster=ILC,
+        job_env="expts/job_env.sh",
+        log_root=f"{LOG_ROOT}/repaper/baselines/slurm-logs",
+        clone_root=CLONE_ROOT,
+        secrets_dir=SECRETS_DIR,
+        setup=("pixi run maturin develop --uv --release --features vecdb",),
+    )
