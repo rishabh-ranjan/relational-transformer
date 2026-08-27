@@ -245,6 +245,8 @@ TUNE: dict[tuple[str, str, str], Resources] = {
 # backfilled onto il-lo a100s, so they stay there.
 # 18:15: fine_tune is done and three b200s sit idle with nothing of mine
 # queued: item-sales' units take them (il, il-interactive, il-lo).
+# 19:15: the rolling 12 h b200 jobs ended early and a b200 is idle again: post-votes
+# cfg1-s1 (its ctx 8192 seed, ~2 h on a b200) takes it under il-lo.
 # 19:10: post-votes tuned to ctx 4096/8192/1024/2048 over 161k rows -- 3.5 h /
 # 4.3 h / 2.3 h / 2.8 h a seed pass on an a100 (tuning: 320/390/210/260 s per
 # 4096 rows) -- so every rank runs one job per seed, sized to backfill; the
@@ -381,7 +383,7 @@ ENS: dict[tuple[str, str, str], list[Resources | list[Resources]]] = {
         [a100("il-lo", "6:00:00")] * 4,
         [
             a100("il", "6:00:00"),
-            a100("il-lo", "6:00:00"),
+            b200("il-lo", "4:00:00"),
             a100("il-lo", "6:00:00"),
             a100("il-lo", "6:00:00"),
         ],
