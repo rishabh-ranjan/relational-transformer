@@ -11,12 +11,15 @@ N_SEEDS = 16
 
 
 def reduce_variant(variant: str) -> None:
-    paths = sorted(
-        (Path(OUT_ROOT).expanduser() / "repaper-enscurve" / variant).glob("*.json")
-    )
-    assert len(paths) == N_TASKS, (
-        f"{variant}: {len(paths)} task curves, expected {N_TASKS}"
-    )
+    root = Path(OUT_ROOT).expanduser() / "repaper-enscurve" / variant
+    marker = root / f"wandb-{project('enscurve')}.json"
+    if marker.exists():
+        print(f"{variant}: logged already, {json.loads(marker.read_text())['url']}")
+        return
+    paths = sorted(root.glob("*__*.json"))
+    if len(paths) != N_TASKS:
+        print(f"{variant}: {len(paths)}/{N_TASKS} task curves, not reduced", flush=True)
+        return
     recs = [json.loads(p.read_text()) for p in paths]
     run = wandb.init(
         entity="rtv2",
@@ -42,8 +45,9 @@ def reduce_variant(variant: str) -> None:
             flush=True,
         )
     run.finish()
+    marker.write_text(json.dumps({"id": run.id, "url": run.url}) + "\n")
 
 
 if __name__ == "__main__":
     reduce_variant("default")
-    # reduce_variant("tuned")
+    reduce_variant("tuned")

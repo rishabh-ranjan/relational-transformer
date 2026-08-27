@@ -59,7 +59,8 @@ regression equals RelBench's NMAE (rustler normalizes by the same train std)
 and for classification is AUROC (sigmoid-invariant) -- so nothing here writes
 submission CSVs; the leaderboard run lives in `../submit`.
 
-`reduce.py` refuses to aggregate an incomplete arm, logs one history row per
+`reduce.py` skips an incomplete arm and an arm it has logged (a `wandb-*.json`
+marker beside the task files names the run), logs one history row per
 ctx size under the `ctx_scaling/steps=0/test/*` keys (aggregates) and
 `per_task/ctx_scaling/steps=0/relbench/<db>/<table>/test/*` (per task), into:
 

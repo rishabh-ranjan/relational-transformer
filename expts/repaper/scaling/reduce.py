@@ -9,12 +9,16 @@ from expts.repaper.config import OUT_ROOT, project
 KEY = "ctx_scaling/steps=0/test"
 
 
-def reduce_arm(*, project: str, run_name: str, arm_dir: str, n_tasks: int) -> None:
-    paths = sorted(Path(arm_dir).expanduser().glob("*.json"))
-    assert len(paths) == n_tasks, (
-        f"{arm_dir}: {len(paths)} task JSONs, expected {n_tasks}; "
-        f"reduce only a complete arm"
-    )
+def reduce_arm(*, project: str, run_name: str, arm_dir: str, n_tasks: int) -> bool:
+    arm = Path(arm_dir).expanduser()
+    marker = arm / f"wandb-{project}-{run_name.replace('/', '-')}.json"
+    if marker.exists():
+        print(f"{run_name}: logged already, {json.loads(marker.read_text())['url']}")
+        return True
+    paths = sorted(arm.glob("*__*.json"))
+    if len(paths) != n_tasks:
+        print(f"{run_name}: {len(paths)}/{n_tasks} task JSONs, not reduced", flush=True)
+        return False
     recs = [json.loads(p.read_text()) for p in paths]
 
     ctxs = sorted({int(c) for r in recs for c in r["per_ctx"]})
@@ -51,11 +55,14 @@ def reduce_arm(*, project: str, run_name: str, arm_dir: str, n_tasks: int) -> No
             flush=True,
         )
     run.finish()
+    marker.write_text(json.dumps({"id": run.id, "url": run.url}) + "\n")
+    return True
 
 
 ROOT = f"{OUT_ROOT}/repaper-scaling"
 
 if __name__ == "__main__":
+    done = []
     for project_name, run_name, arm, n_tasks in [
         ("fulltest", "rt-j", f"{ROOT}/fulltest/rt", 21),
         (
@@ -106,9 +113,12 @@ if __name__ == "__main__":
         ("abl", "abl/vdb_rdblearn", f"{ROOT}/abl/vdb_rdblearn", 21),
         ("abl", "abl/vdb_rt", f"{ROOT}/abl/vdb_rt", 21),
     ]:
-        reduce_arm(
-            project=project(project_name),
-            run_name=run_name,
-            arm_dir=arm,
-            n_tasks=n_tasks,
+        done.append(
+            reduce_arm(
+                project=project(project_name),
+                run_name=run_name,
+                arm_dir=arm,
+                n_tasks=n_tasks,
+            )
         )
+    print(f"{sum(done)}/{len(done)} arms logged", flush=True)
