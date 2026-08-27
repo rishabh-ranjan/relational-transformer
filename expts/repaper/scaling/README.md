@@ -73,7 +73,9 @@ ctx size under the `ctx_scaling/steps=0/test/*` keys (aggregates) and
 ## Placement
 
 One a100 per RT or TabICL job through `il-lo` (TabICL also runs on an rtx8000
-at about a third of the speed); 32-cpu zero-gres slots for LightGBM, whose
+at about a third of the speed); 24-cpu zero-gres slots on the cpu-only
+partition (`il-cpu`: rambo and furiosa; until 2026-08-27 15:00 they ran under
+`il` on hyperturing1, saturating the interactive node) for LightGBM, whose
 per-row fits `predict_batch` fans across the job's cpus. The rel-amazon
 full-test passes are the longest poles and where the high tiers go;
 [`../README.md`](../README.md) has the cluster rules.
