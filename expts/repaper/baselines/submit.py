@@ -204,7 +204,7 @@ for db in DBS:
 # build is zero-gres and takes il so it starts at once (see scaling/submit.py).
 for subdir, root in [
     ("rdblearn_features", f"{SHARE}/vector_db/rdblearn"),
-    # ("rt_features", f"{SHARE}/vector_db/rt"),
+    ("rt_features", f"{SHARE}/vector_db/rt"),
 ]:
     if (
         all(
