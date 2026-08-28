@@ -54,8 +54,10 @@ Logs land under
   extrapolate the heavy-tailed targets in time, since every context row
   precedes the query (2026-08-27 probe on 1024 rows, raw MAE 256 -> 8192
   cells: rel-amazon/item-ltv 9.6 -> 24.8 with the calendar columns, 8.9 ->
-  7.1 without; clipping or rank-gauss transforming the features changed
-  nothing or made it worse). The SQL features carry no calendar columns.
+  7.1 without; dropping the year alone still gave 43 -> 74 on user-ltv, the
+  month and day extrapolate as well; clipping or rank-gauss transforming the
+  features changed nothing or made it worse). The SQL features carry no
+  calendar columns.
   `probe_features.py` / `probe_submit.py` are that probe.
 - **`featurize_rt.py`** -- RT-J row embeddings (the masked target cell's
   final-layer state over a walk-free 256-cell local context), one file per
