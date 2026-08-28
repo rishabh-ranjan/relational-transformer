@@ -274,6 +274,11 @@ def queued() -> dict[str, str]:
 # longest pieces left (2d05h each on an a100 by the rate table, ~1d on a b200,
 # 36h limit), moved to the top of my il queue with `scontrol top`; the two
 # il-interactive slots take the two 14h pieces on a b200 within its 12h wall.
+# 20:40: the two il-interactive b200 pieces finished in 2h25 and 1h31 against
+# 14h a100 projections (5-9x), so a 2d05h piece fits the tier's 12h wall on a
+# b200 with margin. Every ext piece projected at 13h or more on an a100 goes
+# there, two at a time; the tier's a100 pieces (2-7h) move to il, where the
+# main-result arms finish tonight and hand the slots over.
 HIGH: dict[tuple[str, str, str], tuple[str, str, int]] = {
     ("fulltest_ext/rdblearn_tabicl/131072", "rel-amazon", "user-ltv"): (
         "il",
@@ -281,16 +286,19 @@ HIGH: dict[tuple[str, str, str], tuple[str, str, int]] = {
         36,
     ),
     ("fulltest_ext/rdblearn_tabicl/131072", "rel-hm", "item-sales"): ("il", "b200", 36),
-    ("fulltest_ext/rdblearn_tabicl/32768", "rel-amazon", "user-ltv"): (
-        "il-interactive",
-        "b200",
-        12,
-    ),
-    ("fulltest_ext/rdblearn_tabicl/32768", "rel-hm", "item-sales"): (
-        "il-interactive",
-        "b200",
-        12,
-    ),
+    **{
+        (f"fulltest_ext/{method}/{ctx}", db, table): ("il-interactive", "b200", 12)
+        for method, ctx, db, table in [
+            ("sql_tabicl", 131072, "rel-amazon", "user-ltv"),
+            ("sql_tabicl", 131072, "rel-hm", "item-sales"),
+            ("sql_tabicl", 131072, "rel-stack", "post-votes"),
+            ("sql_tabicl", 131072, "rel-amazon", "item-ltv"),
+            ("rdblearn_tabicl", 131072, "rel-stack", "post-votes"),
+            ("rdblearn_tabicl", 65536, "rel-hm", "item-sales"),
+            ("rdblearn_tabicl", 65536, "rel-stack", "post-votes"),
+            ("rdblearn_tabicl", 32768, "rel-stack", "post-votes"),
+        ]
+    },
 }
 
 
@@ -324,24 +332,6 @@ def resources(arm: str, db: str, table: str) -> Resources:
         }.get(f"{db}/{table}", 150)
         ctx = ARMS[arm][1]["ctx_size_list"][0]
         hours = max(2, int(2 * rows / 2 / rate / 60 * ctx / sum(BASELINE_CTX[6:]) + 1))
-        if hours <= 11:
-            return Resources(
-                partition="il",
-                account="infolab",
-                qos="il-interactive",
-                time=f"{hours}:00:00",
-                gpus="a100:1",
-                cpus_per_task=8,
-                ntasks=None,
-                exclusive=False,
-                mem=mem(db),
-                mem_per_gpu=None,
-                constraint="ampere",
-                nodelist=None,
-                reservation=None,
-                dependency=None,
-                exclude="ampere4,ampere6,ampere7",
-            )
         return a100("il", hours, db)
     if method.endswith("_lgbm"):
         if full:
