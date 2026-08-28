@@ -361,7 +361,17 @@ def resources(arm: str, db: str, table: str) -> Resources:
                 else 1
             )
         else:
-            hours = 6 if rows >= 100_000 else 3 if rows >= 20_000 else 2
+            # 08:35: rel-stack/user-badge (255k rows) ran 7h07 at 131k cells in the
+            # 2026-08-19 round and timed out at 6h here.
+            hours = (
+                12
+                if rows >= 200_000
+                else 6
+                if rows >= 100_000
+                else 3
+                if rows >= 20_000
+                else 2
+            )
         return a100("il", hours, db)
     if full:
         return a100("il", 3 if rows >= 30_000 else 2 if rows >= 10_000 else 1, db)
