@@ -137,9 +137,29 @@ is left in the queue.
   leaderboard units per seed, pretraining from a checkpoint 20 minutes old;
   scaling and featurize jobs restart their task from the top, and the biggest
   full-test tasks are hours.
-- The cpu-only partition (`il-cpu`) admits one QOS whose whole per-user
-  budget a standing dev-node allocation holds; cpu work runs as zero-gres
-  `il-lo` jobs on the `il` partition instead.
+- Cpu work (LightGBM fits, featurizing, FAISS builds) runs on the cpu-only
+  partition, `il-cpu` with qos `il-cpu` (uncapped; `il-cpu-long` is the one
+  a standing dev-node allocation exhausts), on rambo and furiosa: the 42
+  LightGBM fits that had saturated the interactive node for an afternoon
+  finished there in under two hours, and re-featurizing every RDBLearn table
+  took 25 minutes. A first job bootstraps a fresh node by itself; the
+  partition's other nodes are listed in `scaling/submit.py`'s `cpu()`.
+- RDBLearn's preprocessor output is meant for its own tree model: it keeps
+  the entity key, the cutoff as int64 nanoseconds and the cutoff's calendar
+  expansions (`<cutoff>.year/.month/.day/.dayofweek`). Fed to an in-context
+  predictor, the first two blow up the float32 standardization and the
+  calendar columns let it extrapolate heavy-tailed targets in time (every
+  context row precedes the query), so RDBLearn + TabICLv2's regression error
+  *rose* with context while LightGBM's did not. `featurize_rdblearn.py`
+  drops all of them; `baselines/probe_*.py` is the probe that pinned the
+  calendar columns down. The symptom to watch for in any new featurizer is a
+  TabICL arm that gets worse with more labels.
+- The `il` partition's own QOS (`il-part`) caps b200s at 2 per user across
+  every QOS; two `il` b200 jobs block `il-interactive` b200 jobs on
+  `QOSMaxGRESPerUser`, and four running at once got two cancelled from
+  outside. A TabICL pass does not checkpoint, and roach requeues a job at its
+  grace time, so a limit shorter than the pass makes it restart from the top
+  every time: `scaling/submit.py`'s limits are set from measured runtimes.
 - A 1-gpu ampere job is capped at 252154M of memory by the submit plugin.
 - Never pin a sweep to `hyperturing2`: its future slots are back-fill-claimed
   by higher-priority `il-lo` work a day out and pinned jobs park on
