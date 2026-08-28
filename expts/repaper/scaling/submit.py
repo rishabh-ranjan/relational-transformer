@@ -364,6 +364,27 @@ def resources(arm: str, db: str, table: str) -> Resources:
     return a100("il", 2 if ARMS[arm][1].get("vector_db_path") else 1, db)
 
 
+# 2026-08-27 23:50: twice tonight a submit ran while the RDBLearn features
+# were being regenerated and queued 133 arm jobs that could only die at
+# PrecomputedFeaturizer; an arm's inputs are checked here instead.
+def inputs_ready(arm: str, db: str, table: str) -> bool:
+    method, overrides = ARMS[arm]
+    root = Path(SHARE).expanduser()
+    if method != "rt":
+        subdir = {
+            "rdblearn_tabicl": "rdblearn_features",
+            "rdblearn_lgbm": "rdblearn_features",
+            "sql_tabicl": "sql_features",
+            "sql_lgbm": "sql_features",
+        }[method]
+        if not (root / "features" / db / subdir / f"{table}_meta.json").exists():
+            return False
+    vdb = overrides.get("vector_db_path")
+    if vdb and not (Path(vdb).expanduser() / db / f"{table}.index").exists():
+        return False
+    return True
+
+
 def nosem_ready() -> bool:
     root = Path(f"{SHARE}/relbench-preprocessed-nosem").expanduser()
     links = [root / "db-task-lists"] + [
@@ -445,6 +466,8 @@ for arm in [
 ]:
     method, overrides = ARMS[arm]
     for db, table in REG_TASKS if arm.startswith("fulltest_ext/") else TASKS:
+        if not inputs_ready(arm, db, table):
+            continue
         out_dir = f"{OUT_ROOT}/repaper-scaling/{arm}"
         name = f"repaper-scal-{arm.replace('/', '-')}-{db}-{table}"
         if (Path(out_dir).expanduser() / f"{db}__{table}.json").exists():
