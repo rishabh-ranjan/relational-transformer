@@ -44,10 +44,19 @@ Logs land under
   (agg primitives max/min/mean/count/mode/std, `dfs2sql` engine, per-row
   temporal cutoffs from the task's time column), transformed by the fitted
   RDBLearn preprocessor, minus the raw entity key and cutoff-time columns it
-  keeps for its own tree estimator, and z-scored over all rows in float64
-  (the preprocessor's int64-nanosecond time columns, ~1e18, otherwise blow
-  up TabICL's float32 per-context standardization: the 2026-08-19 blobs made
-  RDBLearn + TabICLv2's nMAE climb from 40 to 80 with context size).
+  keeps for its own tree estimator and the cutoff's calendar expansions
+  (`<cutoff>.year/.month/.day/.dayofweek`), and z-scored over all rows in
+  float64. Both cuts came from RDBLearn + TabICLv2's regression error rising
+  with context size while LightGBM's on the same blobs did not: the
+  int64-nanosecond time columns (~1e18) of the 2026-08-19 blobs blew up
+  TabICL's float32 per-context standardization (nMAE 40 -> 80 from 256 to
+  8192 cells), and with those gone the absolute year still let TabICL
+  extrapolate the heavy-tailed targets in time, since every context row
+  precedes the query (2026-08-27 probe on 1024 rows, raw MAE 256 -> 8192
+  cells: rel-amazon/item-ltv 9.6 -> 24.8 with the calendar columns, 8.9 ->
+  7.1 without; clipping or rank-gauss transforming the features changed
+  nothing or made it worse). The SQL features carry no calendar columns.
+  `probe_features.py` / `probe_submit.py` are that probe.
 - **`featurize_rt.py`** -- RT-J row embeddings (the masked target cell's
   final-layer state over a walk-free 256-cell local context), one file per
   table, for the RT-similarity retriever arm.
