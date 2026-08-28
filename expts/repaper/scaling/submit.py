@@ -296,6 +296,8 @@ HIGH: dict[tuple[str, str, str], tuple[str, str, int]] = {
             ("rdblearn_tabicl", 65536, "rel-amazon", "item-ltv"),
             ("rdblearn_tabicl", 131072, "rel-amazon", "item-ltv"),
             ("rdblearn_tabicl", 65536, "rel-amazon", "user-ltv"),
+            ("rdblearn_tabicl", 131072, "rel-amazon", "user-ltv"),
+            ("rdblearn_tabicl", 131072, "rel-hm", "item-sales"),
         ]
     },
 }
