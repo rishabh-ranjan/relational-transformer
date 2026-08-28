@@ -131,12 +131,21 @@ def featurize_table(
     # (2026-08-19 blobs: nMAE rose from 40 to 80 with context size while the
     # LightGBM arm on the same blobs was fine). So: drop the key and cutoff
     # columns and z-score every feature over all rows in float64, as the SQL
-    # featurizer does.
+    # featurizer does. The preprocessor also expands the cutoff into
+    # <cutoff>.year/.month/.day/.dayofweek; the year is absolute time again
+    # (every context row precedes the query in it), and with it kept TabICL's
+    # regression error still doubled from 256 to 8192 cells on the heavy-tailed
+    # targets while LightGBM stayed flat (2026-08-27 probe: rel-amazon/item-ltv
+    # raw MAE 9.6 -> 24.8 with the four columns, 8.9 -> 7.1 without; the SQL
+    # features carry no calendar columns). Those expansions go with the cutoff.
     frame = estimator.preprocessor_.transform(X_dfs)
     keys = set(estimator.key_mappings_) | set(X.columns)
     keys.discard(estimator.cutoff_time_column_)
+    cutoff = estimator.cutoff_time_column_
     dropped = [
-        c for c in frame.columns if c in keys or c == estimator.cutoff_time_column_
+        c
+        for c in frame.columns
+        if c in keys or c == cutoff or c.startswith(f"{cutoff}.")
     ]
     frame = frame.drop(columns=dropped)
     arr = frame.to_numpy(dtype=np.float64)
