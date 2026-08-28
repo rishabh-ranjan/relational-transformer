@@ -280,6 +280,9 @@ def queued() -> dict[str, str]:
 # b200 with margin. Every ext piece projected at 13h or more on an a100 goes
 # there, two at a time; the tier's a100 pieces (2-7h) move to il, where the
 # main-result arms finish tonight and hand the slots over.
+# 2026-08-28 07:05: the a100 tier is empty while eight pieces queue for the
+# two-slot lane, so the two shortest lane pieces (9h and 13h a100 projections)
+# go back to a100s and start now.
 HIGH: dict[tuple[str, str, str], tuple[str, str, int]] = {
     # 23:45: the RDBLearn pieces are cancelled for the calendar-column fix, so
     # the il b200 sub-cap goes to the two 2d05h sql pieces the lane had queued.
@@ -293,8 +296,6 @@ HIGH: dict[tuple[str, str, str], tuple[str, str, int]] = {
             ("rdblearn_tabicl", 131072, "rel-stack", "post-votes"),
             ("rdblearn_tabicl", 65536, "rel-hm", "item-sales"),
             ("rdblearn_tabicl", 65536, "rel-stack", "post-votes"),
-            ("rdblearn_tabicl", 32768, "rel-stack", "post-votes"),
-            ("rdblearn_tabicl", 65536, "rel-amazon", "item-ltv"),
             ("rdblearn_tabicl", 131072, "rel-amazon", "item-ltv"),
             ("rdblearn_tabicl", 65536, "rel-amazon", "user-ltv"),
             ("rdblearn_tabicl", 131072, "rel-amazon", "user-ltv"),
