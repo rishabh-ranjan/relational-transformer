@@ -171,7 +171,8 @@ def mem(db: str) -> str:
 # local disk was full on 2026-08-25; both stay out of every gpu job.
 # 2026-08-27 17:00: ampere6 stopped responding and slurm requeued the two 1-day
 # sql ext pieces on it from scratch (5h40 each); it stays excluded until it
-# has been back for a while.
+# has been back for a while. 2026-08-28 05:05: ampere9 the same way (two
+# jobs requeued from scratch).
 def a100(qos: str, hours: int, db: str) -> Resources:
     return Resources(
         partition="il",
@@ -188,7 +189,7 @@ def a100(qos: str, hours: int, db: str) -> Resources:
         nodelist=None,
         reservation=None,
         dependency=None,
-        exclude="ampere4,ampere6,ampere7",
+        exclude="ampere4,ampere6,ampere7,ampere9",
     )
 
 

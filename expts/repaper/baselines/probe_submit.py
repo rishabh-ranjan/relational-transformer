@@ -111,7 +111,7 @@ for arm, (method, features_root) in ARMS.items():
                 nodelist=None,
                 reservation=None,
                 dependency=None,
-                exclude="ampere4,ampere6,ampere7",
+                exclude="ampere4,ampere6,ampere7,ampere9",
             ),
             name=name,
             repo_root=str(Path(__file__).resolve().parents[3]),
