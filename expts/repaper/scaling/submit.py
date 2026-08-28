@@ -280,18 +280,14 @@ def queued() -> dict[str, str]:
 # there, two at a time; the tier's a100 pieces (2-7h) move to il, where the
 # main-result arms finish tonight and hand the slots over.
 HIGH: dict[tuple[str, str, str], tuple[str, str, int]] = {
-    ("fulltest_ext/rdblearn_tabicl/131072", "rel-amazon", "user-ltv"): (
-        "il",
-        "b200",
-        36,
-    ),
-    ("fulltest_ext/rdblearn_tabicl/131072", "rel-hm", "item-sales"): ("il", "b200", 36),
+    # 23:45: the RDBLearn pieces are cancelled for the calendar-column fix, so
+    # the il b200 sub-cap goes to the two 2d05h sql pieces the lane had queued.
+    ("fulltest_ext/sql_tabicl/131072", "rel-hm", "item-sales"): ("il", "b200", 36),
+    ("fulltest_ext/sql_tabicl/131072", "rel-stack", "post-votes"): ("il", "b200", 36),
     **{
         (f"fulltest_ext/{method}/{ctx}", db, table): ("il-interactive", "b200", 12)
         for method, ctx, db, table in [
             ("sql_tabicl", 131072, "rel-amazon", "user-ltv"),
-            ("sql_tabicl", 131072, "rel-hm", "item-sales"),
-            ("sql_tabicl", 131072, "rel-stack", "post-votes"),
             ("sql_tabicl", 131072, "rel-amazon", "item-ltv"),
             ("rdblearn_tabicl", 131072, "rel-stack", "post-votes"),
             ("rdblearn_tabicl", 65536, "rel-hm", "item-sales"),
