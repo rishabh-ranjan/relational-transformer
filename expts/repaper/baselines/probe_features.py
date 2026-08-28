@@ -38,7 +38,26 @@ def dropzero(x: np.ndarray) -> np.ndarray:
     return x[:, keep]
 
 
-TRANSFORMS = {"clip4": clip4, "rankgauss": rankgauss, "dropzero": dropzero}
+# RDBLearn's TabularPreprocessor expands the cutoff timestamp into
+# <cutoff>.year/.month/.day/.dayofweek, kept as the last four columns of every
+# probe task (featurize logs; cardinalities 9/4/10/2 on rel-amazon, 12/4/15/2
+# on rel-stack). The year is absolute time: every context row precedes the
+# query in it.
+def nocal(x: np.ndarray) -> np.ndarray:
+    return x[:, :-4]
+
+
+def noyear(x: np.ndarray) -> np.ndarray:
+    return np.delete(x, x.shape[1] - 4, axis=1)
+
+
+TRANSFORMS = {
+    "clip4": clip4,
+    "rankgauss": rankgauss,
+    "dropzero": dropzero,
+    "nocal": nocal,
+    "noyear": noyear,
+}
 
 if __name__ == "__main__":
     root = Path(SHARE).expanduser()
@@ -49,6 +68,15 @@ if __name__ == "__main__":
             meta["total_nodes"], meta["n_features"]
         )
         for name, fn in TRANSFORMS.items():
+            if (
+                root
+                / "features_probe"
+                / name
+                / db
+                / "rdblearn_features"
+                / f"{table}_vectors.bin"
+            ).exists():
+                continue
             print(f"{db}/{table} {name}", flush=True)
             dst = root / "features_probe" / name / db / "rdblearn_features"
             dst.mkdir(parents=True, exist_ok=True)

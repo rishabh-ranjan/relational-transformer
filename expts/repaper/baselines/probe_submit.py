@@ -35,6 +35,8 @@ ARMS = {
     "clip4": ("rdblearn_tabicl", f"{SHARE}/features_probe/clip4"),
     "rankgauss": ("rdblearn_tabicl", f"{SHARE}/features_probe/rankgauss"),
     "dropzero": ("rdblearn_tabicl", f"{SHARE}/features_probe/dropzero"),
+    "nocal": ("rdblearn_tabicl", f"{SHARE}/features_probe/nocal"),
+    "noyear": ("rdblearn_tabicl", f"{SHARE}/features_probe/noyear"),
     "sql": ("sql_tabicl", f"{SHARE}/features"),
 }
 
