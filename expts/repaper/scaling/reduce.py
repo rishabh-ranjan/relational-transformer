@@ -167,6 +167,15 @@ if __name__ == "__main__":
         ("abl", "abl/vdb_rdblearn", f"{ROOT}/abl/vdb_rdblearn", 21, None),
         ("abl", "abl/vdb_rt", f"{ROOT}/abl/vdb_rt", 21, None),
     ]:
+        if ext:
+            done.append(
+                reduce_arm(
+                    project=project(project_name),
+                    run_name=run_name,
+                    arm_dir=arm,
+                    n_tasks=n_tasks,
+                )
+            )
         done.append(
             reduce_arm(
                 project=project(project_name),
