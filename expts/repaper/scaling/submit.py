@@ -294,12 +294,20 @@ HIGH: dict[tuple[str, str, str], tuple[str, str, int]] = {
     # 10:30: the hm sql piece finished; its il b200 slot goes to the hm rdblearn
     # piece queued behind the two-slot lane.
     ("fulltest_ext/rdblearn_tabicl/131072", "rel-hm", "item-sales"): ("il", "b200", 36),
+    # 2026-08-29 01:15: the sql post-votes 131k piece took 9h13 on a b200 and
+    # the rdblearn one runs 23% slower (28k of 80k batches after 4h10), i.e.
+    # right at the lane's 12h wall, where the grace-time requeue would restart
+    # it from scratch; it moves to the il b200 sub-cap with 36h.
+    ("fulltest_ext/rdblearn_tabicl/131072", "rel-stack", "post-votes"): (
+        "il",
+        "b200",
+        36,
+    ),
     **{
         (f"fulltest_ext/{method}/{ctx}", db, table): ("il-interactive", "b200", 12)
         for method, ctx, db, table in [
             ("sql_tabicl", 131072, "rel-amazon", "user-ltv"),
             ("sql_tabicl", 131072, "rel-amazon", "item-ltv"),
-            ("rdblearn_tabicl", 131072, "rel-stack", "post-votes"),
             ("rdblearn_tabicl", 131072, "rel-amazon", "item-ltv"),
             ("rdblearn_tabicl", 131072, "rel-amazon", "user-ltv"),
         ]
