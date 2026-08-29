@@ -95,4 +95,10 @@ Subsampled RT and every RT ablation pass: 5-15 min. Subsampled TabICL at
 131k cells: rel-stack user-badge 7h07 (rdblearn) / 5h30 (sql) on an a100,
 rel-hm item-sales and rel-stack post-votes 1-3 h, the rest under an hour;
 subsampled LightGBM at 16 cpus under 1h15. The whole scaling stage ran
-00:16-09:01 on up to 12 high-tier slots plus il-lo.
+00:16-09:01 on up to 12 high-tier slots plus il-lo. The full-test extension
+pieces (2026-08-28/29, one context size per job): on a b200 the 131k pieces
+took 8h (rel-amazon user-ltv, rdblearn), 9h13 (rel-stack post-votes, sql),
+10h (rel-hm item-sales, rdblearn) and 11h53 (rel-stack post-votes,
+rdblearn), 5-9x under their a100 projections; the 65k rdblearn pieces took
+10h30 on an a100; LightGBM fits at 24 cpus on rambo/furiosa ran 3x faster
+than at 16 on hyperturing1 (all 42 in under two hours).
