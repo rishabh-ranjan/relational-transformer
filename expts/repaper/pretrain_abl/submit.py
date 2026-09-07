@@ -1,13 +1,21 @@
+import dataclasses
 from pathlib import Path
 
-from expts.pretrain.submit_marlowe import args, cluster, resources
+from expts.pretrain.submit_marlowe import args
 from expts.repaper.config import CLONE_ROOT, LOG_ROOT, SECRETS_DIR, project
 from roach.slurm import submit
+from roach.slurm.clusters import ilc
+
+cluster = ilc.ILC
+resources = dataclasses.replace(ilc.AMPERE_LO, nodes=2)
 
 submit(
     "rt.train:main",
     args=args()
     | dict(run_name="base-rtj", db_task_list="expts/repaper/pretrain_abl/rt-j.json")
+    | dict(
+        stage_dir=None, tokens_per_gpu=2**17, num_workers=14, run_name="base-rtj-ilc"
+    )
     # | dict(
     #     run_name="mask0-rtj",
     #     mask_prob_max=0.0,
@@ -33,7 +41,7 @@ submit(
     resources=resources,
     name="pretrain-abl",
     run_id=None,
-    inside=471116,
+    inside=None,
     repo_root=str(Path(__file__).resolve().parents[3]),
     cluster=cluster,
     job_env="expts/job_env.sh",
