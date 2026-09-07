@@ -9,14 +9,14 @@ from roach.slurm.clusters import ilc
 cluster = ilc.ILC
 
 for arm, resources in [
-    # (
-    # dict(run_name="base-rtj"),
-    # dataclasses.replace(ilc.AMPERE, nodes=1),
-    # ),
-    # (
-    # dict(run_name="mask0-rtj", mask_prob_max=0.0),
-    # dataclasses.replace(ilc.AMPERE_LO, nodes=1),
-    # ),
+    (
+        dict(run_name="base-rtj"),
+        dataclasses.replace(ilc.AMPERE, nodes=1),
+    ),
+    (
+        dict(run_name="mask0-rtj", mask_prob_max=0.0),
+        dataclasses.replace(ilc.AMPERE_LO, nodes=1),
+    ),
     (
         dict(run_name="mask25-rtj", mask_prob_max=0.25, tokens_per_gpu=2**19),
         dataclasses.replace(
