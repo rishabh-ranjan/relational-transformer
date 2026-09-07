@@ -38,7 +38,7 @@ def main() -> None:
             if table.exists():
                 print(f"  {name:44s} done already")
                 continue
-            resources = a100("il", "12:00:00")
+            resources = a100("il-lo", "12:00:00")
             print(f"  {name:44s} {resources.gpus} {resources.qos:15s} {resources.time}")
             submit(
                 "expts.fine_tune.run:main",
