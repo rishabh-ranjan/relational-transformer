@@ -7,7 +7,13 @@ from roach.slurm import submit
 submit(
     "rt.train:main",
     args=args()
-    | dict(run_name="base")
+    | dict(run_name="base-rtj", db_task_list="expts/repaper/pretrain_abl/rt-j.json")
+    # | dict(
+    #     run_name="mask0-rtj",
+    #     mask_prob_max=0.0,
+    #     db_task_list="expts/repaper/pretrain_abl/rt-j.json",
+    # )
+    # | dict(run_name="base")
     # | dict(run_name="mask0", mask_prob_max=0.0)
     # | dict(run_name="mask25", mask_prob_max=0.25)
     # | dict(run_name="mask75", mask_prob_max=0.75)
@@ -27,7 +33,7 @@ submit(
     resources=resources,
     name="pretrain-abl",
     run_id=None,
-    inside=451447,
+    inside=None,
     repo_root=str(Path(__file__).resolve().parents[3]),
     cluster=cluster,
     job_env="expts/job_env.sh",
