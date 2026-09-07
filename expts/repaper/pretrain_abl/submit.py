@@ -17,6 +17,17 @@ for arm, resources in [
         dict(run_name="mask0-rtj", mask_prob_max=0.0),
         dataclasses.replace(ilc.AMPERE_LO, nodes=1),
     ),
+    (
+        dict(run_name="mask25-rtj", mask_prob_max=0.25, tokens_per_gpu=2**19),
+        dataclasses.replace(
+            ilc.BLACKWELL,
+            nodes=1,
+            gpus="b200:2",
+            qos="il",
+            time="7-00:00:00",
+            mem="750000M",
+        ),
+    ),
 ]:
     submit(
         "rt.train:main",
