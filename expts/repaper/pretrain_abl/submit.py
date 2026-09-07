@@ -51,7 +51,7 @@ for arm, resources in [
             project=project("pretrain-abl"),
         ),
         resources=resources,
-        name="pretrain-abl",
+        name=arm["run_name"],
         run_id=None,
         inside=None,
         repo_root=str(Path(__file__).resolve().parents[3]),
