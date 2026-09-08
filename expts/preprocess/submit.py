@@ -237,7 +237,7 @@ def submit_embed(
 def check_tree_is_submittable() -> None:
     dirty = subprocess.run(
         ["git", "status", "--porcelain"],
-        cwd="~/clones/rishabh-ranjan/relational-transformer",
+        cwd=Path("~/clones/rishabh-ranjan/relational-transformer").expanduser(),
         capture_output=True,
         text=True,
     ).stdout.strip()
