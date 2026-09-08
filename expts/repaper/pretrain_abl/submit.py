@@ -1,10 +1,10 @@
-# import dataclasses
+import dataclasses
 from pathlib import Path
 
-from expts.pretrain.submit_marlowe import args, cluster, resources
+from expts.pretrain.submit_marlowe import args
 from expts.repaper.config import CLONE_ROOT, LOG_ROOT, SECRETS_DIR, project
 from roach.slurm import submit
-# from roach.slurm.clusters import ilc
+from roach.slurm.clusters import ilc
 
 # cluster = ilc.ILC
 #
@@ -30,10 +30,20 @@ from roach.slurm import submit
 #     ),
 # ]:
 
+cluster = ilc.ILC
+resources = dataclasses.replace(ilc.AMPERE, nodes=1)
 arm = dict(
-    run_name="base-plurel",
+    run_name="base-plurel-ref",
     db_task_list="~/scratch/hf/stanford-star/plurel-preprocessed/db-task-lists/all.json",
     pre_dir="~/scratch/hf/stanford-star/plurel-preprocessed",
+    stage_dir=None,
+    tokens_per_gpu=2**17,
+    num_workers=resources.cpus_per_task,
+    ctx_size_list=[1024, 2048, 4096, 8192],
+    local_ctx_size_list=[512, 1024, 2048],
+    bfs_width_list=[16, 32, 64, 128],
+    prefer_latest_list=[False],
+    early_stop_after_steps=None,
 )
 submit(
     "rt.train:main",
@@ -70,7 +80,7 @@ submit(
     resources=resources,
     name=arm["run_name"],
     run_id=None,
-    inside=471116,
+    inside=None,
     repo_root=str(Path(__file__).resolve().parents[3]),
     cluster=cluster,
     job_env="expts/job_env.sh",
