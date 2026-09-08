@@ -88,7 +88,7 @@ def resources_for(expected_bytes: int) -> Resources:
         mem=f"{mem // 2**30}G",
         mem_per_gpu=None,
         constraint=None,
-        nodelist=None,
+        nodelist="furiosa,hyperturing1,hyperturing2,turing1,turing2,turing3",
         reservation=None,
         dependency=None,
     )
