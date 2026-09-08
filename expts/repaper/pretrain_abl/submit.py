@@ -73,7 +73,6 @@ submit(
     #     db_task_list="expts/repaper/pretrain_abl/cutoff-autocomplete.json",
     # )
     | dict(
-        early_stop_after_steps=10_000,
         keep_all_ckpts=False,
         project=project("pretrain-abl"),
     ),
