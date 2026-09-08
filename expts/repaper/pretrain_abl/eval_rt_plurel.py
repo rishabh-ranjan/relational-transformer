@@ -39,7 +39,8 @@ def evaluate(*, checkpoint: str, run_id: str) -> None:
     )
 
 
-def run(run_id: str) -> None:
+def run() -> None:
+    run_id = "26-09-08-rt-plurel-eval"
     for variant in ("classification", "regression"):
         evaluate(
             checkpoint=f"~/scratch/hf/stanford-star/rt-plurel/{variant}",
