@@ -19,18 +19,27 @@ SETUP = (
     f" snapshot_download('sentence-transformers/{EMBEDDER}')\"",
 )
 
-NAME = "relbench"
-SOURCE_REPO = "stanford-star/relbench"
-TARGET_REPO = "stanford-star/relbench-preprocessed"
+NAME = "plurel"
+SOURCE_REPO = "stanford-star/plurel"
+TARGET_REPO = None
 CURATED = None
 BIG_TEXT_BYTES = 3 << 29
-KEEP = ("db-task-lists", "legacy")
+KEEP = ("db-task-lists",)
 OUT_NAME = f"{NAME}-preprocessed"
-LEGACY_DIR = f"~/scratch/share/stanford-star/{OUT_NAME}/legacy"
+LEGACY_DIR = None
+
+# NAME = "relbench"
+# SOURCE_REPO = "stanford-star/relbench"
+# TARGET_REPO = "stanford-star/relbench-preprocessed"
+# CURATED = None
+# BIG_TEXT_BYTES = 3 << 29
+# KEEP = ("db-task-lists", "legacy")
+# OUT_NAME = f"{NAME}-preprocessed"
+# LEGACY_DIR = f"~/scratch/share/stanford-star/{OUT_NAME}/legacy"
 
 
-RAW_DIR = f"~/scratch/share/stanford-star/{NAME}"
-OUT_DIR = f"~/scratch/share/stanford-star/{OUT_NAME}"
+RAW_DIR = f"~/scratch/hf/stanford-star/{NAME}"
+OUT_DIR = f"~/scratch/hf/stanford-star/{OUT_NAME}"
 LOG_ROOT = f"~/scratch/relational-transformer/preprocess/{NAME}/slurm-logs"
 SIZES = Path(__file__).with_name(f"sizes-{NAME}.json")
 REPO_ROOT = "~/clones/rishabh-ranjan/relational-transformer"
@@ -51,7 +60,7 @@ def text_bytes(sizes: dict, name: str, default: int) -> int:
     return sizes.get(name, {}).get("text", default)
 
 
-QOS: str | None = None
+QOS: str | None = "il-lo"
 
 
 def resources_for(expected_bytes: int) -> Resources:
