@@ -35,7 +35,7 @@ def evaluate(*, checkpoint: str, run_id: str) -> None:
         project="2026-08-19-repaper-pretrain-abl",
         entity="rtv2",
         out_root="~/scratch/relational-transformer/pretrain",
-        wandb_disabled=False,
+        wandb_disabled=True,
     )
 
 
