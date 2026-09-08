@@ -74,11 +74,12 @@ def resources_for(expected_bytes: int) -> Resources:
     ):
         if expected_bytes < limit:
             break
+    del nodes
     mem = max(8 << 30, 3 * expected_bytes)
     return Resources(
-        partition="il",
+        partition="il-cpu",
         account="infolab",
-        qos=QOS,
+        qos="il-cpu",
         time=walltime,
         gpus="0",
         cpus_per_task=1,
@@ -87,7 +88,7 @@ def resources_for(expected_bytes: int) -> Resources:
         mem=f"{mem // 2**30}G",
         mem_per_gpu=None,
         constraint=None,
-        nodelist=nodes,
+        nodelist=None,
         reservation=None,
         dependency=None,
     )
