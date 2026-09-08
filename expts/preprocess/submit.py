@@ -96,7 +96,7 @@ def resources_for(expected_bytes: int) -> Resources:
 
 BIG_NODES = ("hyperturing2",)
 BIG_GPUS = 10
-SMALL_NODES = ("hyperturing1", "hyperturing2")
+SMALL_NODES = ("hyperturing1",)
 
 
 def embed_resources(text_bytes_: int) -> Resources:
