@@ -88,6 +88,8 @@ def resources_for(expected_bytes: int) -> Resources:
         mem_per_gpu=None,
         constraint=None,
         nodelist=nodes,
+        reservation=None,
+        dependency=None,
     )
 
 
@@ -119,6 +121,8 @@ def embed_resources(text_bytes_: int) -> Resources:
             mem_per_gpu="40G",
             constraint=None,
             nodelist=",".join(BIG_NODES),
+            reservation=None,
+            dependency=None,
         )
 
     return Resources(
@@ -134,6 +138,8 @@ def embed_resources(text_bytes_: int) -> Resources:
         mem_per_gpu="240G",
         constraint=None,
         nodelist=",".join(SMALL_NODES),
+        reservation=None,
+        dependency=None,
     )
 
 
