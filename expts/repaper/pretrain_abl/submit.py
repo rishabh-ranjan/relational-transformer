@@ -5,10 +5,10 @@ from expts.repaper.config import CLONE_ROOT, LOG_ROOT, SECRETS_DIR
 from roach.slurm import submit
 from roach.slurm.clusters import ilc
 
-# resources = dataclasses.replace(ilc.AMPERE, nodes=1)
-resources = dataclasses.replace(
-    ilc.BLACKWELL, nodes=1, gpus="b200:2", qos="il", time="7-00:00:00", mem="1500000M"
-)
+resources = dataclasses.replace(ilc.AMPERE, nodes=1)
+# resources = dataclasses.replace(
+#     ilc.BLACKWELL, nodes=1, gpus="b200:2", qos="il", time="7-00:00:00", mem="1500000M"
+# )
 
 submit(
     "rt.train:main",
@@ -23,13 +23,13 @@ submit(
         materialize_attn_masks=True,
         loss_fn="huber",
         load_ckpt_path=None,
-        # db_task_list="expts/pretrain/all_5gb_cutoff.json",
-        db_task_list="~/scratch/hf/stanford-star/plurel-preprocessed/db-task-lists/rt-plurel-train.json",
+        db_task_list="expts/pretrain/all_5gb_cutoff.json",
+        # db_task_list="~/scratch/hf/stanford-star/plurel-preprocessed/db-task-lists/rt-plurel-train.json",
         train_splits=["train"],
-        # pre_dir="~/scratch/hf/stanford-star/the-join-lite-preprocessed",
-        pre_dir="~/scratch/hf/stanford-star/plurel-preprocessed",
+        pre_dir="~/scratch/hf/stanford-star/the-join-lite-preprocessed",
+        # pre_dir="~/scratch/hf/stanford-star/plurel-preprocessed",
         stage_dir=None,
-        tokens_per_gpu=2**18,  # b200; 2**17 on a100
+        tokens_per_gpu=2**17,  # a100; 2**18 on b200
         num_workers=resources.cpus_per_task,
         prefetch_factor=2,
         ctx_size_list=[512, 1024, 2048, 4096, 8192],
@@ -85,13 +85,13 @@ submit(
         },
         project="2026-09-09_pretrain",
         entity="rtv2",
-        # run_name="join",
-        run_name="plurel",
+        run_name="join",
+        # run_name="plurel",
         wandb_disabled=False,
         out_root="~/scratch/relational-transformer/pretrain",
     ),
     resources=resources,
-    name="plurel",
+    name="join",
     run_id=None,
     inside=None,
     repo_root=str(Path(__file__).resolve().parents[3]),
