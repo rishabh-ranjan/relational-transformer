@@ -4,12 +4,17 @@ from rt.train import main
 
 
 def run() -> None:
-    for variant in ("classification", "regression"):
+    for repo, variant in (
+        ("rt-j", "classification"),
+        ("rt-j", "regression"),
+        # ("rt-plurel", "classification"),
+        # ("rt-plurel", "regression"),
+    ):
         main(
             **args()
             | dict(
-                run_name=f"rt-plurel-{variant}",
-                load_ckpt_path=f"~/scratch/hf/stanford-star/rt-plurel/{variant}",
+                run_name=f"{repo}-{variant}",
+                load_ckpt_path=f"~/scratch/hf/stanford-star/{repo}/{variant}",
                 lr=0.0,
                 total_steps=2,
                 eval_freq=1,
@@ -22,6 +27,6 @@ def run() -> None:
                 keep_all_ckpts=False,
                 targets={},
                 project=project("pretrain-abl"),
-                run_id=f"26-09-08-rt-plurel-eval-{variant}",
+                run_id=f"26-09-09-{repo}-eval-{variant}",
             )
         )
