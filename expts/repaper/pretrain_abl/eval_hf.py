@@ -1,4 +1,3 @@
-from expts.repaper.config import project
 from rt.train import main
 
 
@@ -72,7 +71,7 @@ def run() -> None:
             eval_vector_db_path=None,
             eval_lcs_bw_pl_grid=[(256, 32, True)],
             targets={},
-            project=project("pretrain-abl"),
+            project="2026-09-09_pretrain",
             entity="rtv2",
             run_name=f"{repo}-{variant}",
             wandb_disabled=False,
