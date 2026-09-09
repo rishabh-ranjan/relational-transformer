@@ -36,10 +36,9 @@ resources = dataclasses.replace(
     ilc.BLACKWELL, nodes=1, gpus="b200:2", qos="il", time="7-00:00:00", mem="1500000M"
 )
 arm = dict(
-    run_name="mask0-plurel-filt",
-    mask_prob_max=0.0,
-    db_task_list="~/scratch/hf/stanford-star/plurel-preprocessed/db-task-lists/rt-plurel-train.json",
-    pre_dir="~/scratch/hf/stanford-star/plurel-preprocessed",
+    run_name="base-plurel-boolnum",
+    db_task_list="~/scratch/hf/stanford-star/plurel-boolnum-preprocessed/db-task-lists/rt-plurel-train.json",
+    pre_dir="~/scratch/hf/stanford-star/plurel-boolnum-preprocessed",
     stage_dir=None,
     tokens_per_gpu=2**18,
     num_workers=resources.cpus_per_task,
