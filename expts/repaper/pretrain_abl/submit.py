@@ -36,9 +36,10 @@ resources = dataclasses.replace(
     ilc.BLACKWELL, nodes=1, gpus="b200:2", qos="il", time="7-00:00:00", mem="1500000M"
 )
 arm = dict(
-    run_name="base-plurel-boolnum",
-    db_task_list="~/scratch/hf/stanford-star/plurel-boolnum-preprocessed/db-task-lists/rt-plurel-train.json",
-    pre_dir="~/scratch/hf/stanford-star/plurel-boolnum-preprocessed",
+    run_name="mask0-plurel-filt",
+    mask_prob_max=0.0,
+    db_task_list="~/scratch/hf/stanford-star/plurel-preprocessed/db-task-lists/rt-plurel-train.json",
+    pre_dir="~/scratch/hf/stanford-star/plurel-preprocessed",
     stage_dir=None,
     tokens_per_gpu=2**18,
     num_workers=resources.cpus_per_task,
@@ -81,7 +82,7 @@ submit(
     ),
     resources=resources,
     name=arm["run_name"],
-    run_id=None,
+    run_id="26-09-08_18-19-07_189275282",
     inside=None,
     repo_root=str(Path(__file__).resolve().parents[3]),
     cluster=cluster,
