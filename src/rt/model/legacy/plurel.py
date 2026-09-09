@@ -140,6 +140,7 @@ class PluRelTransformer(nn.Module):
         return load_legacy_checkpoint(cls, repo_id, filename, device=device)
 
     def forward(self, batch):
+        batch = {**batch, "boolean_values": batch["number_values"]}
         node_idxs = batch["node_idxs"]
         f2p_nbr_idxs = batch["f2p_nbr_idxs"]
         col_name_idxs = batch["col_name_idxs"]

@@ -1,6 +1,6 @@
 use crate::common::{
     ArchivedAdj, ArchivedEdge, ArchivedNode, ArchivedOffsets, ArchivedSemType, ArchivedTableType,
-    Offsets, TableInfo,
+    Offsets, SemType, TableInfo,
 };
 use clap::Parser;
 #[cfg(feature = "vecdb")]
@@ -86,7 +86,6 @@ struct Vecs {
     number_values: Vec<bf16>,
     text_values: Vec<bf16>,
     datetime_values: Vec<bf16>,
-    boolean_values: Vec<bf16>,
     is_targets: Vec<bool>,
     is_task_nodes: Vec<bool>,
     is_padding: Vec<bool>,
@@ -110,7 +109,6 @@ struct Slices<'a> {
     number_values: &'a mut [bf16],
     text_values: &'a mut [bf16],
     datetime_values: &'a mut [bf16],
-    boolean_values: &'a mut [bf16],
     is_targets: &'a mut [bool],
     is_task_nodes: &'a mut [bool],
     is_padding: &'a mut [bool],
@@ -133,7 +131,6 @@ impl Vecs {
             number_values: unsafe { alloc_zeroed_vec(l) },
             text_values: unsafe { alloc_zeroed_vec(l * d_text) },
             datetime_values: unsafe { alloc_zeroed_vec(l) },
-            boolean_values: unsafe { alloc_zeroed_vec(l) },
             is_targets: vec![false; l],
             is_task_nodes: vec![false; l],
             is_padding: vec![true; l],
@@ -162,7 +159,6 @@ impl Vecs {
             self.number_values.chunks_exact_mut(seq_len),
             self.text_values.chunks_exact_mut(seq_len * d_text),
             self.datetime_values.chunks_exact_mut(seq_len),
-            self.boolean_values.chunks_exact_mut(seq_len),
             self.is_targets.chunks_exact_mut(seq_len),
             self.is_task_nodes.chunks_exact_mut(seq_len),
             self.is_padding.chunks_exact_mut(seq_len),
@@ -182,7 +178,6 @@ impl Vecs {
                 number_values,
                 text_values,
                 datetime_values,
-                boolean_values,
                 is_targets,
                 is_task_nodes,
                 is_padding,
@@ -200,7 +195,6 @@ impl Vecs {
                 number_values,
                 text_values,
                 datetime_values,
-                boolean_values,
                 is_targets,
                 is_task_nodes,
                 is_padding,
@@ -251,12 +245,6 @@ impl Vecs {
             (
                 "datetime_values",
                 PyArray1::from_vec(py, self.datetime_values),
-            )
-                .into_py_any(py)
-                .unwrap(),
-            (
-                "boolean_values",
-                PyArray1::from_vec(py, self.boolean_values),
             )
                 .into_py_any(py)
                 .unwrap(),
@@ -351,6 +339,8 @@ pub struct Sampler {
     table_ranges: Vec<(i32, i32)>,
     quiet: bool,
 
+    legacy_boolean: bool,
+
     timeout_per_item: f64,
 
     #[cfg_attr(not(feature = "vecdb"), allow(dead_code))]
@@ -386,6 +376,7 @@ impl Sampler {
         ignore_data_errors: bool,
         num_prev_skipped: usize,
         mmap_populate: bool,
+        legacy_boolean: bool,
         timeout_per_item: f64,
         vector_db_path: Option<String>,
     ) -> Self {
@@ -414,6 +405,7 @@ impl Sampler {
                 ignore_data_errors,
                 num_prev_skipped,
                 mmap_populate,
+                legacy_boolean,
                 timeout_per_item,
                 vector_db_path,
             )
@@ -519,6 +511,7 @@ impl Sampler {
         ignore_data_errors: bool,
         num_prev_skipped: usize,
         mmap_populate: bool,
+        legacy_boolean: bool,
         timeout_per_item: f64,
         vector_db_path: Option<String>,
     ) -> Self {
@@ -709,6 +702,7 @@ impl Sampler {
             dataset_tuples,
             table_ranges,
             quiet,
+            legacy_boolean,
             timeout_per_item,
             vector_db_path,
         };
@@ -1526,15 +1520,20 @@ impl Sampler {
             get_text_emb(dataset, slices.col_name_idxs[*seq_i], self.d_text),
         );
 
-        slices.sem_types[*seq_i] = node.sem_types[cell_i].clone() as i32;
-        slices.number_values[*seq_i] = bf16::from_f32(node.number_values[cell_i].into());
+        slices.sem_types[*seq_i] = match node.sem_types[cell_i] {
+            ArchivedSemType::Boolean if !self.legacy_boolean => SemType::Number as i32,
+            ref sem => sem.clone() as i32,
+        };
+        slices.number_values[*seq_i] = bf16::from_f32(match node.sem_types[cell_i] {
+            ArchivedSemType::Boolean => node.boolean_values[cell_i].into(),
+            _ => node.number_values[cell_i].into(),
+        });
 
         let text_idx: i32 = node.text_values[cell_i].into();
         slices.text_values[*seq_i * self.d_text..(*seq_i + 1) * self.d_text]
             .copy_from_slice(get_text_emb(dataset, text_idx, self.d_text));
 
         slices.datetime_values[*seq_i] = bf16::from_f32(node.datetime_values[cell_i].into());
-        slices.boolean_values[*seq_i] = bf16::from_f32(node.boolean_values[cell_i].into());
 
         slices.is_targets[*seq_i] =
             if node.node_idx == target_node_idx && node.col_name_idxs[cell_i] == target_column {
@@ -1999,6 +1998,7 @@ pub fn main(cli: Cli) {
         false,
         0,
         true,
+        false,
         1.0,
         None,
     );

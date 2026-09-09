@@ -51,7 +51,6 @@ def process_batch(tup, d_text):
             "datetime_values",
             "text_values",
             "col_name_values",
-            "boolean_values",
         ]:
             out[k] = torch.from_numpy(v.view(np.float16)).view(torch.bfloat16)
         else:
@@ -72,7 +71,6 @@ def process_batch(tup, d_text):
     out["f2p_nbr_idxs"] = out["f2p_nbr_idxs"].view(-1, seq_len, MAX_F2P_NBRS)
     out["number_values"] = out["number_values"].view(-1, seq_len, 1)
     out["datetime_values"] = out["datetime_values"].view(-1, seq_len, 1)
-    out["boolean_values"] = out["boolean_values"].view(-1, seq_len, 1).bfloat16()
     out["text_values"] = out["text_values"].view(-1, seq_len, d_text)
     out["col_name_values"] = out["col_name_values"].view(-1, seq_len, d_text)
 
@@ -101,6 +99,7 @@ class RustlerDataset:
         quiet,
         ignore_data_errors,
         mmap_populate,
+        legacy_boolean,
         timeout_per_item,
         vector_db_path: str | None,
         db_cutoff: str | int | None,
@@ -203,6 +202,7 @@ class RustlerDataset:
             ignore_data_errors=ignore_data_errors,
             num_prev_skipped=len(skipped_tasks),
             mmap_populate=mmap_populate,
+            legacy_boolean=legacy_boolean,
             timeout_per_item=timeout_per_item,
             vector_db_path=vector_db_path,
         )
@@ -263,6 +263,7 @@ class TrainDataset(RustlerDataset, IterableDataset):
             quiet=False,
             ignore_data_errors=True,
             mmap_populate=mmap_populate,
+            legacy_boolean=False,
             timeout_per_item=timeout_per_item,
             vector_db_path=vector_db_path,
             db_cutoff=db_cutoff,

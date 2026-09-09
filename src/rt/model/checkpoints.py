@@ -25,7 +25,10 @@ def save_model(state_dict, path, metadata: dict | None = None) -> None:
 
 
 def load_model(path):
-    return load_file(str(path))
+    sd = load_file(str(path))
+    for k in [k for k in sd if ".boolean" in k]:
+        del sd[k]
+    return sd
 
 
 def _compat(config: dict) -> None:

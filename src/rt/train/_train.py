@@ -557,6 +557,7 @@ def main(
                         walk_length=eval_walk_length,
                         prefer_latest=pl,
                         mmap_populate=eval_mmap_populate,
+                        legacy_boolean=False,
                         embedder=embedder,
                         d_text=d_text,
                         shuffle_seed=eval_shuffle_seed,

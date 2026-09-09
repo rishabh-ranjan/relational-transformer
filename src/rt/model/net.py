@@ -214,10 +214,7 @@ def _kv_sizes(node_idxs, f2p_nbr_idxs, col_name_idxs, table_name_idxs, is_paddin
     }
 
 
-SEM_TYPE_NAMES = ["number", "text", "datetime", "boolean"]
-
-SEM_TYPE_NUMBER = SEM_TYPE_NAMES.index("number")
-SEM_TYPE_BOOLEAN = SEM_TYPE_NAMES.index("boolean")
+SEM_TYPE_NAMES = ["number", "text", "datetime"]
 
 
 class RelationalTransformer(nn.Module):
@@ -245,7 +242,6 @@ class RelationalTransformer(nn.Module):
                 "text": nn.Linear(d_text, d_model, bias=True),
                 "datetime": nn.Linear(1, d_model, bias=True),
                 "col_name": nn.Linear(d_text, d_model, bias=True),
-                "boolean": nn.Linear(1, d_model, bias=True),
             }
         )
         self.dec_dict = nn.ModuleDict(
@@ -253,7 +249,6 @@ class RelationalTransformer(nn.Module):
                 "number": nn.Linear(d_model, 1, bias=True),
                 "text": nn.Linear(d_model, d_text, bias=True),
                 "datetime": nn.Linear(d_model, 1, bias=True),
-                "boolean": nn.Linear(d_model, 1, bias=True),
             }
         )
         self.norm_dict = nn.ModuleDict(
@@ -262,13 +257,12 @@ class RelationalTransformer(nn.Module):
                 "text": RMSNorm(d_model, eps=1e-6),
                 "datetime": RMSNorm(d_model, eps=1e-6),
                 "col_name": RMSNorm(d_model, eps=1e-6),
-                "boolean": RMSNorm(d_model, eps=1e-6),
             }
         )
         self.mask_embs = nn.ParameterDict(
             {
                 t: nn.Parameter(torch.randn(d_model))
-                for t in ["number", "text", "datetime", "boolean"]
+                for t in SEM_TYPE_NAMES
             }
         )
         self.blocks = nn.ModuleList(
@@ -353,19 +347,6 @@ class RelationalTransformer(nn.Module):
         for t in SEM_TYPE_NAMES:
             k = t + "_values"
             type_values[t] = batch[k].gather(1, si.expand_as(batch[k]))
-
-        is_bool = (sem_types == SEM_TYPE_BOOLEAN).unsqueeze(-1)
-        type_values["number"] = torch.where(
-            is_bool, type_values["boolean"], type_values["number"]
-        )
-        type_values["boolean"] = torch.where(
-            is_bool, torch.zeros_like(type_values["boolean"]), type_values["boolean"]
-        )
-        sem_types = torch.where(
-            sem_types == SEM_TYPE_BOOLEAN,
-            torch.full_like(sem_types, SEM_TYPE_NUMBER),
-            sem_types,
-        )
 
         if self.materialize_attn_masks:
             pad = (~is_padding[:, :, None]) & (~is_padding[:, None, :])
@@ -458,7 +439,7 @@ class RelationalTransformer(nn.Module):
             * (~is_padding)[..., None]
         )
 
-        for i, t in enumerate(["number", "text", "datetime", "boolean"]):
+        for i, t in enumerate(SEM_TYPE_NAMES):
             t_values = type_values[t]
             x = x + (
                 self.norm_dict[t](self.enc_dict[t](t_values))
@@ -477,13 +458,13 @@ class RelationalTransformer(nn.Module):
         if return_embeddings:
             return x
 
-        yhat_out = {"number": None, "text": None, "datetime": None, "boolean": None}
+        yhat_out = {t: None for t in SEM_TYPE_NAMES}
 
         B, S, _ = x.shape
         masks = is_targets.bool()
 
         loss_per_seq = x.new_zeros(B)
-        sem_type_names = ["number", "text", "datetime", "boolean"]
+        sem_type_names = SEM_TYPE_NAMES
         sem_type_losses = {}
 
         for i, t in enumerate(sem_type_names):
@@ -491,22 +472,15 @@ class RelationalTransformer(nn.Module):
             y = type_values[t]
             sem_type_mask = (sem_types == i) & masks
 
-            if t in ("number", "text", "datetime"):
-                if self.loss_fn == "huber":
-                    loss_t = F.huber_loss(yhat, y, reduction="none").mean(-1)
-                elif self.loss_fn == "l1":
-                    loss_t = F.l1_loss(yhat, y, reduction="none").mean(-1)
-                else:
-                    lab = (y > 0).to(yhat.dtype)
-                    w = (y != 0).to(yhat.dtype)
-                    bce = F.binary_cross_entropy_with_logits(
-                        yhat, lab, reduction="none"
-                    )
-                    loss_t = (bce * w).sum(-1) / w.sum(-1).clamp(min=1)
-            elif t == "boolean":
-                loss_t = F.binary_cross_entropy_with_logits(
-                    yhat, (y > 0).float(), reduction="none"
-                ).mean(-1)
+            if self.loss_fn == "huber":
+                loss_t = F.huber_loss(yhat, y, reduction="none").mean(-1)
+            elif self.loss_fn == "l1":
+                loss_t = F.l1_loss(yhat, y, reduction="none").mean(-1)
+            else:
+                lab = (y > 0).to(yhat.dtype)
+                w = (y != 0).to(yhat.dtype)
+                bce = F.binary_cross_entropy_with_logits(yhat, lab, reduction="none")
+                loss_t = (bce * w).sum(-1) / w.sum(-1).clamp(min=1)
 
             n_tokens = sem_type_mask.sum()
             sem_type_losses[t] = (loss_t * sem_type_mask).sum() / n_tokens.clamp(min=1)

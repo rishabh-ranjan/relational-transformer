@@ -6,7 +6,6 @@ from torch.utils.data import DataLoader
 
 from rt.data import EvalDataset, RustlerDataset
 from rt.progress import fmt_duration, log
-from rt.model.net import SEM_TYPE_BOOLEAN
 
 
 class Evaluator:
@@ -27,6 +26,7 @@ class Evaluator:
         walk_length,
         prefer_latest,
         mmap_populate,
+        legacy_boolean,
         embedder,
         d_text,
         shuffle_seed,
@@ -80,6 +80,7 @@ class Evaluator:
                 quiet=True,
                 ignore_data_errors=False,
                 mmap_populate=mmap_populate,
+                legacy_boolean=legacy_boolean,
                 timeout_per_item=3600.0,
                 vector_db_path=vector_db_path,
                 db_cutoff=db_cutoff,
@@ -210,11 +211,7 @@ class Evaluator:
                     _sync()
                     t_predict += time.perf_counter() - _t
 
-                    vals = torch.where(
-                        (batch["sem_types"] == SEM_TYPE_BOOLEAN).unsqueeze(-1),
-                        batch["boolean_values"],
-                        batch["number_values"],
-                    ).squeeze(-1)
+                    vals = batch["number_values"].squeeze(-1)
                     y = (vals * batch["is_targets"].to(vals.dtype)).sum(dim=1)
                     assert y.size(0) == batch_mask.size(0)
                     labels.append(y)

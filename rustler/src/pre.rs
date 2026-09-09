@@ -526,7 +526,8 @@ pub fn main(cli: Cli) {
                 DataType::Boolean => {
                     let col_float = col.cast(&DataType::Float64).unwrap().drop_nulls();
                     let col_mean = col_float.mean().unwrap_or(0.0);
-                    let col_std = col_float.std(1).unwrap_or(0.0);
+                    let col_std = col_float.std(1).unwrap_or(1.0);
+                    let col_std = if col_std == 0.0 { 1.0 } else { col_std };
                     table.col_stats.push(ColStat {
                         mean: col_mean,
                         std: col_std,
@@ -757,7 +758,7 @@ pub fn main(cli: Cli) {
                 node.table_name_idx = table_name_idx;
 
                 let val = match val {
-                    AnyValue::Boolean(val) => AnyValue::Boolean(val),
+                    AnyValue::Boolean(val) => AnyValue::Float64(if val { 1.0 } else { 0.0 }),
                     AnyValue::Int8(val) => AnyValue::Float64(val as f64),
                     AnyValue::Int16(val) => AnyValue::Float64(val as f64),
                     AnyValue::Int32(val) => AnyValue::Float64(val as f64),
@@ -778,17 +779,6 @@ pub fn main(cli: Cli) {
                 };
                 match val {
                     AnyValue::Null => {}
-                    AnyValue::Boolean(val) => {
-                        let val_float = if val { 1.0 } else { 0.0 };
-                        let val_float = (val_float - col_stat.mean) / col_stat.std;
-                        node.boolean_values.push(val_float as f32);
-                        node.number_values.push(0.0);
-                        node.text_values.push(0);
-                        node.datetime_values.push(0.0);
-                        node.sem_types.push(SemType::Boolean);
-                        node.col_name_idxs.push(col_name_idx);
-                        node.class_value_idx.push(-1);
-                    }
                     AnyValue::Float64(val) => {
                         if val.is_nan() {
                             continue;

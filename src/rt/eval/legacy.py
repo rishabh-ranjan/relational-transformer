@@ -66,6 +66,7 @@ def run(
             prefetch_factor=prefetch_factor,
             vector_db_path=vector_db_path,
             db_cutoff=db_cutoff,
+            legacy_boolean=True,
         )
         for _task, _ctx, labels, preds_by_prefix, _nl, node_idxs in ev.evaluate_raw(
             [(model, "")], [ctx_size], with_node_idxs=True
