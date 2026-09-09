@@ -38,16 +38,11 @@ resources = dataclasses.replace(ilc.AMPERE, nodes=1)
 # )
 arm = dict(
     run_name="mask0-join",
-    mask_prob_max=0.0,
     db_task_list="expts/pretrain/all_5gb_cutoff.json",
     pre_dir="~/scratch/hf/stanford-star/the-join-lite-preprocessed",
     stage_dir=None,
     tokens_per_gpu=2**17,
     num_workers=resources.cpus_per_task,
-    ctx_size_list=[1024, 2048, 4096, 8192],
-    local_ctx_size_list=[512, 1024, 2048],
-    bfs_width_list=[16, 32, 64, 128],
-    prefer_latest_list=[False],
     early_stop_after_steps=None,
 )
 submit(
