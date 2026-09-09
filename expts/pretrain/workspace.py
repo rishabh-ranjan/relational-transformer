@@ -1,5 +1,7 @@
 import wandb_workspaces.workspaces as ws
 
+from expts.repaper.config import project
+
 from expts.fine_tune.workspace import (
     COLS,
     INTERNAL,
@@ -15,7 +17,6 @@ from expts.fine_tune.workspace import (
     target_key,
     task_size,
 )
-from expts.pretrain.submit_marlowe import args
 
 
 def build(entity: str, project: str, targets: dict[str, float]) -> ws.Workspace:
@@ -88,6 +89,17 @@ def build(entity: str, project: str, targets: dict[str, float]) -> ws.Workspace:
     return workspace
 
 
-a = args()
-print(save(build(a["entity"], a["project"], a["targets"])))
-# print(save(build(a["entity"], a["project"].replace("pretrain", "pretrain-abl"), a["targets"])))
+print(
+    save(
+        build(
+            "rtv2",
+            project("pretrain"),
+            {
+                "swa/nmae/val/mean": 32.4110,
+                "swa/auroc/val/mean": 73.3929,
+                "nmae/val/mean": 32.9141,
+                "auroc/val/mean": 72.8895,
+            },
+        )
+    )
+)

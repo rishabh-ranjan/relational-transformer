@@ -6,13 +6,11 @@ from roach.slurm.clusters import marlowe
 from expts.repaper.config import project
 from roach.slurm import submit
 
-cluster = marlowe.MARLOWE
 resources = dataclasses.replace(marlowe.H100, nodes=4)
 
-
-def args():
-    gpu = resources.gpus.rpartition(":")[0] or {"marlowe": "h100"}[cluster.name]
-    return dict(
+submit(
+    "rt.train:main",
+    args=dict(
         embedder="all-MiniLM-L12-v2",
         d_text=384,
         num_blocks=12,
@@ -26,8 +24,8 @@ def args():
         db_task_list="expts/pretrain/all_5gb_cutoff.json",
         train_splits=["train"],
         pre_dir="~/scratch/hf/stanford-star/the-join-lite-preprocessed",
-        stage_dir={"ilc": None, "marlowe": "$TMPDIR/hf"}[cluster.name],
-        tokens_per_gpu={"a100": 2**17, "h100": 2**16, "b200": 2**18}[gpu],
+        stage_dir="$TMPDIR/hf",
+        tokens_per_gpu=2**16,
         num_workers=resources.cpus_per_task,
         prefetch_factor=2,
         ctx_size_list=[512, 1024, 2048, 4096, 8192],
@@ -85,21 +83,15 @@ def args():
         run_name="base",
         wandb_disabled=False,
         out_root="~/scratch/relational-transformer/pretrain",
-    )
-
-
-if __name__ == "__main__":
-    submit(
-        "rt.train:main",
-        args=args(),
-        resources=resources,
-        name="pretrain",
-        run_id=None,
-        inside=447124,
-        repo_root=str(Path(__file__).resolve().parents[2]),
-        cluster=cluster,
-        job_env="expts/job_env.sh",
-        log_root="~/scratch/relational-transformer/pretrain/slurm-logs",
-        clone_root="~/roach_clones",
-        secrets_dir="~/scratch/.secrets",
-    )
+    ),
+    resources=resources,
+    name="pretrain",
+    run_id=None,
+    inside=447124,
+    repo_root=str(Path(__file__).resolve().parents[2]),
+    cluster=marlowe.MARLOWE,
+    job_env="expts/job_env.sh",
+    log_root="~/scratch/relational-transformer/pretrain/slurm-logs",
+    clone_root="~/roach_clones",
+    secrets_dir="~/scratch/.secrets",
+)

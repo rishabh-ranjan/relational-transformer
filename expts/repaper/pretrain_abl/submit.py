@@ -1,92 +1,103 @@
 import dataclasses
 from pathlib import Path
 
-from expts.pretrain.submit_marlowe import args
 from expts.repaper.config import CLONE_ROOT, LOG_ROOT, SECRETS_DIR, project
 from roach.slurm import submit
 from roach.slurm.clusters import ilc
 
-# cluster = ilc.ILC
-#
-# for arm, resources in [
-#     (
-#         dict(run_name="base-rtj"),
-#         dataclasses.replace(ilc.AMPERE, nodes=1),
-#     ),
-#     (
-#         dict(run_name="mask0-rtj", mask_prob_max=0.0),
-#         dataclasses.replace(ilc.AMPERE_LO, nodes=1),
-#     ),
-#     (
-#         dict(run_name="mask25-rtj", mask_prob_max=0.25, tokens_per_gpu=2**18),
-#         dataclasses.replace(
-#             ilc.BLACKWELL,
-#             nodes=1,
-#             gpus="b200:2",
-#             qos="il",
-#             time="7-00:00:00",
-#             mem="1500000M",
-#         ),
-#     ),
-# ]:
+resources = dataclasses.replace(ilc.AMPERE, nodes=1)
+# resources = dataclasses.replace(
+#     ilc.BLACKWELL, nodes=1, gpus="b200:2", qos="il", time="7-00:00:00", mem="1500000M"
+# )
 
-cluster = ilc.ILC
-# # resources = dataclasses.replace(ilc.AMPERE, nodes=1)
-resources = dataclasses.replace(
-    ilc.BLACKWELL, nodes=1, gpus="b200:2", qos="il", time="7-00:00:00", mem="1500000M"
-)
-arm = dict(
-    run_name="mask0-plurel",
-    db_task_list="~/scratch/hf/stanford-star/plurel-preprocessed/db-task-lists/rt-plurel-train.json",
-    pre_dir="~/scratch/hf/stanford-star/plurel-preprocessed",
-    stage_dir=None,
-    tokens_per_gpu=2**18,
-    num_workers=resources.cpus_per_task,
-    early_stop_after_steps=10_000,
-    targets={
-        "swa/auroc/val/mean": 70.00,
-        "swa/nmae/val/mean": 35.19,
-        "auroc/val/mean": 70.00,
-        "nmae/val/mean": 35.19,
-    },
-)
 submit(
     "rt.train:main",
-    args=args()
-    # | dict(
-    #     db_task_list="expts/repaper/pretrain_abl/rt-j.json",
-    #     stage_dir=None,
-    #     tokens_per_gpu=2**18,
-    #     num_workers=resources.cpus_per_task,
-    # )
-    | arm
-    # | dict(
-    #     run_name="mask0-rtj",
-    #     mask_prob_max=0.0,
-    #     db_task_list="expts/repaper/pretrain_abl/rt-j.json",
-    # )
-    # | dict(run_name="base")
-    # | dict(run_name="mask0", mask_prob_max=0.0)
-    # | dict(run_name="mask25", mask_prob_max=0.25)
-    # | dict(run_name="mask75", mask_prob_max=0.75)
-    # | dict(
-    #     run_name="mix-forecast",
-    #     db_task_list="expts/repaper/pretrain_abl/cutoff-forecast.json",
-    # )
-    # | dict(
-    #     run_name="mix-autocomplete",
-    #     db_task_list="expts/repaper/pretrain_abl/cutoff-autocomplete.json",
-    # )
-    | dict(
+    args=dict(
+        embedder="all-MiniLM-L12-v2",
+        d_text=384,
+        num_blocks=12,
+        d_model=512,
+        num_heads=8,
+        d_ff=2048,
+        compile=True,
+        materialize_attn_masks=True,
+        loss_fn="huber",
+        load_ckpt_path=None,
+        db_task_list="expts/pretrain/all_5gb_cutoff.json",
+        # db_task_list="~/scratch/hf/stanford-star/plurel-preprocessed/db-task-lists/rt-plurel-train.json",
+        train_splits=["train"],
+        pre_dir="~/scratch/hf/stanford-star/the-join-lite-preprocessed",
+        # pre_dir="~/scratch/hf/stanford-star/plurel-preprocessed",
+        stage_dir=None,
+        tokens_per_gpu=2**17,  # a100; 2**18 on b200
+        num_workers=resources.cpus_per_task,
+        prefetch_factor=2,
+        ctx_size_list=[512, 1024, 2048, 4096, 8192],
+        local_ctx_size_list=[256, 512, 1024, 2048, 4096, 8192],
+        bfs_width_list=[8, 16, 32, 64, 128, 256],
+        prefer_latest_list=[False, True],
+        num_walks=10_000,
+        walk_length=20,
+        mask_prob_max=0.0,
+        items_per_task=100_000,
+        delta_finetune=False,
+        optimizer="muon",
+        lr=5e-4,
+        wd=0.1,
+        lr_warmup_steps=2_000,
+        lr_decay_steps=0,
+        grad_norm_max=1.0,
+        total_bs=1024,
+        total_steps=2**15 + 1,
+        early_stop_after_steps=10_000,
+        can_select_init_model=False,
+        swa_momentum=0.9995,
+        seed=0,
+        mmap_populate=True,
+        timeout_per_item=10.0,
+        eval_freq=1_000,
         keep_all_ckpts=False,
+        vector_db_path=None,
+        db_cutoff=None,
+        resume_save_mins=20.0,
+        eval_splits=["val"],
+        eval_db_task_list="expts/pretrain/eval-tasks.json",
+        eval_pre_dir="~/scratch/hf/stanford-star/relbench-preprocessed",
+        eval_tokens_per_gpu=2**17,
+        eval_num_workers=3,
+        eval_prefetch_factor=2,
+        eval_num_walks=10_000,
+        eval_walk_length=20,
+        eval_items_per_task=1024,
+        eval_ctx_size_list=[8192],
+        eval_mmap_populate=True,
+        eval_shuffle_seed=0,
+        eval_context_seed=0,
+        eval_ensemble_size=1,
+        eval_vector_db_path=None,
+        eval_lcs_bw_pl_grid=[(256, 32, True)],
+        # rt-j hf checkpoints on this eval; fill from the eval-rt-j probe
+        targets={},
+        # rt-plurel hf checkpoints on this eval
+        # targets={
+        #     "swa/auroc/val/mean": 70.00,
+        #     "swa/nmae/val/mean": 35.19,
+        #     "auroc/val/mean": 70.00,
+        #     "nmae/val/mean": 35.19,
+        # },
         project=project("pretrain-abl"),
+        entity="rtv2",
+        run_name="mask0-join",
+        # run_name="mask0-plurel",
+        wandb_disabled=False,
+        out_root="~/scratch/relational-transformer/pretrain",
     ),
     resources=resources,
-    name=arm["run_name"],
+    name="mask0-join",
     run_id=None,
     inside=None,
     repo_root=str(Path(__file__).resolve().parents[3]),
-    cluster=cluster,
+    cluster=ilc.ILC,
     job_env="expts/job_env.sh",
     log_root=f"{LOG_ROOT}/repaper/pretrain_abl/slurm-logs",
     clone_root=CLONE_ROOT,
