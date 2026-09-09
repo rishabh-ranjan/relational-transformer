@@ -82,7 +82,7 @@ submit(
     ),
     resources=resources,
     name=arm["run_name"],
-    run_id="26-09-08_18-19-07_189275282",
+    run_id=None,
     inside=None,
     repo_root=str(Path(__file__).resolve().parents[3]),
     cluster=cluster,
