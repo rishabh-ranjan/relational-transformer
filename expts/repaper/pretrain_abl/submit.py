@@ -33,8 +33,8 @@ from roach.slurm.clusters import ilc
 cluster = ilc.ILC
 resources = dataclasses.replace(ilc.AMPERE, nodes=1)
 arm = dict(
-    run_name="base-plurel-ref",
-    db_task_list="~/scratch/hf/stanford-star/plurel-preprocessed/db-task-lists/all.json",
+    run_name="base-plurel-filt",
+    db_task_list="~/scratch/hf/stanford-star/plurel-preprocessed/db-task-lists/rt-plurel-train.json",
     pre_dir="~/scratch/hf/stanford-star/plurel-preprocessed",
     stage_dir=None,
     tokens_per_gpu=2**17,
