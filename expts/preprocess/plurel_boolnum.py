@@ -1,10 +1,14 @@
 import json
+import os
 import shutil
 import sys
 from concurrent.futures import ProcessPoolExecutor
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+
+os.environ["RT_IDENTIFIER_POLICY"] = "none"
+os.environ["CUDA_VISIBLE_DEVICES"] = ""
 
 import orjson
 import pandas as pd
