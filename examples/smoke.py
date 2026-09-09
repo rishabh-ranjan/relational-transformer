@@ -30,7 +30,7 @@ def smoke(
         prefer_latest_list=[True],
         num_walks=100,
         walk_length=4,
-        mask_prob_max=0.5,
+        mask_prob_max=0.0,
         items_per_task=8,
         delta_finetune=False,
         optimizer="muon",

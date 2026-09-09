@@ -32,16 +32,17 @@ from roach.slurm.clusters import ilc
 
 cluster = ilc.ILC
 # resources = dataclasses.replace(ilc.AMPERE, nodes=1)
-resources = dataclasses.replace(
-    ilc.BLACKWELL, nodes=1, gpus="b200:2", qos="il", time="7-00:00:00", mem="1500000M"
-)
+resources = dataclasses.replace(ilc.AMPERE, nodes=1)
+# resources = dataclasses.replace(
+#     ilc.BLACKWELL, nodes=1, gpus="b200:2", qos="il", time="7-00:00:00", mem="1500000M"
+# )
 arm = dict(
-    run_name="mask0-plurel-filt",
+    run_name="mask0-join",
     mask_prob_max=0.0,
-    db_task_list="~/scratch/hf/stanford-star/plurel-preprocessed/db-task-lists/rt-plurel-train.json",
-    pre_dir="~/scratch/hf/stanford-star/plurel-preprocessed",
+    db_task_list="expts/pretrain/all_5gb_cutoff.json",
+    pre_dir="~/scratch/hf/stanford-star/the-join-lite-preprocessed",
     stage_dir=None,
-    tokens_per_gpu=2**18,
+    tokens_per_gpu=2**17,
     num_workers=resources.cpus_per_task,
     ctx_size_list=[1024, 2048, 4096, 8192],
     local_ctx_size_list=[512, 1024, 2048],

@@ -27,7 +27,7 @@ def train(pre_dir: str, eval_pre_dir: str, out_root: str, run_id: str) -> None:
         prefer_latest_list=[False, True],
         num_walks=10_000,
         walk_length=20,
-        mask_prob_max=0.5,
+        mask_prob_max=0.0,
         items_per_task=100_000,
         delta_finetune=False,
         optimizer="muon",
