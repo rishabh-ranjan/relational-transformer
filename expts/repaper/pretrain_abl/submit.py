@@ -1,14 +1,14 @@
 import dataclasses
 from pathlib import Path
 
-from expts.repaper.config import CLONE_ROOT, LOG_ROOT, SECRETS_DIR, project
+from expts.repaper.config import CLONE_ROOT, LOG_ROOT, SECRETS_DIR
 from roach.slurm import submit
 from roach.slurm.clusters import ilc
 
-resources = dataclasses.replace(ilc.AMPERE, nodes=1)
-# resources = dataclasses.replace(
-#     ilc.BLACKWELL, nodes=1, gpus="b200:2", qos="il", time="7-00:00:00", mem="1500000M"
-# )
+# resources = dataclasses.replace(ilc.AMPERE, nodes=1)
+resources = dataclasses.replace(
+    ilc.BLACKWELL, nodes=1, gpus="b200:2", qos="il", time="7-00:00:00", mem="1500000M"
+)
 
 submit(
     "rt.train:main",
@@ -23,13 +23,13 @@ submit(
         materialize_attn_masks=True,
         loss_fn="huber",
         load_ckpt_path=None,
-        db_task_list="expts/pretrain/all_5gb_cutoff.json",
-        # db_task_list="~/scratch/hf/stanford-star/plurel-preprocessed/db-task-lists/rt-plurel-train.json",
+        # db_task_list="expts/pretrain/all_5gb_cutoff.json",
+        db_task_list="~/scratch/hf/stanford-star/plurel-preprocessed/db-task-lists/rt-plurel-train.json",
         train_splits=["train"],
-        pre_dir="~/scratch/hf/stanford-star/the-join-lite-preprocessed",
-        # pre_dir="~/scratch/hf/stanford-star/plurel-preprocessed",
+        # pre_dir="~/scratch/hf/stanford-star/the-join-lite-preprocessed",
+        pre_dir="~/scratch/hf/stanford-star/plurel-preprocessed",
         stage_dir=None,
-        tokens_per_gpu=2**17,  # a100; 2**18 on b200
+        tokens_per_gpu=2**18,  # b200; 2**17 on a100
         num_workers=resources.cpus_per_task,
         prefetch_factor=2,
         ctx_size_list=[512, 1024, 2048, 4096, 8192],
@@ -76,24 +76,22 @@ submit(
         eval_ensemble_size=1,
         eval_vector_db_path=None,
         eval_lcs_bw_pl_grid=[(256, 32, True)],
-        # rt-j hf checkpoints on this eval; fill from the eval-rt-j probe
-        targets={},
-        # rt-plurel hf checkpoints on this eval
-        # targets={
-        #     "swa/auroc/val/mean": 70.00,
-        #     "swa/nmae/val/mean": 35.19,
-        #     "auroc/val/mean": 70.00,
-        #     "nmae/val/mean": 35.19,
-        # },
-        project=project("pretrain-abl"),
+        # the hf rt-j checkpoints on this exact eval (the eval_hf probe, 26-09-09)
+        targets={
+            "swa/auroc/val/mean": 72.841,
+            "swa/nmae/val/mean": 32.387,
+            "auroc/val/mean": 72.841,
+            "nmae/val/mean": 32.387,
+        },
+        project="2026-09-09_pretrain",
         entity="rtv2",
-        run_name="mask0-join",
-        # run_name="mask0-plurel",
+        # run_name="join",
+        run_name="plurel",
         wandb_disabled=False,
         out_root="~/scratch/relational-transformer/pretrain",
     ),
     resources=resources,
-    name="mask0-join",
+    name="plurel",
     run_id=None,
     inside=None,
     repo_root=str(Path(__file__).resolve().parents[3]),
