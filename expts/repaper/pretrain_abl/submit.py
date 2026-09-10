@@ -5,7 +5,9 @@ from expts.repaper.config import CLONE_ROOT, LOG_ROOT, SECRETS_DIR
 from roach.slurm import submit
 from roach.slurm.clusters import ilc
 
-resources = dataclasses.replace(ilc.AMPERE, nodes=1)
+resources = dataclasses.replace(
+    ilc.AMPERE, nodes=1, gpus="a100:4", exclusive=False, cpus_per_task=14
+)
 # resources = dataclasses.replace(
 #     ilc.BLACKWELL, nodes=1, gpus="b200:2", qos="il", time="7-00:00:00", mem="1500000M"
 # )
