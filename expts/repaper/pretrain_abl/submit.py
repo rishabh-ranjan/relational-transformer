@@ -9,8 +9,11 @@ from roach.slurm.clusters import ilc
 #     ilc.AMPERE, nodes=2, gpus="a100:4", exclusive=False, cpus_per_task=14
 # )
 resources = dataclasses.replace(
-    ilc.BLACKWELL, nodes=1, gpus="b200:2", qos="il", time="7-00:00:00", mem="1500000M"
+    ilc.BLACKWELL, nodes=1, gpus="b200:2", mem="1500000M"
 )
+# resources = dataclasses.replace(
+#     ilc.BLACKWELL, nodes=1, gpus="b200:2", qos="il", time="7-00:00:00", mem="1500000M"
+# )
 
 submit(
     "rt.train:main",
@@ -23,14 +26,15 @@ submit(
         d_ff=2048,
         compile=True,
         materialize_attn_masks=True,
-        loss_fn="huber",
-        load_ckpt_path="~/scratch/hf/stanford-star/rt-plurel",
-        # load_ckpt_path=None,
-        db_task_list="expts/pretrain/all_5gb_cutoff.json",
-        # db_task_list="~/scratch/hf/stanford-star/plurel-preprocessed/db-task-lists/rt-plurel-train.json",
+        loss_fn="l1",
+        # loss_fn="huber",
+        # load_ckpt_path="~/scratch/hf/stanford-star/rt-plurel",
+        load_ckpt_path=None,
+        # db_task_list="expts/pretrain/all_5gb_cutoff.json",
+        db_task_list="~/scratch/hf/stanford-star/plurel-preprocessed/db-task-lists/rt-plurel-train.json",
         train_splits=["train"],
-        pre_dir="~/scratch/hf/stanford-star/the-join-lite-preprocessed",
-        # pre_dir="~/scratch/hf/stanford-star/plurel-preprocessed",
+        # pre_dir="~/scratch/hf/stanford-star/the-join-lite-preprocessed",
+        pre_dir="~/scratch/hf/stanford-star/plurel-preprocessed",
         stage_dir=None,
         tokens_per_gpu=2**18,  # b200; 2**17 on a100
         num_workers=resources.cpus_per_task,
@@ -130,14 +134,15 @@ submit(
         },
         project="2026-09-09_pretrain",
         entity="rtv2",
-        run_name="plurel-join",
+        run_name="plurel-l1",
+        # run_name="plurel-join",
         # run_name="join",
         # run_name="plurel",
         wandb_disabled=False,
         out_root="~/scratch/relational-transformer/pretrain",
     ),
     resources=resources,
-    name="plurel-join",
+    name="plurel-l1",
     run_id=None,
     inside=None,
     repo_root=str(Path(__file__).resolve().parents[3]),
