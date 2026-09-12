@@ -161,7 +161,7 @@ submit(
     ),
     resources=resources,
     name="plurel-join-forecast",
-    run_id="26-09-11_20-37-15_791474393",
+    run_id=None,
     inside=None,
     repo_root=str(Path(__file__).resolve().parents[3]),
     cluster=cluster,
