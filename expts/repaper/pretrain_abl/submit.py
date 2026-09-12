@@ -8,11 +8,11 @@ from roach.slurm.clusters import ilc
 # resources = dataclasses.replace(
 #     ilc.AMPERE, nodes=2, gpus="a100:4", exclusive=False, cpus_per_task=14
 # )
-resources = dataclasses.replace(ilc.AMPERE_LO, nodes=1)
+# resources = dataclasses.replace(ilc.AMPERE_LO, nodes=1)
 # resources = dataclasses.replace(ilc.AMPERE, nodes=1)
-# resources = dataclasses.replace(
-#     ilc.BLACKWELL, nodes=1, gpus="b200:4", mem="500000M"
-# )
+resources = dataclasses.replace(
+    ilc.BLACKWELL, nodes=1, gpus="b200:2", qos="il", time="7-00:00:00", mem="1300000M"
+)
 # resources = dataclasses.replace(
 #     ilc.BLACKWELL, nodes=1, gpus="b200:2", qos="il", time="7-00:00:00", mem="1500000M"
 # )
@@ -28,18 +28,18 @@ submit(
         d_ff=2048,
         compile=True,
         materialize_attn_masks=True,
-        loss_fn="l1",
-        # loss_fn="huber",
-        # load_ckpt_path="~/scratch/hf/stanford-star/rt-plurel",
-        load_ckpt_path=None,
+        loss_fn="huber",
+        # loss_fn="l1",
+        load_ckpt_path="~/scratch/hf/stanford-star/rt-plurel",
+        # load_ckpt_path=None,
+        db_task_list="expts/pretrain/all_5gb_cutoff.json",
         # db_task_list="expts/repaper/pretrain_abl/cutoff-forecast.json",
-        # db_task_list="expts/pretrain/all_5gb_cutoff.json",
-        db_task_list="~/scratch/hf/stanford-star/plurel-preprocessed/db-task-lists/rt-plurel-train.json",
+        # db_task_list="~/scratch/hf/stanford-star/plurel-preprocessed/db-task-lists/rt-plurel-train.json",
         train_splits=["train"],
-        # pre_dir="~/scratch/hf/stanford-star/the-join-lite-preprocessed",
-        pre_dir="~/scratch/hf/stanford-star/plurel-preprocessed",
+        pre_dir="~/scratch/hf/stanford-star/the-join-lite-preprocessed",
+        # pre_dir="~/scratch/hf/stanford-star/plurel-preprocessed",
         stage_dir=None,
-        tokens_per_gpu=2**17,  # a100; 2**18 on b200
+        tokens_per_gpu=2**18,  # b200; 2**17 on a100
         num_workers=resources.cpus_per_task,
         prefetch_factor=2,
         ctx_size_list=[512, 1024, 2048, 4096, 8192],
@@ -137,7 +137,8 @@ submit(
         },
         project="2026-09-09_pretrain",
         entity="rtv2",
-        run_name="plurel-l1",
+        run_name="plurel-join",
+        # run_name="plurel-l1",
         # run_name="plurel-join-forecast",
         # run_name="plurel-join",
         # run_name="join",
@@ -146,8 +147,8 @@ submit(
         out_root="~/scratch/relational-transformer/pretrain",
     ),
     resources=resources,
-    name="plurel-l1",
-    run_id=None,
+    name="plurel-join",
+    run_id="26-09-11_11-20-03_015265411",
     inside=None,
     repo_root=str(Path(__file__).resolve().parents[3]),
     cluster=ilc.ILC,
