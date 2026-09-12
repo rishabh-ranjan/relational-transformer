@@ -8,9 +8,12 @@ from roach.slurm.clusters import aws, ilc
 # resources = dataclasses.replace(
 #     ilc.AMPERE, nodes=2, gpus="a100:4", exclusive=False, cpus_per_task=14
 # )
-cluster = aws.AWS
-resources = dataclasses.replace(aws.H100_1, nodes=4)
-# cluster = ilc.ILC
+# cluster = aws.AWS
+# resources = dataclasses.replace(aws.H100_1, nodes=4)
+cluster = ilc.ILC
+resources = dataclasses.replace(
+    ilc.BLACKWELL, nodes=1, gpus="b200:4", mem="1300000M"
+)
 # resources = dataclasses.replace(ilc.AMPERE_LO, nodes=1)
 # resources = dataclasses.replace(ilc.AMPERE, nodes=1)
 # resources = dataclasses.replace(
@@ -39,14 +42,14 @@ submit(
         # db_task_list="expts/repaper/pretrain_abl/cutoff-forecast.json",
         # db_task_list="~/scratch/hf/stanford-star/plurel-preprocessed/db-task-lists/rt-plurel-train.json",
         train_splits=["train"],
-        pre_dir="~/scratch/hf/stanford-star/the-join-preprocessed",
-        # pre_dir="~/scratch/hf/stanford-star/the-join-lite-preprocessed",
+        pre_dir="~/scratch/hf/stanford-star/the-join-lite-preprocessed",
+        # pre_dir="~/scratch/hf/stanford-star/the-join-preprocessed",
         # pre_dir="~/scratch/hf/stanford-star/plurel-preprocessed",
-        stage_dir="$TMPDIR/hf",
-        # stage_dir=None,
-        tokens_per_gpu=2**16,  # h100; 2**17 a100; 2**18 b200
-        num_workers=15,
-        # num_workers=resources.cpus_per_task,
+        stage_dir=None,
+        # stage_dir="$TMPDIR/hf",
+        tokens_per_gpu=2**18,  # b200; 2**17 a100; 2**16 h100
+        num_workers=resources.cpus_per_task,
+        # num_workers=15,
         prefetch_factor=2,
         ctx_size_list=[512, 1024, 2048, 4096, 8192],
         local_ctx_size_list=[128, 256, 512, 1024, 2048, 4096, 8192],
