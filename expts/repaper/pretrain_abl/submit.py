@@ -11,10 +11,12 @@ from roach.slurm.clusters import aws, ilc
 # cluster = aws.AWS
 # resources = dataclasses.replace(aws.H100_1, nodes=4)
 cluster = ilc.ILC
-resources = dataclasses.replace(ilc.AMPERE, nodes=1)
+resources = dataclasses.replace(ilc.AMPERE_LO, nodes=1)
+# resources = dataclasses.replace(ilc.AMPERE, nodes=1)
 # resources = dataclasses.replace(
 #     ilc.BLACKWELL, nodes=1, gpus="b200:4", mem="1300000M"
 # )
+# resources = dataclasses.replace(ilc.AMPERE_LO, nodes=1)
 # resources = dataclasses.replace(ilc.AMPERE_LO, nodes=1)
 # resources = dataclasses.replace(ilc.AMPERE, nodes=1)
 # resources = dataclasses.replace(
@@ -35,16 +37,16 @@ submit(
         d_ff=2048,
         compile=True,
         materialize_attn_masks=True,
-        loss_fn="l1",
-        # loss_fn="huber",
-        # load_ckpt_path="~/scratch/hf/stanford-star/rt-plurel",
-        load_ckpt_path=None,
-        db_task_list="~/scratch/hf/stanford-star/plurel-preprocessed/db-task-lists/rt-plurel-train.json",
+        loss_fn="huber",
+        # loss_fn="l1",
+        load_ckpt_path="~/scratch/hf/stanford-star/rt-plurel",
+        # load_ckpt_path=None,
+        db_task_list="expts/repaper/pretrain_abl/cutoff-forecast.json",
+        # db_task_list="~/scratch/hf/stanford-star/plurel-preprocessed/db-task-lists/rt-plurel-train.json",
         # db_task_list="expts/pretrain/all_5gb_cutoff.json",
-        # db_task_list="expts/repaper/pretrain_abl/cutoff-forecast.json",
         train_splits=["train"],
-        pre_dir="~/scratch/hf/stanford-star/plurel-preprocessed",
-        # pre_dir="~/scratch/hf/stanford-star/the-join-lite-preprocessed",
+        pre_dir="~/scratch/hf/stanford-star/the-join-lite-preprocessed",
+        # pre_dir="~/scratch/hf/stanford-star/plurel-preprocessed",
         # pre_dir="~/scratch/hf/stanford-star/the-join-preprocessed",
         stage_dir=None,
         # stage_dir="$TMPDIR/hf",
@@ -147,10 +149,10 @@ submit(
         },
         project="2026-09-09_pretrain",
         entity="rtv2",
-        run_name="plurel-l1",
+        run_name="plurel-join-forecast",
+        # run_name="plurel-l1",
         # run_name="plurel-join-l1",
         # run_name="plurel-join",
-        # run_name="plurel-join-forecast",
         # run_name="plurel-join",
         # run_name="join",
         # run_name="plurel",
@@ -158,8 +160,8 @@ submit(
         out_root="~/scratch/relational-transformer/pretrain",
     ),
     resources=resources,
-    name="plurel-l1",
-    run_id="26-09-11_20-47-23_115922966",
+    name="plurel-join-forecast",
+    run_id="26-09-11_20-37-15_791474393",
     inside=None,
     repo_root=str(Path(__file__).resolve().parents[3]),
     cluster=cluster,
