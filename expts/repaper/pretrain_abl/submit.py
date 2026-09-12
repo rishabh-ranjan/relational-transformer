@@ -17,19 +17,7 @@ resources = dataclasses.replace(
 # resources = dataclasses.replace(ilc.AMPERE_LO, nodes=1)
 # resources = dataclasses.replace(ilc.AMPERE, nodes=1)
 # resources = dataclasses.replace(
-#     ilc.BLACKWELL, nodes=1, gpus="b200:4", mem="1300000M"
-# )
-# resources = dataclasses.replace(ilc.AMPERE_LO, nodes=1)
-# resources = dataclasses.replace(
-    ilc.AMPERE_LO, nodes=1, gpus="a100:4", exclusive=False, cpus_per_task=14
-)
-# resources = dataclasses.replace(ilc.AMPERE_LO, nodes=1)
-# resources = dataclasses.replace(ilc.AMPERE, nodes=1)
-# resources = dataclasses.replace(
 #     ilc.BLACKWELL, nodes=1, gpus="b200:2", qos="il", time="7-00:00:00", mem="1300000M"
-# )
-# resources = dataclasses.replace(
-#     ilc.BLACKWELL, nodes=1, gpus="b200:2", qos="il", time="7-00:00:00", mem="1500000M"
 # )
 
 submit(
@@ -159,7 +147,6 @@ submit(
         # run_name="plurel-join-forecast",
         # run_name="plurel-l1",
         # run_name="plurel-join",
-        # run_name="plurel-join",
         # run_name="join",
         # run_name="plurel",
         wandb_disabled=False,
@@ -167,7 +154,7 @@ submit(
     ),
     resources=resources,
     name="plurel-join-l1",
-    run_id=None,
+    run_id="26-09-11_22-12-25_724845083",
     inside=None,
     repo_root=str(Path(__file__).resolve().parents[3]),
     cluster=cluster,
