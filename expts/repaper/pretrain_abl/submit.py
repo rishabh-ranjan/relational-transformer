@@ -9,7 +9,7 @@ from roach.slurm.clusters import ilc
 #     ilc.AMPERE, nodes=2, gpus="a100:4", exclusive=False, cpus_per_task=14
 # )
 resources = dataclasses.replace(
-    ilc.BLACKWELL, nodes=1, gpus="b200:2", mem="1500000M"
+    ilc.BLACKWELL, nodes=1, gpus="b200:2", mem="500000M"
 )
 # resources = dataclasses.replace(
 #     ilc.BLACKWELL, nodes=1, gpus="b200:2", qos="il", time="7-00:00:00", mem="1500000M"
