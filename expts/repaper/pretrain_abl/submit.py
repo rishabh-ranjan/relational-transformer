@@ -8,10 +8,11 @@ from roach.slurm.clusters import ilc
 # resources = dataclasses.replace(
 #     ilc.AMPERE, nodes=2, gpus="a100:4", exclusive=False, cpus_per_task=14
 # )
+resources = dataclasses.replace(ilc.AMPERE_LO, nodes=1)
 # resources = dataclasses.replace(ilc.AMPERE, nodes=1)
-resources = dataclasses.replace(
-    ilc.BLACKWELL, nodes=1, gpus="b200:4", mem="500000M"
-)
+# resources = dataclasses.replace(
+#     ilc.BLACKWELL, nodes=1, gpus="b200:4", mem="500000M"
+# )
 # resources = dataclasses.replace(
 #     ilc.BLACKWELL, nodes=1, gpus="b200:2", qos="il", time="7-00:00:00", mem="1500000M"
 # )
@@ -38,7 +39,7 @@ submit(
         # pre_dir="~/scratch/hf/stanford-star/the-join-lite-preprocessed",
         pre_dir="~/scratch/hf/stanford-star/plurel-preprocessed",
         stage_dir=None,
-        tokens_per_gpu=2**18,  # b200; 2**17 on a100
+        tokens_per_gpu=2**17,  # a100; 2**18 on b200
         num_workers=resources.cpus_per_task,
         prefetch_factor=2,
         ctx_size_list=[512, 1024, 2048, 4096, 8192],
