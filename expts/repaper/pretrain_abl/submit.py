@@ -148,7 +148,7 @@ submit(
     ),
     resources=resources,
     name="plurel-join",
-    run_id="26-09-11_11-20-03_015265411",
+    run_id=None,
     inside=None,
     repo_root=str(Path(__file__).resolve().parents[3]),
     cluster=ilc.ILC,
