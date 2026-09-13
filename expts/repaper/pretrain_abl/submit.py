@@ -12,8 +12,11 @@ from roach.slurm.clusters import aws, ilc
 # resources = dataclasses.replace(aws.H100_1, nodes=4)
 cluster = ilc.ILC
 resources = dataclasses.replace(
-    ilc.AMPERE_LO, nodes=1, gpus="a100:4", exclusive=False, cpus_per_task=14
+    ilc.BLACKWELL, nodes=1, gpus="b200:2", qos="il", time="7-00:00:00", mem="1300000M"
 )
+# resources = dataclasses.replace(
+#     ilc.AMPERE_LO, nodes=1, gpus="a100:4", exclusive=False, cpus_per_task=14
+# )
 # resources = dataclasses.replace(ilc.AMPERE_LO, nodes=1)
 # resources = dataclasses.replace(ilc.AMPERE, nodes=1)
 # resources = dataclasses.replace(
@@ -44,7 +47,7 @@ submit(
         # pre_dir="~/scratch/hf/stanford-star/the-join-preprocessed",
         stage_dir=None,
         # stage_dir="$TMPDIR/hf",
-        tokens_per_gpu=2**17,  # a100; 2**18 b200; 2**16 h100
+        tokens_per_gpu=2**18,  # b200; 2**17 a100; 2**16 h100
         num_workers=resources.cpus_per_task,
         # num_workers=15,
         prefetch_factor=2,
@@ -154,7 +157,7 @@ submit(
     ),
     resources=resources,
     name="plurel-join-l1",
-    run_id=None,
+    run_id="26-09-11_22-12-25_724845083",
     inside=None,
     repo_root=str(Path(__file__).resolve().parents[3]),
     cluster=cluster,
