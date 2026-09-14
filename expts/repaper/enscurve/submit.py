@@ -92,7 +92,7 @@ def queued() -> set[str]:
 
 busy = queued()
 
-for variant in ["default", "tuned"]:
+for variant in ["default"]:  # "tuned" after this round's tuned_configs.json
     for db, table in TASKS:
         ctx, lcs, bw, pl = cfg(variant, db, table)
         out_dir = f"{OUT_ROOT}/repaper-enscurve/{variant}"

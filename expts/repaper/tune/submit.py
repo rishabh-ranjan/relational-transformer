@@ -19,7 +19,7 @@ def resources(db: str) -> Resources:
     return Resources(
         partition="il",
         account="infolab",
-        qos="il-lo",
+        qos="il",
         time="2-00:00:00",
         gpus="a100:1",
         cpus_per_task=8,
