@@ -1,4 +1,4 @@
-RUN_TAG = "2026-08-19"
+RUN_TAG = "2026-09-14"
 
 CKPT_CLF = "~/scratch/hf/stanford-star/rt-j/classification"
 CKPT_REG = "~/scratch/hf/stanford-star/rt-j/regression"
