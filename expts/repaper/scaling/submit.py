@@ -358,6 +358,9 @@ def resources(arm: str, db: str, table: str) -> Resources:
                 db,
             )
         return cpu(12 if rows >= 20_000 else 4, db)
+    # the heavy pieces take idle blackwell cards on il-lo (2-5x an a100)
+    if rows >= 50_000 and not method.endswith("_lgbm"):
+        return b200("il-lo", 6 if full or method == "rt" else 8, db)
     if method.endswith("_tabicl"):
         if full:
             hours = (
