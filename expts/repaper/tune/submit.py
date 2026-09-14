@@ -15,7 +15,25 @@ from roach.slurm import Resources, submit
 from rt.data import get_tasks
 
 
-def resources(db: str) -> Resources:
+def resources(db: str, table: str) -> Resources:
+    # the two longest grids (~10.5 h on an a100) take the il b200 sub-cap
+    if (db, table) in (("rel-amazon", "user-ltv"), ("rel-amazon", "item-ltv")):
+        return Resources(
+            partition="il",
+            account="infolab",
+            qos="il",
+            time="2-00:00:00",
+            gpus="b200:1",
+            cpus_per_task=36,
+            ntasks=None,
+            exclusive=False,
+            mem="240G",
+            mem_per_gpu=None,
+            constraint=None,
+            nodelist="blackwell1",
+            reservation=None,
+            dependency=None,
+        )
     return Resources(
         partition="il",
         account="infolab",
@@ -106,7 +124,7 @@ for task in get_tasks(PRE_DIR, f"{PRE_DIR}/db-task-lists/forecast.json", ("val",
             out_root=CKPT_ROOT,
             wandb_disabled=True,
         ),
-        resources=resources(db),
+        resources=resources(db, table),
         name=f"tune-{db}-{table}",
         run_id=run_id,
         repo_root=str(Path(__file__).resolve().parents[3]),
