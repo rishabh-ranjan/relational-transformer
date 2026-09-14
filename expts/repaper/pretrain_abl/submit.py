@@ -11,7 +11,7 @@ from roach.slurm.clusters import aws, ilc
 # cluster = aws.AWS
 # resources = dataclasses.replace(aws.H100_1, nodes=4)
 cluster = ilc.ILC
-resources = dataclasses.replace(ilc.BLACKWELL, nodes=1, gpus="b200:8", mem="1300000M")
+resources = dataclasses.replace(ilc.BLACKWELL, nodes=1, gpus="b200:8", mem=None)
 # resources = dataclasses.replace(ilc.AMPERE, nodes=1)
 # resources = dataclasses.replace(
 #     ilc.BLACKWELL, nodes=1, gpus="b200:2", qos="il", time="7-00:00:00", mem="1300000M"
@@ -20,7 +20,7 @@ resources = dataclasses.replace(ilc.BLACKWELL, nodes=1, gpus="b200:8", mem="1300
 #     ilc.AMPERE_LO, nodes=1, gpus="a100:4", exclusive=False, cpus_per_task=14
 # )
 # resources = dataclasses.replace(ilc.AMPERE_LO, nodes=1)
-# resources = dataclasses.replace(ilc.BLACKWELL, nodes=1, gpus="b200:8", mem="1300000M")
+# resources = dataclasses.replace(ilc.BLACKWELL, nodes=1, gpus="b200:8", mem=None)
 # resources = dataclasses.replace(ilc.AMPERE, nodes=1)
 # resources = dataclasses.replace(
 #     ilc.BLACKWELL, nodes=1, gpus="b200:2", qos="il", time="7-00:00:00", mem="1300000M"
@@ -52,7 +52,8 @@ submit(
         stage_dir=None,
         # stage_dir="$TMPDIR/hf",
         tokens_per_gpu=2**18,  # b200; 2**17 a100; 2**16 h100
-        num_workers=resources.cpus_per_task,
+        num_workers=16,
+        # num_workers=resources.cpus_per_task,
         # num_workers=15,
         prefetch_factor=2,
         ctx_size_list=[512, 1024, 2048, 4096, 8192],
