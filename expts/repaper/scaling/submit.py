@@ -344,7 +344,7 @@ def resources(arm: str, db: str, table: str) -> Resources:
         }.get(f"{db}/{table}", 150)
         ctx = ARMS[arm][1]["ctx_size_list"][0]
         hours = max(2, int(2 * rows / 2 / rate / 60 * ctx / sum(BASELINE_CTX[6:]) + 1))
-        return a100("il", hours, db)
+        return a100("il-lo", hours, db)
     if method.endswith("_lgbm"):
         if full:
             return cpu(
@@ -381,10 +381,10 @@ def resources(arm: str, db: str, table: str) -> Resources:
                 if rows >= 20_000
                 else 2
             )
-        return a100("il", hours, db)
+        return a100("il-lo", hours, db)
     if full:
-        return a100("il", 3 if rows >= 30_000 else 2 if rows >= 10_000 else 1, db)
-    return a100("il", 2 if ARMS[arm][1].get("vector_db_path") else 1, db)
+        return a100("il-lo", 3 if rows >= 30_000 else 2 if rows >= 10_000 else 1, db)
+    return a100("il-lo", 2 if ARMS[arm][1].get("vector_db_path") else 1, db)
 
 
 # 2026-08-27 23:50: twice tonight a submit ran while the RDBLearn features

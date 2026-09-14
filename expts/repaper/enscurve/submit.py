@@ -56,7 +56,7 @@ def resources(db: str, table: str) -> Resources:
     return Resources(
         partition="il",
         account="infolab",
-        qos="il",
+        qos="il-lo",
         time="1:00:00" if (db, table) in SMALL else "3:00:00",
         gpus="a100:1",
         cpus_per_task=8,
