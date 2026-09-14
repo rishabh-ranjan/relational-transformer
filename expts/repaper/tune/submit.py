@@ -3,8 +3,7 @@ from pathlib import Path
 from roach.slurm.clusters.ilc import ILC
 
 from expts.repaper.config import (
-    CKPT_CLF,
-    CKPT_REG,
+    CKPT,
     CKPT_ROOT,
     CLONE_ROOT,
     LOG_ROOT,
@@ -69,7 +68,7 @@ for task in get_tasks(PRE_DIR, f"{PRE_DIR}/db-task-lists/forecast.json", ("val",
     submit(
         "rt.eval:main",
         args=dict(
-            load_ckpt_path={"clf": CKPT_CLF, "reg": CKPT_REG}[task.task_type],
+            load_ckpt_path=CKPT,
             embedder="all-MiniLM-L12-v2",
             d_text=384,
             num_blocks=12,

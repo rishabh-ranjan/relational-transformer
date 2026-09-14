@@ -27,8 +27,7 @@ def main(
     prefetch_factor: int,
     mmap_populate: bool,
     db_cutoff: str | int | None,
-    ckpt_clf: str,
-    ckpt_reg: str,
+    ckpt: str,
 ) -> None:
     out = Path(out_dir).expanduser()
     final_path = out / f"{db}__{table}.json"
@@ -47,7 +46,6 @@ def main(
     from rt.model import load_rt_model
 
     (task,) = get_tasks(pre_dir, [(db, table)], (split,))
-    ckpt = ckpt_clf if task.task_type == "clf" else ckpt_reg
     model, config = load_rt_model(ckpt, device="cuda", compile=True)
     model = model.to(torch.bfloat16)
 

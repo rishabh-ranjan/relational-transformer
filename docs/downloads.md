@@ -55,7 +55,7 @@ pixi run hf download stanford-star/the-join --repo-type dataset
 # Raw RelBench databases (RelBench format)
 pixi run hf download stanford-star/relbench --repo-type dataset
 
-# RT-J checkpoints (classifier under classification/, regressor under regression/)
+# The RT-J checkpoint
 pixi run hf download stanford-star/rt-j --repo-type model
 ```
 

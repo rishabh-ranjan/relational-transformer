@@ -54,7 +54,7 @@ pre_dir = snapshot_download(
 
 # 2. load a pretrained checkpoint (RT-J here)
 model = RelationalTransformer.from_pretrained(
-    "stanford-star/rt-j/classification", device=device
+    "stanford-star/rt-j", device=device
 ).to(torch.bfloat16)
 cfg = model.config
 

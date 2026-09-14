@@ -6,8 +6,7 @@ from pathlib import Path
 from roach.slurm.clusters.ilc import ILC
 
 from expts.repaper.config import (
-    CKPT_CLF,
-    CKPT_REG,
+    CKPT,
     CLONE_ROOT,
     LOG_ROOT,
     OUT_ROOT,
@@ -126,8 +125,7 @@ for variant in ["default", "tuned"]:
                 prefetch_factor=2,
                 mmap_populate=True,
                 db_cutoff=None,
-                ckpt_clf=CKPT_CLF,
-                ckpt_reg=CKPT_REG,
+                ckpt=CKPT,
             ),
             resources=resources(db, table),
             name=name,

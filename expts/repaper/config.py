@@ -1,7 +1,6 @@
 RUN_TAG = "2026-09-14"
 
-CKPT_CLF = "~/scratch/hf/stanford-star/rt-j/classification"
-CKPT_REG = "~/scratch/hf/stanford-star/rt-j/regression"
+CKPT = "~/scratch/hf/stanford-star/rt-j"
 
 PRE_DIR = "~/scratch/hf/stanford-star/relbench-preprocessed"
 RAW_DIR = "~/scratch/hf/stanford-star/relbench"

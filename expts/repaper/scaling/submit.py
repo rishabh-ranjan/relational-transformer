@@ -6,8 +6,7 @@ from pathlib import Path
 from roach.slurm.clusters.ilc import ILC
 
 from expts.repaper.config import (
-    CKPT_CLF,
-    CKPT_REG,
+    CKPT,
     CLONE_ROOT,
     LOG_ROOT,
     OUT_ROOT,
@@ -532,8 +531,7 @@ for arm in [
                 mmap_populate=True,
                 db_cutoff=None,
                 vector_db_path=None,
-                ckpt_clf=CKPT_CLF,
-                ckpt_reg=CKPT_REG,
+                ckpt=CKPT,
                 tabicl_dir=f"{SHARE}/tabicl",
                 tabicl_max_batch_size=1024,
                 tabicl_min_bin_size=48,

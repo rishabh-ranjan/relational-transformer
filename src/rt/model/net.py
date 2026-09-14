@@ -286,12 +286,9 @@ class RelationalTransformer(nn.Module):
         device: str = "cpu",
         compile: bool = False,
         revision: str | None = None,
-        subfolder: str | None = None,
         **model_kwargs,
     ):
-        config, model_path = resolve_checkpoint(
-            model_id_or_path, revision=revision, subfolder=subfolder
-        )
+        config, model_path = resolve_checkpoint(model_id_or_path, revision=revision)
         m = {**config.get("model", {}), **model_kwargs}
         missing = [k for k in MODEL_DIM_KEYS if k not in m]
         if missing:
@@ -514,7 +511,6 @@ def load_rt_model(
     device: str = "cpu",
     compile: bool = False,
     revision: str | None = None,
-    subfolder: str | None = None,
     model_kwargs: dict | None = None,
 ):
     model = RelationalTransformer.from_pretrained(
@@ -522,7 +518,6 @@ def load_rt_model(
         device=device,
         compile=compile,
         revision=revision,
-        subfolder=subfolder,
         **(model_kwargs or {}),
     )
     return model, model.config

@@ -6,10 +6,8 @@ RelBench) score the predictions with RelBench's own evaluator. There is no
 fine-tuning — RT predicts zero-shot from the context it is given.
 
 A checkpoint is a local path or a Hub model repo such as
-`stanford-star/rt-j/classification`. All tasks in the configured task list are
-evaluated regardless of the checkpoint; if the checkpoint's `config.json` says
-it was selected for one task type (the released `classification` / `regression`
-checkpoints), eval prints a note and still runs both.
+`stanford-star/rt-j` — a single checkpoint handles classification and
+regression tasks alike. All tasks in the configured task list are evaluated.
 
 ## Prerequisite: preprocessed data
 
@@ -27,7 +25,7 @@ pixi run python examples/eval.py
 ```
 
 There is no CLI: [`examples/eval.py`](../examples/eval.py) calls `rt.eval.main`
-with every argument spelled out (`load_ckpt_path="stanford-star/rt-j/classification"`,
+with every argument spelled out (`load_ckpt_path="stanford-star/rt-j"`,
 `pre_dir="data/relbench-preprocessed"`, ...). Copy it and edit the call.
 
 ## Inference with default context
@@ -65,7 +63,7 @@ The task set is `db_task_list`: `(db, task)` pairs given inline or as a path to
 a JSON file of pairs. To run one task:
 
 ```python
-main(load_ckpt_path="stanford-star/rt-j/classification",
+main(load_ckpt_path="stanford-star/rt-j",
      pre_dir="data/relbench-preprocessed",
      db_task_list=[("rel-f1", "driver-top3")], ...)
 ```
@@ -133,7 +131,7 @@ keeping the best per task before scoring test (here with a single test seed, so
 no averaging yet):
 
 ```python
-main(load_ckpt_path="stanford-star/rt-j/regression",
+main(load_ckpt_path="stanford-star/rt-j",
      pre_dir="data/relbench-preprocessed",
      ctx_size_list=[4096, 8192],
      lcs_bw_pl_grid=[(256, 32, True), (512, 64, True)],
@@ -148,7 +146,7 @@ tuned config runs with N independent context seeds on test and the per-row
 predictions are averaged before scoring:
 
 ```python
-main(load_ckpt_path="stanford-star/rt-j/regression",
+main(load_ckpt_path="stanford-star/rt-j",
      pre_dir="data/relbench-preprocessed",
      ctx_size_list=[4096, 8192],
      lcs_bw_pl_grid=[(256, 32, True), (512, 64, True)],
@@ -174,7 +172,7 @@ validation score, the winning config and its value. Drop `"test"` from
 `splits` to stop there, reading no test data at all:
 
 ```python
-main(load_ckpt_path="stanford-star/rt-j/regression",
+main(load_ckpt_path="stanford-star/rt-j",
      pre_dir="data/relbench-preprocessed",
      splits=["val"],
      ctx_size_list=[4096, 8192],

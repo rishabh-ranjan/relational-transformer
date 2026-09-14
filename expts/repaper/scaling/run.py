@@ -36,8 +36,7 @@ def main(
     mmap_populate: bool,
     db_cutoff: str | int | None,
     vector_db_path: str | None,
-    ckpt_clf: str | None,
-    ckpt_reg: str | None,
+    ckpt: str | None,
     tabicl_dir: str | None,
     tabicl_max_batch_size: int,
     tabicl_min_bin_size: int,
@@ -64,7 +63,6 @@ def main(
 
         torch._dynamo.config.cache_size_limit = max(16, 2 * len(ctx_sizes))
         device = "cuda"
-        ckpt = ckpt_clf if task.task_type == "clf" else ckpt_reg
         model, config = load_rt_model(ckpt, device=device, compile=True)
         model = model.to(torch.bfloat16)
         embedder, d_text = config["embedder"], config["d_text"]
@@ -174,8 +172,7 @@ def main(
                 "vector_db_path": vector_db_path,
                 "pre_dir": pre_dir,
                 "features_root": features_root,
-                "ckpt_clf": ckpt_clf,
-                "ckpt_reg": ckpt_reg,
+                "ckpt": ckpt,
             },
         },
     )

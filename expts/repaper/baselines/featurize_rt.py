@@ -8,8 +8,7 @@ def featurize_db(
     db_task_list: str,
     pre_dir: str,
     features_root: str,
-    ckpt_clf: str,
-    ckpt_reg: str,
+    ckpt: str,
     local_ctx_size: int,
     bfs_width: int,
     shuffle_seed: int,
@@ -32,13 +31,9 @@ def featurize_db(
     for t in tasks:
         by_table.setdefault(t.table_name, t)
 
-    nets = {}
+    net, config = load_rt_model(ckpt, device=device, compile=False)
+    net = net.to(torch.bfloat16).eval()
     for task in sorted(by_table.values(), key=lambda t: t.table_name):
-        if task.task_type not in nets:
-            ckpt = ckpt_clf if task.task_type == "clf" else ckpt_reg
-            net, config = load_rt_model(ckpt, device=device, compile=False)
-            nets[task.task_type] = (net.to(torch.bfloat16).eval(), config)
-        net, config = nets[task.task_type]
 
         ds = RustlerDataset(
             tasks=[task],

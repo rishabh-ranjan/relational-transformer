@@ -24,15 +24,15 @@ are submitted, allocated and watched here, and it applies to every job below.
    and the paper (`rishabh-ranjan/overleaf-rtj`, branch `rr-main`, cloned at
    `~/clones/rishabh-ranjan/overleaf-rtj`; `git pull` if it exists). Everything
    is committed before it is submitted and pushed often.
-2. **Checkpoint.** `CKPT_CLF` and `CKPT_REG` are two directories, each holding
-   the `config.json` + `model.safetensors` that
-   `rt.model.RelationalTransformer.from_pretrained` loads, on a path every
-   node can read (compute nodes have no Hub access). A Hub release is mirrored
-   once with `huggingface_hub.snapshot_download("<org>/<repo>",
-   local_dir="~/scratch/hf/<org>/<repo>")`; for `stanford-star/rt-j`
-   the two directories are its `classification/` and `regression/`.
-3. **Config.** Edit [`config.py`](config.py): `CKPT_CLF` / `CKPT_REG` to that
-   pair, `RUN_TAG` to today's date. Set the same `RUN_TAG` in the paper repo's
+2. **Checkpoint.** `CKPT` is a directory holding the `config.json` +
+   `model.safetensors` that `rt.model.RelationalTransformer.from_pretrained`
+   loads, on a path every node can read (compute nodes have no Hub access). A
+   Hub release is mirrored once with
+   `huggingface_hub.snapshot_download("<org>/<repo>",
+   local_dir="~/scratch/hf/<org>/<repo>")`; for `stanford-star/rt-j` that is
+   the repo root.
+3. **Config.** Edit [`config.py`](config.py): `CKPT` to that directory,
+   `RUN_TAG` to today's date. Set the same `RUN_TAG` in the paper repo's
    `gen/__init__.py`. Commit both. Nothing else names a checkpoint or a wandb
    project.
 4. **Clear the previous round's checkpoint-dependent outputs.** Every job

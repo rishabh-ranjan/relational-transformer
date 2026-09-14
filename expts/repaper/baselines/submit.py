@@ -6,8 +6,7 @@ from roach.slurm import Resources, submit
 from roach.slurm.clusters.ilc import ILC
 
 from expts.repaper.config import (
-    CKPT_CLF,
-    CKPT_REG,
+    CKPT,
     CLONE_ROOT,
     LOG_ROOT,
     PRE_DIR,
@@ -155,8 +154,7 @@ for db in DBS:
             db_task_list=DB_TASK_LIST,
             pre_dir=PRE_DIR,
             features_root=f"{SHARE}/features",
-            ckpt_clf=CKPT_CLF,
-            ckpt_reg=CKPT_REG,
+            ckpt=CKPT,
             local_ctx_size=256,
             bfs_width=32,
             shuffle_seed=0,

@@ -226,5 +226,5 @@ model, config = load_rt_model("~/ckpts/run1/best_clf.safetensors", device="cuda"
 ```
 
 The same call loads a released Hub checkpoint
-(`load_rt_model("stanford-star/rt-j/classification")`). Use the resulting checkpoints for
+(`load_rt_model("stanford-star/rt-j")`). Use the resulting checkpoints for
 [inference](inference.md).

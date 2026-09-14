@@ -3,7 +3,7 @@ from pathlib import Path
 
 import numpy as np
 
-from expts.repaper.config import CKPT_CLF, CKPT_REG, PRE_DIR, SHARE, project
+from expts.repaper.config import CKPT, PRE_DIR, SHARE, project
 
 CSV_DIR = Path(SHARE).expanduser() / "leaderboard" / "preds"
 N_CFGS = 4
@@ -57,7 +57,7 @@ def main() -> None:
     for task_key, rec in sorted(cfgs.items()):
         db, table = task_key.split("/")
         (task,) = get_tasks(PRE_DIR, [(db, table)], ("test",))
-        ckpt = {"clf": CKPT_CLF, "reg": CKPT_REG}[task.task_type]
+        ckpt = CKPT
         total = labels = nodes = None
         for rank in range(N_CFGS):
             for unit, seeds in units(db, table, rank):

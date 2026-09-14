@@ -44,6 +44,6 @@ if __name__ == "__main__":
     evaluate(
         pre_dir="data/relbench-preprocessed",
         out_root="~/ckpts",
-        checkpoint="stanford-star/rt-j/classification",
+        checkpoint="stanford-star/rt-j",
         run_id=f"{datetime.now():%y-%m-%d_%H-%M-%S}",
     )

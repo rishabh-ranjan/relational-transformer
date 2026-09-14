@@ -36,9 +36,7 @@ def _compat(config: dict) -> None:
         config["embedder"] = config.pop("embedding_model")
 
 
-def resolve_checkpoint(
-    spec, *, revision: str | None = None, subfolder: str | None = None
-) -> tuple[dict, Path]:
+def resolve_checkpoint(spec, *, revision: str | None = None) -> tuple[dict, Path]:
     p = Path(spec).expanduser()
     if p.is_file():
         cfg_path = p.with_name(CONFIG_FILE)
@@ -46,10 +44,9 @@ def resolve_checkpoint(
         _compat(config)
         return config, p
     if p.is_dir():
-        d = p / subfolder if subfolder else p
+        d = p
     else:
         repo_id, subdir = resolve_repo(spec)
-        subdir = "/".join(part for part in (subdir, subfolder) if part)
         local = snapshot_download(
             repo_id=repo_id,
             revision=revision,
