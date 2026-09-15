@@ -1,13 +1,7 @@
 import numpy as np
 import torch
 
-
-def _trivial(y_int, task_type, n_rows):
-    if n_rows < 2:
-        return 0.5 if task_type == "clf" else 0.0
-    if task_type == "clf" and len(np.unique(y_int)) < 2:
-        return float(y_int[0])
-    return None
+from expts.repaper.baselines.rel2tabv2.degenerate import trivial_prediction
 
 
 class TabFMPredictor:
@@ -56,7 +50,7 @@ class TabFMPredictor:
             x_test = np.nan_to_num(x_test, nan=0.0, posinf=0.0, neginf=0.0)
 
             y_int = (y > 0).astype(np.int64)
-            triv = _trivial(y_int, task_type, X.shape[0])
+            triv = trivial_prediction(y_int, task_type, X.shape[0])
             if triv is not None:
                 results.append(triv)
                 continue
