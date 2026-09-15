@@ -6,17 +6,18 @@ from expts.repaper.config import PRE_DIR
 
 
 def grid(db: str, table: str) -> Path:
+    from expts.repaper.config import CKPT_ROOT, project
+
     return (
-        Path("~/scratch/relational-transformer/icl/rtv2/2026-08-25-icl").expanduser()
-        / f"tune-rt-j-{db}-{table}"
+        Path(CKPT_ROOT).expanduser()
+        / "rtv2"
+        / project("tune")
+        / f"tune--{db}--{table}"
         / "tuning.json"
     )
-    # from expts.repaper.config import CKPT_ROOT, project
     # return (
-    #     Path(CKPT_ROOT).expanduser()
-    #     / "rtv2"
-    #     / project("tune")
-    #     / f"tune--{db}--{table}"
+    #     Path("~/scratch/relational-transformer/icl/rtv2/2026-08-25-icl").expanduser()
+    #     / f"tune-rt-j-{db}-{table}"
     #     / "tuning.json"
     # )
 

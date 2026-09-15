@@ -15,6 +15,24 @@ from roach.slurm import Resources, submit
 
 
 def resources(db: str) -> Resources:
+    # the full-test rel-amazon ensembles take idle blackwell cards on il-lo
+    if db == "rel-amazon":
+        return Resources(
+            partition="il",
+            account="infolab",
+            qos="il-lo",
+            time="2-00:00:00",
+            gpus="b200:1",
+            cpus_per_task=8,
+            ntasks=None,
+            exclusive=False,
+            mem="120G",
+            mem_per_gpu=None,
+            constraint=None,
+            nodelist="blackwell1",
+            reservation=None,
+            dependency=None,
+        )
     return Resources(
         partition="il",
         account="infolab",
