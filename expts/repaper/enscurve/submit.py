@@ -53,8 +53,9 @@ def cfg(variant: str, db: str, table: str) -> tuple[int, int, int, bool]:
 # starts a job of mine (scaling/submit.py says why); whatever is resubmitted
 # from here queues under il behind my own jobs.
 def resources(db: str, table: str) -> Resources:
-    # the big-db curves take idle blackwell cards on il-lo (2-5x an a100)
-    if db in ("rel-amazon", "rel-stack", "rel-hm"):
+    # the big-db curves take idle blackwell cards on il-lo (2-5x an a100);
+    # 2026-09-15 11:20: blackwell is held by 2-3 day il-lo jobs, a100s only
+    if db in ():
         return Resources(
             partition="il",
             account="infolab",

@@ -1,4 +1,6 @@
 import json
+import os
+import subprocess
 from pathlib import Path
 
 from roach.slurm.clusters.ilc import ILC
@@ -14,22 +16,25 @@ from expts.repaper.config import (
 from roach.slurm import Resources, submit
 
 
-def resources(db: str) -> Resources:
-    # the full-test rel-amazon ensembles take idle blackwell cards on il-lo
-    if db == "rel-amazon":
+def resources(db: str, table: str, rank: int) -> Resources:
+    # 2026-09-15 11:20: every a100 and b200 on the cluster is allocated and
+    # this user's 10 il slots are idle, so the ten longest full-test pieces
+    # take il -- the user-churn/user-ltv octet (351k rows each) on a100s and
+    # two item pieces on the il b200 sub-cap, which preempts il-lo blackwell.
+    if db == "rel-amazon" and (table in ("user-churn", "user-ltv") or rank == 0):
         return Resources(
             partition="il",
             account="infolab",
-            qos="il-lo",
+            qos="il",
             time="2-00:00:00",
-            gpus="b200:1",
+            gpus="b200:1" if table in ("item-churn", "item-ltv") else "a100:1",
             cpus_per_task=8,
             ntasks=None,
             exclusive=False,
             mem="120G",
             mem_per_gpu=None,
-            constraint=None,
-            nodelist="blackwell1",
+            constraint=None if table in ("item-churn", "item-ltv") else "ampere",
+            nodelist="blackwell1" if table in ("item-churn", "item-ltv") else None,
             reservation=None,
             dependency=None,
         )
@@ -59,6 +64,18 @@ def resources(db: str) -> Resources:
     )
 
 
+def queued() -> set[str]:
+    out = subprocess.run(
+        ["squeue", "-h", "-u", os.environ["USER"], "-o", "%j"],
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    return set(out.stdout.split())
+
+
+busy = queued()
+
 cfgs = json.loads(
     (Path(__file__).parent.parent / "tune" / "tuned_configs.json").read_text()
 )
@@ -67,6 +84,8 @@ for task_key, rec in sorted(cfgs.items()):
     for rank, (ctx, lcs, bw, pl) in enumerate(rec["top_cfgs"]):
         out_dir = f"{OUT_ROOT}/repaper-submit/cfg{rank}"
         if (Path(out_dir).expanduser() / f"{db}__{table}.json").exists():
+            continue
+        if f"sub-cfg{rank}-{db}-{table}" in busy:
             continue
         submit(
             "expts.repaper.enscurve.run:main",
@@ -94,7 +113,7 @@ for task_key, rec in sorted(cfgs.items()):
                 db_cutoff=None,
                 ckpt=CKPT,
             ),
-            resources=resources(db),
+            resources=resources(db, table, rank),
             name=f"sub-cfg{rank}-{db}-{table}",
             repo_root=str(Path(__file__).resolve().parents[3]),
             cluster=ILC,
