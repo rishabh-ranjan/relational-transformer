@@ -53,6 +53,28 @@ def cfg(variant: str, db: str, table: str) -> tuple[int, int, int, bool]:
 # starts a job of mine (scaling/submit.py says why); whatever is resubmitted
 # from here queues under il behind my own jobs.
 def resources(db: str, table: str) -> Resources:
+    # the big-db curves take idle blackwell cards on il-lo (2-5x an a100)
+    if db in ("rel-amazon", "rel-stack", "rel-hm"):
+        return Resources(
+            partition="il",
+            account="infolab",
+            qos="il-lo",
+            time="2:00:00",
+            gpus="b200:1",
+            cpus_per_task=8,
+            ntasks=None,
+            exclusive=False,
+            mem={
+                "rel-amazon": "120G",
+                "rel-hm": "64G",
+                "rel-stack": "64G",
+            }[db],
+            mem_per_gpu=None,
+            constraint=None,
+            nodelist="blackwell1",
+            reservation=None,
+            dependency=None,
+        )
     return Resources(
         partition="il",
         account="infolab",
