@@ -48,11 +48,20 @@ dev = [
     "roach @ git+https://github.com/rishabh-ranjan/roach@v0.3.7",
     # Builds the FAISS indices the sampler's opt-in vecdb feature reads
     # (expts/repaper/baselines/build_vector_db.py).
+    # EXAONE Tabular v1.0, a tabular foundation model used as a rel2tabv2
+    # predictor. Its pins (numpy >=2.3.5, scikit-learn >=1.7.2, torch >=2.6)
+    # are all satisfied here, so unlike rdblearn it solves in place.
+    "exaonetabular @ git+https://github.com/LGAI-Research/EXAONE-Tabular@8638e07d09fad154249bd75ba4786181491f7025",
     "faiss-cpu",
     "lightgbm",
     "matplotlib",
     "pre-commit",
     "pytest",
+    # Google's TabFM v1.0, the other tabular foundation model rel2tabv2 drives.
+    # The pytorch extra, not jax: its pytorch backend needs only torch, while
+    # the jax extra would pull jax/jaxlib/flax/optax/orbax and a cpu-pinned
+    # torch into an environment built around torch+cu130.
+    "tabfm[pytorch] @ git+https://github.com/google-research/tabfm@fbb665569425fd2f490c6576b3af967876fe11ff",
     # TabICL v2, the in-context tabular predictor of the rel2tab baselines
     # (expts/repaper/baselines).
     "tabicl>=2.1.1,<3",

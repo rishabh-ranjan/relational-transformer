@@ -15,41 +15,43 @@ from expts.repaper.config import (
 DB = "rel-f1"
 TABLE = "driver-dnf"
 
-# What is 0.7252183672473527? Every arm scored it, bit-identical, at
-# ctx == local_ctx == 1024, which proves the predictions cannot depend on the
-# features but not what they *are*. The claim to check is that it is the
-# visible-label base rate: with ~4.8 rows the context is single-class, so
-# lgbm._fit_predict returns float(y_int[0]) and the prediction is the shared
-# label of the query driver's recent races. BaseRatePredictor ignores X and
-# returns mean(y_train > 0), through the identical sampler and seeds, so
-# ctx=1024 reproducing that constant exactly settles it. ctx=8192 gives the
-# label-only reference at the context the lgbm/tabicl rounds used.
-CONFIGS = [(1024, 1024), (256, 8192)]
+LOCAL_CTX_SIZE = 256
+CTX_SIZE = 8192
+ROUND = f"fm_lcs{LOCAL_CTX_SIZE}_ctx{CTX_SIZE}"
 
-EXCLUDE_CPU = (
-    "hyperion1,hyperion3,hyperturing1,hyperturing2,madmax2,"
-    "madmax3,madmax4,madmax6,madmax7,trinity,turing1,turing2,turing3"
-)
+# The two tabular foundation models on the rdblearn blob, at the context the
+# lgbm (0.8074) and tabicl (0.8102) arms used, so all four predictors are
+# directly comparable on the same 73-d features and the same 336 labelled rows.
+#
+# Unlike TabICLBatchedPredictor, which packs thousands of contexts into one
+# forward, both of these are sklearn-shaped: one fit+predict per query, so 702
+# sequential model calls per arm (and EXAONE runs ensemble_count of them
+# internally). Throughput is unmeasured, hence the generous wall clock.
+ARMS = {
+    "exaone": "rdblearn_exaone",
+    "tabfm": "rdblearn_tabfm",
+}
 
+# 2026-09-15: 4 of 8 b200 free, blackwell1 not reserved, and nothing of mine
+# holding any tier, so il-interactive's 2 gpus go to blackwell for both arms --
+# TabFM is 6.2 GB of weights per forward, and the a100s had only 3 cards free
+# across ampere2/ampere8.
 REPO_ROOT = str(Path(__file__).resolve().parents[4])
 
-for local_ctx_size, ctx_size in CONFIGS:
-    round_name = f"baserate_lcs{local_ctx_size}_ctx{ctx_size}"
+for arm, method in ARMS.items():
     submit(
         "expts.repaper.baselines.rel2tabv2.run:main",
         args=dict(
-            # the featurizer is loaded and then ignored, so any built blob
-            # does; rdblearn's is the cheapest to read at 73 wide
-            method="rdblearn_baserate",
+            method=method,
             db=DB,
             table=TABLE,
             split="test",
             pre_dir=PRE_DIR,
             features_root=f"{SHARE}/features",
-            out_dir=f"{OUT_ROOT}/repaper-rel2tabv2/{round_name}",
-            ctx_size_list=[ctx_size],
+            out_dir=f"{OUT_ROOT}/repaper-rel2tabv2/{ROUND}/{arm}",
+            ctx_size_list=[CTX_SIZE],
             items_per_task=10_000_000,
-            local_ctx_size=local_ctx_size,
+            local_ctx_size=LOCAL_CTX_SIZE,
             bfs_width=32,
             prefer_latest=True,
             num_walks=10_000,
@@ -67,27 +69,27 @@ for local_ctx_size, ctx_size in CONFIGS:
             tabicl_min_bin_size=48,
             tabicl_softmax_temperature=0.9,
             lgbm_n_jobs=8,
+            exaone_ensemble_count=8,
+            tabfm_backend="pytorch",
         ),
-        # no fits at all, just a mean per query, so this is the cheapest arm
-        # yet: zero-gres on uncapped il-cpu, 8 cpus for the sampler.
         resources=Resources(
-            partition="il-cpu",
+            partition="il",
             account="infolab",
-            qos="il-cpu",
-            time="2:00:00",
-            gpus="0",
+            qos="il-interactive",
+            time="8:00:00",
+            gpus="b200:1",
             cpus_per_task=8,
-            ntasks=1,
+            ntasks=None,
             exclusive=False,
-            mem="32G",
+            mem="64G",
             mem_per_gpu=None,
             constraint=None,
-            nodelist=None,
+            nodelist="blackwell1",
             reservation=None,
             dependency=None,
-            exclude=EXCLUDE_CPU,
+            exclude=None,
         ),
-        name=f"rel2tabv2-{round_name}-{DB}-{TABLE}",
+        name=f"rel2tabv2-{ROUND}-{arm}-{DB}-{TABLE}",
         repo_root=REPO_ROOT,
         cluster=ILC,
         job_env="expts/job_env.sh",
@@ -96,16 +98,12 @@ for local_ctx_size, ctx_size in CONFIGS:
         secrets_dir=SECRETS_DIR,
     )
 
-# The tabicl round (183460-183462): two 512-d arms on the free b200 via
-# il-interactive, rdblearn on an ampere via il.
+# Earlier rounds on this task, all at local_ctx 256 / ctx 8192 unless noted:
 #
-# ARMS = {
-#     "rt-j": ("rt_tabicl", f"{SHARE}/features_rt-j", "b200"),
-#     "rt-plurel": ("rt_tabicl", f"{SHARE}/features_rt-plurel", "b200"),
-#     "rdblearn": ("rdblearn_tabicl", f"{SHARE}/features", "a100"),
-# }
-#
-# The lgbm round (183457-183459), zero-gres on il-cpu with 16 cpus:
+#   baserate  (183463 ctx=1024 -> 0.7252183672473527, the label base rate;
+#              183464 ctx=8192 -> 0.5656907236617381, the floor at this context)
+#   lgbm      (183457-9) rdblearn 0.8074, rt-j 0.7200, rt-plurel 0.6653
+#   tabicl    (183460-2) rdblearn 0.8102, rt-j 0.7627, rt-plurel 0.7220
 #
 # ARMS = {
 #     "rdblearn": ("rdblearn_lgbm", f"{SHARE}/features"),
@@ -139,7 +137,6 @@ for local_ctx_size, ctx_size in CONFIGS:
 #             dependency=None, exclude="ampere4,ampere6,ampere7,ampere9",
 #         ),
 #         name=f"rel2tabv2-feat-{arm}-{DB}",
-#         ...
 #     )
 #
 # And rdblearn (183395), which takes (db, table) directly and needs RAW_DIR

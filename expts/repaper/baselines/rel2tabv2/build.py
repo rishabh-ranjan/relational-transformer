@@ -14,12 +14,14 @@ def build_rel2tab(
     tabicl_min_bin_size: int,
     tabicl_softmax_temperature: float,
     lgbm_n_jobs: int,
+    exaone_ensemble_count: int,
+    tabfm_backend: str,
 ) -> tuple[Rel2TabModel, str]:
     family, predictor_name = method.rsplit("_", 1)
     assert family in ("rdblearn", "sql", "rt", "plurel"), (
         f"unknown feature family {family!r} in method {method!r}"
     )
-    assert predictor_name in ("lgbm", "tabicl", "baserate"), (
+    assert predictor_name in ("lgbm", "tabicl", "baserate", "exaone", "tabfm"), (
         f"unknown predictor {predictor_name!r} in method {method!r}"
     )
 
@@ -47,6 +49,16 @@ def build_rel2tab(
             checkpoint_dir=tabicl_dir,
             device=device,
         )
+    elif predictor_name == "exaone":
+        from expts.repaper.baselines.rel2tabv2.exaone import ExaonePredictor
+
+        device = "cuda"
+        predictor = ExaonePredictor(ensemble_count=exaone_ensemble_count, device=device)
+    elif predictor_name == "tabfm":
+        from expts.repaper.baselines.rel2tabv2.tabfm import TabFMPredictor
+
+        device = "cuda"
+        predictor = TabFMPredictor(backend=tabfm_backend, device=device)
     elif predictor_name == "baserate":
         from expts.repaper.baselines.rel2tabv2.baserate import BaseRatePredictor
 

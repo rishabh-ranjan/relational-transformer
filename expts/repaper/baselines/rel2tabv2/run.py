@@ -41,6 +41,8 @@ def main(
     tabicl_min_bin_size: int,
     tabicl_softmax_temperature: float,
     lgbm_n_jobs: int,
+    exaone_ensemble_count: int,
+    tabfm_backend: str,
 ) -> None:
     out_path = Path(out_dir).expanduser() / f"{db}__{table}.json"
     if out_path.exists():
@@ -49,11 +51,10 @@ def main(
 
     import numpy as np
 
+    from expts.repaper.baselines.rel2tabv2.build import build_rel2tab
     from rt.data import get_tasks
     from rt.eval import build_evaluator
     from rt.eval.metrics import metric_for
-
-    from expts.repaper.baselines.rel2tabv2.build import build_rel2tab
 
     (task,) = get_tasks(pre_dir, [(db, table)], (split,))
     ctx_sizes = sorted(ctx_size_list)
@@ -68,6 +69,8 @@ def main(
         tabicl_min_bin_size=tabicl_min_bin_size,
         tabicl_softmax_temperature=tabicl_softmax_temperature,
         lgbm_n_jobs=lgbm_n_jobs,
+        exaone_ensemble_count=exaone_ensemble_count,
+        tabfm_backend=tabfm_backend,
     )
 
     ev = build_evaluator(
