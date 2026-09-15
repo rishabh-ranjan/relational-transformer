@@ -21,6 +21,25 @@ def resources(db: str, table: str, rank: int) -> Resources:
     # this user's 10 il slots are idle, so the ten longest full-test pieces
     # take il -- the user-churn/user-ltv octet (351k rows each) on a100s and
     # two item pieces on the il b200 sub-cap, which preempts il-lo blackwell.
+    # 12:45: two blackwell cards freed by the il preemption; the remaining
+    # item pieces queue on them under il-lo rather than the saturated a100s
+    if db == "rel-amazon" and table in ("item-churn", "item-ltv") and rank > 0:
+        return Resources(
+            partition="il",
+            account="infolab",
+            qos="il-lo",
+            time="2-00:00:00",
+            gpus="b200:1",
+            cpus_per_task=8,
+            ntasks=None,
+            exclusive=False,
+            mem="120G",
+            mem_per_gpu=None,
+            constraint=None,
+            nodelist="blackwell1",
+            reservation=None,
+            dependency=None,
+        )
     if db == "rel-amazon" and (table in ("user-churn", "user-ltv") or rank == 0):
         return Resources(
             partition="il",
