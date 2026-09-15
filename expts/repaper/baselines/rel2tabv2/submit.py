@@ -29,7 +29,10 @@ ROUND = f"fm_lcs{LOCAL_CTX_SIZE}_ctx{CTX_SIZE}"
 # internally). Throughput is unmeasured, hence the generous wall clock.
 ARMS = {
     "exaone": "rdblearn_exaone",
-    "tabfm": "rdblearn_tabfm",
+    # 183467 is still running from 2b57923 and has not hit the inference-tensor
+    # error, so it keeps its slot rather than being restarted; uncomment if it
+    # turns out to need the fix too.
+    # "tabfm": "rdblearn_tabfm",
 }
 
 # 2026-09-15: 4 of 8 b200 free, blackwell1 not reserved, and nothing of mine

@@ -1,4 +1,5 @@
 import numpy as np
+import torch
 
 
 def _trivial(y_int, task_type, n_rows):
@@ -60,12 +61,20 @@ class TabFMPredictor:
                 results.append(triv)
                 continue
 
-            if task_type == "clf":
-                model = self._ensure_clf().fit(X, y_int)
-                proba = model.predict_proba(x_test)
-                pos = int(np.flatnonzero(np.asarray(model.classes_) == 1)[0])
-                results.append(float(proba[0, pos]))
-            else:
-                model = self._ensure_reg().fit(X, y)
-                results.append(float(model.predict(x_test)[0]))
+            # rt.eval.evaluator.evaluate_raw wraps the whole loop in
+            # torch.inference_mode, so tensors made here would be inference
+            # tensors, which carry no version counter and blow up inside the
+            # model (183466: "Inference tensors do not track version
+            # counter"). The inputs are numpy, so nothing crosses the
+            # boundary; the load has to be inside too, or the parameters are
+            # inference tensors themselves.
+            with torch.inference_mode(False):
+                if task_type == "clf":
+                    model = self._ensure_clf().fit(X, y_int)
+                    proba = model.predict_proba(x_test)
+                    pos = int(np.flatnonzero(np.asarray(model.classes_) == 1)[0])
+                    results.append(float(proba[0, pos]))
+                else:
+                    model = self._ensure_reg().fit(X, y)
+                    results.append(float(model.predict(x_test)[0]))
         return results
