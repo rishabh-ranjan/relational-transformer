@@ -1,3 +1,5 @@
+import os
+import subprocess
 from pathlib import Path
 
 from roach.slurm.clusters.ilc import ILC
@@ -16,12 +18,12 @@ from rt.data import get_tasks
 
 
 def resources(db: str, table: str) -> Resources:
-    # the two longest grids (~10.5 h on an a100) take the il b200 sub-cap
+    # the two longest grids (~10.5 h on an a100) take idle il-lo b200s
     if (db, table) in (("rel-amazon", "user-ltv"), ("rel-amazon", "item-ltv")):
         return Resources(
             partition="il",
             account="infolab",
-            qos="il",
+            qos="il-lo",
             time="2-00:00:00",
             gpus="b200:1",
             cpus_per_task=36,
@@ -76,12 +78,26 @@ def resources(db: str, table: str) -> Resources:
     # )
 
 
+def queued() -> set[str]:
+    out = subprocess.run(
+        ["squeue", "-h", "-u", os.environ["USER"], "-o", "%j"],
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    return set(out.stdout.split())
+
+
+busy = queued()
+
 for task in get_tasks(PRE_DIR, f"{PRE_DIR}/db-task-lists/forecast.json", ("val",)):
     db, table = task.db_name, task.table_name
     run_id = f"tune--{db}--{table}"
     if (
         Path(CKPT_ROOT).expanduser() / "rtv2" / project("tune") / run_id / "tuning.json"
     ).exists():
+        continue
+    if f"tune-{db}-{table}" in busy:
         continue
     submit(
         "rt.eval:main",

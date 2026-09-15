@@ -79,8 +79,8 @@ def queued() -> set[str]:
 busy = queued()
 
 FEAT_RT = {
-    "rel-amazon": ("il", "b200", 12),
-    "rel-stack": ("il", "b200", 12),
+    "rel-amazon": ("il-lo", "b200", 12),
+    "rel-stack": ("il-lo", "b200", 12),
     "rel-hm": ("il", "a100", 6),
     "rel-avito": ("il", "a100", 6),
     "rel-trial": ("il", "a100", 6),
