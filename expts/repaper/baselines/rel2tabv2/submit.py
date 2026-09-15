@@ -4,7 +4,6 @@ from roach.slurm import Resources, submit
 from roach.slurm.clusters.ilc import ILC
 
 from expts.repaper.config import (
-    CKPT,
     CLONE_ROOT,
     LOG_ROOT,
     OUT_ROOT,
@@ -16,22 +15,26 @@ from expts.repaper.config import (
 DB = "rel-f1"
 TABLE = "driver-dnf"
 
-# Both released checkpoints are the same architecture and shape (config.json
-# identical, d_model=512, 85.6M params), so the arms differ only in what the
-# featurizer was pretrained on. rt-plurel's root safetensors is *not* the
-# legacy PluRelTransformer -- those are its paper/*.pt files at d_model=256,
-# which featurize_plurel takes.
+# ctx == local_ctx == 1024 gave all three arms a bit-identical
+# roc_auc=0.7252183672473527: with ~4.8 visible rows the context is always
+# single-class, so lgbm._fit_predict returns float(y_int[0]) without ever
+# touching X and the features cannot matter. local_ctx_size=256 at ctx=8192
+# puts 337 labelled rows in front of the predictor instead (2026-09-15 probe),
+# which is the first config that can actually separate the featurizers.
+LOCAL_CTX_SIZE = 256
+CTX_SIZE = 8192
+ROUND = f"lcs{LOCAL_CTX_SIZE}_ctx{CTX_SIZE}"
+
+# Every blob is already built and cached, so this round is the cpu stage only:
+# rdblearn from 183395, rt-j from 183453, rt-plurel from 183455. The two rt
+# arms share featurize_rt and differ only in the checkpoint's pretraining,
+# which is why they need separate feature roots.
 ARMS = {
-    "rt-j": CKPT,
-    "rt-plurel": "~/scratch/hf/stanford-star/rt-plurel",
+    "rdblearn": ("rdblearn_lgbm", f"{SHARE}/features"),
+    "rt-j": ("rt_lgbm", f"{SHARE}/features_rt-j"),
+    "rt-plurel": ("rt_lgbm", f"{SHARE}/features_rt-plurel"),
 }
 
-# 2026-09-15: the two featurize passes take il-interactive (2 gpus, priority
-# 1500, and nothing of mine is holding it) on amperes rather than blackwell --
-# all 8 b200 are held by other users' il-lo jobs at 0:10-2:48 elapsed against
-# 2-3 day limits, so none frees inside the minute this job needs on an a100
-# (README: rel-f1 RT featurize is about a minute). Free a100 at submit:
-# ampere2 1, ampere8 2, the other amperes full; ampere4/6/7/9 stay excluded.
 EXCLUDE_CPU = (
     "hyperion1,hyperion3,hyperturing1,hyperturing2,madmax2,"
     "madmax3,madmax4,madmax6,madmax7,trinity,turing1,turing2,turing3"
@@ -39,96 +42,20 @@ EXCLUDE_CPU = (
 
 REPO_ROOT = str(Path(__file__).resolve().parents[4])
 
-
-def gpu_resources(cpus: int, mem: str, time: str) -> Resources:
-    return Resources(
-        partition="il",
-        account="infolab",
-        qos="il-interactive",
-        time=time,
-        gpus="a100:1",
-        cpus_per_task=cpus,
-        ntasks=None,
-        exclusive=False,
-        mem=mem,
-        mem_per_gpu=None,
-        constraint="ampere",
-        nodelist=None,
-        reservation=None,
-        dependency=None,
-        exclude="ampere4,ampere6,ampere7,ampere9",
-    )
-
-
-def cpu_resources(cpus: int, mem: str, time: str) -> Resources:
-    return Resources(
-        partition="il-cpu",
-        account="infolab",
-        qos="il-cpu",
-        time=time,
-        gpus="0",
-        cpus_per_task=cpus,
-        ntasks=1,
-        exclusive=False,
-        mem=mem,
-        mem_per_gpu=None,
-        constraint=None,
-        nodelist=None,
-        reservation=None,
-        dependency=None,
-        exclude=EXCLUDE_CPU,
-    )
-
-
-for arm, ckpt in ARMS.items():
-    features_root = f"{SHARE}/features_{arm}"
-
-    feat = submit(
-        "expts.repaper.baselines.featurize_rt:featurize_db",
-        args=dict(
-            db=DB,
-            # not forecast.json: featurize_rt resolves the whole list
-            # through get_tasks before it filters on db, so every db in it
-            # needs a staged meta.json, and only rel-f1 is staged here
-            # (183449/183451 died on rel-amazon/meta.json). Repo-relative,
-            # so it resolves from the clone root the ranks run in.
-            db_task_list="expts/repaper/baselines/rel2tabv2/rel-f1_driver-dnf.json",
-            pre_dir=PRE_DIR,
-            features_root=features_root,
-            ckpt=ckpt,
-            local_ctx_size=256,
-            bfs_width=32,
-            shuffle_seed=0,
-            context_seed=0,
-            db_cutoff=None,
-            batch_size=1024,
-        ),
-        resources=gpu_resources(8, "32G", "1:00:00"),
-        name=f"rel2tabv2-feat-{arm}-{DB}",
-        repo_root=REPO_ROOT,
-        cluster=ILC,
-        job_env="expts/job_env.sh",
-        log_root=f"{LOG_ROOT}/repaper/baselines/slurm-logs",
-        clone_root=CLONE_ROOT,
-        secrets_dir=SECRETS_DIR,
-    )
-
-    # ctx == local_ctx == 1024 as in the rdblearn arm, so the three are
-    # comparable: the query row's own BFS neighborhood takes the whole budget
-    # and the retriever is left ~5 labelled rows (measured 4.8 on this task).
+for arm, (method, features_root) in ARMS.items():
     submit(
         "expts.repaper.baselines.rel2tabv2.run:main",
         args=dict(
-            method="rt_lgbm",
+            method=method,
             db=DB,
             table=TABLE,
             split="test",
             pre_dir=PRE_DIR,
             features_root=features_root,
-            out_dir=f"{OUT_ROOT}/repaper-rel2tabv2/rt_lgbm-{arm}",
-            ctx_size_list=[1024],
+            out_dir=f"{OUT_ROOT}/repaper-rel2tabv2/{ROUND}/{arm}",
+            ctx_size_list=[CTX_SIZE],
             items_per_task=10_000_000,
-            local_ctx_size=1024,
+            local_ctx_size=LOCAL_CTX_SIZE,
             bfs_width=32,
             prefer_latest=True,
             num_walks=10_000,
@@ -145,22 +72,78 @@ for arm, ckpt in ARMS.items():
             tabicl_max_batch_size=1024,
             tabicl_min_bin_size=48,
             tabicl_softmax_temperature=0.9,
-            lgbm_n_jobs=8,
+            lgbm_n_jobs=16,
         ),
-        resources=cpu_resources(8, "32G", "2:00:00"),
-        name=f"rel2tabv2-rt_lgbm-{arm}-{DB}-{TABLE}",
+        # 337 rows x up to 512 features per fit and 702 fits, against ~5 rows
+        # last round, so 16 cpus for the joblib fan-out. il-cpu is uncapped and
+        # rambo alone had 280 free cpus, so all three arms run at once.
+        resources=Resources(
+            partition="il-cpu",
+            account="infolab",
+            qos="il-cpu",
+            time="4:00:00",
+            gpus="0",
+            cpus_per_task=16,
+            ntasks=1,
+            exclusive=False,
+            mem="32G",
+            mem_per_gpu=None,
+            constraint=None,
+            nodelist=None,
+            reservation=None,
+            dependency=None,
+            exclude=EXCLUDE_CPU,
+        ),
+        name=f"rel2tabv2-{ROUND}-{arm}-{DB}-{TABLE}",
         repo_root=REPO_ROOT,
         cluster=ILC,
         job_env="expts/job_env.sh",
         log_root=f"{LOG_ROOT}/repaper/baselines/slurm-logs",
         clone_root=CLONE_ROOT,
         secrets_dir=SECRETS_DIR,
-        after=feat.id,
     )
 
-# The rdblearn arm, run 2026-09-15 as jobs 183395/183396 (roc_auc 0.7252):
+# The featurize stages, kept for when a blob has to be rebuilt. The rt one
+# needs the curated one-task list: featurize_rt resolves the whole
+# db_task_list through get_tasks before filtering on db, and only rel-f1 is
+# staged here, so forecast.json dies on rel-amazon/meta.json (183449/183451).
 #
-# feat = submit(
+# for arm, ckpt in {
+#     "rt-j": "~/scratch/hf/stanford-star/rt-j",
+#     "rt-plurel": "~/scratch/hf/stanford-star/rt-plurel",
+# }.items():
+#     submit(
+#         "expts.repaper.baselines.featurize_rt:featurize_db",
+#         args=dict(
+#             db=DB,
+#             db_task_list="expts/repaper/baselines/rel2tabv2/rel-f1_driver-dnf.json",
+#             pre_dir=PRE_DIR,
+#             features_root=f"{SHARE}/features_{arm}",
+#             ckpt=ckpt,
+#             local_ctx_size=256,
+#             bfs_width=32,
+#             shuffle_seed=0,
+#             context_seed=0,
+#             db_cutoff=None,
+#             batch_size=1024,
+#         ),
+#         resources=Resources(
+#             partition="il", account="infolab", qos="il-interactive",
+#             time="1:00:00", gpus="a100:1", cpus_per_task=8, ntasks=None,
+#             exclusive=False, mem="32G", mem_per_gpu=None,
+#             constraint="ampere", nodelist=None, reservation=None,
+#             dependency=None, exclude="ampere4,ampere6,ampere7,ampere9",
+#         ),
+#         name=f"rel2tabv2-feat-{arm}-{DB}",
+#         repo_root=REPO_ROOT, cluster=ILC, job_env="expts/job_env.sh",
+#         log_root=f"{LOG_ROOT}/repaper/baselines/slurm-logs",
+#         clone_root=CLONE_ROOT, secrets_dir=SECRETS_DIR,
+#     )
+#
+# And the rdblearn one (183395), which takes (db, table) directly and needs
+# RAW_DIR plus the populated relbench cache:
+#
+# submit(
 #     "expts.repaper.baselines.featurize_rdblearn:featurize_table",
 #     args=dict(
 #         db=DB, table=TABLE, task_type="clf", pre_dir=PRE_DIR, raw_dir=RAW_DIR,
@@ -168,11 +151,6 @@ for arm, ckpt in ARMS.items():
 #         relbench_cache_dir=f"{SHARE}/relbench-cache",
 #         max_depth=2, max_train_samples=1000,
 #     ),
-#     resources=cpu_resources(16, "32G", "2:00:00"),
-#     name=f"rel2tabv2-feat-rdbl-{DB}-{TABLE}",
-#     repo_root=REPO_ROOT, cluster=ILC, job_env="expts/job_env.sh",
-#     log_root=f"{LOG_ROOT}/repaper/baselines/slurm-logs",
-#     clone_root=CLONE_ROOT, secrets_dir=SECRETS_DIR,
 #     pixi_env="featurize",
 #     setup=("pixi install -e featurize", "pixi run install-rdblearn"),
 # )
