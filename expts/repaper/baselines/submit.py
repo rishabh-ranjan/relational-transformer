@@ -55,7 +55,7 @@ def cpu_resources(mem: str, cpus: int) -> Resources:
         reservation=None,
         dependency=None,
         exclude=(
-            "hyperion1,hyperion3,hyperturing1,hyperturing2,madmax1,madmax2,"
+            "hyperion1,hyperion3,hyperturing1,hyperturing2,madmax2,"
             "madmax3,madmax4,madmax6,madmax7,trinity,turing1,turing2,turing3"
         ),
     )
@@ -248,7 +248,7 @@ for subdir, root in [
             reservation=None,
             dependency=None,
             exclude=(
-                "hyperion1,hyperion3,hyperturing1,hyperturing2,madmax1,madmax2,"
+                "hyperion1,hyperion3,hyperturing1,hyperturing2,madmax2,"
                 "madmax3,madmax4,madmax6,madmax7,trinity,turing1,turing2,turing3"
             ),
         ),
