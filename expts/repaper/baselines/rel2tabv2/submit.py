@@ -87,7 +87,12 @@ for arm, ckpt in ARMS.items():
         "expts.repaper.baselines.featurize_rt:featurize_db",
         args=dict(
             db=DB,
-            db_task_list=f"{PRE_DIR}/db-task-lists/forecast.json",
+            # not forecast.json: featurize_rt resolves the whole list
+            # through get_tasks before it filters on db, so every db in it
+            # needs a staged meta.json, and only rel-f1 is staged here
+            # (183449/183451 died on rel-amazon/meta.json). Repo-relative,
+            # so it resolves from the clone root the ranks run in.
+            db_task_list="expts/repaper/baselines/rel2tabv2/rel-f1_driver-dnf.json",
             pre_dir=PRE_DIR,
             features_root=features_root,
             ckpt=ckpt,
