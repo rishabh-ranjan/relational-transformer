@@ -11,14 +11,15 @@ N_SEEDS = 4
 
 
 def units(db: str, table: str, rank: int) -> list[tuple[Path, int]]:
-    icl = Path("~/scratch/relational-transformer/icl/rtv2/2026-08-25-icl").expanduser()
-    whole = icl / f"ens-rt-j-{db}-{table}-cfg{rank}"
-    if (whole / "result.json").exists():
-        return [(whole, N_SEEDS)]
-    return [(icl / f"ens-rt-j-{db}-{table}-cfg{rank}-s{k}", 1) for k in range(N_SEEDS)]
-    # from expts.repaper.config import OUT_ROOT
-    # unit = Path(OUT_ROOT).expanduser() / "repaper-submit" / f"cfg{rank}"
-    # return [(unit / f"{db}__{table}", N_SEEDS)]
+    from expts.repaper.config import OUT_ROOT
+
+    unit = Path(OUT_ROOT).expanduser() / "repaper-submit" / f"cfg{rank}"
+    return [(unit / f"{db}__{table}", N_SEEDS)]
+    # icl = Path("~/scratch/relational-transformer/icl/rtv2/2026-08-25-icl").expanduser()
+    # whole = icl / f"ens-rt-j-{db}-{table}-cfg{rank}"
+    # if (whole / "result.json").exists():
+    #     return [(whole, N_SEEDS)]
+    # return [(icl / f"ens-rt-j-{db}-{table}-cfg{rank}-s{k}", 1) for k in range(N_SEEDS)]
 
 
 def load_unit(unit: Path, seeds: int, cfg: list, ckpt: str) -> np.lib.npyio.NpzFile:
