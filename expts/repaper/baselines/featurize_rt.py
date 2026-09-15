@@ -58,6 +58,7 @@ def featurize_db(
             timeout_per_item=3600.0,
             vector_db_path=None,
             db_cutoff=db_cutoff,
+            legacy_boolean=False,
         )
 
         min_offset, total_nodes = table_offset_and_len(pre_dir, db, task.table_name)
