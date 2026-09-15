@@ -19,7 +19,7 @@ def build_rel2tab(
     assert family in ("rdblearn", "sql", "rt", "plurel"), (
         f"unknown feature family {family!r} in method {method!r}"
     )
-    assert predictor_name in ("lgbm", "tabicl"), (
+    assert predictor_name in ("lgbm", "tabicl", "baserate"), (
         f"unknown predictor {predictor_name!r} in method {method!r}"
     )
 
@@ -47,6 +47,11 @@ def build_rel2tab(
             checkpoint_dir=tabicl_dir,
             device=device,
         )
+    elif predictor_name == "baserate":
+        from expts.repaper.baselines.rel2tabv2.baserate import BaseRatePredictor
+
+        device = "cpu"
+        predictor = BaseRatePredictor()
     else:
         from expts.repaper.baselines.rel2tabv2.lgbm import LGBMPredictor
 
