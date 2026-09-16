@@ -22,17 +22,24 @@ REPO_ROOT = str(Path(__file__).resolve().parents[4])
 # the db into TensorFrames (text columns through GloVe) and its cache is keyed on
 # the dataset-level db, so the tasks of a db share it -- and two jobs on one db
 # would race to write it.
-# rel-f1 alone: this featurizer is new and rel-f1 is 9 tables and 74,063 nodes,
-# so a whole width sweep costs a couple of minutes.
-DBS = ["rel-f1"]
+# rel-event, whose user-ignore (clf) and user-attendance (reg) are the second
+# round's pair: one db, one entity table, 1,958 test rows each. rel-f1 is done.
+#
+# The graph cache for this db is cold and it is 3.2 G of tables with text columns
+# to push through GloVe, so the first (width, seed) is submitted alone to build
+# it -- 16 at once would race to write the same *.pt files. Widen CHANNELS/SEEDS
+# back out once it is warm; featurized() skips whatever is finished.
+DBS = ["rel-event"]
 
 # The width x init-seed grid feeding the ctx sweep in submit.py. Only `channels`
 # and `seed` vary -- num_neighbors stays [128, 64] and num_layers stays 2 -- so a
 # difference between two blobs is one of those two things. The root carries both
 # because the blob filename inside it does not (<table>_vectors.bin).
-CHANNELS = [8, 32, 128, 512]
-# 0-2 are already featurized and skipped by featurize_db's own blob check.
-SEEDS = list(range(8))
+CHANNELS = [8]
+SEEDS = [0]
+#
+# CHANNELS = [8, 32, 128, 512]
+# SEEDS = list(range(4))
 #
 # DBS = [
 #     "rel-f1",
