@@ -71,7 +71,9 @@ LONG = {"rel-amazon", "rel-hm", "rel-stack"}
 # the real ones under a 10-wide cap. Skip them here.
 def featurized(db: str, channels: int, seed: int) -> bool:
     root = Path(SHARE).expanduser() / f"features_gnn-c{channels}-s{seed}"
-    tables = [t for d, t in json.loads(Path(DB_TASK_LIST).read_text()) if d == db]
+    tables = [
+        t for d, t in json.loads(Path(DB_TASK_LIST).expanduser().read_text()) if d == db
+    ]
     return all((root / db / "gnn_features" / f"{t}_meta.json").exists() for t in tables)
 
 
