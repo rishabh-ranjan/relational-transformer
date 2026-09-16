@@ -17,7 +17,7 @@ from expts.repaper.config import (
 # The two cheap rel-f1 tasks, one clf and one reg, where the other featurizers
 # and predictors already have a number under this exact retriever and context,
 # so a new arm is read against them rather than alone.
-TASKS = [("rel-f1", "driver-dnf"), ("rel-f1", "driver-position")]
+TASKS = [("rel-f1", "driver-position")]
 #
 # The smoke wave that came before it, run as 184244-184249: rel-amazon/user-churn
 # is the largest test split in v1 at 351,885 rows, ~1375 eval batches at
@@ -41,7 +41,7 @@ RETRIEVER = "global_train"
 # there is, not which rows. 4096 fits both tasks' train splits (11,411 for
 # driver-dnf, 7,453 for driver-position).
 N_ROWS = [64, 256, 1024, 4096]
-ROUND = "gnn_width_x_ctx_x_seed"
+ROUND = "verify_refit_fix"
 
 # 4 widths x 4 featurizer init seeds x 4 context seeds, exaone throughout,
 # crossed with N_ROWS above: every (width, ctx) cell is 16 evaluations, varying
@@ -63,9 +63,9 @@ ARMS = {
             "context_seed": ctx_seed,
         },
     )
-    for c in (8, 32, 128, 512)
-    for seed in range(4)
-    for ctx_seed in range(4)
+    for c in (512,)
+    for seed in (0,)
+    for ctx_seed in (0,)
 }
 #
 # ARMS = {
@@ -85,18 +85,21 @@ ARMS = {
 #     "rt-plurel-tabfm": ("rt_tabfm", f"{SHARE}/features_rt-plurel"),
 # }
 
-# 2026-09-16: 24 evals of 702 and 760 rows, a couple of minutes each now that
-# each one sweeps four context sizes up to 4096 rows, so they go to a100 under
-# il, whose cap is 10 -- the queue rolls through them. The b200 cap is 2 for the
-# whole il partition, not 2 per qos: partition il carries QoS=il-part
-# (gres/gpu:b200=2), and only il-lo is flagged OverPartQOS, so a b200 job counts
-# against that 2 whichever qos it names -- which is what left the last round's
-# rel-f1 pair pending on QOSMaxGRESPerUser behind its own siblings. Two rel-f1
-# evals of 702 and 760 rows have no use for a b200 anyway, so both go to a100
-# under il (cap 10, 80 G cards). il-interactive caps wall at 12 h.
-QOS = {"rel-amazon": "il-interactive", "rel-f1": "il"}
-CARD = {"rel-amazon": "b200", "rel-f1": "a100"}
-TIME = {"rel-amazon": "12:00:00", "rel-f1": "2:00:00"}
+# 2026-09-16, 96 jobs to place. Every a100 in the partition is allocated except
+# 2 on ampere7 (which this exclude list drops), while blackwell1 sits entirely
+# idle with 8 b200. il caps total gpus at 10 whatever their type, and the b200
+# sub-cap is 2 for the whole partition rather than 2 per qos -- partition il
+# carries QoS=il-part (gres/gpu:b200=2), so a b200 job counts against that 2
+# whichever qos it names. The exception is il-lo, the one qos flagged
+# OverPartQOS: it allows gres/gpu:b200=8 and takes the whole idle node.
+#
+# il-lo is preemptible by il and these runs do not checkpoint, so a preempted
+# job restarts from zero -- acceptable here because the jobs are minutes long,
+# nothing else is asking for b200, and run.main skips an arm whose json already
+# exists, so a requeue redoes only its own work.
+QOS = {"rel-amazon": "il-interactive", "rel-f1": "il-lo"}
+CARD = {"rel-amazon": "b200", "rel-f1": "b200"}
+TIME = {"rel-amazon": "12:00:00", "rel-f1": "4:00:00"}
 # rel-amazon's preprocessed dir is 33 G and mmap_populate faults all of it in;
 # featurize_rt needed 240 G on the same db. rel-f1 is 12 M.
 MEM = {"rel-amazon": "240G", "rel-f1": "32G"}

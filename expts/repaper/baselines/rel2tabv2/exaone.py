@@ -10,7 +10,9 @@ class ExaonePredictor:
         self.device = device
         self._clf = None
         self._reg = None
-        self._fitted = None
+        # context key -> a model already fitted on it. One entry per distinct
+        # context, not one per call: see _fit_shared.
+        self._fitted = {}
 
     def _ensure_clf(self):
         if self._clf is None:
@@ -30,19 +32,47 @@ class ExaonePredictor:
             )
         return self._reg
 
-    def _already_fitted(self, train_features, train_labels, task_type):
+    def _fit_shared(self, train_features, train_labels, task_type, X, y):
         # Rel2TabModel caches the context tensors, so a query-independent
-        # retriever hands the same objects to every batch. rel-amazon/user-churn
-        # is 351,885 test rows at eval_bs 256, so refitting per call would be
-        # ~1375 identical fits. The fitted tensors are held here rather than
-        # their id()s, so nothing can be freed and have its address reused by a
-        # different context.
-        prev = self._fitted
-        return (
-            prev is not None
-            and prev[0] is train_features
-            and prev[1] is train_labels
-            and prev[2] == task_type
+        # retriever hands the same objects to every batch and the fit is
+        # repeatable work: rel-amazon/user-churn is 351,885 test rows at eval_bs
+        # 256, which is ~1375 identical fits.
+        #
+        # One model per context rather than one model and the last context's
+        # fit: _predict_shared loops the context sizes *inside* each batch, so a
+        # single fitted instance is invalidated by the next size and every size
+        # refits on every batch -- 4 fits per batch, 48 for a 12-batch
+        # driver-position run, where 4 would do. EXAONE's fit mutates the model,
+        # so holding several fits means holding several models.
+        #
+        # The key holds the tensors, not their id()s, so nothing can be freed
+        # and have its address reused by a different context.
+        key = (train_features, train_labels, task_type)
+        model = self._fitted.get(key)
+        if model is not None:
+            return model
+        # A per-query retriever would put a distinct context in every call and
+        # allocate a model for each; that is predict_batch's job, not this one.
+        assert len(self._fitted) < 16, (
+            f"{len(self._fitted)} distinct contexts fitted; predict_shared is "
+            f"for a query-independent retriever, use predict_batch instead"
+        )
+        model = self._new_shared_model(task_type)
+        model.fit(X, y)
+        self._fitted[key] = model
+        return model
+
+    def _new_shared_model(self, task_type):
+        if task_type == "clf":
+            from exaonetabular import EXAONETabularClassifier
+
+            return EXAONETabularClassifier.from_pretrained(
+                device=self.device, ensemble_count=self.ensemble_count
+            )
+        from exaonetabular import EXAONETabularRegressor
+
+        return EXAONETabularRegressor.from_pretrained(
+            device=self.device, ensemble_count=self.ensemble_count
         )
 
     def predict_batch(self, work_items):
@@ -107,23 +137,17 @@ class ExaonePredictor:
         if triv is not None:
             return [triv] * n_query
 
-        # One fit, then every query in one predict_proba. Equivalent to the
-        # per-query path rather than an approximation of it: predict_proba runs
-        # state["preprocessor"].transform, fitted during fit on the context
+        # One fit per context, then every query in one predict_proba. Equivalent
+        # to the per-query path rather than an approximation of it: predict_proba
+        # runs state["preprocessor"].transform, fitted during fit on the context
         # alone, so query rows cannot influence one another.
-        fitted = self._already_fitted(train_features, train_labels, task_type)
-        key = (train_features, train_labels, task_type)
         with torch.inference_mode(False):
             if task_type == "clf":
-                model = self._ensure_clf()
-                if not fitted:
-                    model.fit(X, y_int)
-                    self._fitted = key
+                model = self._fit_shared(
+                    train_features, train_labels, task_type, X, y_int
+                )
                 proba = model.predict_proba(X_query)
                 pos = int(np.flatnonzero(np.asarray(model.classes_) == 1)[0])
                 return [float(v) for v in proba[:, pos]]
-            model = self._ensure_reg()
-            if not fitted:
-                model.fit(X, y)
-                self._fitted = key
+            model = self._fit_shared(train_features, train_labels, task_type, X, y)
             return [float(v) for v in model.predict(X_query)]
