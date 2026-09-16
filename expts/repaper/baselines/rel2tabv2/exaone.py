@@ -10,6 +10,7 @@ class ExaonePredictor:
         self.device = device
         self._clf = None
         self._reg = None
+        self._fitted = None
 
     def _ensure_clf(self):
         if self._clf is None:
@@ -28,6 +29,21 @@ class ExaonePredictor:
                 device=self.device, ensemble_count=self.ensemble_count
             )
         return self._reg
+
+    def _already_fitted(self, train_features, train_labels, task_type):
+        # Rel2TabModel caches the context tensors, so a query-independent
+        # retriever hands the same objects to every batch. rel-amazon/user-churn
+        # is 351,885 test rows at eval_bs 256, so refitting per call would be
+        # ~1375 identical fits. The fitted tensors are held here rather than
+        # their id()s, so nothing can be freed and have its address reused by a
+        # different context.
+        prev = self._fitted
+        return (
+            prev is not None
+            and prev[0] is train_features
+            and prev[1] is train_labels
+            and prev[2] == task_type
+        )
 
     def predict_batch(self, work_items):
         results = []
@@ -95,11 +111,19 @@ class ExaonePredictor:
         # per-query path rather than an approximation of it: predict_proba runs
         # state["preprocessor"].transform, fitted during fit on the context
         # alone, so query rows cannot influence one another.
+        fitted = self._already_fitted(train_features, train_labels, task_type)
+        key = (train_features, train_labels, task_type)
         with torch.inference_mode(False):
             if task_type == "clf":
-                model = self._ensure_clf().fit(X, y_int)
+                model = self._ensure_clf()
+                if not fitted:
+                    model.fit(X, y_int)
+                    self._fitted = key
                 proba = model.predict_proba(X_query)
                 pos = int(np.flatnonzero(np.asarray(model.classes_) == 1)[0])
                 return [float(v) for v in proba[:, pos]]
-            model = self._ensure_reg().fit(X, y)
+            model = self._ensure_reg()
+            if not fitted:
+                model.fit(X, y)
+                self._fitted = key
             return [float(v) for v in model.predict(X_query)]
