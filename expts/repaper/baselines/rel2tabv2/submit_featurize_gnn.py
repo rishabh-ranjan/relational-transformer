@@ -94,7 +94,14 @@ for db in DBS:
                 num_layers=2,
                 num_neighbors=128,
                 aggr="sum",
+                # "uniform": an unbiased sample of the eligible history, against
+                # "last"'s most-recent-k, which is recency biased. Both honour the
+                # cutoff, so neither leaks.
                 temporal_strategy="uniform",
+                # 1, and not for performance: see featurize_gnn. Anything above 1
+                # makes the blob differ run to run, which would confound every
+                # comparison between featurizer configurations.
+                sampler_threads=1,
                 batch_size=512,
                 # 0: the loader's workers would each hold a copy of the materialized
                 # graph, and rel-amazon's is the reason this job asks for 400G.

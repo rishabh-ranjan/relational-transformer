@@ -17,6 +17,7 @@ def featurize_db(
     num_neighbors: int,
     aggr: str,
     temporal_strategy: str,
+    sampler_threads: int,
     batch_size: int,
     num_workers: int,
     seed: int,
@@ -67,9 +68,15 @@ def featurize_db(
     # race to write the same cache, which is how seven rdblearn jobs died on the
     # relbench cache (184096-184110).
     cache_dir = str(Path(graph_cache_dir).expanduser() / db)
+    # cpu, not `device`, exactly as examples/gnn_entity.py hardcodes it: the
+    # embeddings go into the TensorFrames that make_pkey_fkey_graph writes to
+    # cache_dir, so a cuda embedder makes the cache a file full of cuda tensors
+    # that torch_frame.load refuses to read on a cpu host ("Attempting to
+    # deserialize object on a CUDA device"). The GNN itself still runs on
+    # `device`; only this one-off encode is pinned.
     embedder_cfg = TextEmbedderConfig(
         text_embedder=GloveTextEmbedding(
-            model_path=Path(text_embedder_dir).expanduser(), device=device
+            model_path=Path(text_embedder_dir).expanduser(), device="cpu"
         ),
         batch_size=256,
     )
@@ -148,6 +155,16 @@ def featurize_db(
         for module in (encoder, temporal_encoder, gnn):
             module.eval()
 
+        # pyg-lib samples in parallel with one RandintEngine per thread, and
+        # each engine is seeded deterministically (vslNewStream(.., MT19937, 1)),
+        # so nothing here draws from entropy -- what varies run to run is which
+        # thread draws for which seed node. seed_everything cannot reach any of
+        # it. Measured on rel-f1/driver-top3, two separate processes with a warm
+        # graph cache: default threads DIFFER, one thread IDENTICAL
+        # (scripts/probe_sampler_seed.py, scripts/featurize_once.py). Set after
+        # make_pkey_fkey_graph so a cold cache still materializes and embeds in
+        # parallel; the GNN forward is on `device`, so this only costs sampling.
+        torch.set_num_threads(sampler_threads)
         loader = NeighborLoader(
             data,
             num_neighbors=[num_neighbors // 2**i for i in range(num_layers)],
