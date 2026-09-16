@@ -17,7 +17,7 @@ from expts.repaper.config import (
 # The two cheap rel-f1 tasks, one clf and one reg, where the other featurizers
 # and predictors already have a number under this exact retriever and context,
 # so a new arm is read against them rather than alone.
-TASKS = [("rel-f1", "driver-position")]
+TASKS = [("rel-f1", "driver-dnf"), ("rel-f1", "driver-position")]
 #
 # The smoke wave that came before it, run as 184244-184249: rel-amazon/user-churn
 # is the largest test split in v1 at 351,885 rows, ~1375 eval batches at
@@ -41,7 +41,7 @@ RETRIEVER = "global_train"
 # there is, not which rows. 4096 fits both tasks' train splits (11,411 for
 # driver-dnf, 7,453 for driver-position).
 N_ROWS = [64, 256, 1024, 4096]
-ROUND = "verify_refit_fix"
+ROUND = "gnn_width_x_ctx_x_seed"
 
 # 4 widths x 4 featurizer init seeds x 4 context seeds, exaone throughout,
 # crossed with N_ROWS above: every (width, ctx) cell is 16 evaluations, varying
@@ -63,9 +63,9 @@ ARMS = {
             "context_seed": ctx_seed,
         },
     )
-    for c in (512,)
-    for seed in (0,)
-    for ctx_seed in (0,)
+    for c in (8, 32, 128, 512)
+    for seed in range(4)
+    for ctx_seed in range(4)
 }
 #
 # ARMS = {
