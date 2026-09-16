@@ -1,3 +1,5 @@
+import os
+import subprocess
 from pathlib import Path
 
 from roach.slurm import Resources, submit
@@ -52,12 +54,16 @@ ARMS = {
 #     "rt-plurel-tabfm": ("rt_tabfm", f"{SHARE}/features_rt-plurel"),
 # }
 
-# 2026-09-16: blackwell1 has 5 of 8 b200 free with 1.9 T of its 3 T memory free,
-# and nothing of mine is on any gpu tier. il-interactive's 2 gpus go to the
-# rel-amazon pair -- 351,885 queries against rel-f1's 760, so they are the whole
-# wall clock -- and il's 2-b200 sub-cap takes the rel-f1 pair. Four b200 asked
-# for, four free, nothing pends. il-interactive caps wall at 12 h.
+# 2026-09-16: blackwell1 has 5 of 8 b200 free and ampere8 5 of 8 a100, nothing
+# of mine on any gpu tier. The b200 cap is 2 for the whole il partition, not 2
+# per qos: partition il carries QoS=il-part (gres/gpu:b200=2), and only il-lo is
+# flagged OverPartQOS, so a b200 job counts against that 2 whichever qos it
+# names. So the rel-amazon pair -- 351,885 queries against rel-f1's 760, the
+# whole wall clock -- takes both b200 under il-interactive, and the rel-f1 pair
+# goes to a100 under il (cap 10, 80 G cards, ample for a 760-row eval) rather
+# than pending forever behind its own sibling. il-interactive caps wall at 12 h.
 QOS = {"rel-amazon": "il-interactive", "rel-f1": "il"}
+CARD = {"rel-amazon": "b200", "rel-f1": "a100"}
 TIME = {"rel-amazon": "12:00:00", "rel-f1": "2:00:00"}
 # rel-amazon's preprocessed dir is 33 G and mmap_populate faults all of it in;
 # featurize_rt needed 240 G on the same db. rel-f1 is 12 M.
@@ -66,28 +72,47 @@ MEM = {"rel-amazon": "240G", "rel-f1": "32G"}
 REPO_ROOT = str(Path(__file__).resolve().parents[4])
 
 
-def gpu_resources(db: str, card: str) -> Resources:
+# Same guard as submit_featurize.py. run.main already returns early if its json
+# exists, so a finished arm is cheap to re-ask for, but a job still running has
+# written nothing yet and would be duplicated onto the same out_dir.
+def queued() -> set[str]:
+    out = subprocess.run(
+        ["squeue", "-h", "-u", os.environ["USER"], "-o", "%j"],
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    return set(out.stdout.split())
+
+
+busy = queued()
+
+
+def gpu_resources(db: str) -> Resources:
     return Resources(
         partition="il",
         account="infolab",
         qos=QOS[db],
         time=TIME[db],
-        gpus=f"{card}:1",
+        gpus=f"{CARD[db]}:1",
         cpus_per_task=8,
         ntasks=None,
         exclusive=False,
         mem=MEM[db],
         mem_per_gpu=None,
-        constraint="ampere" if card == "a100" else None,
-        nodelist="blackwell1" if card == "b200" else None,
+        constraint="ampere" if CARD[db] == "a100" else None,
+        nodelist="blackwell1" if CARD[db] == "b200" else None,
         reservation=None,
         dependency=None,
-        exclude="ampere4,ampere6,ampere7,ampere9" if card == "a100" else None,
+        exclude="ampere4,ampere6,ampere7,ampere9" if CARD[db] == "a100" else None,
     )
 
 
 for db, table in TASKS:
     for arm, (method, features_root) in ARMS.items():
+        name = f"rel2tabv2-{ROUND}-{arm}-{db}-{table}"
+        if name in busy:
+            continue
         submit(
             "expts.repaper.baselines.rel2tabv2.run:main",
             args=dict(
@@ -127,8 +152,8 @@ for db, table in TASKS:
                 context_sampler="uniform",
                 context_split="train",
             ),
-            resources=gpu_resources(db, "b200"),
-            name=f"rel2tabv2-{ROUND}-{arm}-{db}-{table}",
+            resources=gpu_resources(db),
+            name=name,
             repo_root=REPO_ROOT,
             cluster=ILC,
             job_env="expts/job_env.sh",
