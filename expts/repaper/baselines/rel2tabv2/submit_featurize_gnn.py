@@ -1,3 +1,4 @@
+import json
 import os
 import subprocess
 from pathlib import Path
@@ -58,6 +59,15 @@ MEM = {
 LONG = {"rel-amazon", "rel-hm", "rel-stack"}
 
 
+# featurize_db skips a table whose blob exists, but that still costs a job, a
+# clone and a pixi install: going from 3 seeds to 8 queued 12 no-op jobs ahead of
+# the real ones under a 10-wide cap. Skip them here.
+def featurized(db: str, channels: int, seed: int) -> bool:
+    root = Path(SHARE).expanduser() / f"features_gnn-c{channels}-s{seed}"
+    tables = [t for d, t in json.loads(Path(DB_TASK_LIST).read_text()) if d == db]
+    return all((root / db / "gnn_features" / f"{t}_meta.json").exists() for t in tables)
+
+
 def queued() -> set[str]:
     out = subprocess.run(
         ["squeue", "-h", "-u", os.environ["USER"], "-o", "%j"],
@@ -74,7 +84,7 @@ for db in DBS:
     for channels in CHANNELS:
         for seed in SEEDS:
             name = f"rel2tabv2-feat-gnn-c{channels}-s{seed}-{db}"
-            if name in busy:
+            if name in busy or featurized(db, channels, seed):
                 continue
             submit(
                 "expts.repaper.baselines.featurize_gnn:featurize_db",
