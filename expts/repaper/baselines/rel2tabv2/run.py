@@ -109,6 +109,7 @@ def main(
     )
 
     per_ctx: dict[int, dict] = OrderedDict()
+    saved_preds: dict[str, np.ndarray] = {}
     for _task, ctx, labels, preds_by_prefix, num_labels in ev.evaluate_raw(
         [(model, "")], ctx_sizes
     ):
@@ -124,9 +125,18 @@ def main(
             "n": int(labels.shape[0]),
             "mean_labels": float(np.mean(num_labels)),
         }
+        preds = np.asarray(preds_by_prefix[""], dtype=np.float64)
+        saved_preds[f"preds_{int(ctx)}"] = preds
+        saved_preds["labels"] = np.asarray(labels, dtype=np.float64)
         print(
             f"{db}/{table} ctx={ctx}: {metric_name}={metric_value:.4f} "
             f"(n={labels.shape[0]}, labels={per_ctx[int(ctx)]['mean_labels']:.1f})",
+            flush=True,
+        )
+        print(
+            f"  preds: {len(np.unique(preds))} distinct, "
+            f"min {preds.min():.4f} p50 {np.median(preds):.4f} "
+            f"max {preds.max():.4f} mean {preds.mean():.4f} std {preds.std():.4f}",
             flush=True,
         )
 
@@ -162,4 +172,8 @@ def main(
             },
         },
     )
-    print(f"wrote {out_path}", flush=True)
+    # The metric alone cannot distinguish a real fit from a degenerate one, and
+    # rerunning an arm to find out costs more than the 702 floats do.
+    preds_path = out_path.with_name(f"{db}__{table}_preds.npz")
+    np.savez(preds_path, **saved_preds)
+    print(f"wrote {out_path} and {preds_path}", flush=True)
