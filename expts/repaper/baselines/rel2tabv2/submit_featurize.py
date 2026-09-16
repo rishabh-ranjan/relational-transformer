@@ -71,9 +71,9 @@ REPO_ROOT = str(Path(__file__).resolve().parents[4])
 # Same idiom as baselines/submit.py: a finished blob or an already-queued job is
 # skipped, so this file can be rerun to fill in only what is missing. Without
 # it a rerun would duplicate a job still writing its blob and redo the work.
-def featurized(db: str, subdir: str, table: str) -> bool:
+def featurized(db: str, table: str) -> bool:
     meta = (
-        Path(SHARE).expanduser() / f"{subdir}/{db}/rdblearn_features/{table}_meta.json"
+        Path(SHARE).expanduser() / f"features/{db}/rdblearn_features/{table}_meta.json"
     )
     return meta.exists()
 
@@ -145,7 +145,7 @@ def rt_resources(db: str, card: str, qos: str) -> Resources:
 # the featurize environment, hence the --no-deps install in setup.
 for task in TASKS:
     name = f"rel2tabv2-feat-rdbl-{task.db_name}-{task.table_name}"
-    if featurized("features", task.db_name, task.table_name) or name in busy:
+    if featurized(task.db_name, task.table_name) or name in busy:
         continue
     submit(
         "expts.repaper.baselines.featurize_rdblearn:featurize_table",
