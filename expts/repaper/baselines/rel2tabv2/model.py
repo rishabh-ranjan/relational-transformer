@@ -10,34 +10,65 @@ def _fmt(secs):
 
 
 class Rel2TabModel(nn.Module):
-    def __init__(self, retriever, featurizer, predictor):
+    def __init__(self, retriever, featurizer, predictor, labels=None):
         super().__init__()
         self.retriever = retriever
         self.featurizer = featurizer
         self.predictor = predictor
+        # Only a query-independent retriever needs this: it returns indices for
+        # rows that are not in the batch, so their labels have to be fetched.
+        # The per-query retriever's context rows are in the batch already.
+        self.labels = labels
+        self._context = None
+
+    def _shared_context(self, task):
+        # Built once per task: the retriever's indices do not vary across
+        # batches, so neither do the features and labels for them.
+        if self._context is None:
+            assert self.labels is not None, (
+                "a query-independent retriever needs a label source"
+            )
+            self._context = {}
+            for n, node_idxs in self.retriever.context_node_idxs().items():
+                idx = torch.from_numpy(node_idxs.astype("int64"))
+                feats = self.featurizer.compute_features(task, idx, "cpu")
+                y = self.labels.labels_for(task, node_idxs)
+                self._context[n] = (feats, y)
+                print(
+                    f"    rel2tab context: {task.db_name}/{task.table_name} "
+                    f"n={n} rows, {feats.shape[1]} features, "
+                    f"label mean {float(y.mean()):.4f} "
+                    f"frac>0 {float((y > 0).float().mean()):.4f}",
+                    flush=True,
+                )
+        return self._context
 
     def _predict_shared(self, batch, eval_ctx_size_list, task):
         bs = batch["is_targets"].size(0)
 
         tic = time.time()
-        ctx = self.retriever.retrieve(batch, eval_ctx_size_list, task)
+        context = self._shared_context(task)
+        queries = self.retriever.queries(batch, eval_ctx_size_list)
+        query_features = self.featurizer.compute_features(
+            task, queries.node_idxs, "cpu"
+        )
         t_retrieve = time.time() - tic
 
         default = 0.5 if task.task_type == "clf" else 0.0
         preds = {}
-        visible = ctx.visible
+        visible = queries.visible
         n_visible = int(visible.sum().item())
 
         tic = time.time()
         for c in eval_ctx_size_list:
             out = torch.full((bs,), default)
-            out[ctx.num_queries :] = 0.0
+            out[queries.num_queries :] = 0.0
             if n_visible:
-                train_features, train_labels = ctx.per_ctx[c]
+                train_features, train_labels = context[c]
                 values = self.predictor.predict_shared(
                     train_features,
                     train_labels,
-                    ctx.query_features[visible],
+                    query_features[visible],
                     task.task_type,
                 )
                 assert len(values) == n_visible, (

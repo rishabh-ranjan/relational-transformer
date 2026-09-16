@@ -8,7 +8,6 @@ from expts.repaper.config import (
     LOG_ROOT,
     OUT_ROOT,
     PRE_DIR,
-    RAW_DIR,
     SECRETS_DIR,
     SHARE,
 )
@@ -79,7 +78,6 @@ for arm, (method, features_root, qos, card) in ARMS.items():
             table=TABLE,
             split="test",
             pre_dir=PRE_DIR,
-            raw_dir=RAW_DIR,
             features_root=features_root,
             out_dir=f"{OUT_ROOT}/repaper-rel2tabv2/{ROUND}/{arm}",
             ctx_size_list=N_ROWS,

@@ -1,8 +1,15 @@
 import json
 import os
+import pickle
 import uuid
 from collections import OrderedDict
 from pathlib import Path
+
+# The preprocessed collection's text embedder. build_evaluator and the global
+# retriever's label source both read the same data, so they take it from here
+# rather than each carrying a literal that could drift.
+EMBEDDER = "all-MiniLM-L12-v2"
+D_TEXT = 384
 
 
 def _atomic_write_json(path: Path, obj: dict) -> None:
@@ -46,7 +53,6 @@ def main(
     retriever: str,
     context_sampler: str,
     context_split: str,
-    raw_dir: str,
 ) -> None:
     out_path = Path(out_dir).expanduser() / f"{db}__{table}.json"
     if out_path.exists():
@@ -82,14 +88,15 @@ def main(
         # for the global retriever these are context ROW counts, not cells
         n_rows_list=ctx_sizes,
         pre_dir=pre_dir,
-        raw_dir=raw_dir,
+        embedder=EMBEDDER,
+        d_text=D_TEXT,
     )
 
     ev = build_evaluator(
         [task],
         pre_dir,
-        embedder="all-MiniLM-L12-v2",
-        d_text=384,
+        embedder=EMBEDDER,
+        d_text=D_TEXT,
         device=device,
         ctx_size_list=ctx_sizes,
         local_ctx_size=local_ctx_size,
@@ -140,6 +147,21 @@ def main(
             flush=True,
         )
 
+    result = {
+        "method": method,
+        "task": f"{db}/{table}",
+        "db": db,
+        "table": table,
+        "task_type": task.task_type,
+        "per_ctx": {int(c): per_ctx[c] for c in sorted(per_ctx)},
+        "labels": saved_preds.get("labels"),
+        "preds": {
+            int(k.removeprefix("preds_")): v
+            for k, v in saved_preds.items()
+            if k.startswith("preds_")
+        },
+    }
+
     _atomic_write_json(
         out_path,
         {
@@ -176,4 +198,12 @@ def main(
     # rerunning an arm to find out costs more than the 702 floats do.
     preds_path = out_path.with_name(f"{db}__{table}_preds.npz")
     np.savez(preds_path, **saved_preds)
-    print(f"wrote {out_path} and {preds_path}", flush=True)
+
+    pickle_path = out_path.with_name(f"{db}__{table}.pkl")
+    result["config"] = json.loads(out_path.read_text())["config"]
+    tmp = pickle_path.parent / f".tmp.{os.getpid()}.{uuid.uuid4().hex}.pkl"
+    with open(tmp, "wb") as f:
+        pickle.dump(result, f, protocol=pickle.HIGHEST_PROTOCOL)
+    os.replace(tmp, pickle_path)
+
+    print(f"wrote {out_path}, {preds_path} and {pickle_path}", flush=True)

@@ -47,10 +47,9 @@ def _install_attention_patch():
     with _patch_lock:
         if _patch_installed:
             return
-        from torch.nn import functional as F
-
         from tabicl._model import attention as _attn_mod
         from tabicl._model.layers import MultiheadAttentionBlock
+        from torch.nn import functional as F
 
         orig_block_forward = MultiheadAttentionBlock.forward
         orig_sdpa = _attn_mod.sdpa_with_flattened_batch
