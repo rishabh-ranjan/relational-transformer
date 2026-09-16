@@ -73,11 +73,11 @@ class GlobalContextRetriever:
         self.n_rows_list = sorted(n_rows_list)
         drawn = sampler.sample(candidates, self.n_rows_list[-1])
 
-        self._ctx_node_idxs = {n: drawn[:n] for n in self.n_rows_list}
+        self._ctx_node_idxs = {n: np.sort(drawn[:n]) for n in self.n_rows_list}
         self._ctx_cache: dict[int, tuple[torch.Tensor, torch.Tensor]] = {}
 
     def _label_column(self, task):
-        target = task.target_col
+        target = task.target_column
         assert target in self._labels_by_row.columns, (
             f"{self.db}/{self.table}: task rows have no target column "
             f"{target!r}; got {list(self._labels_by_row.columns)}"

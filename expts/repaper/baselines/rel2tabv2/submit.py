@@ -23,19 +23,24 @@ METHOD = "rdblearn_exaone"
 # context -- given the same rows the computation is identical, which is what
 # predict_shared's bit-exactness against predict_batch establishes.
 #
-# These numbers are context ROW counts, not cells, so they do not belong on the
-# same axis as the ctx=256..8192 curves. 336 is here because it is what the
-# per-query ctx=8192 arm averaged (mean_labels 336.3), making that one point a
-# like-for-like comparison against its 0.8238.
+# One size, exactly 1024 rows, drawn by UniformRandomSampler: a seeded
+# rng.choice(train_node_idxs, size=1024, replace=False). Reproducible -- the
+# generator is reseeded from context_seed on every call, so the same seed gives
+# the same 1024 rows (checked), and the draw spans the whole train range
+# 1950-2004 at an 0.868 positive rate against train's 0.880.
+#
+# This number is a context ROW count, not cells, so it does not belong on the
+# same axis as the ctx=256..8192 curves. For reference the per-query ctx=8192
+# arm averaged 336 labelled rows, so 1024 is about 3x the context it had.
 RETRIEVER = "global_train"
-N_ROWS = [64, 256, 336, 1024]
-ROUND = f"global_uniform_seed0_{METHOD}"
+N_ROWS = [1024]
+ROUND = f"global_uniform_seed0_n1024_{METHOD}"
 
 # The sampler still runs, only to say which rows are queries and what their
 # labels are; its context is discarded. num_walks=0 and a small local_ctx_size
 # keep it from doing work nobody reads. max(N_ROWS) sets eval_bs
 # (2**18 // 1024 = 256), so 702 test rows come in 3 batches and EXAONE fits
-# 3 x 4 = 12 times rather than once per query.
+# 3 times rather than once per query.
 REPO_ROOT = str(Path(__file__).resolve().parents[4])
 
 # 2026-09-15: 4 of 8 b200 free, blackwell1 not reserved, nothing of mine on any

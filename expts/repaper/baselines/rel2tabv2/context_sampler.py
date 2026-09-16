@@ -17,7 +17,11 @@ class UniformRandomSampler(ContextSampler):
             f"candidates are available"
         )
         rng = np.random.default_rng(self.seed)
-        return np.sort(rng.choice(candidates, size=n_rows, replace=False))
+        # Random order, deliberately unsorted: the caller nests sizes by taking
+        # prefixes, and a prefix of a random permutation is itself a uniform
+        # subset. Sorting here made drawn[:64] the 64 lowest node indices, which
+        # on rel-f1 is 1950-1954 rather than a sample of 1950-2004.
+        return rng.choice(candidates, size=n_rows, replace=False)
 
 
 class MostRecentSampler(ContextSampler):
@@ -36,3 +40,21 @@ class MostRecentSampler(ContextSampler):
         )
         newest = np.argsort(ts, kind="stable")[::-1][:n_rows]
         return np.sort(candidates[newest])
+
+
+class BernoulliSampler(ContextSampler):
+    def __init__(self, seed, probability):
+        assert 0.0 < probability <= 1.0, f"probability {probability} not in (0, 1]"
+        self.seed = seed
+        self.probability = probability
+
+    def sample(self, candidates, n_rows):
+        # n_rows is ignored: the size is what the coin flips give,
+        # |context| ~ Binomial(len(candidates), probability). One uniform per
+        # candidate, thresholded, so a family of probabilities drawn from the
+        # same seed is nested -- every row in the p=0.01 context is in the
+        # p=0.1 one.
+        candidates = np.asarray(candidates)
+        rng = np.random.default_rng(self.seed)
+        keep = rng.random(len(candidates)) < self.probability
+        return candidates[keep]
