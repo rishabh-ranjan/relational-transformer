@@ -97,8 +97,23 @@ ARMS = {
 # job restarts from zero -- acceptable here because the jobs are minutes long,
 # nothing else is asking for b200, and run.main skips an arm whose json already
 # exists, so a requeue redoes only its own work.
-QOS = {"rel-amazon": "il-interactive", "rel-f1": "il-lo"}
-CARD = {"rel-amazon": "b200", "rel-f1": "b200"}
+#
+# Both card types at once, because their budgets are disjoint: rtx8000 has its
+# own sub-cap under il (gres/gpu:rtx8000=10) and b200 runs under il-lo, so 18
+# jobs run concurrently rather than 8. Split by cost -- driver-dnf is ~2 min a
+# job and goes to the older, slower, entirely idle rtx8000 (20 cards, 2 T of
+# host memory, sm_75 which this torch ships kernels for, and EXAONE computes in
+# fp16 rather than bf16 so Turing's tensor cores apply); driver-position keeps
+# the b200 because its c512 cells are the long pole at ~6.5 min.
+#
+# The rtx8000 nodes have never run one of these, so the driver there is the one
+# untested thing. run.main skips an arm whose json exists, which makes a
+# resubmit of anything that dies cost only the arms that actually failed.
+ROUTE = {
+    ("rel-amazon", "user-churn"): ("il-interactive", "b200"),
+    ("rel-f1", "driver-dnf"): ("il", "rtx8000"),
+    ("rel-f1", "driver-position"): ("il-lo", "b200"),
+}
 TIME = {"rel-amazon": "12:00:00", "rel-f1": "4:00:00"}
 # rel-amazon's preprocessed dir is 33 G and mmap_populate faults all of it in;
 # featurize_rt needed 240 G on the same db. rel-f1 is 12 M.
@@ -130,23 +145,24 @@ def queued() -> set[str]:
 busy = queued()
 
 
-def gpu_resources(db: str) -> Resources:
+def gpu_resources(db: str, table: str) -> Resources:
+    qos, card = ROUTE[(db, table)]
     return Resources(
         partition="il",
         account="infolab",
-        qos=QOS[db],
+        qos=qos,
         time=TIME[db],
-        gpus=f"{CARD[db]}:1",
+        gpus=f"{card}:1",
         cpus_per_task=8,
         ntasks=None,
         exclusive=False,
         mem=MEM[db],
         mem_per_gpu=None,
-        constraint="ampere" if CARD[db] == "a100" else None,
-        nodelist="blackwell1" if CARD[db] == "b200" else None,
+        constraint="ampere" if card == "a100" else None,
+        nodelist="blackwell1" if card == "b200" else None,
         reservation=None,
         dependency=None,
-        exclude="ampere4,ampere6,ampere7,ampere9" if CARD[db] == "a100" else None,
+        exclude="ampere4,ampere6,ampere7,ampere9" if card == "a100" else None,
     )
 
 
@@ -211,7 +227,7 @@ for db, table in TASKS:
                 context_split="train",
                 tags=tags,
             ),
-            resources=gpu_resources(db),
+            resources=gpu_resources(db, table),
             name=name,
             repo_root=REPO_ROOT,
             cluster=ILC,
