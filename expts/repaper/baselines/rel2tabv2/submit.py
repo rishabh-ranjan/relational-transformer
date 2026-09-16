@@ -38,11 +38,14 @@ RETRIEVER = "global_train"
 N_ROWS = [1024]
 ROUND = "global_uniform_seed0_n1024"
 
-# The randomly-initialized RelBench GNN's first read: 128-d, 2-hop, untrained,
-# against exaone on rdblearn (0.7640 / 0.5040), rt-j (0.7407) and rt-plurel
-# (0.6758). Only rel-f1 is featurized so far.
+# The randomly-initialized GNN's width sweep, exaone throughout. Only `channels`
+# differs between the three feature roots, so the spread across these rows is
+# the width and nothing else. Read against exaone on rdblearn (73-d: 0.7640
+# auroc / 0.5040 mae), rt-j (512-d: 0.7407) and rt-plurel (512-d: 0.6758) --
+# note the 512 row here is the same width as both rt featurizers.
 ARMS = {
-    "gnn-exaone": ("gnn_exaone", f"{SHARE}/features_gnn"),
+    f"gnn{c}-exaone": ("gnn_exaone", f"{SHARE}/features_gnn-{c}")
+    for c in (32, 128, 512)
 }
 #
 # ARMS = {
@@ -62,9 +65,9 @@ ARMS = {
 #     "rt-plurel-tabfm": ("rt_tabfm", f"{SHARE}/features_rt-plurel"),
 # }
 
-# 2026-09-16: ampere8 has 2 of 8 a100 free, blackwell1 4 of 8 b200, nothing of
-# mine on any gpu tier. Two 702- and 760-row evals, so two a100 under il is the
-# whole ask. The b200 cap is 2 for the
+# 2026-09-16: six 702- and 760-row evals, a minute each, so they go to a100
+# under il, whose cap is 10 -- the three featurize jobs they follow hand their
+# a100 back as they finish. The b200 cap is 2 for the
 # whole il partition, not 2 per qos: partition il carries QoS=il-part
 # (gres/gpu:b200=2), and only il-lo is flagged OverPartQOS, so a b200 job counts
 # against that 2 whichever qos it names -- which is what left the last round's
