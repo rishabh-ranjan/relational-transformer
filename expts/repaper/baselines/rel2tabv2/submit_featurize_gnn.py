@@ -21,15 +21,20 @@ REPO_ROOT = str(Path(__file__).resolve().parents[4])
 # the db into TensorFrames (text columns through GloVe) and its cache is keyed on
 # the dataset-level db, so the tasks of a db share it -- and two jobs on one db
 # would race to write it.
-DBS = [
-    "rel-f1",
-    "rel-trial",
-    "rel-event",
-    "rel-avito",
-    "rel-stack",
-    "rel-hm",
-    "rel-amazon",
-]
+# rel-f1 alone first: this featurizer has never run, and rel-f1 is 9 tables and
+# 74,063 nodes, so a wrong assumption surfaces in minutes rather than after
+# rel-amazon's materialization.
+DBS = ["rel-f1"]
+#
+# DBS = [
+#     "rel-f1",
+#     "rel-trial",
+#     "rel-event",
+#     "rel-avito",
+#     "rel-stack",
+#     "rel-hm",
+#     "rel-amazon",
+# ]
 
 # The materialization holds the whole db as TensorFrames, text embeddings
 # included, so this tracks db size rather than task size. Same ladder the rt
