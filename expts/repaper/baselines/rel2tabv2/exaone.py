@@ -67,3 +67,39 @@ class ExaonePredictor:
                     model = self._ensure_reg().fit(X, y)
                     results.append(float(model.predict(x_test)[0]))
         return results
+
+    def predict_shared(self, train_features, train_labels, query_features, task_type):
+        X = np.nan_to_num(
+            train_features.float().cpu().numpy().astype(np.float64),
+            nan=0.0,
+            posinf=0.0,
+            neginf=0.0,
+        )
+        y = np.nan_to_num(
+            train_labels.float().cpu().numpy().astype(np.float64), nan=0.0
+        )
+        X_query = np.nan_to_num(
+            query_features.float().cpu().numpy().astype(np.float64),
+            nan=0.0,
+            posinf=0.0,
+            neginf=0.0,
+        )
+        n_query = X_query.shape[0]
+
+        y_int = (y > 0).astype(np.int64)
+        triv = trivial_prediction(y_int, task_type, X.shape[0])
+        if triv is not None:
+            return [triv] * n_query
+
+        # One fit, then every query in one predict_proba. Equivalent to the
+        # per-query path rather than an approximation of it: predict_proba runs
+        # state["preprocessor"].transform, fitted during fit on the context
+        # alone, so query rows cannot influence one another.
+        with torch.inference_mode(False):
+            if task_type == "clf":
+                model = self._ensure_clf().fit(X, y_int)
+                proba = model.predict_proba(X_query)
+                pos = int(np.flatnonzero(np.asarray(model.classes_) == 1)[0])
+                return [float(v) for v in proba[:, pos]]
+            model = self._ensure_reg().fit(X, y)
+            return [float(v) for v in model.predict(X_query)]

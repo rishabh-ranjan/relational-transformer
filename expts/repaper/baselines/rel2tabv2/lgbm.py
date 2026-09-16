@@ -48,3 +48,32 @@ class LGBMPredictor:
         for (i, _), v in zip(jobs, fitted):
             results[i] = v
         return results
+
+    def predict_shared(self, train_features, train_labels, query_features, task_type):
+        X = train_features.float().cpu().numpy()
+        y = np.nan_to_num(train_labels.float().cpu().numpy(), nan=0.0)
+        X_query = query_features.float().cpu().numpy()
+        n_query = X_query.shape[0]
+
+        # The degenerate conditions are properties of the context alone now, so
+        # they hold for every query at once. self.params keeps n_jobs=1 so a
+        # shared fit is bit-identical to the per-query arms' fits rather than
+        # merely close: lightgbm's histogram sums are thread-order dependent.
+        if len(y) < 2:
+            return [0.5 if task_type == "clf" else 0.0] * n_query
+
+        if task_type == "clf":
+            from lightgbm import LGBMClassifier
+
+            y_int = (y > 0).astype(int)
+            if len(np.unique(y_int)) < 2:
+                return [float(y_int[0])] * n_query
+            model = LGBMClassifier(**self.params)
+            model.fit(X, y_int)
+            return [float(v) for v in model.predict_proba(X_query)[:, 1]]
+
+        from lightgbm import LGBMRegressor
+
+        model = LGBMRegressor(**self.params)
+        model.fit(X, y)
+        return [float(v) for v in model.predict(X_query)]

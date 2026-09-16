@@ -16,6 +16,13 @@ def build_rel2tab(
     lgbm_n_jobs: int,
     exaone_ensemble_count: int,
     tabfm_backend: str,
+    retriever: str,
+    context_sampler: str,
+    context_seed: int,
+    context_split: str,
+    n_rows_list: list[int],
+    pre_dir: str,
+    raw_dir: str,
 ) -> tuple[Rel2TabModel, str]:
     family, predictor_name = method.rsplit("_", 1)
     assert family in ("rdblearn", "sql", "rt", "plurel", "relagent"), (
@@ -71,4 +78,30 @@ def build_rel2tab(
         device = "cpu"
         predictor = LGBMPredictor(n_jobs=lgbm_n_jobs)
 
-    return Rel2TabModel(SamplerRetriever(), featurizer, predictor), device
+    if retriever == "sampler":
+        retr = SamplerRetriever()
+    elif retriever == "global_train":
+        from expts.repaper.baselines.rel2tabv2.context_sampler import (
+            UniformRandomSampler,
+        )
+        from expts.repaper.baselines.rel2tabv2.global_retriever import (
+            GlobalContextRetriever,
+        )
+
+        assert context_sampler == "uniform", (
+            f"unknown context sampler {context_sampler!r}"
+        )
+        retr = GlobalContextRetriever(
+            sampler=UniformRandomSampler(seed=context_seed),
+            featurizer=featurizer,
+            db=db,
+            table=table,
+            pre_dir=pre_dir,
+            raw_dir=raw_dir,
+            context_split=context_split,
+            n_rows_list=n_rows_list,
+        )
+    else:
+        raise AssertionError(f"unknown retriever {retriever!r}")
+
+    return Rel2TabModel(retr, featurizer, predictor), device

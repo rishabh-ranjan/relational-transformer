@@ -43,6 +43,10 @@ def main(
     lgbm_n_jobs: int,
     exaone_ensemble_count: int,
     tabfm_backend: str,
+    retriever: str,
+    context_sampler: str,
+    context_split: str,
+    raw_dir: str,
 ) -> None:
     out_path = Path(out_dir).expanduser() / f"{db}__{table}.json"
     if out_path.exists():
@@ -71,6 +75,14 @@ def main(
         lgbm_n_jobs=lgbm_n_jobs,
         exaone_ensemble_count=exaone_ensemble_count,
         tabfm_backend=tabfm_backend,
+        retriever=retriever,
+        context_sampler=context_sampler,
+        context_seed=context_seed,
+        context_split=context_split,
+        # for the global retriever these are context ROW counts, not cells
+        n_rows_list=ctx_sizes,
+        pre_dir=pre_dir,
+        raw_dir=raw_dir,
     )
 
     ev = build_evaluator(
@@ -129,6 +141,9 @@ def main(
             "per_ctx": {str(c): per_ctx[c] for c in sorted(per_ctx)},
             "config": {
                 "method": method,
+                "retriever": retriever,
+                "context_sampler": context_sampler,
+                "context_split": context_split,
                 "split": split,
                 "ctx_sizes": ctx_sizes,
                 "items_per_task": items_per_task,

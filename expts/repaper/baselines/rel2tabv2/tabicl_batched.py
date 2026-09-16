@@ -477,3 +477,27 @@ class TabICLBatchedPredictor:
                     results[item[0]] = float(pred_np[j])
 
         return results
+
+    def predict_shared(self, train_features, train_labels, query_features, task_type):
+        # Deliberately a delegation, not a fused forward. TabICL's sequence is
+        # [train rows..., one query row] and its row attention is bidirectional
+        # over that sequence, so appending Q query rows to a single context
+        # would let the queries attend to each other -- a different (and
+        # leaky) computation, not a faster form of the same one. Replicating
+        # the context per query reproduces the per-query numbers exactly, and
+        # predict_batch already packs a whole chunk into one forward, so this
+        # is the batched path either way; chunking here only bounds the memory
+        # the replicated contexts take.
+        n_query = query_features.shape[0]
+        results = []
+        for start in range(0, n_query, self.max_batch_size):
+            chunk = query_features[start : start + self.max_batch_size]
+            results.extend(
+                self.predict_batch(
+                    [
+                        (train_features, train_labels, chunk[i], task_type)
+                        for i in range(chunk.shape[0])
+                    ]
+                )
+            )
+        return results

@@ -8,151 +8,105 @@ from expts.repaper.config import (
     LOG_ROOT,
     OUT_ROOT,
     PRE_DIR,
+    RAW_DIR,
     SECRETS_DIR,
     SHARE,
 )
 
 DB = "rel-f1"
 TABLE = "driver-dnf"
+METHOD = "rdblearn_exaone"
 
-LOCAL_CTX_SIZE = 256
-CTX_SIZE = 8192
-ROUND = f"fm_lcs{LOCAL_CTX_SIZE}_ctx{CTX_SIZE}"
-
-# The two tabular foundation models on the rdblearn blob, at the context the
-# lgbm (0.8074) and tabicl (0.8102) arms used, so all four predictors are
-# directly comparable on the same 73-d features and the same 336 labelled rows.
+# The query-independent retriever: one uniform seeded draw from the *train*
+# split, the same context for every query, its features precomputed once. The
+# only thing that differs from the per-query arms is which rows are in the
+# context -- given the same rows the computation is identical, which is what
+# predict_shared's bit-exactness against predict_batch establishes.
 #
-# Unlike TabICLBatchedPredictor, which packs thousands of contexts into one
-# forward, both of these are sklearn-shaped: one fit+predict per query, so 702
-# sequential model calls per arm (and EXAONE runs ensemble_count of them
-# internally). Throughput is unmeasured, hence the generous wall clock.
-ARMS = {
-    "exaone": "rdblearn_exaone",
-    # 183467 is still running from 2b57923 and has not hit the inference-tensor
-    # error, so it keeps its slot rather than being restarted; uncomment if it
-    # turns out to need the fix too.
-    # "tabfm": "rdblearn_tabfm",
-}
+# These numbers are context ROW counts, not cells, so they do not belong on the
+# same axis as the ctx=256..8192 curves. 336 is here because it is what the
+# per-query ctx=8192 arm averaged (mean_labels 336.3), making that one point a
+# like-for-like comparison against its 0.8238.
+RETRIEVER = "global_train"
+N_ROWS = [64, 256, 336, 1024]
+ROUND = f"global_uniform_seed0_{METHOD}"
 
-# 2026-09-15: 4 of 8 b200 free, blackwell1 not reserved, and nothing of mine
-# holding any tier, so il-interactive's 2 gpus go to blackwell for both arms --
-# TabFM is 6.2 GB of weights per forward, and the a100s had only 3 cards free
-# across ampere2/ampere8.
+# The sampler still runs, only to say which rows are queries and what their
+# labels are; its context is discarded. num_walks=0 and a small local_ctx_size
+# keep it from doing work nobody reads. max(N_ROWS) sets eval_bs
+# (2**18 // 1024 = 256), so 702 test rows come in 3 batches and EXAONE fits
+# 3 x 4 = 12 times rather than once per query.
 REPO_ROOT = str(Path(__file__).resolve().parents[4])
 
-for arm, method in ARMS.items():
-    submit(
-        "expts.repaper.baselines.rel2tabv2.run:main",
-        args=dict(
-            method=method,
-            db=DB,
-            table=TABLE,
-            split="test",
-            pre_dir=PRE_DIR,
-            features_root=f"{SHARE}/features",
-            out_dir=f"{OUT_ROOT}/repaper-rel2tabv2/{ROUND}/{arm}",
-            ctx_size_list=[CTX_SIZE],
-            items_per_task=10_000_000,
-            local_ctx_size=LOCAL_CTX_SIZE,
-            bfs_width=32,
-            prefer_latest=True,
-            num_walks=10_000,
-            walk_length=20,
-            shuffle_seed=0,
-            context_seed=0,
-            tokens_per_gpu=2**18,
-            num_workers=8,
-            prefetch_factor=2,
-            mmap_populate=True,
-            db_cutoff=None,
-            vector_db_path=None,
-            tabicl_dir=f"{SHARE}/tabicl",
-            tabicl_max_batch_size=1024,
-            tabicl_min_bin_size=48,
-            tabicl_softmax_temperature=0.9,
-            lgbm_n_jobs=8,
-            exaone_ensemble_count=8,
-            tabfm_backend="pytorch",
-        ),
-        resources=Resources(
-            partition="il",
-            account="infolab",
-            qos="il-interactive",
-            time="8:00:00",
-            gpus="b200:1",
-            cpus_per_task=8,
-            ntasks=None,
-            exclusive=False,
-            mem="64G",
-            mem_per_gpu=None,
-            constraint=None,
-            nodelist="blackwell1",
-            reservation=None,
-            dependency=None,
-            exclude=None,
-        ),
-        name=f"rel2tabv2-{ROUND}-{arm}-{DB}-{TABLE}",
-        repo_root=REPO_ROOT,
-        cluster=ILC,
-        job_env="expts/job_env.sh",
-        log_root=f"{LOG_ROOT}/repaper/baselines/slurm-logs",
-        clone_root=CLONE_ROOT,
-        secrets_dir=SECRETS_DIR,
-    )
+# 2026-09-15: 4 of 8 b200 free, blackwell1 not reserved, nothing of mine on any
+# gpu tier, so il-interactive takes a b200. EXAONE is 161 MB of weights with an
+# 8-member ensemble, and the 1024-row contexts are the expensive end.
+submit(
+    "expts.repaper.baselines.rel2tabv2.run:main",
+    args=dict(
+        method=METHOD,
+        db=DB,
+        table=TABLE,
+        split="test",
+        pre_dir=PRE_DIR,
+        raw_dir=RAW_DIR,
+        features_root=f"{SHARE}/features",
+        out_dir=f"{OUT_ROOT}/repaper-rel2tabv2/{ROUND}",
+        ctx_size_list=N_ROWS,
+        items_per_task=10_000_000,
+        local_ctx_size=64,
+        bfs_width=32,
+        prefer_latest=True,
+        num_walks=0,
+        walk_length=0,
+        shuffle_seed=0,
+        context_seed=0,
+        tokens_per_gpu=2**18,
+        num_workers=8,
+        prefetch_factor=2,
+        mmap_populate=True,
+        db_cutoff=None,
+        vector_db_path=None,
+        tabicl_dir=f"{SHARE}/tabicl",
+        tabicl_max_batch_size=1024,
+        tabicl_min_bin_size=48,
+        tabicl_softmax_temperature=0.9,
+        lgbm_n_jobs=8,
+        exaone_ensemble_count=8,
+        tabfm_backend="pytorch",
+        retriever=RETRIEVER,
+        context_sampler="uniform",
+        context_split="train",
+    ),
+    resources=Resources(
+        partition="il",
+        account="infolab",
+        qos="il-interactive",
+        time="4:00:00",
+        gpus="b200:1",
+        cpus_per_task=8,
+        ntasks=None,
+        exclusive=False,
+        mem="64G",
+        mem_per_gpu=None,
+        constraint=None,
+        nodelist="blackwell1",
+        reservation=None,
+        dependency=None,
+        exclude=None,
+    ),
+    name=f"rel2tabv2-{ROUND}-{DB}-{TABLE}",
+    repo_root=REPO_ROOT,
+    cluster=ILC,
+    job_env="expts/job_env.sh",
+    log_root=f"{LOG_ROOT}/repaper/baselines/slurm-logs",
+    clone_root=CLONE_ROOT,
+    secrets_dir=SECRETS_DIR,
+)
 
-# Earlier rounds on this task, all at local_ctx 256 / ctx 8192 unless noted:
+# Per-query retriever rounds on this task, for reference. Those ctx numbers are
+# CELLS; the ones above are rows.
 #
-#   baserate  (183463 ctx=1024 -> 0.7252183672473527, the label base rate;
-#              183464 ctx=8192 -> 0.5656907236617381, the floor at this context)
-#   lgbm      (183457-9) rdblearn 0.8074, rt-j 0.7200, rt-plurel 0.6653
-#   tabicl    (183460-2) rdblearn 0.8102, rt-j 0.7627, rt-plurel 0.7220
-#
-# ARMS = {
-#     "rdblearn": ("rdblearn_lgbm", f"{SHARE}/features"),
-#     "rt-j": ("rt_lgbm", f"{SHARE}/features_rt-j"),
-#     "rt-plurel": ("rt_lgbm", f"{SHARE}/features_rt-plurel"),
-# }
-#
-# The featurize stages, for when a blob has to be rebuilt. featurize_rt needs
-# the curated one-task list: it resolves the whole db_task_list through
-# get_tasks before filtering on db, and only rel-f1 is staged here, so
-# forecast.json dies on rel-amazon/meta.json (183449/183451).
-#
-# for arm, ckpt in {
-#     "rt-j": "~/scratch/hf/stanford-star/rt-j",
-#     "rt-plurel": "~/scratch/hf/stanford-star/rt-plurel",
-# }.items():
-#     submit(
-#         "expts.repaper.baselines.featurize_rt:featurize_db",
-#         args=dict(
-#             db=DB,
-#             db_task_list="expts/repaper/baselines/rel2tabv2/rel-f1_driver-dnf.json",
-#             pre_dir=PRE_DIR, features_root=f"{SHARE}/features_{arm}", ckpt=ckpt,
-#             local_ctx_size=256, bfs_width=32, shuffle_seed=0, context_seed=0,
-#             db_cutoff=None, batch_size=1024,
-#         ),
-#         resources=Resources(
-#             partition="il", account="infolab", qos="il-interactive",
-#             time="1:00:00", gpus="a100:1", cpus_per_task=8, ntasks=None,
-#             exclusive=False, mem="32G", mem_per_gpu=None,
-#             constraint="ampere", nodelist=None, reservation=None,
-#             dependency=None, exclude="ampere4,ampere6,ampere7,ampere9",
-#         ),
-#         name=f"rel2tabv2-feat-{arm}-{DB}",
-#     )
-#
-# And rdblearn (183395), which takes (db, table) directly and needs RAW_DIR
-# plus the populated relbench cache:
-#
-# submit(
-#     "expts.repaper.baselines.featurize_rdblearn:featurize_table",
-#     args=dict(
-#         db=DB, table=TABLE, task_type="clf", pre_dir=PRE_DIR, raw_dir=RAW_DIR,
-#         features_root=f"{SHARE}/features",
-#         relbench_cache_dir=f"{SHARE}/relbench-cache",
-#         max_depth=2, max_train_samples=1000,
-#     ),
-#     pixi_env="featurize",
-#     setup=("pixi install -e featurize", "pixi run install-rdblearn"),
-# )
+#   retriever="sampler", local_ctx_size=256, ctx_size_list=[8192]
+#   baserate 0.5657 | lgbm 0.8074 | tabicl 0.8102 | tabfm 0.8217 | exaone 0.8238
+#   (rdblearn 73-d features; rt-j 0.7627 and rt-plurel 0.7220 under tabicl)
