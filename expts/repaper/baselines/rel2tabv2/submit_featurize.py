@@ -35,9 +35,10 @@ LONG = {"rel-amazon", "rel-hm", "rel-stack"}
 # 2026-09-16: 8 b200 free on an unreserved blackwell1, 17 a100 free, nothing of
 # mine on any gpu tier. il-interactive's 2 gpus and il's 2-b200 sub-cap go to
 # the four longest jobs (rel-amazon and rel-hm, both checkpoints); every other
-# rt job takes an ampere under il, and what does not fit the 10-gpu cap lands on
-# il-lo, which is fine because featurize_rt skips a table whose blob exists, so
-# a preempted job redoes only what it had not written.
+# rt job takes an ampere under il. That asks for 12 gpus under a 10-gpu cap, so
+# two will sit on QOSMaxGRESPerUser and start as the short dbs drain -- minutes,
+# since only rel-amazon, rel-hm and rel-stack are long. featurize_rt also skips
+# a table whose blob exists, so nothing is redone if a job has to restart.
 MEM = {
     "rel-amazon": "240G",
     "rel-avito": "64G",
