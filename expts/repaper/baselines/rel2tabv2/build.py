@@ -29,7 +29,7 @@ def build_rel2tab(
     d_text: int,
 ) -> tuple[Rel2TabModel, str]:
     family, predictor_name = method.rsplit("_", 1)
-    assert family in ("rdblearn", "sql", "rt", "plurel", "relagent"), (
+    assert family in ("rdblearn", "sql", "rt", "plurel", "relagent", "gnn"), (
         f"unknown feature family {family!r} in method {method!r}"
     )
     assert predictor_name in (
@@ -49,6 +49,7 @@ def build_rel2tab(
             "rt": "rt_features",
             "plurel": "plurel_features",
             "relagent": "relagent_features",
+            "gnn": "gnn_features",
         }[family],
         [(db, table)],
     )

@@ -179,5 +179,35 @@ tqdm = "*"
 # Run once per checkout (jobs run it via `setup=`).
 install-rdblearn = "uv pip install --python \"$CONDA_PREFIX/bin/python\" --no-deps git+https://github.com/ValterH/rdblearn@89bba03b1bacd5eaa884d1dc415703baed59f7f8 autogluon-features autogluon-common"
 
+# The RelBench GNN featurizer (expts/repaper/baselines/featurize_gnn.py) needs
+# relbench's `example` extra -- pytorch_frame and torch_geometric -- plus pyg-lib,
+# whose neighbor sampler is the only one that supports heterogeneous *temporal*
+# sampling; torch-sparse's has no time argument, and without it the loader cannot
+# honour a cutoff. pyg-lib ships prebuilt wheels against exact torch versions and
+# the newest is pt29, so torch is pinned to 2.9.0 here against the default
+# environment's 2.14: this is why it is its own environment rather than more
+# entries in `dev`. cu130 to match the driver the default environment already
+# uses, and it covers b200 (sm_100) as well as the amperes.
+[tool.pixi.feature.gnn.dependencies]
+python = "3.12.*"
+
+[tool.pixi.feature.gnn.pypi-options]
+extra-index-urls = ["https://download.pytorch.org/whl/cu130"]
+find-links = [{ url = "https://data.pyg.org/whl/torch-2.9.0+cu130.html" }]
+index-strategy = "unsafe-best-match"
+
+[tool.pixi.feature.gnn.pypi-dependencies]
+# Jobs enter through `python -m roach.slurm.run` whatever environment they run in.
+roach = { git = "https://github.com/rishabh-ranjan/roach", tag = "v0.3.7" }
+# The same commit as the default environment: `relbench.modeling` and the local
+# `load_dataset(path)` path both come from here, and the two pins must not drift.
+relbench = { git = "https://github.com/stanford-star/relbench", rev = "bac62c99cf1a60fbfd7c61c5fd7cb183453b7997", extras = ["example"] }
+torch = "==2.9.0"
+pyg-lib = "*"
+numpy = "*"
+pandas = "*"
+pyarrow = "*"
+
 [tool.pixi.environments]
 featurize = { features = ["featurize"], no-default-feature = true }
+gnn = { features = ["gnn"], no-default-feature = true }
