@@ -14,15 +14,19 @@ from expts.repaper.config import (
     SHARE,
 )
 
-# Smoke wave before the 21-task sweep. The global retriever has only ever run on
-# rel-f1/driver-dnf: 702 test rows, clf. Two paths the sweep needs have never
-# executed, and they are independent, so they are tested apart rather than
-# paying for both at once. rel-amazon/user-churn is the largest test split in v1
-# at 351,885 rows, ~1375 eval batches at 2**18/1024, and its rdblearn blob is 12
-# features; rel-f1/driver-position is the cheapest reg task at 760 rows, which
-# exercises PreprocessedLabels' normalised-label path and metric_for's reg
-# branch for the price of a few minutes.
-TASKS = [("rel-amazon", "user-churn"), ("rel-f1", "driver-position")]
+# First TabPFN-3.5 round: the two cheap rel-f1 tasks, one clf and one reg, where
+# both the other predictors already have a number under this exact retriever and
+# context (exaone 0.7640 / tabfm 0.7740 auroc on driver-dnf, 0.5040 / 0.5089 mae
+# on driver-position), so the new arm is read against them rather than alone.
+TASKS = [("rel-f1", "driver-dnf"), ("rel-f1", "driver-position")]
+#
+# The smoke wave that came before it, run as 184244-184249: rel-amazon/user-churn
+# is the largest test split in v1 at 351,885 rows, ~1375 eval batches at
+# 2**18/1024, and rel-f1/driver-position is the cheapest reg task at 760 rows,
+# which together are the two paths the global retriever had never executed --
+# scale and regression.
+#
+# TASKS = [("rel-amazon", "user-churn"), ("rel-f1", "driver-position")]
 
 # The query-independent retriever: one seeded rng.choice draw of exactly 1024
 # rows from the train split, the same context for every query, features
@@ -35,13 +39,17 @@ RETRIEVER = "global_train"
 N_ROWS = [1024]
 ROUND = "global_uniform_seed0_n1024"
 
-# Only the rdblearn featurizer for the smoke wave: what is untested is the
-# retriever/labels/evaluator path, which is shared by all three feature roots,
-# and rdblearn is the one whose rel-f1 numbers are already known.
+# Only the rdblearn featurizer: what a new predictor or a new retriever path has
+# to be read against is the arm whose rel-f1 numbers are already known, and the
+# 73-d blob is the one that has them.
 ARMS = {
-    "rdblearn-exaone": ("rdblearn_exaone", f"{SHARE}/features"),
-    "rdblearn-tabfm": ("rdblearn_tabfm", f"{SHARE}/features"),
+    "rdblearn-tabpfn": ("rdblearn_tabpfn", f"{SHARE}/features"),
 }
+#
+# ARMS = {
+#     "rdblearn-exaone": ("rdblearn_exaone", f"{SHARE}/features"),
+#     "rdblearn-tabfm": ("rdblearn_tabfm", f"{SHARE}/features"),
+# }
 #
 # The full sweep's six, for when the smoke wave lands:
 #
@@ -54,14 +62,14 @@ ARMS = {
 #     "rt-plurel-tabfm": ("rt_tabfm", f"{SHARE}/features_rt-plurel"),
 # }
 
-# 2026-09-16: blackwell1 has 5 of 8 b200 free and ampere8 5 of 8 a100, nothing
-# of mine on any gpu tier. The b200 cap is 2 for the whole il partition, not 2
-# per qos: partition il carries QoS=il-part (gres/gpu:b200=2), and only il-lo is
-# flagged OverPartQOS, so a b200 job counts against that 2 whichever qos it
-# names. So the rel-amazon pair -- 351,885 queries against rel-f1's 760, the
-# whole wall clock -- takes both b200 under il-interactive, and the rel-f1 pair
-# goes to a100 under il (cap 10, 80 G cards, ample for a 760-row eval) rather
-# than pending forever behind its own sibling. il-interactive caps wall at 12 h.
+# 2026-09-16: ampere8 has 6 of 8 a100 free, blackwell1 4 of 8 b200, and one job
+# of mine is still on a b200 under il-interactive. The b200 cap is 2 for the
+# whole il partition, not 2 per qos: partition il carries QoS=il-part
+# (gres/gpu:b200=2), and only il-lo is flagged OverPartQOS, so a b200 job counts
+# against that 2 whichever qos it names -- which is what left the last round's
+# rel-f1 pair pending on QOSMaxGRESPerUser behind its own siblings. Two rel-f1
+# evals of 702 and 760 rows have no use for a b200 anyway, so both go to a100
+# under il (cap 10, 80 G cards). il-interactive caps wall at 12 h.
 QOS = {"rel-amazon": "il-interactive", "rel-f1": "il"}
 CARD = {"rel-amazon": "b200", "rel-f1": "a100"}
 TIME = {"rel-amazon": "12:00:00", "rel-f1": "2:00:00"}
@@ -148,6 +156,19 @@ for db, table in TASKS:
                 lgbm_n_jobs=8,
                 exaone_ensemble_count=8,
                 tabfm_backend="pytorch",
+                tabpfn_dir=f"{SHARE}/tabpfn",
+                # "auto" rather than an integer: tabpfn raises n_estimators on a
+                # dataset wider than max_features_per_estimator so that every
+                # feature is seen by some ensemble member, and the three feature
+                # roots here are 4 to 512 columns wide. A fixed count would
+                # silently drop columns on the wide ones.
+                tabpfn_n_estimators="auto",
+                # The global retriever fits one context and then predicts on
+                # every batch against it, which is exactly what fit_with_cache
+                # is for: the train KV cache is built once in fit(). Switch this
+                # to "fit_preprocessors" together with retriever="sampler",
+                # where every query refits and a cache would never be reused.
+                tabpfn_fit_mode="fit_with_cache",
                 retriever=RETRIEVER,
                 context_sampler="uniform",
                 context_split="train",

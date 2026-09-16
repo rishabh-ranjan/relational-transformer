@@ -16,6 +16,9 @@ def build_rel2tab(
     lgbm_n_jobs: int,
     exaone_ensemble_count: int,
     tabfm_backend: str,
+    tabpfn_dir: str,
+    tabpfn_n_estimators: int | str,
+    tabpfn_fit_mode: str,
     retriever: str,
     context_sampler: str,
     context_seed: int,
@@ -29,9 +32,14 @@ def build_rel2tab(
     assert family in ("rdblearn", "sql", "rt", "plurel", "relagent"), (
         f"unknown feature family {family!r} in method {method!r}"
     )
-    assert predictor_name in ("lgbm", "tabicl", "baserate", "exaone", "tabfm"), (
-        f"unknown predictor {predictor_name!r} in method {method!r}"
-    )
+    assert predictor_name in (
+        "lgbm",
+        "tabicl",
+        "baserate",
+        "exaone",
+        "tabfm",
+        "tabpfn",
+    ), f"unknown predictor {predictor_name!r} in method {method!r}"
 
     featurizer = PrecomputedFeaturizer(
         features_root,
@@ -68,6 +76,16 @@ def build_rel2tab(
 
         device = "cuda"
         predictor = TabFMPredictor(backend=tabfm_backend, device=device)
+    elif predictor_name == "tabpfn":
+        from expts.repaper.baselines.rel2tabv2.tabpfn import TabPFNPredictor
+
+        device = "cuda"
+        predictor = TabPFNPredictor(
+            n_estimators=tabpfn_n_estimators,
+            fit_mode=tabpfn_fit_mode,
+            checkpoint_dir=tabpfn_dir,
+            device=device,
+        )
     elif predictor_name == "baserate":
         from expts.repaper.baselines.rel2tabv2.baserate import BaseRatePredictor
 
