@@ -14,10 +14,9 @@ from expts.repaper.config import (
     SHARE,
 )
 
-# First TabPFN-3.5 round: the two cheap rel-f1 tasks, one clf and one reg, where
-# both the other predictors already have a number under this exact retriever and
-# context (exaone 0.7640 / tabfm 0.7740 auroc on driver-dnf, 0.5040 / 0.5089 mae
-# on driver-position), so the new arm is read against them rather than alone.
+# The two cheap rel-f1 tasks, one clf and one reg, where the other featurizers
+# and predictors already have a number under this exact retriever and context,
+# so a new arm is read against them rather than alone.
 TASKS = [("rel-f1", "driver-dnf"), ("rel-f1", "driver-position")]
 #
 # The smoke wave that came before it, run as 184244-184249: rel-amazon/user-churn
@@ -39,16 +38,17 @@ RETRIEVER = "global_train"
 N_ROWS = [1024]
 ROUND = "global_uniform_seed0_n1024"
 
-# Only the rdblearn featurizer: what a new predictor or a new retriever path has
-# to be read against is the arm whose rel-f1 numbers are already known, and the
-# 73-d blob is the one that has them.
+# The randomly-initialized RelBench GNN's first read: 128-d, 2-hop, untrained,
+# against exaone on rdblearn (0.7640 / 0.5040), rt-j (0.7407) and rt-plurel
+# (0.6758). Only rel-f1 is featurized so far.
 ARMS = {
-    "rdblearn-tabpfn": ("rdblearn_tabpfn", f"{SHARE}/features"),
+    "gnn-exaone": ("gnn_exaone", f"{SHARE}/features_gnn"),
 }
 #
 # ARMS = {
 #     "rdblearn-exaone": ("rdblearn_exaone", f"{SHARE}/features"),
 #     "rdblearn-tabfm": ("rdblearn_tabfm", f"{SHARE}/features"),
+#     "rdblearn-tabpfn": ("rdblearn_tabpfn", f"{SHARE}/features"),
 # }
 #
 # The full sweep's six, for when the smoke wave lands:
@@ -62,8 +62,9 @@ ARMS = {
 #     "rt-plurel-tabfm": ("rt_tabfm", f"{SHARE}/features_rt-plurel"),
 # }
 
-# 2026-09-16: ampere8 has 6 of 8 a100 free, blackwell1 4 of 8 b200, and one job
-# of mine is still on a b200 under il-interactive. The b200 cap is 2 for the
+# 2026-09-16: ampere8 has 2 of 8 a100 free, blackwell1 4 of 8 b200, nothing of
+# mine on any gpu tier. Two 702- and 760-row evals, so two a100 under il is the
+# whole ask. The b200 cap is 2 for the
 # whole il partition, not 2 per qos: partition il carries QoS=il-part
 # (gres/gpu:b200=2), and only il-lo is flagged OverPartQOS, so a b200 job counts
 # against that 2 whichever qos it names -- which is what left the last round's
