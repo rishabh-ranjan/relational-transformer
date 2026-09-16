@@ -8,7 +8,7 @@ from expts.repaper.config import (
     CLONE_ROOT,
     LOG_ROOT,
     PRE_DIR,
-    RAW_DIR,  # noqa: F401  (the rdblearn block below)
+    RAW_DIR,
     SECRETS_DIR,
     SHARE,
 )
@@ -49,6 +49,16 @@ MEM = {
     "rel-trial": "64G",
 }
 
+RDBL_MEM = {
+    "rel-amazon": "250G",
+    "rel-avito": "64G",
+    "rel-event": "400G",
+    "rel-f1": "16G",
+    "rel-hm": "150G",
+    "rel-stack": "150G",
+    "rel-trial": "64G",
+}
+
 EXCLUDE_CPU = (
     "hyperion1,hyperion3,hyperturing1,hyperturing2,madmax2,"
     "madmax3,madmax4,madmax6,madmax7,trinity,turing1,turing2,turing3"
@@ -80,71 +90,72 @@ def rt_resources(db: str, card: str, qos: str) -> Resources:
     )
 
 
-# Four b200 slots for the longest pairs; everything else on amperes.
-b200_for = [(db, arm) for arm in RT_CKPTS for db in ("rel-amazon", "rel-hm")]
-qos_for = dict.fromkeys(b200_for[:2], "il-interactive")
-
-for arm, ckpt in RT_CKPTS.items():
-    for db in DBS:
-        card = "b200" if (db, arm) in b200_for else "a100"
-        qos = qos_for.get((db, arm), "il")
-        submit(
-            "expts.repaper.baselines.featurize_rt:featurize_db",
-            args=dict(
-                db=db,
-                db_task_list=DB_TASK_LIST,
-                pre_dir=PRE_DIR,
-                features_root=f"{SHARE}/features_{arm}",
-                ckpt=ckpt,
-                local_ctx_size=256,
-                bfs_width=32,
-                shuffle_seed=0,
-                context_seed=0,
-                db_cutoff=None,
-                batch_size=1024,
-            ),
-            resources=rt_resources(db, card, qos),
-            name=f"rel2tabv2-feat-{arm}-{db}",
-            repo_root=REPO_ROOT,
-            cluster=ILC,
-            job_env="expts/job_env.sh",
-            log_root=f"{LOG_ROOT}/repaper/baselines/slurm-logs",
-            clone_root=CLONE_ROOT,
-            secrets_dir=SECRETS_DIR,
-        )
-
-# rdblearn is per task, not per db, and needs the relbench cache warm plus
-# rdblearn itself, which its pins cannot solve into the featurize environment.
-# Held back until the cache finishes populating; uncomment then.
+# The rt pass, submitted 2026-09-16 as 184077-184090 (both checkpoints, all
+# seven dbs). Commented so this file can be rerun for rdblearn without
+# duplicating jobs that are still running; featurize_rt skips a table whose
+# blob exists, so uncommenting is safe to redo.
 #
-# for task in TASKS:
-#     submit(
-#         "expts.repaper.baselines.featurize_rdblearn:featurize_table",
-#         args=dict(
-#             db=task.db_name,
-#             table=task.table_name,
-#             task_type=task.task_type,
-#             pre_dir=PRE_DIR,
-#             raw_dir=RAW_DIR,
-#             features_root=f"{SHARE}/features",
-#             relbench_cache_dir=f"{SHARE}/relbench-cache",
-#             max_depth=2,
-#             max_train_samples=1000,
-#         ),
-#         resources=Resources(
-#             partition="il-cpu", account="infolab", qos="il-cpu",
-#             time="1-00:00:00", gpus="0", cpus_per_task=16, ntasks=1,
-#             exclusive=False, mem=MEM[task.db_name], mem_per_gpu=None,
-#             constraint=None, nodelist=None, reservation=None, dependency=None,
-#             exclude=EXCLUDE_CPU,
-#         ),
-#         name=f"rel2tabv2-feat-rdbl-{task.db_name}-{task.table_name}",
-#         repo_root=REPO_ROOT,
-#         cluster=ILC,
-#         job_env="expts/job_env.sh",
-#         log_root=f"{LOG_ROOT}/repaper/baselines/slurm-logs",
-#         clone_root=CLONE_ROOT,
-#         secrets_dir=SECRETS_DIR,
-#         pixi_env="featurize",
-#         setup=("pixi install -e featurize", "pixi run install-rdblearn"),
-#     )
+# b200_for = [(db, arm) for arm in RT_CKPTS for db in ("rel-amazon", "rel-hm")]
+# qos_for = dict.fromkeys(b200_for[:2], "il-interactive")
+#
+# for arm, ckpt in RT_CKPTS.items():
+#     for db in DBS:
+#         card = "b200" if (db, arm) in b200_for else "a100"
+#         submit(
+#             "expts.repaper.baselines.featurize_rt:featurize_db",
+#             args=dict(
+#                 db=db, db_task_list=DB_TASK_LIST, pre_dir=PRE_DIR,
+#                 features_root=f"{SHARE}/features_{arm}", ckpt=ckpt,
+#                 local_ctx_size=256, bfs_width=32, shuffle_seed=0,
+#                 context_seed=0, db_cutoff=None, batch_size=1024,
+#             ),
+#             resources=rt_resources(db, card, qos_for.get((db, arm), "il")),
+#             name=f"rel2tabv2-feat-{arm}-{db}",
+#             ...
+#         )
+
+# rdblearn: per task, not per db. Zero-gres on uncapped il-cpu, and the
+# relbench cache is warm for all 21 tasks as of 2026-09-16, so no compute node
+# needs internet for the dataset itself. rdblearn's own pins cannot solve into
+# the featurize environment, hence the --no-deps install in setup.
+for task in TASKS:
+    submit(
+        "expts.repaper.baselines.featurize_rdblearn:featurize_table",
+        args=dict(
+            db=task.db_name,
+            table=task.table_name,
+            task_type=task.task_type,
+            pre_dir=PRE_DIR,
+            raw_dir=RAW_DIR,
+            features_root=f"{SHARE}/features",
+            relbench_cache_dir=f"{SHARE}/relbench-cache",
+            max_depth=2,
+            max_train_samples=1000,
+        ),
+        resources=Resources(
+            partition="il-cpu",
+            account="infolab",
+            qos="il-cpu",
+            time="1-00:00:00",
+            gpus="0",
+            cpus_per_task=16,
+            ntasks=1,
+            exclusive=False,
+            mem=RDBL_MEM[task.db_name],
+            mem_per_gpu=None,
+            constraint=None,
+            nodelist=None,
+            reservation=None,
+            dependency=None,
+            exclude=EXCLUDE_CPU,
+        ),
+        name=f"rel2tabv2-feat-rdbl-{task.db_name}-{task.table_name}",
+        repo_root=REPO_ROOT,
+        cluster=ILC,
+        job_env="expts/job_env.sh",
+        log_root=f"{LOG_ROOT}/repaper/baselines/slurm-logs",
+        clone_root=CLONE_ROOT,
+        secrets_dir=SECRETS_DIR,
+        pixi_env="featurize",
+        setup=("pixi install -e featurize", "pixi run install-rdblearn"),
+    )
