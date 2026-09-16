@@ -43,22 +43,29 @@ RETRIEVER = "global_train"
 N_ROWS = [64, 256, 1024, 4096]
 ROUND = "gnn_width_x_ctx_x_seed"
 
-# 4 widths x 8 featurizer init seeds, exaone throughout, crossed with N_ROWS
-# above: 4 x 4 x 8 = 128 (width, ctx, seed) points per task from 32 jobs. 8 and
-# not 3: at 3 seeds the std over seeds reached 0.157 auroc at width 8 and was
-# 0.01-0.06 elsewhere, wider than most of the differences being compared.
-# Seeds 0-2 are already done and skipped by done() below.
-# context_seed stays 0 for all of them, so every arm sees the *same* context
-# rows and the seed-to-seed spread is the GNN's initialization alone rather
-# than that mixed with retrieval noise.
+# 4 widths x 4 featurizer init seeds x 4 context seeds, exaone throughout,
+# crossed with N_ROWS above: every (width, ctx) cell is 16 evaluations, varying
+# both the GNN's initialization and which rows the retriever drew. Context seed 0
+# is already done and skipped by done() below, so this submits the other three.
+# (gnn seeds 4-7 at cs0 also exist, from when this was an 8-seed single-context
+# sweep; they are outside this grid, and the collation filters them out rather
+# than letting them weight cs0.)
 ARMS = {
-    f"gnn-c{c}-s{seed}-exaone": (
+    f"gnn-c{c}-s{seed}-cs{ctx_seed}-exaone": (
         "gnn_exaone",
         f"{SHARE}/features_gnn-c{c}-s{seed}",
-        {"featurizer": "gnn", "predictor": "exaone", "channels": c, "gnn_seed": seed},
+        ctx_seed,
+        {
+            "featurizer": "gnn",
+            "predictor": "exaone",
+            "channels": c,
+            "gnn_seed": seed,
+            "context_seed": ctx_seed,
+        },
     )
     for c in (8, 32, 128, 512)
-    for seed in range(8)
+    for seed in range(4)
+    for ctx_seed in range(4)
 }
 #
 # ARMS = {
@@ -141,7 +148,7 @@ def gpu_resources(db: str) -> Resources:
 
 
 for db, table in TASKS:
-    for arm, (method, features_root, tags) in ARMS.items():
+    for arm, (method, features_root, ctx_seed, tags) in ARMS.items():
         name = f"rel2tabv2-{ROUND}-{arm}-{db}-{table}"
         if name in busy or done(arm, db, table):
             continue
@@ -166,7 +173,10 @@ for db, table in TASKS:
                 num_walks=0,
                 walk_length=0,
                 shuffle_seed=0,
-                context_seed=0,
+                # The retriever's row draw. shuffle_seed stays 0 so the query
+                # set and its order -- hence the labels -- are identical across
+                # context seeds and the cells stay comparable.
+                context_seed=ctx_seed,
                 tokens_per_gpu=2**18,
                 num_workers=8,
                 prefetch_factor=2,
