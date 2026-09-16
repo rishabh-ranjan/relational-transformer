@@ -17,7 +17,10 @@ from expts.repaper.config import (
 # The two cheap rel-f1 tasks, one clf and one reg, where the other featurizers
 # and predictors already have a number under this exact retriever and context,
 # so a new arm is read against them rather than alone.
-TASKS = [("rel-f1", "driver-dnf"), ("rel-f1", "driver-position")]
+TASKS = [("rel-event", "user-ignore"), ("rel-event", "user-attendance")]
+#
+# Round one, done: rel-f1's pair, 702 and 760 test rows.
+# TASKS = [("rel-f1", "driver-dnf"), ("rel-f1", "driver-position")]
 #
 # The smoke wave that came before it, run as 184244-184249: rel-amazon/user-churn
 # is the largest test split in v1 at 351,885 rows, ~1375 eval batches at
@@ -113,11 +116,15 @@ ROUTE = {
     ("rel-amazon", "user-churn"): ("il-interactive", "b200"),
     ("rel-f1", "driver-dnf"): ("il", "rtx8000"),
     ("rel-f1", "driver-position"): ("il-lo", "b200"),
+    # Same split by cost: the clf task to the idle older cards, the regression
+    # one -- ~7x the per-batch cost at the same shape -- to the b200.
+    ("rel-event", "user-ignore"): ("il", "rtx8000"),
+    ("rel-event", "user-attendance"): ("il-lo", "b200"),
 }
-TIME = {"rel-amazon": "12:00:00", "rel-f1": "4:00:00"}
+TIME = {"rel-amazon": "12:00:00", "rel-f1": "4:00:00", "rel-event": "4:00:00"}
 # rel-amazon's preprocessed dir is 33 G and mmap_populate faults all of it in;
 # featurize_rt needed 240 G on the same db. rel-f1 is 12 M.
-MEM = {"rel-amazon": "240G", "rel-f1": "32G"}
+MEM = {"rel-amazon": "240G", "rel-f1": "32G", "rel-event": "96G"}
 
 REPO_ROOT = str(Path(__file__).resolve().parents[4])
 

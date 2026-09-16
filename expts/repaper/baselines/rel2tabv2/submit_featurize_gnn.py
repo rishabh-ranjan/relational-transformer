@@ -35,11 +35,13 @@ DBS = ["rel-event"]
 # and `seed` vary -- num_neighbors stays [128, 64] and num_layers stays 2 -- so a
 # difference between two blobs is one of those two things. The root carries both
 # because the blob filename inside it does not (<table>_vectors.bin).
-CHANNELS = [8]
-SEEDS = [0]
+CHANNELS = [8, 32, 128, 512]
+SEEDS = list(range(4))
 #
-# CHANNELS = [8, 32, 128, 512]
-# SEEDS = list(range(4))
+# The single warm-up job that built the graph cache, kept as the shape to
+# rerun for the next db:
+# CHANNELS = [8]
+# SEEDS = [0]
 #
 # DBS = [
 #     "rel-f1",
