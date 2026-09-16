@@ -30,7 +30,8 @@ DBS = ["rel-f1"]
 # difference between two blobs is one of those two things. The root carries both
 # because the blob filename inside it does not (<table>_vectors.bin).
 CHANNELS = [8, 32, 128, 512]
-SEEDS = [0, 1, 2]
+# 0-2 are already featurized and skipped by featurize_db's own blob check.
+SEEDS = list(range(8))
 #
 # DBS = [
 #     "rel-f1",

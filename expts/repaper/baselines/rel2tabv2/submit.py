@@ -43,8 +43,11 @@ RETRIEVER = "global_train"
 N_ROWS = [64, 256, 1024, 4096]
 ROUND = "gnn_width_x_ctx_x_seed"
 
-# 4 widths x 3 featurizer init seeds, exaone throughout, crossed with N_ROWS
-# above: 4 x 4 x 3 = 48 (width, ctx, seed) points per task from 12 jobs.
+# 4 widths x 8 featurizer init seeds, exaone throughout, crossed with N_ROWS
+# above: 4 x 4 x 8 = 128 (width, ctx, seed) points per task from 32 jobs. 8 and
+# not 3: at 3 seeds the std over seeds reached 0.157 auroc at width 8 and was
+# 0.01-0.06 elsewhere, wider than most of the differences being compared.
+# Seeds 0-2 are already done and skipped by done() below.
 # context_seed stays 0 for all of them, so every arm sees the *same* context
 # rows and the seed-to-seed spread is the GNN's initialization alone rather
 # than that mixed with retrieval noise.
@@ -55,7 +58,7 @@ ARMS = {
         {"featurizer": "gnn", "predictor": "exaone", "channels": c, "gnn_seed": seed},
     )
     for c in (8, 32, 128, 512)
-    for seed in (0, 1, 2)
+    for seed in range(8)
 }
 #
 # ARMS = {
@@ -94,9 +97,16 @@ MEM = {"rel-amazon": "240G", "rel-f1": "32G"}
 REPO_ROOT = str(Path(__file__).resolve().parents[4])
 
 
-# Same guard as submit_featurize.py. run.main already returns early if its json
-# exists, so a finished arm is cheap to re-ask for, but a job still running has
-# written nothing yet and would be duplicated onto the same out_dir.
+# run.main also returns early on an existing json, but that still costs a job, a
+# clone and a pixi install per finished arm -- 24 of them when this sweep went
+# from 3 seeds to 8. Skip them here instead.
+def done(arm: str, db: str, table: str) -> bool:
+    out = Path(OUT_ROOT).expanduser() / "repaper-rel2tabv2" / ROUND / arm
+    return (out / f"{db}__{table}.json").exists()
+
+
+# Same guard as submit_featurize.py: a job still running has written no json yet
+# and would be duplicated onto the same out_dir.
 def queued() -> set[str]:
     out = subprocess.run(
         ["squeue", "-h", "-u", os.environ["USER"], "-o", "%j"],
@@ -133,7 +143,7 @@ def gpu_resources(db: str) -> Resources:
 for db, table in TASKS:
     for arm, (method, features_root, tags) in ARMS.items():
         name = f"rel2tabv2-{ROUND}-{arm}-{db}-{table}"
-        if name in busy:
+        if name in busy or done(arm, db, table):
             continue
         submit(
             "expts.repaper.baselines.rel2tabv2.run:main",
