@@ -56,6 +56,7 @@ def main(
     retriever: str,
     context_sampler: str,
     context_split: str,
+    tags: dict,
 ) -> None:
     out_path = Path(out_dir).expanduser() / f"{db}__{table}.json"
     if out_path.exists():
@@ -154,6 +155,7 @@ def main(
         )
 
     result = {
+        "tags": tags,
         "method": method,
         "task": f"{db}/{table}",
         "db": db,
@@ -177,6 +179,9 @@ def main(
             "table": table,
             "task_type": task.task_type,
             "per_ctx": {str(c): per_ctx[c] for c in sorted(per_ctx)},
+            # Whatever the sweep varies, named by the sweep rather than inferred
+            # from features_root's spelling downstream.
+            "tags": tags,
             "config": {
                 "method": method,
                 "retriever": retriever,

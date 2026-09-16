@@ -35,17 +35,27 @@ TASKS = [("rel-f1", "driver-dnf"), ("rel-f1", "driver-position")]
 # 1024 is a context ROW count, not cells, so it does not share an axis with the
 # ctx=256..8192 curves; the per-query ctx=8192 arm averaged 336 labelled rows.
 RETRIEVER = "global_train"
-N_ROWS = [1024]
-ROUND = "global_uniform_seed0_n1024"
+# One job per (task, width, featurizer seed) covers all four sizes: the
+# retriever draws once at 4096 and takes nested prefixes, so 64 is a subset of
+# 256 of 1024 of 4096 and the curve over them varies only in how much context
+# there is, not which rows. 4096 fits both tasks' train splits (11,411 for
+# driver-dnf, 7,453 for driver-position).
+N_ROWS = [64, 256, 1024, 4096]
+ROUND = "gnn_width_x_ctx_x_seed"
 
-# The randomly-initialized GNN's width sweep, exaone throughout. Only `channels`
-# differs between the three feature roots, so the spread across these rows is
-# the width and nothing else. Read against exaone on rdblearn (73-d: 0.7640
-# auroc / 0.5040 mae), rt-j (512-d: 0.7407) and rt-plurel (512-d: 0.6758) --
-# note the 512 row here is the same width as both rt featurizers.
+# 4 widths x 3 featurizer init seeds, exaone throughout, crossed with N_ROWS
+# above: 4 x 4 x 3 = 48 (width, ctx, seed) points per task from 12 jobs.
+# context_seed stays 0 for all of them, so every arm sees the *same* context
+# rows and the seed-to-seed spread is the GNN's initialization alone rather
+# than that mixed with retrieval noise.
 ARMS = {
-    f"gnn{c}-exaone": ("gnn_exaone", f"{SHARE}/features_gnn-{c}")
-    for c in (32, 128, 512)
+    f"gnn-c{c}-s{seed}-exaone": (
+        "gnn_exaone",
+        f"{SHARE}/features_gnn-c{c}-s{seed}",
+        {"featurizer": "gnn", "predictor": "exaone", "channels": c, "gnn_seed": seed},
+    )
+    for c in (8, 32, 128, 512)
+    for seed in (0, 1, 2)
 }
 #
 # ARMS = {
@@ -65,9 +75,9 @@ ARMS = {
 #     "rt-plurel-tabfm": ("rt_tabfm", f"{SHARE}/features_rt-plurel"),
 # }
 
-# 2026-09-16: six 702- and 760-row evals, a minute each, so they go to a100
-# under il, whose cap is 10 -- the three featurize jobs they follow hand their
-# a100 back as they finish. The b200 cap is 2 for the
+# 2026-09-16: 24 evals of 702 and 760 rows, a couple of minutes each now that
+# each one sweeps four context sizes up to 4096 rows, so they go to a100 under
+# il, whose cap is 10 -- the queue rolls through them. The b200 cap is 2 for the
 # whole il partition, not 2 per qos: partition il carries QoS=il-part
 # (gres/gpu:b200=2), and only il-lo is flagged OverPartQOS, so a b200 job counts
 # against that 2 whichever qos it names -- which is what left the last round's
@@ -121,7 +131,7 @@ def gpu_resources(db: str) -> Resources:
 
 
 for db, table in TASKS:
-    for arm, (method, features_root) in ARMS.items():
+    for arm, (method, features_root, tags) in ARMS.items():
         name = f"rel2tabv2-{ROUND}-{arm}-{db}-{table}"
         if name in busy:
             continue
@@ -176,6 +186,7 @@ for db, table in TASKS:
                 retriever=RETRIEVER,
                 context_sampler="uniform",
                 context_split="train",
+                tags=tags,
             ),
             resources=gpu_resources(db),
             name=name,
