@@ -1,3 +1,4 @@
+import hashlib
 import json
 import time
 from pathlib import Path
@@ -168,9 +169,16 @@ def featurize_db(
         # thread draws for which seed node. seed_everything cannot reach any of
         # it. Measured on rel-f1/driver-top3, two separate processes with a warm
         # graph cache: default threads DIFFER, one thread IDENTICAL
-        # (scripts/probe_sampler_seed.py, scripts/featurize_once.py). Set after
-        # make_pkey_fkey_graph so a cold cache still materializes and embeds in
-        # parallel; the GNN forward is on `device`, so this only costs sampling.
+        # (scripts/probe_sampler_seed.py).
+        #
+        # sampler_threads > 1 is therefore a deliberate trade: the blob is not
+        # regenerable bit-exactly, and instead *the blob itself* is the artifact
+        # of record -- never delete one that results were computed from. The
+        # provenance written beside it below, sha256 included, is what ties a
+        # result back to the exact features it used.
+        #
+        # Set after make_pkey_fkey_graph either way, so a cold cache still
+        # materializes and embeds in parallel.
         torch.set_num_threads(sampler_threads)
         loader = NeighborLoader(
             data,
@@ -230,13 +238,34 @@ def featurize_db(
         assert np.isfinite(feats).all()
 
         feats.tofile(vectors_path)
+        digest = hashlib.sha256()
+        with open(vectors_path, "rb") as fh:
+            while block := fh.read(16 << 20):
+                digest.update(block)
         meta_path.write_text(
             json.dumps(
                 {
                     "n_features": feats.shape[1],
                     "min_offset": min_offset,
                     "total_nodes": total_nodes,
-                }
+                    "sha256": digest.hexdigest(),
+                    "reproducible": sampler_threads == 1,
+                    "config": {
+                        "featurizer": "relbench_gnn_random_init",
+                        "channels": channels,
+                        "num_layers": num_layers,
+                        "num_neighbors": [
+                            num_neighbors // 2**i for i in range(num_layers)
+                        ],
+                        "aggr": aggr,
+                        "temporal_strategy": temporal_strategy,
+                        "sampler_threads": sampler_threads,
+                        "batch_size": batch_size,
+                        "seed": seed,
+                    },
+                },
+                indent=2,
+                sort_keys=True,
             )
         )
         print(
