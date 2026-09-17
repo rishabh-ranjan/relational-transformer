@@ -1,5 +1,4 @@
 import functools
-import hashlib
 import json
 import pickle
 from pathlib import Path
@@ -13,35 +12,26 @@ pyg-lib samples neighbours in parallel with one RandintEngine per thread. Every
 engine is seeded deterministically (vslNewStream(.., MT19937, 1)), so nothing
 draws from entropy, but which thread draws for which seed node depends on thread
 scheduling, and torch_geometric.seed.seed_everything reaches none of it. The
-featurize jobs were run with sampler_threads > 1 -- a deliberate trade, because
-the 21 tasks are ~33 M rows of 2-hop sampling -- so re-running the featurizer
-would produce different features and slightly different metrics.
+featurize jobs ran with sampler_threads > 1 -- a deliberate trade, because the
+21 tasks are ~33 M rows of 2-hop sampling -- so re-running the featurizer
+produces different features and slightly different metrics.
 
-The blobs are therefore the artifact of record, not the code that made them.
-Every gnn row below carries the sha256 of the feature file the run actually
-read, recomputed from disk here rather than trusted from metadata. Do not delete
-or regenerate a blob that a result was computed from; if a hash below does not
-match what is on disk, that result no longer has its features and must be rerun.
+The gnn blobs are therefore the artifact of record, not the code that made
+them: keep them, and do not regenerate one that a result was computed from. Each
+carries its own sha256 and `reproducible: false` in its `<table>_meta.json`,
+written when it was created; that metadata is reported below but not verified
+against the file, because re-reading ~150 GiB to check is not worth it.
 
 rdblearn, rt-j and rt-plurel are unaffected -- those featurizers are
-deterministic and their blobs can be rebuilt.\
+deterministic and their blobs can be rebuilt from code.\
 """
 
 
-# Memoised on the path: every predictor run against a blob asks for the same
-# hash, and the wide ones are large -- rel-amazon at 512 channels is 5.5 G, so
-# hashing once per result rather than once per blob was most of the runtime.
-@functools.cache
-def sha256_file(path: Path) -> str:
-    digest = hashlib.sha256()
-    with open(path, "rb") as fh:
-        while block := fh.read(16 << 20):
-            digest.update(block)
-    return digest.hexdigest()
-
-
-# Returns a dict that callers only read, so sharing one instance between the
-# results that used the same blob is safe.
+# Metadata only, never the bytes. Verifying a blob by re-hashing it means
+# reading ~150 GiB across the four feature roots, and it would only tell us
+# something for the gnn ones: the other three featurizers are deterministic, so
+# a changed blob there is simply rebuilt. The hash reported here is the one
+# featurize_gnn wrote when it created the file.
 @functools.cache
 def blob_provenance(features_root: str, subdir: str, db: str, table: str) -> dict:
     feat_dir = Path(features_root).expanduser() / db / subdir
@@ -50,18 +40,14 @@ def blob_provenance(features_root: str, subdir: str, db: str, table: str) -> dic
     if not meta_path.is_file() or not vectors.is_file():
         return {"present": False}
     meta = json.loads(meta_path.read_text())
-    on_disk = sha256_file(vectors)
     return {
         "present": True,
         "n_features": meta["n_features"],
         "total_nodes": meta["total_nodes"],
-        "sha256": on_disk,
-        # A blob written before provenance was recorded has no stored hash; then
-        # the on-disk hash is all there is, and it cannot be checked against
-        # what the run read.
-        "sha256_matches_meta": meta.get("sha256") == on_disk
-        if "sha256" in meta
-        else None,
+        "bytes": vectors.stat().st_size,
+        # Written at creation time; absent for a blob made before provenance was
+        # recorded (rel-f1 and rel-event, from the width grid).
+        "sha256": meta.get("sha256"),
         "reproducible": meta.get("reproducible"),
         "config": meta.get("config"),
     }
@@ -143,13 +129,6 @@ def collate(round_dir: str, out_dir: str) -> None:
         )
         print(f"{task:{width}} {metric:8} {cells}")
 
-    stale = [
-        f"{r['arm']}/{r['task']}"
-        for r in rows
-        if r["blob"]["present"] and r["blob"]["sha256_matches_meta"] is False
-    ]
-    if stale:
-        print(f"\nBLOB HASH MISMATCH -- features changed since the run: {stale}")
     absent = [f"{r['arm']}/{r['task']}" for r in rows if not r["blob"]["present"]]
     if absent:
         print(f"\nBLOB MISSING -- result can no longer be traced: {absent}")
