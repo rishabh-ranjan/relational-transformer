@@ -54,28 +54,18 @@ DBS = ["rel-stack", "rel-hm", "rel-amazon"]
 # path peaks at one table's frames, a warm cache loads each cached .pt whole.
 # These five all start cold and then go warm within the same job, so they have
 # to survive the larger of the two peaks. The amperes have 2 T.
-# 240G is the ceiling for a single a100 (the per-GPU cap is 252154M), so the
-# three big dbs take two a100 each purely to be allowed 480G -- the second card
-# buys memory, not compute. Their text columns are the reason: GloVe embeddings
-# accumulate at 300 floats per row, which is ~16 G per text column on a table of
-# rel-amazon's size, on top of the raw db in pandas. An OOM here is expensive
-# because it discards the materialization, and while the graph cache survives to
-# warm the retry, the other agent measured the *warm* path peaking higher than
-# the cold one.
-MEM = {
-    "rel-amazon": "480G",
-    "rel-avito": "240G",
-    "rel-hm": "480G",
-    "rel-stack": "480G",
-    "rel-trial": "240G",
-}
-GPUS = {
-    "rel-amazon": 2,
-    "rel-avito": 1,
-    "rel-hm": 2,
-    "rel-stack": 2,
-    "rel-trial": 1,
-}
+# 240G, the ceiling for one a100 (the per-GPU cap is 252154M, and 14 CPUs).
+#
+# More GPUs is NOT a way to buy past that here: roach runs one rank per GPU, so
+# gpus=2 would execute featurize_db twice and the two ranks would race to write
+# the same blob. One a100 it is; 240G is ~20x rel-trial's measured 12.5 G peak.
+# If a big db still OOMs, the escape is il-cpu, which is uncapped and where the
+# rdblearn featurizers ran at 400G -- featurize_gnn falls back to cpu on its own
+# when no gpu is visible.
+MEM = dict.fromkeys(
+    ["rel-amazon", "rel-avito", "rel-hm", "rel-stack", "rel-trial"], "240G"
+)
+GPUS = dict.fromkeys(["rel-amazon", "rel-avito", "rel-hm", "rel-stack", "rel-trial"], 1)
 
 # Sized off rel-f1 (74,063 db nodes, 24,058 task rows, 87 s at 512 wide) and the
 # blob row counts: rel-amazon is ~17 M task rows across its four tasks, rel-hm
