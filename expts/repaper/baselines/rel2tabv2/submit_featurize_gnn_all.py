@@ -37,14 +37,14 @@ FEATURES_ROOT = f"{SHARE}/features_gnn-c{CHANNELS}-s{SEED}"
 # so a db's tasks share one build -- and two concurrent jobs on a cold db race to
 # write the same *.pt files. One job per db makes that race impossible among
 # these, which matters because all five of these caches are cold.
-# The two cheap dbs first, to measure what this path actually costs. An ampere
-# caps one a100 at 14 CPUs and 252154M, so the big three cannot simply be given
-# 400-600G -- buying more memory means asking for more GPUs, which is worth doing
-# from a measurement rather than from a guess. rel-event's numbers do not
-# extrapolate: 3.3 G of graph cache OOM-killed a 32 G job.
-DBS = ["rel-trial", "rel-avito"]
+DBS = ["rel-stack", "rel-hm", "rel-amazon"]
 #
-# DBS = ["rel-stack", "rel-hm", "rel-amazon"]
+# The two cheap dbs, run first to measure this path: live MaxRSS 12.5 G
+# (rel-trial, 1.4 G of graph cache) and 10.8 G (rel-avito, 56 M of cache), and
+# GloVe materialization at ~25 k sentences/s on 14 cpu threads. rel-event's
+# 3.3 G cache had OOM-killed a 32 G job, so the peak runs ~9x the cache; the
+# three above are sized from that rather than from rel-event alone.
+# DBS = ["rel-trial", "rel-avito"]
 #
 # rel-f1 and rel-event are already done at this configuration.
 # DBS = ["rel-f1", "rel-event"]
@@ -54,21 +54,26 @@ DBS = ["rel-trial", "rel-avito"]
 # path peaks at one table's frames, a warm cache loads each cached .pt whole.
 # These five all start cold and then go warm within the same job, so they have
 # to survive the larger of the two peaks. The amperes have 2 T.
-# 240G is the ceiling for a single a100 (the per-GPU cap is 252154M). The big
-# three may need more than that, which means more GPUs per job; decide that from
-# the MaxRSS these two report, not before.
+# 240G is the ceiling for a single a100 (the per-GPU cap is 252154M), so the
+# three big dbs take two a100 each purely to be allowed 480G -- the second card
+# buys memory, not compute. Their text columns are the reason: GloVe embeddings
+# accumulate at 300 floats per row, which is ~16 G per text column on a table of
+# rel-amazon's size, on top of the raw db in pandas. An OOM here is expensive
+# because it discards the materialization, and while the graph cache survives to
+# warm the retry, the other agent measured the *warm* path peaking higher than
+# the cold one.
 MEM = {
-    "rel-amazon": "240G",
+    "rel-amazon": "480G",
     "rel-avito": "240G",
-    "rel-hm": "240G",
-    "rel-stack": "240G",
+    "rel-hm": "480G",
+    "rel-stack": "480G",
     "rel-trial": "240G",
 }
 GPUS = {
-    "rel-amazon": 1,
+    "rel-amazon": 2,
     "rel-avito": 1,
-    "rel-hm": 1,
-    "rel-stack": 1,
+    "rel-hm": 2,
+    "rel-stack": 2,
     "rel-trial": 1,
 }
 
