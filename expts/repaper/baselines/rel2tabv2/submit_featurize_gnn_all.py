@@ -37,7 +37,14 @@ FEATURES_ROOT = f"{SHARE}/features_gnn-c{CHANNELS}-s{SEED}"
 # so a db's tasks share one build -- and two concurrent jobs on a cold db race to
 # write the same *.pt files. One job per db makes that race impossible among
 # these, which matters because all five of these caches are cold.
-DBS = ["rel-trial", "rel-avito", "rel-stack", "rel-hm", "rel-amazon"]
+# The two cheap dbs first, to measure what this path actually costs. An ampere
+# caps one a100 at 14 CPUs and 252154M, so the big three cannot simply be given
+# 400-600G -- buying more memory means asking for more GPUs, which is worth doing
+# from a measurement rather than from a guess. rel-event's numbers do not
+# extrapolate: 3.3 G of graph cache OOM-killed a 32 G job.
+DBS = ["rel-trial", "rel-avito"]
+#
+# DBS = ["rel-stack", "rel-hm", "rel-amazon"]
 #
 # rel-f1 and rel-event are already done at this configuration.
 # DBS = ["rel-f1", "rel-event"]
@@ -47,12 +54,22 @@ DBS = ["rel-trial", "rel-avito", "rel-stack", "rel-hm", "rel-amazon"]
 # path peaks at one table's frames, a warm cache loads each cached .pt whole.
 # These five all start cold and then go warm within the same job, so they have
 # to survive the larger of the two peaks. The amperes have 2 T.
+# 240G is the ceiling for a single a100 (the per-GPU cap is 252154M). The big
+# three may need more than that, which means more GPUs per job; decide that from
+# the MaxRSS these two report, not before.
 MEM = {
-    "rel-amazon": "600G",
-    "rel-avito": "192G",
-    "rel-hm": "400G",
-    "rel-stack": "400G",
-    "rel-trial": "192G",
+    "rel-amazon": "240G",
+    "rel-avito": "240G",
+    "rel-hm": "240G",
+    "rel-stack": "240G",
+    "rel-trial": "240G",
+}
+GPUS = {
+    "rel-amazon": 1,
+    "rel-avito": 1,
+    "rel-hm": 1,
+    "rel-stack": 1,
+    "rel-trial": 1,
 }
 
 # Sized off rel-f1 (74,063 db nodes, 24,058 task rows, 87 s at 512 wide) and the
@@ -110,13 +127,13 @@ for db in DBS:
             # "last"'s most-recent-k, which is recency biased. Both honour the
             # cutoff, so neither leaks.
             temporal_strategy="uniform",
-            # 16, not 1, which is a deliberate trade of reproducibility for
+            # 14, not 1, which is a deliberate trade of reproducibility for
             # throughput on 33 M task rows: pyg-lib's per-thread sampler engines
             # make the blob depend on thread scheduling (see featurize_gnn). The
             # blob is therefore the artifact of record -- meta.json carries its
             # sha256 and `reproducible: false`, and collate_results.py reports
             # both. Never delete a blob that results were computed from.
-            sampler_threads=16,
+            sampler_threads=14,
             batch_size=512,
             num_workers=0,
             seed=SEED,
@@ -126,8 +143,10 @@ for db in DBS:
             account="infolab",
             qos="il",
             time=TIME[db],
-            gpus="a100:1",
-            cpus_per_task=16,
+            # An ampere allows 14 CPUs and 252154M per a100, so a job needing
+            # more memory has to hold more GPUs to be allowed it.
+            gpus=f"a100:{GPUS[db]}",
+            cpus_per_task=14 * GPUS[db],
             ntasks=None,
             exclusive=False,
             mem=MEM[db],
