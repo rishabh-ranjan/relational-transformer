@@ -81,6 +81,7 @@ def featurize_db(
         batch_size=256,
     )
 
+    data = col_stats_dict = None
     for table in tables:
         vectors_path = out_dir / f"{table}_vectors.bin"
         meta_path = out_dir / f"{table}_meta.json"
@@ -88,6 +89,12 @@ def featurize_db(
             print(f"[{db}] {table}: already featurized, skipping", flush=True)
             continue
         tic = time.time()
+        # Drop the previous table's graph before building the next. The cold
+        # path materializes table by table and peaks at one table's frames
+        # (rel-event: MaxRSS 3.3 G), but a warm cache torch_frame.loads each .pt
+        # whole, and holding two of those at once OOM-killed all 15 jobs of the
+        # rel-event wave at 32 G.
+        data = col_stats_dict = None
 
         task = dataset.load_task(table)
         # Never the example's include_task_tables="all"/"current_only": those add

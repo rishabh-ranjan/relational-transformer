@@ -53,15 +53,15 @@ SEEDS = list(range(4))
 #     "rel-amazon",
 # ]
 
-# Measured, not guessed from db size: rel-event's cold-cache job (184548, which
-# materialized 3.2 G of tables through GloVe) peaked at MaxRSS 3.3 G against the
-# 240 G it had been given off the rt ladder. torch_frame materializes and writes
-# per table rather than holding the db at once, so this tracks the largest table
-# and not the database. The big dbs keep headroom until one of them is measured.
+# rel-event's cold-cache job (184548) reported MaxRSS 3.3 G, so 32 G looked
+# generous -- and OOM-killed all 15 warm-cache jobs. The cold path materializes
+# table by table and peaks at one table's frames; a warm cache loads each cached
+# .pt whole, which is a different and larger peak. Measure the path you are
+# about to run, not the one that happened to run first.
 MEM = {
     "rel-amazon": "400G",
     "rel-avito": "64G",
-    "rel-event": "32G",
+    "rel-event": "192G",
     "rel-f1": "32G",
     "rel-hm": "240G",
     "rel-stack": "240G",
