@@ -95,16 +95,23 @@ def queued() -> set[str]:
 
 busy = queued()
 
+ckpt = "~/scratch/hf/stanford-star/rt-plurel"
+subdir = "repaper-submit-rt-plurel"
+prefix = "subp"
+# ckpt = CKPT
+# subdir = "repaper-submit"
+# prefix = "sub"
+
 cfgs = json.loads(
     (Path(__file__).parent.parent / "tune" / "tuned_configs.json").read_text()
 )
 for task_key, rec in sorted(cfgs.items()):
     db, table = task_key.split("/")
     for rank, (ctx, lcs, bw, pl) in enumerate(rec["top_cfgs"]):
-        out_dir = f"{OUT_ROOT}/repaper-submit/cfg{rank}"
+        out_dir = f"{OUT_ROOT}/{subdir}/cfg{rank}"
         if (Path(out_dir).expanduser() / f"{db}__{table}.json").exists():
             continue
-        if f"sub-cfg{rank}-{db}-{table}" in busy:
+        if f"{prefix}-cfg{rank}-{db}-{table}" in busy:
             continue
         submit(
             "expts.repaper.enscurve.run:main",
@@ -130,10 +137,10 @@ for task_key, rec in sorted(cfgs.items()):
                 prefetch_factor=2,
                 mmap_populate=True,
                 db_cutoff=None,
-                ckpt=CKPT,
+                ckpt=ckpt,
             ),
             resources=resources(db, table, rank),
-            name=f"sub-cfg{rank}-{db}-{table}",
+            name=f"{prefix}-cfg{rank}-{db}-{table}",
             repo_root=str(Path(__file__).resolve().parents[3]),
             cluster=ILC,
             job_env="expts/job_env.sh",
