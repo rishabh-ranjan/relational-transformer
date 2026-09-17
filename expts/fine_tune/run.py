@@ -240,11 +240,7 @@ def main(
 ) -> None:
     (rt_task,) = get_tasks(pre_dir, [(db, task)], ("train",))
     task_type = rt_task.task_type
-    warm_start = (
-        None
-        if load_ckpt_root is None
-        else f"{load_ckpt_root}/{ {'clf': 'classification', 'reg': 'regression'}[task_type] }"
-    )
+    warm_start = load_ckpt_root
     name = f"{model}/{db}/{task}"
 
     def stage(s: str) -> tuple[str, Path]:

@@ -9,14 +9,14 @@ from roach.slurm import Resources, submit
 
 HERE = Path(__file__).parent
 
-PROJECT = "2026-08-24-fine_tune"
+PROJECT = "2026-09-17-fine_tune"
 ENTITY = "rtv2"
 OUT_ROOT = "~/scratch/relational-transformer/fine_tune"
 
 MODELS = (
     ("rt-plurel", "~/scratch/hf/stanford-star/rt-plurel"),
-    ("rt", None),
-    ("rt-j", "~/scratch/hf/stanford-star/rt-j"),
+    # ("rt", None),
+    # ("rt-j", "~/scratch/hf/stanford-star/rt-j"),
 )
 
 TASKS = (
@@ -119,123 +119,35 @@ def b200(qos: str, time: str) -> Resources:
 # clocks, item-sales and user-engagement first) on the fastest slots:
 # il-interactive 2 x b200, il 2 x b200 + 8 x a100, then il-lo for the 30 left.
 # TASKS is in that cost order, so the plan reads down the list.
+# 2026-09-17 10:20, read off the cluster: nothing of mine anywhere, ~57 a100
+# free, blackwell1 has 4 b200 free (roed holds 4 under il-lo). The four tasks
+# whose selection arm ran to its 50k ceiling in the 08-24 sweep take the b200s
+# (two on il, two on il-lo where a requeue resumes), the next eight fill the
+# il a100 cap, the rest ride il-lo.
 RESOURCES: dict[tuple[str, str, str], Resources] = {
-    ("rt-plurel", "rel-hm", "item-sales"): b200("il-interactive", "12:00:00"),
-    ("rt", "rel-hm", "item-sales"): b200("il-interactive", "12:00:00"),
-    ("rt-plurel", "rel-stack", "user-engagement"): b200("il", "7-00:00:00"),
-    ("rt", "rel-stack", "user-engagement"): b200("il", "7-00:00:00"),
-    # 11:55: the il b200 sub-cap has one slot left (l1ly holds il-lo b200s, which
-    # il preempts); the il a100 job with the most left moves onto it. scancel
-    # sends SIGTERM, rt.train saves at the next step, so the move costs a restart.
+    ("rt-plurel", "rel-hm", "item-sales"): b200("il", "7-00:00:00"),
     ("rt-plurel", "rel-amazon", "user-churn"): b200("il", "7-00:00:00"),
-    # 14:45: the il b200 sub-cap has a slot again; the a100 job with the most
-    # left (selection arm at 46.8k, a ~45k-step refit ahead) moves onto it.
-    ("rt", "rel-amazon", "user-churn"): b200("il", "7-00:00:00"),
+    ("rt-plurel", "rel-hm", "user-churn"): b200("il-lo", "3-00:00:00"),
+    ("rt-plurel", "rel-stack", "user-badge"): b200("il-lo", "3-00:00:00"),
+    ("rt-plurel", "rel-stack", "user-engagement"): a100("il", "7-00:00:00"),
     ("rt-plurel", "rel-trial", "study-adverse"): a100("il", "7-00:00:00"),
-    ("rt", "rel-trial", "study-adverse"): a100("il", "7-00:00:00"),
-    ("rt-plurel", "rel-hm", "user-churn"): a100("il", "7-00:00:00"),
-    # 15:45: rt/stack/user-badge finished on its il-interactive b200; the slot
-    # goes to the a100 job with the most left (a 41k-step refit just begun).
-    ("rt", "rel-hm", "user-churn"): b200("il-interactive", "12:00:00"),
     ("rt-plurel", "rel-amazon", "item-churn"): a100("il", "7-00:00:00"),
-    ("rt", "rel-amazon", "item-churn"): a100("il", "7-00:00:00"),
     ("rt-plurel", "rel-event", "user-attendance"): a100("il", "7-00:00:00"),
-    # 03:35: rt-plurel/user-engagement finished on its il b200 (4h40); the slot
-    # goes to the biggest pending task with the least done (5.4k steps).
-    ("rt", "rel-event", "user-attendance"): b200("il", "7-00:00:00"),
-    # 08:15: rt/item-sales finished on its il-interactive b200 (9h15); the slot
-    # goes to the il-lo selection arm with the most left (13.7k steps).
-    ("rt-plurel", "rel-amazon", "user-ltv"): b200("il-interactive", "12:00:00"),
-    # 02:25: rt/user-engagement finished on its il b200 (3h25); the freed slot
-    # goes to the pending task with the most left, which had not started.
-    ("rt", "rel-amazon", "user-ltv"): b200("il", "7-00:00:00"),
-    ("rt-plurel", "rel-avito", "user-visits"): a100("il-lo", "3-00:00:00"),
-    ("rt", "rel-avito", "user-visits"): a100("il-lo", "3-00:00:00"),
-    # 10:55: two il a100 slots freed (rt/study-adverse, rt-plurel/hm/user-churn
-    # finished); the last two il-lo jobs move onto them.
-    # 15:12: rt-plurel/amazon/user-ltv finished on its il-interactive b200; the
-    # slot goes to the a100 job with the most left (selection arm at 46.1k, a
-    # ~50k-step refit ahead).
-    ("rt-plurel", "rel-stack", "user-badge"): b200("il-interactive", "12:00:00"),
-    # 08:32: rt-plurel/item-sales finished on its il-interactive b200 (9h34);
-    # the slot goes to the il-lo selection arm with the most left (16.3k steps).
-    ("rt", "rel-stack", "user-badge"): b200("il-interactive", "12:00:00"),
-    ("rt-plurel", "rel-event", "user-ignore"): a100("il-lo", "3-00:00:00"),
-    ("rt", "rel-event", "user-ignore"): a100("il-lo", "3-00:00:00"),
-    # 06:30: rt-plurel/study-adverse finished on its il a100 (7h49); the slot
-    # goes to the il-lo job with the most left that a requeue had put on ampere7.
+    ("rt-plurel", "rel-amazon", "user-ltv"): a100("il", "7-00:00:00"),
+    ("rt-plurel", "rel-avito", "user-visits"): a100("il", "7-00:00:00"),
+    ("rt-plurel", "rel-event", "user-ignore"): a100("il", "7-00:00:00"),
     ("rt-plurel", "rel-amazon", "item-ltv"): a100("il", "7-00:00:00"),
-    # 07:12: rt/user-attendance finished on its il b200 (3h16); the slot goes
-    # to the il-lo selection arm with the most left (12.2k steps, biggest db).
-    ("rt", "rel-amazon", "item-ltv"): b200("il", "7-00:00:00"),
     ("rt-plurel", "rel-trial", "site-success"): a100("il-lo", "3-00:00:00"),
-    ("rt", "rel-trial", "site-success"): a100("il-lo", "3-00:00:00"),
     ("rt-plurel", "rel-stack", "post-votes"): a100("il-lo", "3-00:00:00"),
-    ("rt", "rel-stack", "post-votes"): a100("il-lo", "3-00:00:00"),
     ("rt-plurel", "rel-avito", "user-clicks"): a100("il-lo", "3-00:00:00"),
-    ("rt", "rel-avito", "user-clicks"): a100("il-lo", "3-00:00:00"),
     ("rt-plurel", "rel-avito", "ad-ctr"): a100("il-lo", "3-00:00:00"),
-    ("rt", "rel-avito", "ad-ctr"): a100("il-lo", "3-00:00:00"),
     ("rt-plurel", "rel-trial", "study-outcome"): a100("il-lo", "3-00:00:00"),
-    ("rt", "rel-trial", "study-outcome"): a100("il-lo", "3-00:00:00"),
     ("rt-plurel", "rel-event", "user-repeat"): a100("il-lo", "3-00:00:00"),
-    ("rt", "rel-event", "user-repeat"): a100("il-lo", "3-00:00:00"),
     ("rt-plurel", "rel-f1", "driver-dnf"): a100("il-lo", "3-00:00:00"),
-    ("rt", "rel-f1", "driver-dnf"): a100("il-lo", "3-00:00:00"),
     ("rt-plurel", "rel-f1", "driver-top3"): a100("il-lo", "3-00:00:00"),
-    ("rt", "rel-f1", "driver-top3"): a100("il-lo", "3-00:00:00"),
     ("rt-plurel", "rel-f1", "driver-position"): a100("il-lo", "3-00:00:00"),
-    ("rt", "rel-f1", "driver-position"): a100("il-lo", "3-00:00:00"),
-    # 2026-08-26 00:15, rt-j (mirror verified against the Hub, revision 1819386c):
-    # every il and il-interactive slot of mine is held by the icl session
-    # (8 a100 + 2 b200 on il, 2 b200 on il-interactive), blackwell1 is full, and
-    # ~6 a100 are free but PLANNED: backfill holds them for three pending 8xa100
-    # il-lo jobs of higher priority, and a 3-day job cannot fit the gap before
-    # their start (slurm planned ours for 04:58 .. 08-28). A 6-hour wall clock
-    # does fit and backfills at once; roach requeues at the limit and the job
-    # resumes, so a long task just runs in 6-hour slices. Promoted onto the
-    # high tiers as the shared caps free up, longest tasks first.
-    # 01:36: an il-interactive slot and a b200 card free (icl's unit ended);
-    # the longest rt-j task moves off its a100 slice.
-    ("rt-j", "rel-hm", "item-sales"): b200("il-interactive", "12:00:00"),
-    # 00:55: the second il b200 (icl's job there ended) and one il slot free.
-    ("rt-j", "rel-stack", "user-engagement"): b200("il", "7-00:00:00"),
-    # 00:45: one il slot and one il b200 of the sub-cap free (icl holds the
-    # rest), a b200 card free: the longest pending rt-j task takes it.
-    ("rt-j", "rel-amazon", "user-churn"): b200("il", "7-00:00:00"),
-    ("rt-j", "rel-trial", "study-adverse"): a100("il-lo", "6:00:00"),
-    # 01:52: the second il-interactive slot and a b200 card free.
-    ("rt-j", "rel-hm", "user-churn"): b200("il-interactive", "12:00:00"),
-    # 04:15: rt-j/user-engagement finished on its il b200; the longest rt-j task
-    # still on an a100 slice takes the slot.
-    ("rt-j", "rel-amazon", "item-churn"): b200("il", "7-00:00:00"),
-    # 08:24: rt-j/hm/user-churn finished on its il-interactive b200; the pending
-    # selection arm with the most left takes the slot.
-    ("rt-j", "rel-event", "user-attendance"): b200("il-interactive", "12:00:00"),
-    # 02:10: one il slot free across sessions; the longest pending task takes it.
-    # 08:02: rt-j/item-churn finished on its il b200; user-ltv moves from its il
-    # a100 onto that b200 (same il total, the sub-cap had the slot).
-    ("rt-j", "rel-amazon", "user-ltv"): b200("il", "7-00:00:00"),
-    ("rt-j", "rel-avito", "user-visits"): a100("il-lo", "6:00:00"),
-    # 07:12: rt-j/item-sales finished on its il-interactive b200; the il-lo
-    # selection arm with the most left (user-badge ran 33-41k steps for the
-    # other warm starts) moves onto it.
-    ("rt-j", "rel-stack", "user-badge"): b200("il-interactive", "12:00:00"),
-    ("rt-j", "rel-event", "user-ignore"): a100("il-lo", "6:00:00"),
-    # 10:40: rt-j/event/user-attendance finished on its il-interactive b200;
-    # the last selection arm still on an a100 slice (item-ltv, 23k steps and
-    # still improving) moves onto it.
-    ("rt-j", "rel-amazon", "item-ltv"): b200("il-interactive", "12:00:00"),
-    ("rt-j", "rel-trial", "site-success"): a100("il-lo", "6:00:00"),
-    ("rt-j", "rel-stack", "post-votes"): a100("il-lo", "6:00:00"),
-    ("rt-j", "rel-avito", "user-clicks"): a100("il-lo", "6:00:00"),
-    ("rt-j", "rel-avito", "ad-ctr"): a100("il-lo", "6:00:00"),
-    ("rt-j", "rel-trial", "study-outcome"): a100("il-lo", "6:00:00"),
-    ("rt-j", "rel-event", "user-repeat"): a100("il-lo", "6:00:00"),
-    ("rt-j", "rel-f1", "driver-dnf"): a100("il-lo", "6:00:00"),
-    ("rt-j", "rel-f1", "driver-top3"): a100("il-lo", "6:00:00"),
-    ("rt-j", "rel-f1", "driver-position"): a100("il-lo", "6:00:00"),
 }
+
 
 
 def queued() -> set[str]:

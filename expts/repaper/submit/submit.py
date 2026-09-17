@@ -17,13 +17,10 @@ from roach.slurm import Resources, submit
 
 
 def resources(db: str, table: str, rank: int) -> Resources:
-    # 2026-09-15 11:20: every a100 and b200 on the cluster is allocated and
-    # this user's 10 il slots are idle, so the ten longest full-test pieces
-    # take il -- the user-churn/user-ltv octet (351k rows each) on a100s and
-    # two item pieces on the il b200 sub-cap, which preempts il-lo blackwell.
-    # 12:45: two blackwell cards freed by the il preemption; the remaining
-    # item pieces queue on them under il-lo rather than the saturated a100s
-    if db == "rel-amazon" and table in ("item-churn", "item-ltv") and rank > 0:
+    # 2026-09-17 10:25: the il tier carries the fine_tune sweep, so the ICL
+    # rerun rides il-lo -- the rel-amazon item pieces on the free blackwell
+    # cards, everything else on the plentiful a100s.
+    if db == "rel-amazon" and table in ("item-churn", "item-ltv"):
         return Resources(
             partition="il",
             account="infolab",
@@ -37,23 +34,6 @@ def resources(db: str, table: str, rank: int) -> Resources:
             mem_per_gpu=None,
             constraint=None,
             nodelist="blackwell1",
-            reservation=None,
-            dependency=None,
-        )
-    if db == "rel-amazon" and (table in ("user-churn", "user-ltv") or rank == 0):
-        return Resources(
-            partition="il",
-            account="infolab",
-            qos="il",
-            time="2-00:00:00",
-            gpus="b200:1" if table in ("item-churn", "item-ltv") else "a100:1",
-            cpus_per_task=8,
-            ntasks=None,
-            exclusive=False,
-            mem="120G",
-            mem_per_gpu=None,
-            constraint=None if table in ("item-churn", "item-ltv") else "ampere",
-            nodelist="blackwell1" if table in ("item-churn", "item-ltv") else None,
             reservation=None,
             dependency=None,
         )
