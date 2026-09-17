@@ -114,13 +114,17 @@ ARMS = {
 # resubmit of anything that dies cost only the arms that actually failed.
 ROUTE = {
     ("rel-amazon", "user-churn"): ("il-interactive", "b200"),
-    ("rel-f1", "driver-dnf"): ("il", "rtx8000"),
+    ("rel-f1", "driver-dnf"): ("il-lo", "b200"),
     ("rel-f1", "driver-position"): ("il-lo", "b200"),
-    # Same split by cost: the clf task to the idle older cards, the regression
-    # one -- ~7x the per-batch cost at the same shape -- to the b200.
-    ("rel-event", "user-ignore"): ("il", "rtx8000"),
+    ("rel-event", "user-ignore"): ("il-lo", "b200"),
     ("rel-event", "user-attendance"): ("il-lo", "b200"),
 }
+# Not rtx8000, though 20 of them sit idle and sm_75 is in this torch's arch
+# list: EXAONE's attention calls F.scaled_dot_product_attention, and on sm_75
+# that raises "RuntimeError: No available kernel" -- flash and mem-efficient
+# both want sm_80+. All 64 user-ignore jobs of the first rel-event wave died on
+# it (184585 and siblings) while the 64 b200 jobs completed. Starting on a node
+# is not evidence that the work runs there.
 TIME = {"rel-amazon": "12:00:00", "rel-f1": "4:00:00", "rel-event": "4:00:00"}
 # rel-amazon's preprocessed dir is 33 G and mmap_populate faults all of it in;
 # featurize_rt needed 240 G on the same db. rel-f1 is 12 M.
