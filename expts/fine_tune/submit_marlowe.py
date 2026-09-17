@@ -66,8 +66,15 @@ def main() -> None:
                 wandb_disabled=False,
                 out_root=OUT_ROOT,
             ),
+            # 2-day walls sat behind a 3-day backfill horizon; a 6-hour slice
+            # backfills into today's churn and roach requeues at the limit,
+            # so a long stage just runs in slices (the 08-24 sweep's pattern)
             resources=dataclasses.replace(
-                marlowe.H100, gpus="1", exclusive=False, cpus_per_task=14
+                marlowe.H100,
+                gpus="1",
+                exclusive=False,
+                cpus_per_task=14,
+                time="6:00:00",
             ),
             name=name,
             repo_root=str(HERE.parents[1]),
