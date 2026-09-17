@@ -1,3 +1,4 @@
+import gc
 import hashlib
 import json
 import time
@@ -198,7 +199,14 @@ def featurize_db(
         # representation the head would have consumed. shallow_list and
         # id_awareness are the example's defaults (off), so nothing else of it is
         # skipped.
-        chunks = []
+        # Written straight into one preallocated float32 array rather than a list
+        # of per-batch tensors. rel-amazon/user-ltv is 5,470,060 x 512, so the
+        # result alone is 11 G; accumulating chunks and then going through
+        # torch.cat(...).numpy().astype(np.float64) held the data four times over
+        # and OOM-killed a 240 G job at 99.2% of that table (184956, MaxRSS
+        # 249 G). Everything below works in float32 and in row blocks.
+        feats = np.empty((total_nodes, channels), dtype=np.float32)
+        pos = 0
         with torch.no_grad():
             for i, batch in enumerate(loader):
                 batch = batch.to(device)
@@ -215,26 +223,46 @@ def featurize_db(
                     batch.num_sampled_nodes_dict,
                     batch.num_sampled_edges_dict,
                 )
-                chunks.append(x_dict[entity_table][: seed_time.size(0)].float().cpu())
+                chunk = x_dict[entity_table][: seed_time.size(0)].float().cpu().numpy()
+                feats[pos : pos + chunk.shape[0]] = chunk
+                pos += chunk.shape[0]
                 if i % 200 == 0:
-                    done = sum(c.shape[0] for c in chunks)
                     print(
-                        f"[{db}] {table}: {done}/{total_nodes} rows "
+                        f"[{db}] {table}: {pos}/{total_nodes} rows "
                         f"({time.time() - tic:.0f}s)",
                         flush=True,
                     )
-
-        arr = torch.cat(chunks, dim=0).numpy().astype(np.float64)
-        assert arr.shape[0] == total_nodes, f"{arr.shape[0]} vs {total_nodes}"
+        assert pos == total_nodes, f"{pos} vs {total_nodes}"
 
         # Same standardization as the rdblearn and sql blobs: the predictors see
-        # one column scale across every context, and TabICL's float32
-        # per-context standardization cannot be trusted with raw magnitudes.
-        arr = np.where(np.isfinite(arr), arr, np.nan)
-        mean = np.nanmean(arr, axis=0, keepdims=True)
-        std = np.nanstd(arr, axis=0, keepdims=True)
+        # one column scale across every context, and TabICL's float32 per-context
+        # standardization cannot be trusted with raw magnitudes. Accumulated in
+        # float64 over float32 blocks -- np.nanmean on the whole array would
+        # allocate a float64 copy of it, which is the thing being avoided.
+        block = 1 << 16
+        count = np.zeros(channels, dtype=np.int64)
+        total = np.zeros(channels, dtype=np.float64)
+        for i in range(0, total_nodes, block):
+            sl = feats[i : i + block]
+            finite = np.isfinite(sl)
+            count += finite.sum(axis=0)
+            total += np.where(finite, sl, 0.0).sum(axis=0, dtype=np.float64)
+        mean = total / np.maximum(count, 1)
+        sq = np.zeros(channels, dtype=np.float64)
+        for i in range(0, total_nodes, block):
+            sl = feats[i : i + block]
+            d = np.where(np.isfinite(sl), sl - mean, 0.0)
+            sq += np.einsum("ij,ij->j", d, d)
+        std = np.sqrt(sq / np.maximum(count, 1))
         std = np.where(std < 1e-8, 1.0, std)
-        feats = np.nan_to_num((arr - mean) / std, nan=0.0).astype(np.float32)
+
+        mean32 = mean.astype(np.float32)
+        std32 = std.astype(np.float32)
+        for i in range(0, total_nodes, block):
+            sl = feats[i : i + block]
+            sl -= mean32
+            sl /= std32
+            np.nan_to_num(sl, copy=False, nan=0.0, posinf=0.0, neginf=0.0)
         assert np.isfinite(feats).all()
 
         feats.tofile(vectors_path)
@@ -273,3 +301,8 @@ def featurize_db(
             f"in {time.time() - tic:.0f}s",
             flush=True,
         )
+        # Four rel-amazon tasks run in one job, each rebuilding `data` and an
+        # 11 G blob; without this the previous table's graph and features are
+        # still reachable while the next one is being built.
+        del feats, loader, encoder, temporal_encoder, gnn, data, col_stats_dict
+        gc.collect()
