@@ -1,3 +1,4 @@
+import functools
 import hashlib
 import json
 import pickle
@@ -27,6 +28,10 @@ deterministic and their blobs can be rebuilt.\
 """
 
 
+# Memoised on the path: every predictor run against a blob asks for the same
+# hash, and the wide ones are large -- rel-amazon at 512 channels is 5.5 G, so
+# hashing once per result rather than once per blob was most of the runtime.
+@functools.cache
 def sha256_file(path: Path) -> str:
     digest = hashlib.sha256()
     with open(path, "rb") as fh:
@@ -35,6 +40,9 @@ def sha256_file(path: Path) -> str:
     return digest.hexdigest()
 
 
+# Returns a dict that callers only read, so sharing one instance between the
+# results that used the same blob is safe.
+@functools.cache
 def blob_provenance(features_root: str, subdir: str, db: str, table: str) -> dict:
     feat_dir = Path(features_root).expanduser() / db / subdir
     meta_path = feat_dir / f"{table}_meta.json"
