@@ -53,13 +53,15 @@ SEEDS = list(range(4))
 #     "rel-amazon",
 # ]
 
-# The materialization holds the whole db as TensorFrames, text embeddings
-# included, so this tracks db size rather than task size. Same ladder the rt
-# featurize pass used, which is the closest measured thing.
+# Measured, not guessed from db size: rel-event's cold-cache job (184548, which
+# materialized 3.2 G of tables through GloVe) peaked at MaxRSS 3.3 G against the
+# 240 G it had been given off the rt ladder. torch_frame materializes and writes
+# per table rather than holding the db at once, so this tracks the largest table
+# and not the database. The big dbs keep headroom until one of them is measured.
 MEM = {
     "rel-amazon": "400G",
     "rel-avito": "64G",
-    "rel-event": "240G",
+    "rel-event": "32G",
     "rel-f1": "32G",
     "rel-hm": "240G",
     "rel-stack": "240G",
