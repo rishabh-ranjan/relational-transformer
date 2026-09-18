@@ -21,7 +21,7 @@ from expts.repaper.config import (
 # One row count per job. run.py refuses several for a query-independent
 # retriever, because the evaluator keys the context by ITS context size and there
 # is only one of those per run.
-CONTEXT_ROWS = [1024]
+CONTEXT_ROWS = [16384, 262144]
 #
 # CONTEXT_ROWS = [1024, 16384, 262144]
 
@@ -30,12 +30,20 @@ METHOD = "rt_tabpfn"
 FEATURES_ROOT = f"{SHARE}/features_rt-j"
 SUBDIR = "rt_features"
 
-# Equivalence check first: rt-j + tabpfn at 1024 on this task is 0.7177 in
-# n1024_4feat_2pred, which was run before the evaluator's context size was
-# separated from the predictor's row count. Reproducing it here confirms the
-# separation changed nothing about prediction.
+# Smoke wave: the two new sizes on one task, before 42 jobs. rel-hm/user-churn
+# has 3.83 M train rows, so 262144 is reached rather than clamped, and 74,575
+# test rows is the cheapest such task. What is untested is the fit, not the
+# eval: tabpfn's n_estimators resolves to 8 and fit_with_cache builds a KV cache
+# per estimator, so 262144 x 512 is where this either fits in 80 GB or does not.
+#
+# The equivalence check that came first, job 187400: rt-j + tabpfn at 1024 rows
+# on rel-f1/driver-dnf reproduced n1024_4feat_2pred's 0.7177475235446249
+# bit-for-bit after the evaluator's context size was separated from the
+# predictor's row count.
 DB_TASK_LIST = f"{PRE_DIR}/db-task-lists/forecast.json"
-TASKS = [("rel-f1", "driver-dnf")]
+TASKS = [("rel-hm", "user-churn")]
+#
+# TASKS = [("rel-f1", "driver-dnf")]
 #
 # import json
 # TASKS = [tuple(p) for p in json.loads(Path(DB_TASK_LIST).expanduser().read_text())]
