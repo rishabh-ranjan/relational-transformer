@@ -29,6 +29,7 @@ def main(
     features_root: str,
     out_dir: str,
     ctx_size_list: list[int],
+    sampler_ctx_size: int,
     items_per_task: int,
     local_ctx_size: int,
     bfs_width: int,
@@ -73,6 +74,30 @@ def main(
     (task,) = get_tasks(pre_dir, [(db, table)], (split,))
     ctx_sizes = sorted(ctx_size_list)
 
+    # What the evaluator is told its context size is, which is NOT the
+    # predictor's context size under a query-independent retriever. The
+    # evaluator's number is a per-query cell count: the rustler sampler pads
+    # every batch to it (3.2 GiB for eight queries at 262144) and
+    # eval_bs = tokens_per_gpu // it. The global retriever discards that context
+    # entirely, so a run passes something small here and keys its real row
+    # counts under it. For retriever="sampler" the context IS the evaluator's,
+    # so the two must agree.
+    if retriever == "sampler":
+        assert sampler_ctx_size == max(ctx_sizes), (
+            f"retriever='sampler' uses the evaluator's context, so "
+            f"sampler_ctx_size ({sampler_ctx_size}) must be max(ctx_size_list) "
+            f"({max(ctx_sizes)})"
+        )
+        eval_ctx_sizes = ctx_sizes
+        ctx_keys = ctx_sizes
+    else:
+        assert len(ctx_sizes) == 1, (
+            f"a query-independent retriever keys its context by the evaluator's "
+            f"single context size, so pass one row count, got {ctx_sizes}"
+        )
+        eval_ctx_sizes = [sampler_ctx_size]
+        ctx_keys = [sampler_ctx_size]
+
     model, device = build_rel2tab(
         method=method,
         db=db,
@@ -94,6 +119,7 @@ def main(
         context_split=context_split,
         # for the global retriever these are context ROW counts, not cells
         n_rows_list=ctx_sizes,
+        ctx_keys=ctx_keys,
         pre_dir=pre_dir,
         embedder=EMBEDDER,
         d_text=D_TEXT,
@@ -105,7 +131,7 @@ def main(
         embedder=EMBEDDER,
         d_text=D_TEXT,
         device=device,
-        ctx_size_list=ctx_sizes,
+        ctx_size_list=eval_ctx_sizes,
         local_ctx_size=local_ctx_size,
         bfs_width=bfs_width,
         prefer_latest=prefer_latest,
@@ -124,8 +150,13 @@ def main(
 
     per_ctx: dict[int, dict] = OrderedDict()
     saved_preds: dict[str, np.ndarray] = {}
+    # rows_for maps the evaluator's context key back to the number of context
+    # rows the predictor actually saw, so a result is readable without knowing
+    # how the run was configured.
+    rows_for = dict(zip(ctx_keys, ctx_sizes))
+    effective = getattr(model.retriever, "effective_rows", None)
     for _task, ctx, labels, preds_by_prefix, num_labels in ev.evaluate_raw(
-        [(model, "")], ctx_sizes
+        [(model, "")], eval_ctx_sizes
     ):
         metric_name, metric_value = metric_for(
             task.task_type, labels, preds_by_prefix[""]
@@ -138,6 +169,12 @@ def main(
             "metric_value": metric_value,
             "n": int(labels.shape[0]),
             "mean_labels": float(np.mean(num_labels)),
+            # The experiment's axis. n_context_rows is what was asked for and
+            # n_context_rows_effective what the train split could supply.
+            "n_context_rows": int(rows_for[int(ctx)]),
+            "n_context_rows_effective": (
+                int(effective[int(ctx)]) if effective else int(rows_for[int(ctx)])
+            ),
         }
         preds = np.asarray(preds_by_prefix[""], dtype=np.float64)
         saved_preds[f"preds_{int(ctx)}"] = preds
@@ -189,6 +226,7 @@ def main(
                 "context_split": context_split,
                 "split": split,
                 "ctx_sizes": ctx_sizes,
+                "sampler_ctx_size": sampler_ctx_size,
                 "items_per_task": items_per_task,
                 "local_ctx_size": local_ctx_size,
                 "bfs_width": bfs_width,

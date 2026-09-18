@@ -193,6 +193,11 @@ for db, table in TASKS:
                 features_root=features_root,
                 out_dir=f"{OUT_ROOT}/repaper-rel2tabv2/{ROUND}/{arm}",
                 ctx_size_list=N_ROWS,
+                # The evaluator's per-query context width, which a
+                # query-independent retriever discards -- not the predictor's
+                # row count, which is ctx_size_list. Keep these equal only for
+                # retriever="sampler". See run.py.
+                sampler_ctx_size=64 if RETRIEVER != "sampler" else max(N_ROWS),
                 items_per_task=10_000_000,
                 # the sampler only says which rows are queries and what their labels
                 # are; its context is discarded, so num_walks=0 and a small
@@ -207,7 +212,7 @@ for db, table in TASKS:
                 # set and its order -- hence the labels -- are identical across
                 # context seeds and the cells stay comparable.
                 context_seed=ctx_seed,
-                tokens_per_gpu=2**18,
+                tokens_per_gpu=64 * 256 if RETRIEVER != "sampler" else 2**18,
                 num_workers=8,
                 prefetch_factor=2,
                 mmap_populate=True,

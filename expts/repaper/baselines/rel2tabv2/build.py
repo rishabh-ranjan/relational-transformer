@@ -24,6 +24,7 @@ def build_rel2tab(
     context_seed: int,
     context_split: str,
     n_rows_list: list[int],
+    ctx_keys: list[int],
     pre_dir: str,
     embedder: str,
     d_text: int,
@@ -120,6 +121,7 @@ def build_rel2tab(
             pre_dir=pre_dir,
             context_split=context_split,
             n_rows_list=n_rows_list,
+            ctx_keys=ctx_keys,
         )
         labels = PreprocessedLabels(pre_dir=pre_dir, embedder=embedder, d_text=d_text)
     else:

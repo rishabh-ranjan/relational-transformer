@@ -131,6 +131,11 @@ for db, table in TASKS:
                 features_root=features_root,
                 out_dir=f"{OUT_ROOT}/repaper-rel2tabv2/{ROUND}/{arm}",
                 ctx_size_list=N_ROWS,
+                # What the evaluator is told, not what the predictor gets: the
+                # global retriever discards the evaluator's per-query context,
+                # and the sampler pads every batch to this width. 64 matches
+                # local_ctx_size, so nothing is padded and nothing is wasted.
+                sampler_ctx_size=64,
                 items_per_task=10_000_000,
                 # the sampler only says which rows are queries and what their
                 # labels are; its context is discarded, so num_walks=0 and a
@@ -142,7 +147,9 @@ for db, table in TASKS:
                 walk_length=0,
                 shuffle_seed=0,
                 context_seed=0,
-                tokens_per_gpu=2**18,
+                # eval_bs = tokens_per_gpu // sampler_ctx_size, so this is
+                # 256 query rows per batch regardless of the context size.
+                tokens_per_gpu=64 * 256,
                 num_workers=8,
                 prefetch_factor=2,
                 mmap_populate=True,
