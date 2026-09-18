@@ -1,3 +1,4 @@
+import json
 import os
 import subprocess
 from pathlib import Path
@@ -21,33 +22,26 @@ from expts.repaper.config import (
 # One row count per job. run.py refuses several for a query-independent
 # retriever, because the evaluator keys the context by ITS context size and there
 # is only one of those per run.
-CONTEXT_ROWS = [16384, 262144]
-#
-# CONTEXT_ROWS = [1024, 16384, 262144]
+CONTEXT_ROWS = [1024, 16384, 262144]
 
 ROUND = "rtj_tabpfn_ctx_scaling"
 METHOD = "rt_tabpfn"
 FEATURES_ROOT = f"{SHARE}/features_rt-j"
 SUBDIR = "rt_features"
 
-# Smoke wave: the two new sizes on one task, before 42 jobs. rel-hm/user-churn
-# has 3.83 M train rows, so 262144 is reached rather than clamped, and 74,575
-# test rows is the cheapest such task. What is untested is the fit, not the
-# eval: tabpfn's n_estimators resolves to 8 and fit_with_cache builds a KV cache
-# per estimator, so 262144 x 512 is where this either fits in 80 GB or does not.
+# The full sweep. 2**10 is rerun here rather than read from n1024_4feat_2pred so
+# the round is self-contained; job 187400 confirmed it reproduces that round
+# bit-for-bit, and done() skips whatever is already finished.
 #
-# The equivalence check that came first, job 187400: rt-j + tabpfn at 1024 rows
-# on rel-f1/driver-dnf reproduced n1024_4feat_2pred's 0.7177475235446249
-# bit-for-bit after the evaluator's context size was separated from the
-# predictor's row count.
+# The smoke wave that preceded it, on rel-hm/user-churn (3.83 M train rows, so
+# 262144 is reached rather than clamped): 0.6157 -> 0.6361 -> 0.6471 over the
+# three sizes, 22m27 and 44 G host peak at the largest. The cost is the one
+# 8-estimator KV-cache fit, not the eval.
 DB_TASK_LIST = f"{PRE_DIR}/db-task-lists/forecast.json"
-TASKS = [("rel-hm", "user-churn")]
+TASKS = [tuple(p) for p in json.loads(Path(DB_TASK_LIST).expanduser().read_text())]
 #
-# TASKS = [("rel-f1", "driver-dnf")]
+# TASKS = [("rel-hm", "user-churn")]
 #
-# import json
-# TASKS = [tuple(p) for p in json.loads(Path(DB_TASK_LIST).expanduser().read_text())]
-
 # The evaluator's per-query context width, which this retriever discards. The
 # rustler sampler pads every batch to it -- 3.2 GiB for eight queries at 262144,
 # all of it thrown away -- so it stays at local_ctx_size and the predictor's row
