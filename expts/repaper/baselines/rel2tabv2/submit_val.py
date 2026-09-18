@@ -48,12 +48,20 @@ BIG = {"rel-amazon", "rel-hm", "rel-stack"}
 REPO_ROOT = str(Path(__file__).resolve().parents[4])
 
 # 2026-09-18: every a100 and b200 on ilc is allocated, and another agent's
-# ctx-scaling sweep holds the whole `il` gpu cap (10 running, 35 pending), so
-# this round goes to `il-lo`: uncapped, priority 100, preemptible with a 300s
+# ctx-scaling sweep held the whole `il` gpu cap (10 running, 35 pending), so the
+# round went out on `il-lo`: uncapped, priority 100, preemptible with a 300s
 # grace. The run does not checkpoint, so a preemption costs one job's elapsed
-# time and nothing else -- done() skips whatever finished. Promote to `il` as
-# that sweep hands its cap back.
-QOS = "il-lo"
+# time and nothing else -- done() skips whatever finished.
+#
+# As that sweep hands the cap back, promote: scancel a pending job, switch the
+# line below, resubmit (only the cancelled task is not already queued or done).
+# A pending job loses nothing by being moved, and an `il` job at priority 1000
+# takes the next card to free ahead of every `il-lo` job in the queue. Spend a
+# freed slot on the task with the most eval left -- the long pole finishes the
+# round. Their pending jobs claim the cap as surely as their running ones, so
+# the count to read is running+pending under qos `il`.
+QOS = "il"
+# QOS = "il-lo"
 
 
 def blob_ready(db: str, table: str) -> bool:
