@@ -36,10 +36,21 @@ def queued() -> set[str]:
 
 def main() -> None:
     busy = queued()
+    done = set(
+        subprocess.run(
+            ["ssh", "marlowe", "find scratch/relational-transformer/fine_tune -name '*__*.csv'"],
+            capture_output=True,
+            text=True,
+            check=True,
+        ).stdout.split()
+    )
     for db, task in TASKS:
         name = f"ft-rt-plurel-{db}-{task}-mw"
         if name in busy:
             print(f"  {name:48s} queued already")
+            continue
+        if any(f"{db}__{task}.csv" in p for p in done):
+            print(f"  {name:48s} done already")
             continue
         submit(
             "expts.fine_tune.run:main",
