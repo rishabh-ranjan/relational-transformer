@@ -15,6 +15,7 @@ def featurize_db(
     context_seed: int,
     db_cutoff: str | int | None,
     batch_size: int,
+    augment: dict | None,
 ) -> None:
     import numpy as np
     import torch
@@ -33,6 +34,33 @@ def featurize_db(
 
     net, config = load_rt_model(ckpt, device=device, compile=False)
     net = net.to(torch.bfloat16).eval()
+
+    plan = None
+    if augment is not None:
+        from rt.augment.inject import augment_batch
+        from rt.augment.plan import (
+            build_plan,
+            load_column_index,
+            load_name_embeddings,
+        )
+        from rt.augment.stats import load as load_numeric_stats
+
+        stats_dir = Path(augment["stats_dir"]).expanduser()
+        stats = load_numeric_stats(stats_dir / f"{db}.json")
+        plan = build_plan(
+            stats=stats,
+            column_index=load_column_index(pre_dir, db),
+            name_embeddings=load_name_embeddings(stats_dir / f"{db}_names.npz"),
+            include=augment["transforms"],
+            max_modal_share=augment["max_modal_share"],
+            d_text=config["d_text"],
+        ).to(device)
+        print(
+            f"[{db}] augmentation on: {len(plan.columns)} derived columns of "
+            f"{len(stats.derived)} ({augment['transforms']}, "
+            f"max_modal_share={augment['max_modal_share']})",
+            flush=True,
+        )
     for task in sorted(by_table.values(), key=lambda t: t.table_name):
 
         ds = RustlerDataset(
@@ -83,6 +111,8 @@ def featurize_db(
                 batch = process_batch(tup, ds.d_text)
                 batch.pop("batch_mask", None)
                 batch = {k: v.to(device, non_blocking=True) for k, v in batch.items()}
+                if plan is not None:
+                    batch = augment_batch(batch, plan)
                 x = net(batch, return_embeddings=True)
                 sort_keys = batch["col_name_idxs"].masked_fill(
                     batch["is_padding"], torch.iinfo(batch["col_name_idxs"].dtype).max
