@@ -47,9 +47,13 @@ DB_TASK_LIST = f"{PRE_DIR}/db-task-lists/forecast.json"
 ALL_DBS = sorted(
     {db for db, _ in json.loads(Path(DB_TASK_LIST).expanduser().read_text())}
 )
-# One cheap db first, to measure how far the features move against the
+# rel-event first: it had the LOWEST baseline-to-augmented feature correlation
+# (0.919 mean per-dimension, against 0.986-0.992 on rel-f1), so it is where the
+# token-count control has the most to separate -- and it featurizes in 6 min.
+# rel-f1 is already done under this root.
+# Previously: one cheap db to measure how far the features move against the
 # no-augment baseline before spending the rest.
-DBS = ["rel-f1"]
+DBS = ["rel-event"]
 # DBS = ALL_DBS
 
 # The baseline pass ran 2 h on the small dbs and 12 h on rel-amazon, rel-hm and
