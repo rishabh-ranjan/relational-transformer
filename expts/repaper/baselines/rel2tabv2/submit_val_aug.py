@@ -50,11 +50,16 @@ QUERY_BATCH = 256
 BIG = {"rel-amazon", "rel-hm", "rel-stack"}
 REPO_ROOT = str(Path(__file__).resolve().parents[4])
 
-# `il` first, and anything that ends up pending on QOSMaxGRESPerUser moves to
-# `il-lo`. The featurize sweep holds 7 of the cap's 10 while it runs, so the
-# first few submitted here will overflow until it drains.
-QOS = "il"
-# QOS = "il-lo"
+# Sweep 1 holds most of the `il` gpu cap while it runs, so this goes out on
+# `il-lo`: uncapped, so every ready task can sit in the queue and take whatever
+# card frees rather than being held back by our own cap. Promote a batch to `il`
+# once sweep 1 drains and the cap is free again.
+#
+# il-lo is preemptible and this run does not checkpoint, so a preemption costs
+# one task's elapsed time; done() skips whatever finished, so resubmitting is
+# the recovery.
+# QOS = "il"
+QOS = "il-lo"
 
 
 def blob_ready(db: str, table: str) -> bool:
