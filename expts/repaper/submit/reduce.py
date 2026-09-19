@@ -5,7 +5,14 @@ import numpy as np
 
 from expts.repaper.config import CKPT, PRE_DIR, SHARE, project
 
-CSV_DIR = Path(SHARE).expanduser() / "leaderboard" / "preds"
+CKPT_DIR = "~/scratch/hf/stanford-star/rt-plurel"
+SUBDIR = "repaper-submit-rt-plurel"
+CSV_DIR = Path(SHARE).expanduser() / "leaderboard" / "preds-rt-plurel"
+RUN_NAME = "rtplurel-top4x4"
+# CKPT_DIR = CKPT
+# SUBDIR = "repaper-submit"
+# CSV_DIR = Path(SHARE).expanduser() / "leaderboard" / "preds"
+# RUN_NAME = "rtj-top4x4"
 N_CFGS = 4
 N_SEEDS = 4
 
@@ -13,7 +20,7 @@ N_SEEDS = 4
 def units(db: str, table: str, rank: int) -> list[tuple[Path, int]]:
     from expts.repaper.config import OUT_ROOT
 
-    unit = Path(OUT_ROOT).expanduser() / "repaper-submit" / f"cfg{rank}"
+    unit = Path(OUT_ROOT).expanduser() / SUBDIR / f"cfg{rank}"
     return [(unit / f"{db}__{table}", N_SEEDS)]
     # icl = Path("~/scratch/relational-transformer/icl/rtv2/2026-08-25-icl").expanduser()
     # whole = icl / f"ens-rt-j-{db}-{table}-cfg{rank}"
@@ -58,7 +65,7 @@ def main() -> None:
     for task_key, rec in sorted(cfgs.items()):
         db, table = task_key.split("/")
         (task,) = get_tasks(PRE_DIR, [(db, table)], ("test",))
-        ckpt = CKPT
+        ckpt = CKPT_DIR
         total = labels = nodes = None
         for rank in range(N_CFGS):
             for unit, seeds in units(db, table, rank):
@@ -95,7 +102,7 @@ def main() -> None:
         "mean_reg": float(np.mean(by_type["reg"])),
         "per_task": results,
     }
-    out = CSV_DIR.parent / "results.json"
+    out = CSV_DIR.parent / f"{RUN_NAME}-results.json"
     out.write_text(json.dumps(summary, indent=1, sort_keys=True) + "\n")
 
     import wandb
@@ -103,7 +110,7 @@ def main() -> None:
     run = wandb.init(
         entity="rtv2",
         project=project("submit"),
-        name="rtj-top4x4",
+        name=RUN_NAME,
         reinit="finish_previous",
     )
     wandb.log(
