@@ -30,7 +30,7 @@ def main() -> None:
     placements = (
         (
             ilc.ILC,
-            dataclasses.replace(ilc.AMPERE_LO, nodes=1),
+            dataclasses.replace(ilc.AMPERE_LO, nodes=1, exclude="ampere4"),
             "",
             2**17,
             16,
