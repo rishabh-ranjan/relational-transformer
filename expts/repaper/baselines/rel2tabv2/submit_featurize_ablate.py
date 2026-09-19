@@ -47,14 +47,17 @@ DB_TASK_LIST = f"{PRE_DIR}/db-task-lists/forecast.json"
 ALL_DBS = sorted(
     {db for db, _ in json.loads(Path(DB_TASK_LIST).expanduser().read_text())}
 )
-# rel-event first: it had the LOWEST baseline-to-augmented feature correlation
-# (0.919 mean per-dimension, against 0.986-0.992 on rel-f1), so it is where the
-# token-count control has the most to separate -- and it featurizes in 6 min.
-# rel-f1 is already done under this root.
-# Previously: one cheap db to measure how far the features move against the
-# no-augment baseline before spending the rest.
-DBS = ["rel-event"]
-# DBS = ALL_DBS
+# The two probes are in: rel-f1 and rel-event both show that most of the feature
+# movement is the extra tokens rather than the transforms, so the control is
+# worth running whole. featurize_rt skips a finished table, so those two are
+# free to re-list.
+DBS = ALL_DBS
+# DBS = ["rel-event"]
+
+# These are new runs, so they can take the fast cards. blackwell1 is one node of
+# eight shared with everyone and il-part caps b200 at 2 per user, so exactly the
+# two dbs that dominate the wall clock get them; everything else is an ampere.
+CARD = {"rel-amazon": "b200", "rel-hm": "b200"}
 
 # The baseline pass ran 2 h on the small dbs and 12 h on rel-amazon, rel-hm and
 # rel-stack at local_ctx_size=256. The augmentation more than doubles the
@@ -137,17 +140,21 @@ for db in DBS:
             qos="il",
             # qos="il-lo",
             time="1-00:00:00" if db in LONG else "8:00:00",
-            gpus="a100:1",
+            gpus=f"{CARD.get(db, 'a100')}:1",
             cpus_per_task=8,
             ntasks=None,
             exclusive=False,
             mem=MEM[db],
             mem_per_gpu=None,
-            constraint="ampere",
-            nodelist=None,
+            constraint="ampere" if CARD.get(db, "a100") == "a100" else None,
+            nodelist="blackwell1" if CARD.get(db) == "b200" else None,
             reservation=None,
             dependency=None,
-            exclude="ampere4,ampere6,ampere7,ampere9",
+            exclude=(
+                "ampere4,ampere6,ampere7,ampere9"
+                if CARD.get(db, "a100") == "a100"
+                else None
+            ),
         ),
         name=name,
         repo_root=REPO_ROOT,
