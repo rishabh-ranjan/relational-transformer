@@ -140,6 +140,54 @@ class PairProduct:
         return pair_product(left, right)
 
 
+@dataclass(frozen=True)
+class Identity:
+    name: str = "identity"
+    arity: int = 1
+    needs_pass2: bool = True
+    params: dict = field(default_factory=lambda: {"input_space": "standardized"})
+
+    def fingerprint_for(self, sources: tuple[str, ...]) -> str:
+        return fingerprint(self.name, self.params, sources)
+
+    def derived_key(self, source: str) -> str:
+        return f"identity({source})"
+
+    def display_name(self, source: str) -> str:
+        return source
+
+    def apply_unary(self, values: torch.Tensor) -> torch.Tensor:
+        return values.to(torch.float32)
+
+
+@dataclass(frozen=True)
+class PairLeft:
+    name: str = "pair_left"
+    arity: int = 2
+    needs_pass2: bool = True
+    params: dict = field(default_factory=lambda: {"input_space": "standardized"})
+
+    def fingerprint_for(self, sources: tuple[str, ...]) -> str:
+        return fingerprint(self.name, self.params, sources)
+
+    def derived_key(self, left: str, right: str) -> str:
+        return f"pair_left({left},{right})"
+
+    def display_name(self, left: str, right: str) -> str:
+        _, table = _split_key(left)
+        _, right_table = _split_key(right)
+        if table != right_table:
+            raise ValueError(
+                f"pair_left pairs must come from one table, got {table!r} and "
+                f"{right_table!r}"
+            )
+        return left
+
+    def apply_pair(self, left: torch.Tensor, right: torch.Tensor) -> torch.Tensor:
+        del right
+        return left.to(torch.float32)
+
+
 def sample_pairs(columns: list[str], n_pairs: int, seed: int) -> list[tuple[str, str]]:
     if n_pairs < 0:
         raise ValueError(f"n_pairs must be non-negative, got {n_pairs}")
@@ -176,7 +224,7 @@ def standardize(
 
 @dataclass(frozen=True)
 class DerivedColumn:
-    transform: Ecdf | SignedLog1p | PairProduct
+    transform: Ecdf | SignedLog1p | PairProduct | Identity | PairLeft
     sources: tuple[str, ...]
     source_stats: tuple[ColumnStats, ...]
     derived: DerivedStats
@@ -228,9 +276,9 @@ class DerivedColumn:
                 device=inputs[0].device,
             ).expand(inputs[0].shape[0], -1)
             return self.transform.apply_unary(inputs[0], knots)
-        if isinstance(self.transform, SignedLog1p):
+        if isinstance(self.transform, (SignedLog1p, Identity)):
             return self.transform.apply_unary(inputs[0])
-        if isinstance(self.transform, PairProduct):
+        if isinstance(self.transform, (PairProduct, PairLeft)):
             return self.transform.apply_pair(inputs[0], inputs[1])
         raise TypeError(f"unknown transform {self.transform!r}")
 

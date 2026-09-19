@@ -39,6 +39,7 @@ def featurize_db(
     if augment is not None:
         from rt.augment.inject import augment_batch
         from rt.augment.plan import (
+            build_ablation_plan,
             build_plan,
             load_column_index,
             load_name_embeddings,
@@ -54,11 +55,27 @@ def featurize_db(
             include=augment["transforms"],
             max_modal_share=augment["max_modal_share"],
             d_text=config["d_text"],
-        ).to(device)
+        )
+        kind = "derived"
+        if augment["ablation"]:
+            # Token-count control: the same cells in the same places, carrying
+            # the untransformed z-scored value. Isolates what widening the row
+            # does from what the transforms do.
+            plan = build_ablation_plan(
+                real=plan,
+                stats=stats,
+                name_embeddings=load_name_embeddings(
+                    stats_dir / f"{db}_ablation_names.npz"
+                ),
+                d_text=config["d_text"],
+            )
+            kind = "untransformed copy"
+        plan = plan.to(device)
         print(
-            f"[{db}] augmentation on: {len(plan.columns)} derived columns of "
+            f"[{db}] augmentation on: {len(plan.columns)} {kind} columns of "
             f"{len(stats.derived)} ({augment['transforms']}, "
-            f"max_modal_share={augment['max_modal_share']})",
+            f"max_modal_share={augment['max_modal_share']}, "
+            f"ablation={augment['ablation']})",
             flush=True,
         )
     for task in sorted(by_table.values(), key=lambda t: t.table_name):

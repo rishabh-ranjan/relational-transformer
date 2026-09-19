@@ -6,7 +6,14 @@ import numpy as np
 import torch
 
 from rt.augment.stats import NumericStats
-from rt.augment.transforms import DerivedColumn, Ecdf, PairProduct, SignedLog1p
+from rt.augment.transforms import (
+    DerivedColumn,
+    Ecdf,
+    Identity,
+    PairLeft,
+    PairProduct,
+    SignedLog1p,
+)
 
 SYNTHETIC_COL_BASE = 1 << 24
 NUMBER_SEM_TYPE = 0
@@ -15,7 +22,13 @@ TRANSFORM_BY_NAME = {
     "ecdf": Ecdf(),
     "signed_log1p": SignedLog1p(),
     "pair_product": PairProduct(),
+    # The token-count ablation: same number of extra cells in the same places,
+    # carrying the untransformed z-scored value instead of a derived one.
+    "identity": Identity(),
+    "pair_left": PairLeft(),
 }
+ABLATION_OF = {"ecdf": "identity", "signed_log1p": "identity",
+               "pair_product": "pair_left"}
 
 
 @dataclass(frozen=True)
@@ -144,3 +157,82 @@ def load_column_index(pre_dir: str, db: str) -> dict[str, int]:
 def load_name_embeddings(path: str | Path) -> dict[str, np.ndarray]:
     with np.load(Path(path).expanduser(), allow_pickle=False) as data:
         return {k: data[k] for k in data.files}
+
+
+def ablation_names(real: AugmentPlan) -> list[str]:
+    """Display names for the ablation mirror of `real`, in plan order.
+
+    Each copy is numbered per source column. A copy must NOT reuse its source's
+    name: identical name and identical value would make it an exact duplicate
+    token, which is a degenerate input the model never saw in pretraining, and a
+    different intervention from "one more column". Numbering keeps the structure
+    matched to the real augmentation -- new column, new name, new token -- with
+    only the value left untransformed.
+    """
+    seen: dict[str, int] = {}
+    names = []
+    for column in real.columns:
+        source = column.derived.sources[0]
+        seen[source] = seen.get(source, 0) + 1
+        col, _, table = source.partition(" of ")
+        names.append(f"{col} (copy {seen[source]}) of {table}")
+    return names
+
+
+def build_ablation_plan(
+    *,
+    real: AugmentPlan,
+    stats: NumericStats,
+    name_embeddings: dict[str, np.ndarray],
+    d_text: int,
+) -> AugmentPlan:
+    """A plan that mirrors `real` cell for cell with untransformed values.
+
+    A unary transform becomes an identity copy of its one source; a pair becomes
+    a copy of its LEFT source that stays gated on both parents, so it fires on
+    exactly the same rows. The result adds the same number of tokens in the same
+    positions, carrying values the model already has.
+
+    Copies of one source share a DerivedStats -- the output distribution is the
+    same for every copy -- but each gets its own synthetic column id and its own
+    name embedding.
+    """
+    names = ablation_names(real)
+    planned: list[PlannedColumn] = []
+    vectors: list[np.ndarray] = []
+    for column, name in zip(real.columns, names):
+        transform = TRANSFORM_BY_NAME[ABLATION_OF[column.derived.transform.name]]
+        sources = column.derived.sources
+        key = transform.derived_key(*sources)
+        derived_stats = stats.derived_for(key, transform.fingerprint_for(sources))
+        if name not in name_embeddings:
+            raise KeyError(
+                f"{name!r}: no column-name embedding; run the ablation name "
+                f"embedding job for this plan"
+            )
+        vector = name_embeddings[name]
+        if vector.shape != (d_text,):
+            raise ValueError(
+                f"{name!r}: name embedding has shape {vector.shape}, expected "
+                f"({d_text},)"
+            )
+        planned.append(
+            PlannedColumn(
+                derived=DerivedColumn(
+                    transform=transform,
+                    sources=sources,
+                    source_stats=column.derived.source_stats,
+                    derived=derived_stats,
+                ),
+                source_col_idxs=column.source_col_idxs,
+                synthetic_col_idx=SYNTHETIC_COL_BASE + len(planned),
+                name_embedding_row=len(planned),
+            )
+        )
+        vectors.append(vector)
+    embeddings = (
+        torch.from_numpy(np.stack(vectors)).to(torch.bfloat16)
+        if vectors
+        else torch.zeros((0, d_text), dtype=torch.bfloat16)
+    )
+    return AugmentPlan(db=stats.db, columns=tuple(planned), name_embeddings=embeddings)

@@ -18,12 +18,18 @@ from rt.augment.stats import (
 from rt.augment.transforms import (
     DerivedColumn,
     Ecdf,
+    Identity,
+    PairLeft,
     PairProduct,
     SignedLog1p,
     sample_pairs,
 )
 
-TRANSFORMS = {"ecdf": Ecdf(), "signed_log1p": SignedLog1p()}
+# Unary transforms. "identity" is the token-count ablation: it adds a cell
+# carrying the untransformed z-scored value, so an ablation plan can mirror a
+# real one token for token without adding information.
+TRANSFORMS = {"ecdf": Ecdf(), "signed_log1p": SignedLog1p(), "identity": Identity()}
+PAIR_TRANSFORMS = {"pair_product": PairProduct(), "pair_left": PairLeft()}
 
 
 def is_numeric(t: pa.DataType) -> bool:
@@ -136,8 +142,11 @@ def main(
 ) -> None:
     raw = Path(raw_dir).expanduser() / db
     pre = Path(pre_dir).expanduser() / db
-    unknown = sorted(set(transforms) - set(TRANSFORMS) - {"pair_product"})
-    assert not unknown, f"unknown transforms {unknown}; have {sorted(TRANSFORMS)}"
+    unknown = sorted(set(transforms) - set(TRANSFORMS) - set(PAIR_TRANSFORMS))
+    assert not unknown, (
+        f"unknown transforms {unknown}; have "
+        f"{sorted(set(TRANSFORMS) | set(PAIR_TRANSFORMS))}"
+    )
 
     manifest = yaml.safe_load((raw / "manifest.yaml").read_text())
     # The store is the authority on which columns became cells: pre.rs drops
@@ -184,7 +193,7 @@ def main(
             per_table.setdefault(table, []).append(key)
             z = standardized(values, stats)
             for name in transforms:
-                if name == "pair_product":
+                if name in PAIR_TRANSFORMS:
                     continue
                 got = fit_derived(
                     transform=TRANSFORMS[name],
@@ -197,8 +206,8 @@ def main(
                     continue
                 derived[got.key] = got
 
-    if "pair_product" in transforms:
-        product = PairProduct()
+    for pair_name in sorted(set(transforms) & set(PAIR_TRANSFORMS)):
+        product = PAIR_TRANSFORMS[pair_name]
         for table, keys in sorted(per_table.items()):
             pairs = sample_pairs(keys, n_pairs=n_pairs_per_table, seed=pair_seed)
             for left, right in pairs:

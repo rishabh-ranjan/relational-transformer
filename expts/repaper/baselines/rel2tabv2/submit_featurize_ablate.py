@@ -15,36 +15,42 @@ from expts.repaper.config import (
     SHARE,
 )
 
-# Sweep 1 of the augmented arm: refeaturize with rt-j while the numeric
-# augmentation is injecting derived cells, so the 512-d blob is produced from a
-# wider input. Sweep 2 (submit_val_aug.py) is the same 21-task val evaluation as
-# the baseline, reading these blobs instead of features_rt-j.
+# The token-count ablation for the augmented arm. Identical to
+# submit_featurize_aug.py except `ablation: True`, which replaces every derived
+# cell with an untransformed copy of its source -- same count, same positions,
+# same column-name structure, but carrying a value the model already has.
 #
-# Written to a NEW root so the baseline blobs the val baseline was computed from
-# are never touched. featurize_rt skips a table whose blob exists, so this is
-# safe to resubmit.
-ROUND = "rtj_val_aug"
-FEATURES_ROOT = f"{SHARE}/features_rt-j-aug"
+# It answers the question the augmented arm on its own cannot: how much of any
+# change comes from widening the row, and how much from the transforms.
+#
+# Verified token-matched on rel-f1: both plans emit 57 columns and 5048 derived
+# cells at identical positions, sequence 256 -> 597 either way.
+ROUND = "rtj_val_ablate"
+FEATURES_ROOT = f"{SHARE}/features_rt-j-ablate"
 STATS_DIR = f"{SHARE}/numeric_stats"
 
 # All three transforms. On a real rel-f1 batch at these settings the sequence
 # grows 2.33x (256 -> 597 cells), which is the cost being bought.
 AUGMENT = {
     "stats_dir": STATS_DIR,
+    # The transform list still selects WHICH cells get a copy: the ablation
+    # mirrors the real plan, so it has to be built from the same selection.
     "transforms": ["ecdf", "signed_log1p", "pair_product"],
+    "ablation": True,
     # A transform whose output piles onto one value is dropped: the ecdf of a
     # zero-inflated count column sends ~88% of rows to the same rank and still
     # costs a token.
     "max_modal_share": 0.5,
-    "ablation": False,
 }
 
 DB_TASK_LIST = f"{PRE_DIR}/db-task-lists/forecast.json"
-DBS = sorted(
+ALL_DBS = sorted(
     {db for db, _ in json.loads(Path(DB_TASK_LIST).expanduser().read_text())}
 )
-#
-# DBS = ["rel-f1"]
+# One cheap db first, to measure how far the features move against the
+# no-augment baseline before spending the rest.
+DBS = ["rel-f1"]
+# DBS = ALL_DBS
 
 # The baseline pass ran 2 h on the small dbs and 12 h on rel-amazon, rel-hm and
 # rel-stack at local_ctx_size=256. The augmentation more than doubles the
@@ -65,7 +71,10 @@ REPO_ROOT = str(Path(__file__).resolve().parents[4])
 
 def stats_ready(db: str) -> bool:
     d = Path(STATS_DIR).expanduser()
-    return (d / f"{db}.json").is_file() and (d / f"{db}_names.npz").is_file()
+    return all(
+        (d / name).is_file()
+        for name in (f"{db}.json", f"{db}_names.npz", f"{db}_ablation_names.npz")
+    )
 
 
 def featurized(db: str) -> bool:
