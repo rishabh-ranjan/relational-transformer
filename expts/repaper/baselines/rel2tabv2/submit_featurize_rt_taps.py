@@ -33,15 +33,17 @@ TAP_UNITS = [1, 4, 8, 12]
 # of scope until something narrows it. Row counts are total_nodes (all splits),
 # which is what the blob is indexed by.
 #
-# Smoking rel-f1 first: it is the smallest at 0.92 GiB, and its unit-12 target
-# slot can be checked against features_rt-j before the other 26 GiB is
-# written. Uncomment the rest once that check passes; featurize_db_taps skips
-# a table whose blob and meta already exist, so re-running is safe.
+# rel-f1 was smoked first (job 190200): 0.92 GiB written against 0.92 GiB
+# predicted, 2 dead slots per table, 0 duplicate writes. Its unit-12 target
+# slot reproduces features_rt-j on all but 46 of 6.49M elements, and those
+# differ by a bf16 rounding of the pre-scale value between cpu and gpu --
+# accepted. featurize_db_taps skips a table whose blob and meta already exist,
+# so rel-f1 is a no-op on this pass.
 TASKS_BY_DB = {
-    # "rel-avito": ["ad-ctr", "user-clicks", "user-visits"],
-    # "rel-event": ["user-attendance", "user-ignore", "user-repeat"],
+    "rel-avito": ["ad-ctr", "user-clicks", "user-visits"],
+    "rel-event": ["user-attendance", "user-ignore", "user-repeat"],
     "rel-f1": ["driver-dnf", "driver-position", "driver-top3"],
-    # "rel-trial": ["site-success", "study-adverse", "study-outcome"],
+    "rel-trial": ["site-success", "study-adverse", "study-outcome"],
 }
 # total_nodes x 4 taps x n_slots x 512 x 2 bytes, summed over each db's
 # tasks, computed against the real slot lists union_slots() produces (9-31
