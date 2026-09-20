@@ -127,17 +127,27 @@ def probe(
             x_final = net(batch, return_embeddings=True)
 
             B = len(node_idxs)
+            # Everything below is done in the SORTED frame, because that is
+            # the frame the hook outputs live in and the frame the dump will
+            # index. Selecting in the unsorted frame and indexing a sorted
+            # tensor with it is the bug this probe already caught once.
+            sort_keys0 = batch["col_name_idxs"].masked_fill(
+                batch["is_padding"], torch.iinfo(batch["col_name_idxs"].dtype).max
+            )
+            s0 = sort_keys0.argsort(dim=-1, stable=True)
             seeds = torch.tensor(node_idxs, device=device).view(B, 1)
-            nidx = batch["node_idxs"]
-            pad = batch["is_padding"]
+            nidx = batch["node_idxs"].gather(1, s0)
+            pad = batch["is_padding"].gather(1, s0)
             is_seed_cell = (nidx == seeds) & ~pad
             # Cross-check the two other ways the batch marks the seed row.
             if "bfs_depths" in batch:
-                by_depth = (batch["bfs_depths"] == 0) & ~pad
+                by_depth = (batch["bfs_depths"].gather(1, s0) == 0) & ~pad
                 n_seed_mismatch += int((by_depth != is_seed_cell).any(dim=1).sum())
 
             # Parent rows: the f2p targets of the seed row's own cells.
-            f2p = batch["f2p_nbr_idxs"]
+            f2p = batch["f2p_nbr_idxs"].gather(
+                1, s0.unsqueeze(-1).expand_as(batch["f2p_nbr_idxs"])
+            )
             seed_f2p = f2p.masked_fill(~is_seed_cell.unsqueeze(-1), -1)
             is_parent_cell = (
                 (nidx.unsqueeze(-1).unsqueeze(-1) == seed_f2p.unsqueeze(1))
@@ -148,8 +158,9 @@ def probe(
             )
             sel = is_seed_cell | is_parent_cell
 
+            col_sorted = batch["col_name_idxs"].gather(1, s0)
             for b in range(B):
-                cols = batch["col_name_idxs"][b][sel[b]].tolist()
+                cols = col_sorted[b][sel[b]].tolist()
                 hit = {slots[c] for c in cols if c in slots}
                 present[list(hit)] += 1
                 n_dup_cells += len(cols) - len(set(cols))
@@ -163,14 +174,13 @@ def probe(
             gap = (tap12.float() - x_final.float()).abs().max().item()
             max_gap = max(max_gap, gap)
 
-            sort_keys = batch["col_name_idxs"].masked_fill(
-                pad, torch.iinfo(batch["col_name_idxs"].dtype).max
-            )
-            si = sort_keys.argsort(dim=-1, stable=True)
-            sorted_is_targets = batch["is_targets"].gather(1, si)
-            mine = tap12.gather(
-                1, si.unsqueeze(-1).expand(-1, -1, tap12.shape[-1])
-            )[sorted_is_targets].float().cpu().numpy()
+            # forward() sorts the sequence before the blocks run, so a hook's
+            # output is ALREADY in canonical order. Only is_targets, which
+            # comes off the unsorted batch, has to be permuted to match it --
+            # sorting the hook output a second time is what made this check
+            # read 6.19 instead of 0 on the first pass.
+            sorted_is_targets = batch["is_targets"].gather(1, s0)
+            mine = tap12[sorted_is_targets].float().cpu().numpy()
             theirs = blob[start : start + B]
             d = np.abs(mine - theirs).max()
             print(
