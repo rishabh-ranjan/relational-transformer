@@ -12,7 +12,7 @@ ARMS = (
     ("mask50", 0.5, "expts/pretrain/all_5gb_cutoff.json"),
     ("mask75", 0.75, "expts/pretrain/all_5gb_cutoff.json"),
     ("mix-forecast", 0.0, "expts/repaper/pretrain_abl/cutoff-forecast.json"),
-    ("mix-autocomplete", 0.0, "expts/repaper/pretrain_abl/cutoff-autocomplete.json"),
+    # ("mix-autocomplete", 0.0, "expts/repaper/pretrain_abl/cutoff-autocomplete.json"),  # done 26-09-19 (ILC, 18k steps)
 )
 
 
