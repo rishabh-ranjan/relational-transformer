@@ -1,3 +1,5 @@
+import re
+
 from expts.repaper.baselines.rel2tabv2.model import Rel2TabModel
 from expts.repaper.baselines.rel2tabv2.precomputed import PrecomputedFeaturizer
 from expts.repaper.baselines.rel2tabv2.retriever import SamplerRetriever
@@ -30,11 +32,15 @@ def build_rel2tab(
     d_text: int,
 ) -> tuple[Rel2TabModel, str]:
     family, predictor_name = method.rsplit("_", 1)
-    # rttaps<unit> reads the multi-tap dump at that relational unit, e.g.
-    # "rttaps12_tabpfn". The unit rides in the method string rather than in a
-    # new run.main argument, so the other rounds' submitters keep working
-    # against an unchanged entry point.
-    tap_unit = int(family[len("rttaps") :]) if family.startswith("rttaps") else None
+    # rttaps<unit><subset> indexes the multi-tap dump: one relational unit,
+    # one slot subset, e.g. "rttaps12full_tabpfn", "rttaps4target_tabpfn".
+    # Nothing is re-featurized -- the blob holds every unit and every slot,
+    # and this picks which of them become the feature vector. Both ride in the
+    # method string rather than in new run.main arguments, so the other
+    # rounds' submitters keep working against an unchanged entry point.
+    taps_spec = re.fullmatch(r"rttaps(\d+)(full|target|other)", family)
+    tap_unit = int(taps_spec.group(1)) if taps_spec else None
+    tap_subset = taps_spec.group(2) if taps_spec else None
     assert family in (
         "rdblearn",
         "sql",
@@ -57,7 +63,9 @@ def build_rel2tab(
     if tap_unit is not None:
         from expts.repaper.baselines.rel2tabv2.taps import TapsFeaturizer
 
-        featurizer = TapsFeaturizer(features_root, [(db, table)], tap_unit)
+        featurizer = TapsFeaturizer(
+            features_root, [(db, table)], tap_unit, tap_subset
+        )
     else:
         featurizer = PrecomputedFeaturizer(
             features_root,

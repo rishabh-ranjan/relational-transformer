@@ -7,8 +7,10 @@ import torch
 
 
 class TapsFeaturizer:
-    def __init__(self, features_root, db_tables, tap_unit, chunk_rows=8192):
+    def __init__(self, features_root, db_tables, tap_unit, subset, chunk_rows=8192):
+        assert subset in ("full", "target", "other"), f"unknown subset {subset!r}"
         self.tap_unit = tap_unit
+        self.subset = subset
         self.chunk_rows = chunk_rows
         self._f: dict[tuple[str, str], tuple] = {}
         for db, table in sorted(set(db_tables)):
@@ -26,27 +28,42 @@ class TapsFeaturizer:
             # as a value cell, so those slots are NaN on every row. Dropping
             # them here keeps them out of tabpfn's feature budget, which is
             # what max_features_per_estimator is spent against.
-            live = np.array([s for s in range(meta["shape"][2]) if s not in dead])
-            self._f[db, table] = (arr, ti, live, meta["min_offset"])
+            live = [s for s in range(meta["shape"][2]) if s not in dead]
+            tgt = meta["target_slot"]
+            assert tgt in live, f"{db}/{table}: the target slot is dead"
+            # full  = every live column of the union set
+            # target= the target cell alone, which is what features_rt-j holds
+            #         (modulo norm_out) -- the control for "does the rest of
+            #         the row add anything"
+            # other = the union set without the target cell, which asks the
+            #         complement: how much is in the row around it
+            keep = {
+                "full": live,
+                "target": [tgt],
+                "other": [s for s in live if s != tgt],
+            }[subset]
+            assert keep, f"{db}/{table}: subset {subset!r} selects no slots"
+            sel = np.array(keep)
+            self._f[db, table] = (arr, ti, sel, meta["min_offset"])
             print(
-                f"TapsFeaturizer: {db}/{table} unit {tap_unit} "
-                f"({meta['shape'][0]} rows, {len(live)} live of "
-                f"{meta['shape'][2]} slots, {len(live) * meta['shape'][3]} "
-                f"features), dropped {sorted(meta['slots'][s] for s in dead)}",
+                f"TapsFeaturizer: {db}/{table} unit {tap_unit} subset {subset} "
+                f"({meta['shape'][0]} rows, {len(sel)} of {len(live)} live "
+                f"slots, {len(sel) * meta['shape'][3]} features), "
+                f"target slot {tgt}, dead {sorted(meta['slots'][s] for s in dead)}",
                 flush=True,
             )
 
     def compute_features(self, task, node_idxs, device):
-        arr, ti, live, min_offset = self._f[task.db_name, task.table_name]
+        arr, ti, sel, min_offset = self._f[task.db_name, task.table_name]
         idx = node_idxs.cpu().numpy().astype(np.int64) - min_offset
         n, d_model = len(idx), arr.shape[3]
-        out = np.empty((n, len(live) * d_model), dtype=np.float32)
+        out = np.empty((n, len(sel) * d_model), dtype=np.float32)
         # Chunked: a fancy index over the whole blob would materialise every
         # tap and every slot for the context, which is tens of GiB at a large
         # context size. NaN is carried through -- it is what marks a cell the
         # database does not have.
         for lo in range(0, n, self.chunk_rows):
             rows = idx[lo : lo + self.chunk_rows]
-            block = np.asarray(arr[rows, ti][:, live, :]).astype(np.float32)
+            block = np.asarray(arr[rows, ti][:, sel, :]).astype(np.float32)
             out[lo : lo + len(rows)] = block.reshape(len(rows), -1)
         return torch.from_numpy(out).to(device)
