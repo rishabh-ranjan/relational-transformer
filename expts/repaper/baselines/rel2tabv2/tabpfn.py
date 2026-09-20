@@ -17,7 +17,7 @@ CHECKPOINT = "tabpfn-v3.5-20260909.safetensors"
 
 
 class TabPFNPredictor:
-    def __init__(self, n_estimators, fit_mode, checkpoint_dir, device):
+    def __init__(self, n_estimators, fit_mode, checkpoint_dir, device, nan_as_missing):
         assert n_estimators == "auto" or (
             isinstance(n_estimators, int) and n_estimators > 0
         ), f"tabpfn n_estimators must be 'auto' or a positive int, got {n_estimators!r}"
@@ -26,6 +26,7 @@ class TabPFNPredictor:
         )
         self.n_estimators = n_estimators
         self.fit_mode = fit_mode
+        self.nan_as_missing = nan_as_missing
         self.checkpoint_dir = Path(checkpoint_dir).expanduser()
         self.device = device
         self._clf = None
@@ -68,6 +69,22 @@ class TabPFNPredictor:
             )
         return self._reg
 
+    def _features(self, a):
+        # TabPFN declares allow_nan and validates X with
+        # ensure_all_finite=False, so NaN is its missing-value encoding, and
+        # its preprocessing is written around that (KDITransformerWithNaN
+        # restores the mask after transforming). A featurizer whose NaN means
+        # "this cell does not exist in the database" therefore passes it
+        # through; zero-filling would assert the cell exists and is zero.
+        # +-inf is never meaningful and is clamped either way. Labels are not
+        # cleaned here: y is validated with ensure_all_finite=True.
+        return np.nan_to_num(
+            a,
+            nan=np.nan if self.nan_as_missing else 0.0,
+            posinf=0.0,
+            neginf=0.0,
+        )
+
     def _already_fitted(self, train_features, train_labels, task_type):
         # Rel2TabModel caches the context tensors, so a query-independent
         # retriever hands the same objects to every batch. rel-amazon/user-churn
@@ -93,8 +110,8 @@ class TabPFNPredictor:
             x_test = (
                 test_features.float().cpu().numpy().astype(np.float64).reshape(1, -1)
             )
-            X = np.nan_to_num(X, nan=0.0, posinf=0.0, neginf=0.0)
-            x_test = np.nan_to_num(x_test, nan=0.0, posinf=0.0, neginf=0.0)
+            X = self._features(X)
+            x_test = self._features(x_test)
 
             y_int = (y > 0).astype(np.int64)
             triv = trivial_prediction(y_int, task_type, X.shape[0])
@@ -121,20 +138,12 @@ class TabPFNPredictor:
         return results
 
     def predict_shared(self, train_features, train_labels, query_features, task_type):
-        X = np.nan_to_num(
-            train_features.float().cpu().numpy().astype(np.float64),
-            nan=0.0,
-            posinf=0.0,
-            neginf=0.0,
-        )
+        X = self._features(train_features.float().cpu().numpy().astype(np.float64))
         y = np.nan_to_num(
             train_labels.float().cpu().numpy().astype(np.float64), nan=0.0
         )
-        X_query = np.nan_to_num(
-            query_features.float().cpu().numpy().astype(np.float64),
-            nan=0.0,
-            posinf=0.0,
-            neginf=0.0,
+        X_query = self._features(
+            query_features.float().cpu().numpy().astype(np.float64)
         )
         n_query = X_query.shape[0]
 

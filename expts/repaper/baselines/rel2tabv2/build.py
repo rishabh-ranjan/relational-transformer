@@ -30,7 +30,19 @@ def build_rel2tab(
     d_text: int,
 ) -> tuple[Rel2TabModel, str]:
     family, predictor_name = method.rsplit("_", 1)
-    assert family in ("rdblearn", "sql", "rt", "plurel", "relagent", "gnn"), (
+    # rttaps<unit> reads the multi-tap dump at that relational unit, e.g.
+    # "rttaps12_tabpfn". The unit rides in the method string rather than in a
+    # new run.main argument, so the other rounds' submitters keep working
+    # against an unchanged entry point.
+    tap_unit = int(family[len("rttaps") :]) if family.startswith("rttaps") else None
+    assert family in (
+        "rdblearn",
+        "sql",
+        "rt",
+        "plurel",
+        "relagent",
+        "gnn",
+    ) or tap_unit in (1, 4, 8, 12), (
         f"unknown feature family {family!r} in method {method!r}"
     )
     assert predictor_name in (
@@ -42,18 +54,23 @@ def build_rel2tab(
         "tabpfn",
     ), f"unknown predictor {predictor_name!r} in method {method!r}"
 
-    featurizer = PrecomputedFeaturizer(
-        features_root,
-        {
-            "rdblearn": "rdblearn_features",
-            "sql": "sql_features",
-            "rt": "rt_features",
-            "plurel": "plurel_features",
-            "relagent": "relagent_features",
-            "gnn": "gnn_features",
-        }[family],
-        [(db, table)],
-    )
+    if tap_unit is not None:
+        from expts.repaper.baselines.rel2tabv2.taps import TapsFeaturizer
+
+        featurizer = TapsFeaturizer(features_root, [(db, table)], tap_unit)
+    else:
+        featurizer = PrecomputedFeaturizer(
+            features_root,
+            {
+                "rdblearn": "rdblearn_features",
+                "sql": "sql_features",
+                "rt": "rt_features",
+                "plurel": "plurel_features",
+                "relagent": "relagent_features",
+                "gnn": "gnn_features",
+            }[family],
+            [(db, table)],
+        )
 
     if predictor_name == "tabicl":
         from expts.repaper.baselines.rel2tabv2.tabicl_batched import (
@@ -87,6 +104,11 @@ def build_rel2tab(
             fit_mode=tabpfn_fit_mode,
             checkpoint_dir=tabpfn_dir,
             device=device,
+            # Only the taps dump has cells that are genuinely absent -- a
+            # column null in the database, or a seed row with no parent. Every
+            # other featurizer produces a dense vector, where a NaN would be a
+            # bug to zero out rather than a fact to pass on.
+            nan_as_missing=tap_unit is not None,
         )
     elif predictor_name == "baserate":
         from expts.repaper.baselines.rel2tabv2.baserate import BaseRatePredictor
