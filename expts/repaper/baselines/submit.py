@@ -161,7 +161,6 @@ for db in DBS:
             context_seed=0,
             db_cutoff=None,
             batch_size=1024,
-            augment=None,
         ),
         # The rt features gate the vdb_rt arm and its index, so they take the
         # high-tier slots as scaling's passes free them: 02:22 rel-amazon (~5 h

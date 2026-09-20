@@ -133,7 +133,6 @@ def rt_resources(db: str, card: str, qos: str) -> Resources:
 #                 features_root=f"{SHARE}/features_{arm}", ckpt=ckpt,
 #                 local_ctx_size=256, bfs_width=32, shuffle_seed=0,
 #                 context_seed=0, db_cutoff=None, batch_size=1024,
-#                 augment=None,
 #             ),
 #             resources=rt_resources(db, card, qos_for.get((db, arm), "il")),
 #             name=f"rel2tabv2-feat-{arm}-{db}",
