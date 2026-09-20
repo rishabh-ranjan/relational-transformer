@@ -133,6 +133,10 @@ def main() -> None:
                 log_root=f"{LOG_ROOT}/repaper/pretrain_abl/slurm-logs",
                 clone_root=CLONE_ROOT if suffix == "" else "~/roach_clones",
                 secrets_dir=SECRETS_DIR if suffix == "" else "~/scratch/.secrets",
+                # marlowe's NFS home breaks pixi's env-build lock, so 8 ranks
+                # racing the first `pixi run` at a fresh clone die on a
+                # half-built env; prepare builds it once instead
+                setup=("pixi install",) if suffix == "-mw" else None,
             )
 
 
