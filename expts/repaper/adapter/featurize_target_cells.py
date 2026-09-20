@@ -1,5 +1,6 @@
 import json
 import shutil
+import zlib
 from pathlib import Path
 
 
@@ -32,7 +33,10 @@ def pool_rows(np, pre_dir, db, name, table, shuffle_seed, max_rows, **_):
     # A uniform draw, not a prefix: node idx order is time order, so the first
     # max_rows rows of a big task table are its earliest horizons rather than a
     # sample of it.
-    rng = np.random.default_rng(abs(hash((shuffle_seed, db, name))) % 2**63)
+    # crc32, not hash(): python salts str hashes per process, so hash() here
+    # would draw different rows on a rerun.
+    key = f"{shuffle_seed}/{db}/{name}".encode()
+    rng = np.random.default_rng(zlib.crc32(key))
     return np.sort(rng.choice(n, size=max_rows, replace=False) + lo), n
 
 
