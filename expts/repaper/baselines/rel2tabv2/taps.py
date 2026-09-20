@@ -7,11 +7,19 @@ import torch
 
 
 class TapsFeaturizer:
-    def __init__(self, features_root, db_tables, tap_unit, subset, chunk_rows=8192):
-        assert subset in ("full", "target", "other"), f"unknown subset {subset!r}"
+    def __init__(
+        self, features_root, db_tables, tap_unit, subset, proj_dim=512, proj_seed=0,
+        chunk_rows=8192,
+    ):
+        assert subset in ("full", "target", "other", "proj"), (
+            f"unknown subset {subset!r}"
+        )
         self.tap_unit = tap_unit
         self.subset = subset
+        self.proj_dim = proj_dim
+        self.proj_seed = proj_seed
         self.chunk_rows = chunk_rows
+        self._proj: dict[tuple[str, str], torch.Tensor] = {}
         self._f: dict[tuple[str, str], tuple] = {}
         for db, table in sorted(set(db_tables)):
             d = Path(features_root).expanduser() / db / "rt_taps"
@@ -39,12 +47,29 @@ class TapsFeaturizer:
             #         complement: how much is in the row around it
             keep = {
                 "full": live,
+                "proj": live,
                 "target": [tgt],
                 "other": [s for s in live if s != tgt],
             }[subset]
             assert keep, f"{db}/{table}: subset {subset!r} selects no slots"
             sel = np.array(keep)
             self._f[db, table] = (arr, ti, sel, meta["min_offset"])
+            if subset == "proj":
+                # One Xavier-initialised matrix per table, drawn from a fixed
+                # seed and never trained: the same projection for every row of
+                # that dataset, and reproducible from the seed alone rather
+                # than being an artifact to keep.
+                n_in = len(sel) * meta["shape"][3]
+                g = torch.Generator().manual_seed(proj_seed)
+                w = torch.empty(n_in, proj_dim)
+                torch.nn.init.xavier_uniform_(w, generator=g)
+                self._proj[db, table] = w.requires_grad_(False)
+                print(
+                    f"TapsFeaturizer: {db}/{table} random projection "
+                    f"{n_in} -> {proj_dim}, xavier_uniform seed {proj_seed}, "
+                    f"bound {(6.0 / (n_in + proj_dim)) ** 0.5:.5f}",
+                    flush=True,
+                )
             print(
                 f"TapsFeaturizer: {db}/{table} unit {tap_unit} subset {subset} "
                 f"({meta['shape'][0]} rows, {len(sel)} of {len(live)} live "
@@ -66,4 +91,13 @@ class TapsFeaturizer:
             rows = idx[lo : lo + self.chunk_rows]
             block = np.asarray(arr[rows, ti][:, sel, :]).astype(np.float32)
             out[lo : lo + len(rows)] = block.reshape(len(rows), -1)
-        return torch.from_numpy(out).to(device)
+        x = torch.from_numpy(out)
+        if self.subset == "proj":
+            # A dense matmul cannot carry a missing-value mask: one NaN in a
+            # row makes every one of the 512 outputs NaN, which on a table
+            # like study-outcome (42% of cells absent) would be almost every
+            # row. So missing cells become 0 before the projection, and this
+            # arm alone gives up the NaN-as-missing signal the others keep.
+            x = torch.nan_to_num(x, nan=0.0, posinf=0.0, neginf=0.0)
+            x = x @ self._proj[task.db_name, task.table_name]
+        return x.to(device)

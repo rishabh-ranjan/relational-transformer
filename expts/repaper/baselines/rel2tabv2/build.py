@@ -38,7 +38,7 @@ def build_rel2tab(
     # and this picks which of them become the feature vector. Both ride in the
     # method string rather than in new run.main arguments, so the other
     # rounds' submitters keep working against an unchanged entry point.
-    taps_spec = re.fullmatch(r"rttaps(\d+)(full|target|other)", family)
+    taps_spec = re.fullmatch(r"rttaps(\d+)(full|target|other|proj)", family)
     tap_unit = int(taps_spec.group(1)) if taps_spec else None
     tap_subset = taps_spec.group(2) if taps_spec else None
     assert family in (
