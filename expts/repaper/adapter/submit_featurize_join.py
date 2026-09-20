@@ -94,19 +94,16 @@ def queued() -> set[str]:
 
 busy = queued()
 
-# Read fresh every submission; this split is not a default to inherit.
-# 2026-09-20: blackwell1 has 6 free b200, the amperes are full. The b200 cap of
-# 2 is the *partition* QOS, shared by il and il-interactive, so only two b200
-# can sit on a high tier at all; il-lo is flagged OverPartQOS (b200=8) and takes
-# the other two. il's ten then go to amperes and il-lo takes what is left. The
-# dump skips a task whose files exist, so a preempted shard resumes at the task
-# it was in.
-TIERS = (
-    ["il-interactive"] * 2
-    + ["il-lo"] * (N_B200 - 2)
-    + ["il"] * 10
-    + ["il-lo"] * (N_A100 - 10)
-)
+# il and il-lo only; il-interactive is not ours to spend here. Read the split
+# fresh every submission -- this one is not a default to inherit.
+#
+# The b200 cap of 2 is the *partition* QOS, so two b200 shards go to il, where
+# priority 1000 outranks the il-lo jobs that hold blackwell1 and the cap is
+# reachable; the other two go to il-lo, which is flagged OverPartQOS (b200=8).
+# Those two spend 2 of il's ten gpus, leaving 8 for amperes, and il-lo takes the
+# remaining twelve. The dump skips a task whose files exist, so a preempted
+# shard resumes at the task it was in.
+TIERS = ["il"] * 2 + ["il-lo"] * (N_B200 - 2) + ["il"] * 8 + ["il-lo"] * (N_A100 - 8)
 
 for i, (card, dbs, rows) in enumerate(shards()):
     name = f"adapter-featurize-join-s{i:02d}"
