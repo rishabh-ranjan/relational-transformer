@@ -41,6 +41,12 @@ def build_rel2tab(
     taps_spec = re.fullmatch(r"rttaps(\d+)(full|target|other|proj)", family)
     tap_unit = int(taps_spec.group(1)) if taps_spec else None
     tap_subset = taps_spec.group(2) if taps_spec else None
+    # rtadapter<name> is rt_features put through a trained linear adapter, with
+    # "identity" the control that isolates the adapter from everything else the
+    # arm changes. The name resolves under SHARE/adapters, so it rides in the
+    # method string like the taps family and run.main's signature is unchanged.
+    adapter_spec = re.fullmatch(r"rtadapter([A-Za-z0-9_-]+)", family)
+    adapter_name = adapter_spec.group(1) if adapter_spec else None
     assert family in (
         "rdblearn",
         "sql",
@@ -48,7 +54,7 @@ def build_rel2tab(
         "plurel",
         "relagent",
         "gnn",
-    ) or tap_unit in (1, 4, 8, 12), (
+    ) or tap_unit in (1, 4, 8, 12) or adapter_name is not None, (
         f"unknown feature family {family!r} in method {method!r}"
     )
     assert predictor_name in (
@@ -60,7 +66,14 @@ def build_rel2tab(
         "tabpfn",
     ), f"unknown predictor {predictor_name!r} in method {method!r}"
 
-    if tap_unit is not None:
+    if adapter_name is not None:
+        from expts.repaper.baselines.rel2tabv2.adapter import AdapterFeaturizer
+        from expts.repaper.config import SHARE
+
+        featurizer = AdapterFeaturizer(
+            features_root, [(db, table)], adapter_name, f"{SHARE}/adapters"
+        )
+    elif tap_unit is not None:
         from expts.repaper.baselines.rel2tabv2.taps import TapsFeaturizer
 
         featurizer = TapsFeaturizer(
