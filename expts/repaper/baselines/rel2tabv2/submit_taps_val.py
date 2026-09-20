@@ -56,16 +56,17 @@ REPO_ROOT = str(Path(__file__).resolve().parents[4])
 
 
 def n_estimators_for(db: str, table: str) -> int:
-    """Enough ensemble members that every feature is sampled at least once.
+    """How many ensemble members full feature coverage would take.
 
     An estimator sees at most `max_features_per_estimator` (768) features, and
     `balanced` subsampling partitions a globally shuffled pool across members,
     so `ceil(n_features / 768)` covers everything exactly.
 
-    `"auto"` does NOT do this for us: base.resolved_n_estimators returns the
-    checkpoint's N_ESTIMATORS (8) and scale_n_estimators_for_feature_coverage
-    treats any int as explicit, so `"auto"` silently covers 6144 features and
-    warns about the rest. Hence an explicit count per task.
+    This is NOT what runs -- `tabpfn_n_estimators` is `"auto"` below, which
+    resolves to the checkpoint's N_ESTIMATORS of 8 and is then treated as
+    explicit by scale_n_estimators_for_feature_coverage, so 8 x 768 = 6144
+    features are sampled and the rest are not. It is recorded in the tags so a
+    result says how much of its own feature space the run could see.
     """
     meta = json.loads(
         (
@@ -134,7 +135,8 @@ for db, table in TASKS:
             exaone_ensemble_count=8,
             tabfm_backend="pytorch",
             tabpfn_dir=f"{SHARE}/tabpfn",
-            tabpfn_n_estimators=n_est,
+            tabpfn_n_estimators="auto",
+            # tabpfn_n_estimators=n_est,
             tabpfn_fit_mode="fit_with_cache",
             retriever="global_train",
             context_sampler="uniform",
@@ -147,7 +149,11 @@ for db, table in TASKS:
                 split="val",
                 tap_unit=TAP_UNIT,
                 n_context_rows=CONTEXT_ROWS,
-                n_estimators=n_est,
+                n_estimators="auto",
+                # What full coverage would have needed, against the 8 that
+                # "auto" resolves to: above 8, the run saw 6144 of its
+                # features and not the rest.
+                n_estimators_for_full_coverage=n_est,
                 features_regenerable=True,
             ),
         ),
