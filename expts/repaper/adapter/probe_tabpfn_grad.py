@@ -57,6 +57,11 @@ def main(
         warm = torch.randn(32, d_feat, device=device)
         y = torch.arange(32, device=device) % 2
         est.fit_with_differentiable_input(warm, y if task_type == "clf" else y.float())
+        if task_type == "reg":
+            # The standard fit moves the bar distribution to the device; the
+            # differentiable one never does, so its borders sit on the cpu and
+            # the loss dies in searchsorted.
+            est.znorm_space_bardist_ = est.znorm_space_bardist_.to(device)
         n = 0
         for model in est.models_:
             for p in model.parameters():
