@@ -19,9 +19,11 @@ from expts.repaper.config import CKPT, CLONE_ROOT, LOG_ROOT, SECRETS_DIR, SHARE
 # db-task-lists/rt-j.json: 911 of its 10,815 pairs name 26 dbs the preprocessed
 # repo does not ship.
 #
-# Shape is the one features_rt-j was built at (local_ctx_size 256, bfs_width 32,
-# prefer_latest False, context_seed 0), so a Join embedding and a RelBench
-# embedding are the same quantity and an adapter transfers between them.
+# Shape and normalisation are what features_rt-j was built at: local_ctx_size
+# 256, bfs_width 32, prefer_latest False, context_seed 0, and norm_out over the
+# last block. So this is the same construction as rt_features and RelBench needs
+# no dump of its own -- rt_features already holds every row of all 21 tasks,
+# which is also the validation context, at whatever size we index out of it.
 #
 # 4096 rows per task, uniformly drawn rather than a prefix, since node order is
 # time order. 36.6M rows, 34.9 GiB. The dumped row count is NOT the mixture
@@ -93,12 +95,18 @@ def queued() -> set[str]:
 busy = queued()
 
 # Read fresh every submission; this split is not a default to inherit.
-# 2026-09-20: blackwell1 has 6 free b200 and the amperes are full, so the whole
-# b200 budget is takeable now -- 2 on il-interactive (12h wall, which a
-# half-hour shard fits) and 2 on il, which is the sub-cap. il's remaining 8
-# a100 slots and then il-lo take the rest; the dump skips a task whose files
-# exist, so a preempted shard resumes at the task it was in.
-TIERS = ["il-interactive"] * 2 + ["il"] * 10 + ["il-lo"] * (N_B200 + N_A100 - 12)
+# 2026-09-20: blackwell1 has 6 free b200, the amperes are full. The b200 cap of
+# 2 is the *partition* QOS, shared by il and il-interactive, so only two b200
+# can sit on a high tier at all; il-lo is flagged OverPartQOS (b200=8) and takes
+# the other two. il's ten then go to amperes and il-lo takes what is left. The
+# dump skips a task whose files exist, so a preempted shard resumes at the task
+# it was in.
+TIERS = (
+    ["il-interactive"] * 2
+    + ["il-lo"] * (N_B200 - 2)
+    + ["il"] * 10
+    + ["il-lo"] * (N_A100 - 10)
+)
 
 for i, (card, dbs, rows) in enumerate(shards()):
     name = f"adapter-featurize-join-s{i:02d}"
@@ -112,8 +120,6 @@ for i, (card, dbs, rows) in enumerate(shards()):
             pre_dir=PRE_DIR,
             features_root=f"{SHARE}/features_join_u12",
             ckpt=CKPT,
-            row_rule="pool",
-            tap_unit=12,
             local_ctx_size=256,
             bfs_width=32,
             shuffle_seed=0,
@@ -121,7 +127,6 @@ for i, (card, dbs, rows) in enumerate(shards()):
             batch_size=1024,
             min_rows=128,
             max_rows=4096,
-            context_rows=0,
             expected_gib=rows * 1024 / 2**30 * 1.2,
         ),
         resources=Resources(
@@ -130,7 +135,9 @@ for i, (card, dbs, rows) in enumerate(shards()):
             qos=TIERS[i],
             time="12:00:00",
             gpus=f"{card}:1",
-            cpus_per_task=16,
+            # 14 is the per-a100 cap on the amperes (252154M with it);
+            # blackwell1 is 288 cores over 8 cards.
+            cpus_per_task=14 if card == "a100" else 32,
             ntasks=None,
             exclusive=False,
             mem="120G" if card == "a100" else "240G",

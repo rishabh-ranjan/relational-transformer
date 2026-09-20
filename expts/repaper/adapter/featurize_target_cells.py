@@ -36,30 +36,6 @@ def pool_rows(np, pre_dir, db, name, table, shuffle_seed, max_rows, **_):
     return np.sort(rng.choice(n, size=max_rows, replace=False) + lo), n
 
 
-def val_and_context_rows(np, pre_dir, db, name, table, context_seed, context_rows, **_):
-    from expts.repaper.baselines.rel2tab.featurizer import (
-        get_table_splits,
-        load_table_info,
-    )
-    from expts.repaper.baselines.rel2tabv2.context_sampler import UniformRandomSampler
-
-    splits = get_table_splits(load_table_info(pre_dir, db), table)
-    val, train = splits["val"], splits["train"]
-    val_rows = np.arange(
-        val["node_idx_offset"], val["node_idx_offset"] + val["num_nodes"]
-    )
-    candidates = np.arange(
-        train["node_idx_offset"], train["node_idx_offset"] + train["num_nodes"]
-    )
-    # The identical draw GlobalContextRetriever makes, so the rows this dump
-    # holds are exactly the rows the evaluator will ask for. Test is never
-    # touched: the dump cannot score a split it does not contain.
-    drawn = UniformRandomSampler(seed=context_seed).sample(
-        candidates, min(context_rows, len(candidates))
-    )
-    return np.union1d(val_rows, drawn), train["num_nodes"] + val["num_nodes"]
-
-
 def featurize_dbs(
     *,
     dbs: list[str],
@@ -67,8 +43,6 @@ def featurize_dbs(
     pre_dir: str,
     features_root: str,
     ckpt: str,
-    row_rule: str,
-    tap_unit: int,
     local_ctx_size: int,
     bfs_width: int,
     shuffle_seed: int,
@@ -76,7 +50,6 @@ def featurize_dbs(
     batch_size: int,
     min_rows: int,
     max_rows: int,
-    context_rows: int,
     expected_gib: float,
 ) -> None:
     import time
@@ -88,21 +61,16 @@ def featurize_dbs(
     from rt.data import RustlerDataset, process_batch
     from rt.model import load_rt_model
 
-    select = {"pool": pool_rows, "val+context": val_and_context_rows}[row_rule]
-
     device = "cuda"
     net, config = load_rt_model(ckpt, device=device, compile=False)
     net = net.to(torch.bfloat16).eval()
     d_model = net.d_model
 
-    # The target cell's raw residual stream at the end of relational unit
-    # tap_unit -- no norm_out, the same quantity the relbench rt_taps dump holds
-    # at that tap. norm_out is an RMSNorm, whose per-row rescaling a linear
-    # adapter cannot undo, so raw is what both corpora have to store.
-    tap = {}
-    handle = net.blocks[tap_unit - 1].register_forward_hook(
-        lambda _m, _i, out: tap.__setitem__("x", out)
-    )
+    # return_embeddings=True is norm_out over the last block: the post-norm_out
+    # unit-12 target cell, and exactly how features_rt-j was built. So the Join
+    # side of the adapter's input and the RelBench side are the same
+    # construction, not merely the same layer, and RelBench needs no dump of its
+    # own -- rt_features already holds every row of all 21 tasks.
 
     total_written = 0
     t_start = time.time()
@@ -152,7 +120,7 @@ def featurize_dbs(
                 n_done += 1
                 continue
 
-            rows, total_nodes = select(
+            rows, total_nodes = pool_rows(
                 np,
                 pre_dir=pre_dir,
                 db=db,
@@ -160,8 +128,6 @@ def featurize_dbs(
                 table=task.table_name,
                 shuffle_seed=shuffle_seed,
                 max_rows=max_rows,
-                context_seed=context_seed,
-                context_rows=context_rows,
             )
             if len(rows) < min_rows:
                 n_skipped += 1
@@ -189,11 +155,10 @@ def featurize_dbs(
                     batch = {
                         k: v.to(device, non_blocking=True) for k, v in batch.items()
                     }
-                    tap.clear()
-                    net(batch, return_embeddings=True)
+                    x = net(batch, return_embeddings=True)
 
-                    # forward() sorts the sequence before the blocks run, so the
-                    # hook output is already in the canonical frame; only
+                    # forward() sorts the sequence before the blocks run, so
+                    # its output is already in the canonical frame; only
                     # is_targets, which comes off the unsorted batch, has to be
                     # permuted to meet it.
                     keys = batch["col_name_idxs"].masked_fill(
@@ -219,7 +184,7 @@ def featurize_dbs(
                         .cpu()
                         .numpy()
                     )
-                    emb = tap["x"][is_targets].bfloat16()
+                    emb = x[is_targets].bfloat16()
                     assert emb.shape == (B, d_model), emb.shape
                     fh.write(emb.view(torch.uint16).cpu().numpy().tobytes())
 
@@ -238,12 +203,10 @@ def featurize_dbs(
                     {
                         "dtype": "bfloat16",
                         "shape": [n_rows, d_model],
-                        "tap": tap_unit,
                         "task": name,
                         "table": task.table_name,
                         "task_type": task.task_type,
                         "target_column": task.target_column,
-                        "row_rule": row_rule,
                         # The mixture weight: pretraining draws a row uniformly
                         # from a pool holding min(rows, 100_000) of every task,
                         # so P(task) is set by this, not by what we dumped.
@@ -260,7 +223,7 @@ def featurize_dbs(
                         "bfs_width": bfs_width,
                         "context_seed": context_seed,
                         "shuffle_seed": shuffle_seed,
-                        "normalisation": "raw residual stream, no norm_out",
+                        "normalisation": "norm_out over the last block, as features_rt-j",
                     },
                     indent=2,
                 )
@@ -279,7 +242,6 @@ def featurize_dbs(
             f"stopping before the remaining dbs run the disk down"
         )
 
-    handle.remove()
     print(
         f"done: {total_written / 2**30:.2f} GiB over {len(dbs)} dbs in "
         f"{(time.time() - t_start) / 60:.1f} min",
