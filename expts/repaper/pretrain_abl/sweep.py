@@ -37,7 +37,9 @@ def main() -> None:
         ),
         (
             marlowe.MARLOWE,
-            dataclasses.replace(marlowe.H100, cpus_per_task=14),
+            # 2026-09-19 23:40: torch import dies on n26 (libnvJitLink.so.13 missing
+            # there; the same env runs on n23/n24)
+            dataclasses.replace(marlowe.H100, cpus_per_task=14, exclude="n26"),
             "-mw",
             2**17,
             14,
