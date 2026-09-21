@@ -278,6 +278,9 @@ def main(
             flat = torch.cat([p.detach().flatten() for p in adapter.parameters()])
             drift = float((flat - init_flat).norm())
             g = np.array(gnorms) if gnorms else np.array([np.nan])
+            # Peak memory is the constraint that decides how far draws can be
+            # stacked, so it is logged, not inferred.
+            peak_gib = torch.cuda.max_memory_allocated(device) / 2**30
             if is_main:
                 print(
                     f"step {step:>6} "
@@ -286,6 +289,7 @@ def main(
                     f"max {np.max(g):.4g} "
                     f"clipped {float(np.mean(g > grad_norm_max)):.2f} "
                     f"dropped {n_bad} degen {n_degenerate} "
+                    f"peak {peak_gib:.1f}GiB "
                     f"{(time.time() - t0) / 60:.1f} min",
                     flush=True,
                 )
@@ -304,6 +308,7 @@ def main(
                         "train/frac_clipped": float(np.mean(g > grad_norm_max)),
                         "train/steps_dropped": n_bad,
                         "train/ctx_degenerate": n_degenerate,
+                        "train/peak_gib": peak_gib,
                         "train/lr": opt.param_groups[0]["lr"],
                         "train/minutes": (now - t0) / 60,
                         "train/tasks_seen": (step + 1) * total_tasks_per_step,

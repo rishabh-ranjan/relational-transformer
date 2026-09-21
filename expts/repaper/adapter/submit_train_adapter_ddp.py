@@ -64,7 +64,11 @@ REPO_ROOT = str(Path(__file__).resolve().parents[3])
 # possible; the stacking itself needs fit_from_preprocessed and is not in yet.
 # SMOKE: 1 gpu, 5 steps, no eval, no wandb -- measure s/draw at d_out=64
 # + bf16 + ladder before spending a 4-gpu slot.
-ARMS = [("bf16", "join-v6-smoke-proj64")]
+# fp32: bf16 needs FINGERPRINT_FEATURE off (the torch fingerprint step in
+# the GPU pipeline hashes via .numpy() AFTER the bf16 cast at
+# inference.py:1308), and that changes the model inputs. Measure d_out=64
+# on its own first -- if it drops peak memory enough, bf16 is not needed.
+ARMS = [("fp32", "join-v6-smoke-proj64")]
 # ARMS = [(None, "join-v4-ddp-linear")]
 
 for autocast, RUN in ARMS:
