@@ -47,7 +47,10 @@ submit(
         d_feat=512,
         min_rows=512,
         n_ctx_lo=256,
-        n_ctx_hi=2048,
+        # 2048 came from a probe measured under fp16 autocast; forcing fp32
+        # (see train_adapter.tabpfn) roughly doubles activation memory, and
+        # 2048x256 already peaked at 33 GiB of an 80 GiB card.
+        n_ctx_hi=1024,
         n_query=256,
         tasks_per_step=4,
         total_steps=10_000,

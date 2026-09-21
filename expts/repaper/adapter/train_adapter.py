@@ -248,6 +248,15 @@ def main(
             fit_mode="fit_preprocessors",
             differentiable_input=True,
             random_state=seed,
+            # Not "auto": infer_autocast_inference_mode turns that into fp16
+            # autocast on gpu, an activation overflows in the forward, and the
+            # backward through that inf is non-finite while the loss stays
+            # finite -- an inf logit still softmaxes to a real probability.
+            # Being independent of the loss scale is the signature, and it is
+            # why a GradScaler halved from 65536 to 0 without ever recovering.
+            # rt-j embeddings reach a per-dim mean of 12.8, so the activations
+            # are nowhere near the randn the probe fed it.
+            inference_precision=torch.float32,
         )
         warm = torch.randn(32, d_feat, device=device)
         y = torch.arange(32, device=device) % 2
@@ -329,13 +338,6 @@ def main(
     t0 = time.time()
     logged_step, logged_t = 0, t0
     n_bad = n_degenerate = 0
-    # TabPFN runs its forward under fp16 autocast on gpu
-    # (infer_autocast_inference_mode), and the backward inherits it, so the
-    # gradients reaching the adapter overflow to inf at full scale -- every
-    # step of the first attempt was dropped with a perfectly finite loss. A
-    # scaler is the standard remedy: it backs the scale off until the
-    # gradients represent, and skips only the steps that overflow on the way.
-    scaler = torch.amp.GradScaler("cuda")
     running = {"clf": [], "reg": []}
     for step in range(total_steps):
         for g in opt.param_groups:
@@ -363,12 +365,11 @@ def main(
             if not torch.isfinite(loss):
                 bad.append((e["db"], e["task"], e["task_type"], n_ctx, "loss"))
                 continue
-            scaler.scale(loss / tasks_per_step).backward()
+            (loss / tasks_per_step).backward()
             running[e["task_type"]].append(float(loss))
-        # unscale before inspecting or clipping: the gradients in .grad are
-        # multiplied by the scaler's factor until this runs, and clipping an
-        # inf gradient is what turns it into NaN.
-        scaler.unscale_(opt)
+        # The guard stays even though fp32 should remove the cause: clipping
+        # an inf gradient silently turns it into NaN, so a single bad step
+        # would poison the weights for the rest of the run.
         if bad or not all(
             p.grad is None or torch.isfinite(p.grad).all()
             for p in adapter.parameters()
@@ -376,15 +377,12 @@ def main(
             n_bad += 1
             if n_bad <= 20 or n_bad % 100 == 0:
                 print(
-                    f"step {step:>6} non-finite, step dropped "
-                    f"(scale {scaler.get_scale():.0f}): {bad}",
-                    flush=True,
+                    f"step {step:>6} non-finite, step dropped: {bad}", flush=True
                 )
             opt.zero_grad(set_to_none=True)
         else:
             torch.nn.utils.clip_grad_norm_(adapter.parameters(), grad_norm_max)
-            scaler.step(opt)
-        scaler.update()
+            opt.step()
 
         if step % 20 == 0:
             msg = " ".join(
@@ -393,7 +391,7 @@ def main(
             dw = float((adapter.weight - torch.eye(d_feat, device=device)).norm())
             print(
                 f"step {step:>6} {msg} |W-I| {dw:.4f} "
-                f"dropped {n_bad} degen {n_degenerate} scale {scaler.get_scale():.0f} "
+                f"dropped {n_bad} degen {n_degenerate} "
                 f"{(time.time() - t0) / 60:.1f} min",
                 flush=True,
             )
@@ -413,7 +411,6 @@ def main(
                         "train/w_minus_i": dw,
                         "train/steps_dropped": n_bad,
                         "train/ctx_degenerate": n_degenerate,
-                        "train/grad_scale": scaler.get_scale(),
                         "train/lr": opt.param_groups[0]["lr"],
                         "train/minutes": (now - t0) / 60,
                         **(
