@@ -28,7 +28,7 @@ def main(
     root = Path(features_root).expanduser()
     model_path = Path(tabpfn_dir).expanduser() / "tabpfn-v3.5-20260909.safetensors"
 
-    def make(task_type, precision):
+    def make(task_type, cfg):
         cls = TabPFNClassifier if task_type == "clf" else TabPFNRegressor
         est = cls(
             n_estimators=1,
@@ -37,7 +37,8 @@ def main(
             fit_mode="fit_preprocessors",
             differentiable_input=True,
             random_state=seed,
-            inference_precision=precision,
+            inference_precision=torch.float32,
+            inference_config=cfg,
         )
         warm = torch.randn(32, d_feat, device=device)
         y = torch.arange(32, device=device) % 2
@@ -68,7 +69,11 @@ def main(
 
     for db, task in tasks:
         emb, y, task_type = load(db, task)
-        for precision in (torch.float32, "auto"):
+        # Precision is settled: PowBackward0 NaNs identically in fp32 and
+        # autocast. What varies now is the config. TorchSoftClipOutliersStep
+        # is the only torch step that runs unconditionally, gated on
+        # outlier_removal_std, which resolves to 12.0 for clf.
+        for label, precision in (("default", None), ("no-outlier-removal", {"OUTLIER_REMOVAL_STD": None})):
             adapter = nn.Linear(d_feat, d_feat, bias=True).to(device)
             with torch.no_grad():
                 adapter.weight.copy_(torch.eye(d_feat))
@@ -103,7 +108,7 @@ def main(
 
             fin_logits = bool(torch.isfinite(logits).all())
             print(
-                f"\n=== {db}/{task} [{task_type}] precision={precision} "
+                f"\n=== {db}/{task} [{task_type}] cfg={label} "
                 f"n_ctx={n_c} n_q={len(y) - n_c}",
                 flush=True,
             )

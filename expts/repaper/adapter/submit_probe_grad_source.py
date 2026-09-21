@@ -21,6 +21,7 @@ submit(
             # can be read against a working case
             ("join-se-writing", "user-new-badge-adoption"),
             ("join-nhtsa-fars", "vehicles-first_mo"),
+            ("join-nhtsa-fars", "vehicles-dr_pres"),
         ],
         n_ctx=512,
         n_query=256,
