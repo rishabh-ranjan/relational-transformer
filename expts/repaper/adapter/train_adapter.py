@@ -323,6 +323,7 @@ def main(
     rng = np.random.default_rng(seed)
     t0 = time.time()
     logged_step, logged_t = 0, t0
+    n_bad = 0
     running = {"clf": [], "reg": []}
     for step in range(total_steps):
         for g in opt.param_groups:
