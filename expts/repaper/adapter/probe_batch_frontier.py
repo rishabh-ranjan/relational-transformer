@@ -3,6 +3,7 @@ import json
 import os
 import statistics
 import time
+import traceback
 from pathlib import Path
 
 os.environ.setdefault("PYTORCH_CUDA_ALLOC_CONF", "expandable_segments:True")
@@ -202,7 +203,16 @@ def main(
             (e for e in entries if e["task_type"] == tt and e["n"] >= need),
             key=lambda e: (-e["n"], e["db"], e["task"]),
         )
-        by_type[tt] = cand[: n_tasks // 2]
+        seen = set()
+        spread = []
+        for e in cand:
+            if e["db"] in seen:
+                continue
+            seen.add(e["db"])
+            spread.append(e)
+            if len(spread) == n_tasks // 2:
+                break
+        by_type[tt] = spread
         print(
             f"{tt}: {len(cand)} tasks with >= {need} rows, using "
             + ", ".join(f"{e['db']}/{e['task']}(n={e['n']})" for e in by_type[tt]),
@@ -261,23 +271,41 @@ def main(
         adapter.zero_grad(set_to_none=True)
         loss.backward()
         g = adapter[1].weight.grad
-        return (
-            float(g.norm()),
-            bool(torch.isfinite(g).all()),
-            float(g.abs().max()),
-        )
+        return {
+            "norm": float(g.norm()),
+            "finite": bool(torch.isfinite(g).all()),
+            "absmax": float(g.abs().max()),
+        }
 
-    l_fp, _ = _legacy_clf_loss(clf_fp, adapter, emb[:1], lab[:1], n_ctx0, device)
-    v_fp = float(l_fp)
-    g_fp = gnorm(l_fp)
-    l_no, _ = _legacy_clf_loss(clf_nofp, adapter, emb[:1], lab[:1], n_ctx0, device)
-    v_no = float(l_no)
-    g_no = gnorm(l_no)
-    l_ba, _ = _batched_clf_loss(
-        clf_bat, adapter, emb[:1], lab[:1], n_ctx0, perf0, device
+    def guarded(tag, fn):
+        try:
+            loss, _ = fn()
+            return float(loss), gnorm(loss), None
+        except Exception as exc:  # noqa: BLE001
+            traceback.print_exc()
+            adapter.zero_grad(set_to_none=True)
+            gc.collect()
+            torch.cuda.empty_cache()
+            return None, None, f"{tag} {type(exc).__name__}: {exc}"
+
+    v_fp, g_fp, e_fp = guarded(
+        "legacy_fp",
+        lambda: _legacy_clf_loss(clf_fp, adapter, emb[:1], lab[:1], n_ctx0, device),
     )
-    v_ba = float(l_ba)
-    g_ba = gnorm(l_ba)
+    v_no, g_no, e_no = guarded(
+        "legacy_nofp",
+        lambda: _legacy_clf_loss(clf_nofp, adapter, emb[:1], lab[:1], n_ctx0, device),
+    )
+    v_ba, g_ba, e_ba = guarded(
+        "batched",
+        lambda: _batched_clf_loss(
+            clf_bat, adapter, emb[:1], lab[:1], n_ctx0, perf0, device
+        ),
+    )
+
+    def rel(a, b):
+        return None if a is None or b is None else abs(a - b) / abs(b)
+
     emit(
         {
             "check": "clf_b1_equivalence",
@@ -285,27 +313,39 @@ def main(
             "loss_legacy_fingerprint": v_fp,
             "loss_legacy_nofingerprint": v_no,
             "loss_batched_nofingerprint": v_ba,
-            "rel_batched_vs_legacy_nofp": abs(v_ba - v_no) / abs(v_no),
-            "rel_batched_vs_legacy_fp": abs(v_ba - v_fp) / abs(v_fp),
-            "rel_fp_vs_nofp_legacy": abs(v_fp - v_no) / abs(v_fp),
+            "rel_batched_vs_legacy_nofp": rel(v_ba, v_no),
+            "rel_batched_vs_legacy_fp": rel(v_ba, v_fp),
+            "rel_fp_vs_nofp_legacy": rel(v_fp, v_no),
             "gnorm_legacy_fingerprint": g_fp,
             "gnorm_legacy_nofingerprint": g_no,
             "gnorm_batched": g_ba,
+            "errors": [x for x in (e_fp, e_no, e_ba) if x],
         }
     )
 
     print("\n=== B=1 batched agreement across n_ctx ===", flush=True)
     for n_ctx in sweep_n_ctx:
         e2, l2 = draws[("clf", n_ctx)]
-        a, _ = _legacy_clf_loss(clf_nofp, adapter, e2[:1], l2[:1], n_ctx, device)
-        b, _ = _batched_clf_loss(clf_bat, adapter, e2[:1], l2[:1], n_ctx, perf0, device)
+        a, _ga, ea = guarded(
+            "legacy_nofp",
+            lambda e=e2, l=l2, n=n_ctx: _legacy_clf_loss(
+                clf_nofp, adapter, e[:1], l[:1], n, device
+            ),
+        )
+        b, _gb, eb = guarded(
+            "batched",
+            lambda e=e2, l=l2, n=n_ctx: _batched_clf_loss(
+                clf_bat, adapter, e[:1], l[:1], n, perf0, device
+            ),
+        )
         emit(
             {
                 "check": "clf_b1_by_nctx",
                 "n_ctx": n_ctx,
-                "loss_legacy_nofp": float(a),
-                "loss_batched": float(b),
-                "rel": abs(float(a) - float(b)) / abs(float(a)),
+                "loss_legacy_nofp": a,
+                "loss_batched": b,
+                "rel": rel(b, a),
+                "errors": [x for x in (ea, eb) if x],
             }
         )
 
@@ -357,7 +397,11 @@ def main(
     reg_leg = _fresh_est("reg", tabpfn_dir, device, seed, d_feat, "fp32", True)
     reg_bat = _fresh_est("reg", tabpfn_dir, device, seed, d_feat, "fp32", False)
     remb, ry = draws[("reg", n_ctx0)]
-    rl, _ = _legacy_reg_loss(reg_leg, adapter, remb[:1], ry[:1], n_ctx0, device)
+    rl_v, _grl, e_rl = guarded(
+        "legacy_reg",
+        lambda: _legacy_reg_loss(reg_leg, adapter, remb[:1], ry[:1], n_ctx0, device),
+    )
+    emit({"check": "reg_legacy_b1", "n_ctx": n_ctx0, "loss": rl_v, "error": e_rl})
     for b, via in ((1, False), (2, False), (2, True)):
         try:
             v, _ = _batched_reg_loss(
@@ -368,7 +412,7 @@ def main(
                 "B": b,
                 "via_engine": via,
                 "loss": float(v),
-                "loss_legacy_b1": float(rl),
+                "loss_legacy_b1": rl_v,
             }
         except Exception as exc:  # noqa: BLE001
             rec = {
@@ -379,54 +423,58 @@ def main(
             }
         emit(rec)
 
-    del clf_fp, clf_nofp, clf_bat, reg_leg, reg_bat
+    clf_fp = clf_nofp = clf_bat = reg_leg = reg_bat = None
     gc.collect()
     torch.cuda.empty_cache()
 
     # ---------------- phase 2: legacy baselines ----------------
     print("\n=== legacy fit_with_differentiable_input baselines (B=1) ===", flush=True)
     for prec in sweep_precision:
-        est = _fresh_est("clf", tabpfn_dir, device, seed, d_feat, prec, True)
-        for n_ctx in sweep_n_ctx:
-            e1, l1 = draws[("clf", n_ctx)]
-            try:
-                s, lv, peak = _time_config(
-                    lambda e=e1, l=l1, n=n_ctx, es=est: _legacy_clf_loss(
-                        es, adapter, e[:1], l[:1], n, device
-                    )[0],
-                    adapter,
-                    warmup,
-                    iters,
-                )
-                emit(
-                    {
-                        "path": "legacy",
-                        "precision": prec,
-                        "n_ctx": n_ctx,
-                        "B": 1,
-                        "recompute": False,
-                        "s_per_draw": s,
-                        "peak_gib": peak,
-                        "loss": lv,
-                    }
-                )
-            except (torch.cuda.OutOfMemoryError, RuntimeError) as exc:
-                emit(
-                    {
-                        "path": "legacy",
-                        "precision": prec,
-                        "n_ctx": n_ctx,
-                        "B": 1,
-                        "recompute": False,
-                        "oom": _oom(exc),
-                        "error": f"{type(exc).__name__}: {str(exc)[:200]}",
-                    }
-                )
-                gc.collect()
-                torch.cuda.empty_cache()
-        del est
-        gc.collect()
-        torch.cuda.empty_cache()
+        for fingerprint in (True, False):
+            est = _fresh_est("clf", tabpfn_dir, device, seed, d_feat, prec, fingerprint)
+            path = "legacy" if fingerprint else "legacy-nofp"
+            for n_ctx in sweep_n_ctx:
+                e1, l1 = draws[("clf", n_ctx)]
+                try:
+                    s, lv, peak = _time_config(
+                        lambda e=e1, l=l1, n=n_ctx, es=est: _legacy_clf_loss(
+                            es, adapter, e[:1], l[:1], n, device
+                        )[0],
+                        adapter,
+                        warmup,
+                        iters,
+                    )
+                    emit(
+                        {
+                            "path": path,
+                            "precision": prec,
+                            "n_ctx": n_ctx,
+                            "B": 1,
+                            "recompute": False,
+                            "s_per_draw": s,
+                            "peak_gib": peak,
+                            "loss": lv,
+                        }
+                    )
+                except Exception as exc:  # noqa: BLE001
+                    traceback.print_exc()
+                    emit(
+                        {
+                            "path": path,
+                            "precision": prec,
+                            "n_ctx": n_ctx,
+                            "B": 1,
+                            "recompute": False,
+                            "oom": _oom(exc),
+                            "error": f"{type(exc).__name__}: {str(exc)[:300]}",
+                        }
+                    )
+                    adapter.zero_grad(set_to_none=True)
+                    gc.collect()
+                    torch.cuda.empty_cache()
+            est = None
+            gc.collect()
+            torch.cuda.empty_cache()
 
     # ---------------- phase 3: batched sweep ----------------
     print("\n=== batched fit_from_preprocessed sweep ===", flush=True)
@@ -473,7 +521,8 @@ def main(
                                 "loss": lv,
                             }
                         )
-                    except (torch.cuda.OutOfMemoryError, RuntimeError) as exc:
+                    except Exception as exc:  # noqa: BLE001
+                        traceback.print_exc()
                         oom = _oom(exc)
                         emit(
                             {
@@ -483,7 +532,7 @@ def main(
                                 "B": b,
                                 "recompute": recompute,
                                 "oom": oom,
-                                "error": f"{type(exc).__name__}: {str(exc)[:200]}",
+                                "error": f"{type(exc).__name__}: {str(exc)[:300]}",
                             }
                         )
                         adapter.zero_grad(set_to_none=True)
@@ -491,7 +540,7 @@ def main(
                         torch.cuda.empty_cache()
                         if oom:
                             break
-        del est
+        est = None
         gc.collect()
         torch.cuda.empty_cache()
 
@@ -531,7 +580,8 @@ def main(
                                 "loss": lv,
                             }
                         )
-                    except (torch.cuda.OutOfMemoryError, RuntimeError) as exc:
+                    except Exception as exc:  # noqa: BLE001
+                        traceback.print_exc()
                         oom = _oom(exc)
                         emit(
                             {
@@ -542,7 +592,7 @@ def main(
                                 "B": b,
                                 "recompute": False,
                                 "oom": oom,
-                                "error": f"{type(exc).__name__}: {str(exc)[:200]}",
+                                "error": f"{type(exc).__name__}: {str(exc)[:300]}",
                             }
                         )
                         narrow.zero_grad(set_to_none=True)
@@ -550,14 +600,14 @@ def main(
                         torch.cuda.empty_cache()
                         if oom:
                             break
-            del est
+            est = None
             gc.collect()
             torch.cuda.empty_cache()
 
     # ---------------- table ----------------
     print("\n=== TABLE ===", flush=True)
     print(
-        f"{'path':9s} {'dout':>5s} {'prec':5s} {'n_ctx':>6s} {'B':>3s} {'recomp':>6s} "
+        f"{'path':12s} {'dout':>5s} {'prec':5s} {'n_ctx':>6s} {'B':>3s} {'recomp':>6s} "
         f"{'peakGiB':>8s} {'s/draw':>8s} {'x base':>7s}",
         flush=True,
     )
@@ -576,7 +626,7 @@ def main(
             b0 = base.get(n_ctx)
             sp = f"{b0 / r['s_per_draw']:7.2f}" if b0 else "      -"
             print(
-                f"{r['path']:9s} {r.get('d_out', d_feat):5d} {r['precision']:5s} "
+                f"{r['path']:12s} {r.get('d_out', d_feat):5d} {r['precision']:5s} "
                 f"{n_ctx:6d} {r['B']:3d} {r['recompute']!s:>6s} "
                 f"{r['peak_gib']:8.1f} {r['s_per_draw']:8.4f} {sp}",
                 flush=True,
@@ -584,7 +634,7 @@ def main(
         else:
             tag = "OOM" if r.get("oom") else r.get("skipped", "ERR")
             print(
-                f"{r['path']:9s} {r.get('d_out', d_feat):5d} {r['precision']:5s} "
+                f"{r['path']:12s} {r.get('d_out', d_feat):5d} {r['precision']:5s} "
                 f"{n_ctx:6d} {r['B']:3d} {r['recompute']!s:>6s} {tag:>8s}",
                 flush=True,
             )
