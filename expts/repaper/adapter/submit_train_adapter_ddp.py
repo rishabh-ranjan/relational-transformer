@@ -39,10 +39,9 @@ REPO_ROOT = str(Path(__file__).resolve().parents[3])
 # execution units. bf16 puts matmuls on tensor cores and lets sdpa select
 # FlashAttention. Expected 2-3x, shape-limited rather than FLOP-limited
 # (attention is (1, 554, 16, 64): batch 1, 16 heads over 108 SMs).
-# SMOKE: 1 rank, 2 steps, no eval, no wandb -- a bf16 dtype error costs a
-# 4-gpu slot, so prove the path on one gpu first.
-ARMS = [("bf16", "join-v5-smoke-bf16")]
-# ARMS = [("bf16", "join-v5-ddp-linear-bf16")]
+# The 1-gpu smoke (job 191828) cleared the bf16 dtype path: step 0 ran
+# with finite loss and gnorm 4.909, no "unsupported ScalarType BFloat16".
+ARMS = [("bf16", "join-v5-ddp-linear-bf16")]
 # ARMS = [(None, "join-v4-ddp-linear")]
 
 for autocast, RUN in ARMS:
@@ -67,9 +66,9 @@ for autocast, RUN in ARMS:
             # 4 ranks x 4 tasks x 32 accum. The script asserts the divisibility, so
             # changing the rank count without changing this fails at startup rather
             # than silently running a different batch.
-            total_tasks_per_step=8,
+            total_tasks_per_step=512,
             tasks_per_micro=4,
-            total_steps=2,
+            total_steps=2_500,
             lr=1e-4,
             # Zero, deliberately. AdamW's decay pulls a weight toward 0, and this
             # weight starts at I -- decaying it is decaying the rt-j featurizer
@@ -85,24 +84,24 @@ for autocast, RUN in ARMS:
             hidden_dim=0,
             # At ~70 s/step these are ~30 min and ~1 h of wall clock, not the
             # 10 min and 20 min they were on one gpu.
-            eval_every=0,
-            save_every=0,
+            eval_every=25,
+            save_every=50,
             seed=0,
             targets={"val/auroc": 0.7173, "val/nmae": 0.3584},
             run_name=f"adapter-{RUN}",
             project=project("adapter"),
             entity="rtv2",
-            wandb_disabled=True,
+            wandb_disabled=False,
         ),
         resources=Resources(
             partition="il",
             account="infolab",
             qos="il",
             # ~49 h at 70 s/step; 72 leaves room for a slow node.
-            time="0:20:00",
+            time="3-00:00:00",
             # One rank per gpu: roach maps SLURM_PROCID -> RANK and SLURM_NTASKS ->
             # WORLD_SIZE (roach/slurm/run.py:19), so ntasks=None gives 4 ranks.
-            gpus="a100:1",
+            gpus="a100:4",
             cpus_per_task=14,
             ntasks=None,
             exclusive=False,
