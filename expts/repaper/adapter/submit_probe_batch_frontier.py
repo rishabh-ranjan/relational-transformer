@@ -47,7 +47,7 @@ submit(
         # ~23 min of sweep inside a 40 min job, leaving room for the clone, the
         # env, five checkpoint loads and the table. Every row prints as it is
         # measured, so a job cut short still reports what it got.
-        budget_s=1400,
+        budget_s=1400.0,
         # The v6 arm projects to 64 dims, which shrinks the feature axis 8x and
         # moves the frontier with it. Measured last, only if the budget is left.
         probe_d_out=64,
