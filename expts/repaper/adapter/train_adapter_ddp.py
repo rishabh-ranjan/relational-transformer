@@ -41,6 +41,12 @@ def main(
 ) -> None:
     params = dict(locals())
 
+    # Before the first cuda allocation. rt-j pretraining sets this
+    # (src/rt/_env.py:5,27) and the adapter path never called _setup_env, so it
+    # has been running on the default allocator with shapes that change every
+    # micro-step -- the case expandable_segments exists for.
+    os.environ.setdefault("PYTORCH_CUDA_ALLOC_CONF", "expandable_segments:True")
+
     import fnmatch
     import socket
     from datetime import timedelta
