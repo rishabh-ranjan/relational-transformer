@@ -87,7 +87,7 @@ def draw(rng, pool, e, n_ctx_lo, n_ctx_hi, n_query):
     return emb, y, n_ctx
 
 
-def build_adapter(adapter_kind, d_feat, hidden_dim, stats_path, device):
+def build_adapter(adapter_kind, d_feat, d_out, hidden_dim, stats_path, device):
     import numpy as np
     import torch
     from torch import nn
@@ -138,12 +138,18 @@ def build_adapter(adapter_kind, d_feat, hidden_dim, stats_path, device):
     # the context, so an output bias is subtracted straight back off and its
     # gradient is zero by construction.
     if adapter_kind == "linear":
-        # Identity, so step 0 is exactly the un-adapted rt-j featurizer (the
-        # standardiser in front of it is invisible to TabPFN, see above) and
-        # every later step is attributable to training.
-        head = nn.Linear(d_feat, d_feat, bias=False)
+        head = nn.Linear(d_feat, d_out, bias=False)
         with torch.no_grad():
-            head.weight.copy_(torch.eye(d_feat))
+            if d_out == d_feat:
+                # Identity, so step 0 is exactly the un-adapted rt-j featurizer
+                # (the standardiser in front is invisible to TabPFN, see above)
+                # and every later step is attributable to training.
+                head.weight.copy_(torch.eye(d_feat))
+            else:
+                # A projection cannot be identity-initialised, so step 0 is a
+                # random 512->d_out projection and is expected to start *below*
+                # the un-adapted featurizer, not at it.
+                nn.init.xavier_uniform_(head.weight)
     elif adapter_kind == "mlp":
         # A bottleneck cannot be initialised at identity, so unlike the linear
         # arm this one does NOT start from the un-adapted featurizer: its step
@@ -152,7 +158,7 @@ def build_adapter(adapter_kind, d_feat, hidden_dim, stats_path, device):
         head = nn.Sequential(
             nn.Linear(d_feat, hidden_dim, bias=True),
             nn.ReLU(),
-            nn.Linear(hidden_dim, d_feat, bias=False),
+            nn.Linear(hidden_dim, d_out, bias=False),
         )
         with torch.no_grad():
             for m in head:
@@ -163,6 +169,28 @@ def build_adapter(adapter_kind, d_feat, hidden_dim, stats_path, device):
     else:
         raise AssertionError(f"unknown adapter_kind {adapter_kind!r}")
     return nn.Sequential(standardize, head).to(device)
+
+
+def draw_fixed(rng, pool, e, n_ctx, n_query):
+    import numpy as np
+
+    idx = rng.choice(e["n"], size=n_ctx + n_query, replace=False)
+    emb, y = pool.read(e, np.sort(idx))
+    return emb, y
+
+
+def pick_task(rng, entries, p, n_rows, tries=64):
+    # A ladder rung fixes n_ctx, so a task with too few rows cannot supply the
+    # draw at all and has to be resampled rather than clamped -- clamping would
+    # reintroduce the ragged shapes the ladder exists to remove. This does bias
+    # the mixture toward larger tasks at the long rungs; that is the price of
+    # fixed shapes and it is why the rung is drawn per micro-step rather than
+    # per task.
+    for _ in range(tries):
+        e = entries[int(rng.choice(len(entries), p=p))]
+        if e["n"] >= n_rows:
+            return e
+    return None
 
 
 def summarize(per_task):
@@ -229,7 +257,7 @@ def load_relbench(pre_dir, features_root, labels_root, n_ctx, n_query, seed):
     return out
 
 
-def make_ests(tabpfn_dir, device, seed, d_feat):
+def make_ests(tabpfn_dir, device, seed, n_features, precision):
     import torch
     from tabpfn import TabPFNClassifier, TabPFNRegressor
 
@@ -249,7 +277,10 @@ def make_ests(tabpfn_dir, device, seed, d_feat):
             # run under; autocast was never the cause (PowBackward0 nan'd
             # identically in both) and reverting to it, with n_ctx_hi back at
             # 2048, is an untested speedup rather than a correctness question.
-            inference_precision=torch.float32,
+            inference_precision={
+                "fp32": torch.float32,
+                "bf16": torch.bfloat16,
+            }[precision],
             # The one step in TabPFN's torch preprocessing pipeline that runs
             # unconditionally is TorchSoftClipOutliersStep -- everything else
             # sits behind enable_gpu_preprocessing, which defaults off. It
@@ -261,7 +292,7 @@ def make_ests(tabpfn_dir, device, seed, d_feat):
             # already-working one identical to 6 significant figures.
             inference_config={"OUTLIER_REMOVAL_STD": None},
         )
-        warm = torch.randn(32, d_feat, device=device)
+        warm = torch.randn(32, n_features, device=device)
         y = torch.arange(32, device=device) % 2
         est.fit_with_differentiable_input(warm, y if task_type == "clf" else y.float())
         if task_type == "reg":
@@ -455,7 +486,9 @@ def main(
     train_entries = load_index(features_root, min_rows)
     train_pool = Pool(train_entries)
 
-    adapter = build_adapter(adapter_kind, d_feat, hidden_dim, stats_path, device)
+    adapter = build_adapter(
+        adapter_kind, d_feat, d_feat, hidden_dim, stats_path, device
+    )
     init_flat = torch.cat([p.detach().flatten() for p in adapter.parameters()]).clone()
     opt = torch.optim.AdamW(adapter.parameters(), lr=lr, weight_decay=wd)
 
@@ -470,7 +503,7 @@ def main(
         # t = (step - warmup_steps) / max(1, total_steps - warmup_steps)
         # return lr_min + 0.5 * (lr - lr_min) * (1.0 + math.cos(math.pi * t))
 
-    ests = make_ests(tabpfn_dir, device, seed, d_feat)
+    ests = make_ests(tabpfn_dir, device, seed, d_feat, "fp32")
     print("tabpfn frozen; only the adapter trains", flush=True)
 
     relbench = load_relbench(

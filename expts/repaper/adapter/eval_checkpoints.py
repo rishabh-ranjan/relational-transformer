@@ -106,7 +106,12 @@ def main(
         if ck is None:
             return nn.Identity().to(device)
         a = build_adapter(
-            ck["adapter_kind"], d_feat, ck["hidden_dim"], ck["stats_path"], device
+            ck["adapter_kind"],
+            d_feat,
+            ck.get("d_out", d_feat),
+            ck["hidden_dim"],
+            ck["stats_path"],
+            device,
         )
         a.load_state_dict(ck["state_dict"])
         return a.eval()

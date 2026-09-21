@@ -15,9 +15,9 @@ def main(
     stats_path: str,
     out_dir: str,
     d_feat: int,
+    d_out: int,
     min_rows: int,
-    n_ctx_lo: int,
-    n_ctx_hi: int,
+    n_ctx_list: list[int],
     n_query: int,
     total_tasks_per_step: int,
     tasks_per_micro: int,
@@ -28,7 +28,7 @@ def main(
     hidden_dim: int,
     warmup_steps: int,
     grad_norm_max: float,
-    autocast: str | None,
+    precision: str,
     eval_every: int,
     save_every: int,
     seed: int,
@@ -52,12 +52,13 @@ def main(
     from expts.repaper.adapter.train_adapter import (
         Pool,
         build_adapter,
-        draw,
+        draw_fixed,
         evaluate_relbench,
         load_index,
         load_relbench,
         loss_and_pred,
         make_ests,
+        pick_task,
     )
 
     # Why data parallel at all: rt-j pretraining averaged `total_bs=1024`
@@ -83,17 +84,15 @@ def main(
         "nccl", timeout=timedelta(hours=1), device_id=torch.device(device)
     )
     is_main = rank == 0
-    # Eval deliberately stays fp32 whatever training runs in, so val numbers
-    # are comparable across precision arms and only the training path varies.
-    autocast_dtype = {None: None, "bf16": torch.bfloat16}[autocast]
 
     assert total_tasks_per_step % (world_size * tasks_per_micro) == 0, (
         f"total_tasks_per_step {total_tasks_per_step} not divisible by "
         f"world_size {world_size} * tasks_per_micro {tasks_per_micro}"
     )
     accum = total_tasks_per_step // (world_size * tasks_per_micro)
-    assert min_rows > n_query + 64, (
-        f"min_rows {min_rows} leaves no context after {n_query} queries"
+    assert min_rows >= min(n_ctx_list) + n_query, (
+        f"min_rows {min_rows} cannot supply the shortest rung "
+        f"{min(n_ctx_list)} + {n_query} queries"
     )
 
     out = Path(out_dir).expanduser()
@@ -130,7 +129,9 @@ def main(
     train_entries = load_index(features_root, min_rows)
     train_pool = Pool(train_entries)
 
-    adapter = build_adapter(adapter_kind, d_feat, hidden_dim, stats_path, device)
+    adapter = build_adapter(
+        adapter_kind, d_feat, d_out, hidden_dim, stats_path, device
+    )
     # Identity init is deterministic so the ranks already agree, but a mlp arm
     # would not be: broadcast regardless, or a silent divergence at step 0
     # turns into ranks optimising different functions.
@@ -145,7 +146,9 @@ def main(
             return lr * (step + 1) / warmup_steps
         return lr
 
-    ests = make_ests(tabpfn_dir, device, seed, d_feat)
+    # n_features is the adapter's OUTPUT width: that is what TabPFN sees,
+    # and its cost scales with it.
+    ests = make_ests(tabpfn_dir, device, seed, d_out, precision)
 
     # Every rank evaluates the same 21 val tasks so the metric does not depend
     # on which rank reports it; only rank 0 logs. Loading is per-rank memmap
@@ -181,19 +184,23 @@ def main(
         local_bad = 0
         loss_sum = torch.zeros(2, device=device)
         loss_cnt = torch.zeros(2, device=device)
-        for _ in range(accum):
+        for micro in range(accum):
+            # One rung per micro-step, shared by every draw in it, so their
+            # shapes match and they can be stacked. Seeded off (step, micro)
+            # and NOT off rank, so all ranks walk the same rung sequence and
+            # none straggles on a long rung while the others wait at the
+            # all_reduce -- rt-j pretraining does exactly this
+            # (datasets.py:279, random.Random(self.seed + step)).
+            rung = np.random.default_rng([seed, step, micro])
+            n_ctx = int(rung.choice(n_ctx_list))
             for _ in range(tasks_per_micro):
-                e = train_entries[int(rng.choice(len(train_entries), p=train_pool.p))]
-                emb, y, n_ctx = draw(rng, train_pool, e, n_ctx_lo, n_ctx_hi, n_query)
+                e = pick_task(rng, train_entries, train_pool.p, n_ctx + n_query)
+                if e is None:
+                    n_degenerate += 1
+                    continue
+                emb, y = draw_fixed(rng, train_pool, e, n_ctx, n_query)
                 loss, _pred, _truth = loss_and_pred(
-                    ests,
-                    adapter,
-                    e["task_type"],
-                    emb,
-                    y,
-                    n_ctx,
-                    device,
-                    autocast_dtype,
+                    ests, adapter, e["task_type"], emb, y, n_ctx, device
                 )
                 if loss is None:
                     n_degenerate += 1
@@ -234,6 +241,21 @@ def main(
             for p in adapter.parameters():
                 if p.grad is not None:
                     dist.all_reduce(p.grad, op=dist.ReduceOp.SUM)
+            # A dtype or device change inside TabPFN that detached the graph
+            # would show up as a zero gradient and a run that looks healthy
+            # while learning nothing. torch.as_tensor preserves the graph
+            # across a dtype cast (verified: ToCopyBackward0), but this is the
+            # cheap standing check that it stays true.
+            if step == 0:
+                g0 = sum(
+                    float(p.grad.abs().sum())
+                    for p in adapter.parameters()
+                    if p.grad is not None
+                )
+                assert g0 > 0, (
+                    "adapter gradient is exactly zero at step 0 -- something "
+                    "on the TabPFN path detached the graph"
+                )
             # Clipped after the all_reduce: the norm that matters is the global
             # gradient's, not any one rank's slice of it.
             gnorms.append(
@@ -335,6 +357,7 @@ def main(
                 {
                     "step": step,
                     "adapter_kind": adapter_kind,
+                    "d_out": d_out,
                     "hidden_dim": hidden_dim,
                     "stats_path": stats_path,
                     "state_dict": adapter.state_dict(),
@@ -347,6 +370,7 @@ def main(
             {
                 "step": total_steps,
                 "adapter_kind": adapter_kind,
+                "d_out": d_out,
                 "hidden_dim": hidden_dim,
                 "stats_path": stats_path,
                 "state_dict": adapter.state_dict(),

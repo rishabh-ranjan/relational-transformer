@@ -39,9 +39,32 @@ REPO_ROOT = str(Path(__file__).resolve().parents[3])
 # execution units. bf16 puts matmuls on tensor cores and lets sdpa select
 # FlashAttention. Expected 2-3x, shape-limited rather than FLOP-limited
 # (attention is (1, 554, 16, 64): batch 1, 16 heads over 108 SMs).
-# The 1-gpu smoke (job 191828) cleared the bf16 dtype path: step 0 ran
-# with finite loss and gnorm 4.909, no "unsupported ScalarType BFloat16".
-ARMS = [("bf16", "join-v5-ddp-linear-bf16")]
+# v6. Three changes from v4/v5, all aimed at the shape problem:
+#   d_out 64      TabPFN is a *cell*-level transformer: cost scales with the
+#                 feature axis, and 512 features x ~810 rows is ~415k cell
+#                 positions for ONE draw -- about 3x rt-j pretraining's entire
+#                 131k-token micro-batch. Running a 256-row context against a
+#                 512-dim vector is also a degenerate regime for TabPFN
+#                 (rows < features). 64 also lands entirely inside
+#                 max_features_per_estimator=500, so the 12-13 permanently
+#                 dead output dims disappear.
+#   n_ctx ladder  one rung per micro-step shared by every draw in it, seeded
+#                 off (seed, step, micro) and NOT off rank so the ranks stay
+#                 in lockstep -- rt-j pretraining's scheme (datasets.py:279).
+#                 This is the precondition for stacking draws into one forward.
+#   bf16          forced via inference_precision, i.e. cast the model once as
+#                 pretraining does, NOT autocast. Autocast made the adapter
+#                 emit bf16 into AddFingerprintFeaturesStep, which hashes via
+#                 .numpy() and has no bf16 -- that killed v5 at step 0. Forced
+#                 bf16 casts in _prepare_model_inputs (inference.py:1308)
+#                 *after* preprocessing, so the fingerprint step still sees
+#                 fp32. Halves activations, which is what buys batch size.
+#
+# NOTE draws are still processed one at a time. The ladder makes stacking
+# possible; the stacking itself needs fit_from_preprocessed and is not in yet.
+# SMOKE: 1 gpu, 5 steps, no eval, no wandb -- measure s/draw at d_out=64
+# + bf16 + ladder before spending a 4-gpu slot.
+ARMS = [("bf16", "join-v6-smoke-proj64")]
 # ARMS = [(None, "join-v4-ddp-linear")]
 
 for autocast, RUN in ARMS:
@@ -53,22 +76,22 @@ for autocast, RUN in ARMS:
             relbench_pre_dir=PRE_DIR,
             relbench_features_root=f"{SHARE}/features_rt-j",
             relbench_labels_root=f"{SHARE}/labels_relbench",
-            relbench_n_ctx=8192,
-            relbench_n_query=4096,
+            relbench_n_ctx=256,
+            relbench_n_query=256,
             tabpfn_dir=f"{SHARE}/tabpfn",
             stats_path=f"{SHARE}/feature_stats_join_u12.npz",
             out_dir=f"{OUT_ROOT}/adapter/{RUN}",
             d_feat=512,
+            d_out=64,
             min_rows=512,
-            n_ctx_lo=256,
-            n_ctx_hi=1024,
+            n_ctx_list=[256, 512, 1024],
             n_query=256,
             # 4 ranks x 4 tasks x 32 accum. The script asserts the divisibility, so
             # changing the rank count without changing this fails at startup rather
             # than silently running a different batch.
-            total_tasks_per_step=512,
+            total_tasks_per_step=128,
             tasks_per_micro=4,
-            total_steps=2_500,
+            total_steps=5,
             lr=1e-4,
             # Zero, deliberately. AdamW's decay pulls a weight toward 0, and this
             # weight starts at I -- decaying it is decaying the rt-j featurizer
@@ -79,29 +102,29 @@ for autocast, RUN in ARMS:
             # gradient should also be far steadier than a 4-task one, so this
             # ought to bind on a small minority of steps; train/frac_clipped says.
             grad_norm_max=10.0,
-            autocast=autocast,
+            precision=autocast,
             adapter_kind="linear",
             hidden_dim=0,
             # At ~70 s/step these are ~30 min and ~1 h of wall clock, not the
             # 10 min and 20 min they were on one gpu.
-            eval_every=25,
-            save_every=50,
+            eval_every=0,
+            save_every=0,
             seed=0,
             targets={"val/auroc": 0.7173, "val/nmae": 0.3584},
             run_name=f"adapter-{RUN}",
             project=project("adapter"),
             entity="rtv2",
-            wandb_disabled=False,
+            wandb_disabled=True,
         ),
         resources=Resources(
             partition="il",
             account="infolab",
             qos="il",
             # ~49 h at 70 s/step; 72 leaves room for a slow node.
-            time="3-00:00:00",
+            time="0:30:00",
             # One rank per gpu: roach maps SLURM_PROCID -> RANK and SLURM_NTASKS ->
             # WORLD_SIZE (roach/slurm/run.py:19), so ntasks=None gives 4 ranks.
-            gpus="a100:4",
+            gpus="a100:1",
             cpus_per_task=14,
             ntasks=None,
             exclusive=False,
