@@ -103,12 +103,8 @@ def build(entity: str, name: str, targets: dict[str, float]) -> ws.Workspace:
 print(
     save(
         build(
-            # The key in ~/scratch/.secrets/wandb reaches this entity and not
-            # the rtv2 team: entity(name: "rtv2") lists no project there, and
-            # upsertModel and wandb.init on it both come back "the provided API
-            # key cannot access this resource". Flip these two when it can.
-            # "rtv2",
-            "vedanga-stanford-university",
+            "rtv2",
+            # "vedanga-stanford-university",
             project("adapter"),
             # rt-j without an adapter, on the same 21 val tasks: the line every
             # val panel is read against (submit_train_adapter.py logs it).

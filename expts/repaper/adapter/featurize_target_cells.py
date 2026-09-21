@@ -116,7 +116,7 @@ def featurize_dbs(
         )
 
         db_written = 0
-        n_done = n_skipped = 0
+        n_done = n_skipped = db_sub = 0
         for dataset_idx, (name, task) in enumerate(named):
             bin_path = out_dir / f"{name}_target.bin"
             meta_path = out_dir / f"{name}_meta.json"
@@ -145,7 +145,19 @@ def featurize_dbs(
                 f"{free / 2**30:.1f} GiB is free"
             )
 
-            labels = np.empty(n_rows, dtype=np.float32)
+            # rustler's seq() does not fail a row it cannot build: it swaps in
+            # a *different* random item from the sampler's pool and carries on
+            # (fly.rs:955). For training that is invisible and harmless -- items
+            # are a random draw anyway -- but batch_for_nodes_py asks for
+            # specific rows, so the swap silently files one row's embedding
+            # under another row's node idx, and the substitute can belong to a
+            # different task in the same db. Two of the three triggers are
+            # silent: a target column the node does not carry, and a null target
+            # value, both of which return BuildError into an empty match arm.
+            # The third, >5 f2p neighbours, panics and prints. So the only
+            # reliable check is to ask what node each row actually came from.
+            kept_nodes, kept_labels = [], []
+            n_sub = 0
             tmp = bin_path.with_suffix(".bin.partial")
             with open(tmp, "wb") as fh, torch.inference_mode():
                 for start in range(0, n_rows, batch_size):
@@ -181,7 +193,7 @@ def featurize_dbs(
                         .gather(1, si.unsqueeze(-1).expand_as(batch["number_values"]))
                         .squeeze(-1)
                     )
-                    labels[start : start + B] = (
+                    labels = (
                         (vals * is_targets.to(vals.dtype))
                         .sum(dim=1)
                         .float()
@@ -190,12 +202,50 @@ def featurize_dbs(
                     )
                     emb = x[is_targets].bfloat16()
                     assert emb.shape == (B, d_model), emb.shape
-                    fh.write(emb.view(torch.uint16).cpu().numpy().tobytes())
 
+                    # The substitution check. The node the target cell actually
+                    # belongs to must be the node we asked for; anything else is
+                    # a row seq() swapped in, and keeping it would file one
+                    # row's embedding under another row's idx.
+                    got = (
+                        (batch["node_idxs"].gather(1, si) * is_targets)
+                        .sum(dim=1)
+                        .cpu()
+                        .numpy()
+                    )
+                    want = np.asarray(node_idxs, dtype=got.dtype)
+                    ok = got == want
+                    n_sub += int((~ok).sum())
+                    fh.write(
+                        emb[torch.from_numpy(ok).to(device)]
+                        .view(torch.uint16)
+                        .cpu()
+                        .numpy()
+                        .tobytes()
+                    )
+                    kept_nodes.append(want[ok])
+                    kept_labels.append(labels[ok])
+
+            kept = np.concatenate(kept_nodes) if kept_nodes else np.empty(0, np.int64)
+            labels = (
+                np.concatenate(kept_labels)
+                if kept_labels
+                else np.empty(0, np.float32)
+            )
+            if len(kept) < min_rows:
+                tmp.unlink()
+                print(
+                    f"[{db}] {name}: only {len(kept)} of {n_rows} rows are "
+                    f"buildable, under {min_rows}; skipping",
+                    flush=True,
+                )
+                n_skipped += 1
+                continue
+            n_rows = len(kept)
             tmp.replace(bin_path)
             np.savez(
                 out_dir / f"{name}_rows.npz",
-                node_idxs=rows.astype(np.int64),
+                node_idxs=kept.astype(np.int64),
                 labels=labels,
             )
             written = bin_path.stat().st_size
@@ -216,6 +266,9 @@ def featurize_dbs(
                         # so P(task) is set by this, not by what we dumped.
                         "total_nodes": total_nodes,
                         "sampled_rows": n_rows,
+                        # Rows seq() could not build and silently swapped out,
+                        # dropped here rather than written under the wrong node.
+                        "n_substituted": n_sub,
                         "label_mean": float(finite.mean()) if finite.size else None,
                         "label_std": float(finite.std()) if finite.size else None,
                         "label_frac_positive": float((finite > 0).mean())
@@ -232,12 +285,14 @@ def featurize_dbs(
                     indent=2,
                 )
             )
+            db_sub += n_sub
             n_done += 1
 
         gib = total_written / 2**30
         print(
-            f"[{db}] {n_done} tasks, {n_skipped} under {min_rows} rows, "
-            f"{db_written / 2**20:.0f} MiB | cumulative {gib:.2f} of an expected "
+            f"[{db}] {n_done} tasks, {n_skipped} skipped, {db_sub} substituted "
+            f"rows dropped, {db_written / 2**20:.0f} MiB "
+            f"| cumulative {gib:.2f} of an expected "
             f"{expected_gib:.2f} GiB, {(time.time() - t_start) / 60:.1f} min",
             flush=True,
         )

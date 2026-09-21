@@ -63,9 +63,7 @@ submit(
         targets={"val/auroc": 0.7173, "val/nmae": 0.3584},
         run_name=f"adapter-{RUN}",
         project=project("adapter"),
-        # The run key cannot reach the rtv2 team; see workspace.py.
-        # entity="rtv2",
-        entity="vedanga-stanford-university",
+        entity="rtv2",
         wandb_disabled=False,
     ),
     resources=Resources(
