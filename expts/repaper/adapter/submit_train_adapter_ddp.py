@@ -68,9 +68,10 @@ REPO_ROOT = str(Path(__file__).resolve().parents[3])
 # the GPU pipeline hashes via .numpy() AFTER the bf16 cast at
 # inference.py:1308), and that changes the model inputs. Measure d_out=64
 # on its own first -- if it drops peak memory enough, bf16 is not needed.
-# SMOKE first: 1 gpu, 5 steps, batched path, no eval, no wandb.
-ARMS = [("bf16", "join-v7-smoke-batched")]
-# ARMS = [("bf16", "join-v7-ddp-proj64-batched")]
+# Smoke (job 191935, 1 gpu) cleared the fused path: both task types ran,
+# gradient nonzero, 0 dropped, 0 degenerate, peak 18.0 GiB, and
+# 0.0938 s/draw against production 0.5581 = 6.0x.
+ARMS = [("bf16", "join-v7-ddp-proj64-batched")]
 # ARMS = [(None, "join-v4-ddp-linear")]
 
 for autocast, RUN in ARMS:
@@ -82,8 +83,8 @@ for autocast, RUN in ARMS:
             relbench_pre_dir=PRE_DIR,
             relbench_features_root=f"{SHARE}/features_rt-j",
             relbench_labels_root=f"{SHARE}/labels_relbench",
-            relbench_n_ctx=256,
-            relbench_n_query=256,
+            relbench_n_ctx=8192,
+            relbench_n_query=4096,
             tabpfn_dir=f"{SHARE}/tabpfn",
             stats_path=f"{SHARE}/feature_stats_join_u12.npz",
             out_dir=f"{OUT_ROOT}/adapter/{RUN}",
@@ -95,14 +96,14 @@ for autocast, RUN in ARMS:
             # 4 ranks x 4 tasks x 32 accum. The script asserts the divisibility, so
             # changing the rank count without changing this fails at startup rather
             # than silently running a different batch.
-            total_tasks_per_step=128,
+            total_tasks_per_step=512,
             # Aligned with n_ctx_list. Chosen so peak memory is roughly flat
             # across rungs and total_tasks_per_step divides exactly at every
             # one. Measured frontier at d_out=64/bf16: s/draw is flat past
             # B~8-12, so 32/16/8 captures essentially all of it while leaving
             # over half the card free for the relbench eval draw.
             micro_batch_list=[32, 16, 8],
-            total_steps=5,
+            total_steps=2_500,
             lr=1e-4,
             # Zero, deliberately. AdamW's decay pulls a weight toward 0, and this
             # weight starts at I -- decaying it is decaying the rt-j featurizer
@@ -118,24 +119,25 @@ for autocast, RUN in ARMS:
             hidden_dim=0,
             # At ~70 s/step these are ~30 min and ~1 h of wall clock, not the
             # 10 min and 20 min they were on one gpu.
-            eval_every=0,
-            save_every=0,
+            eval_every=25,
+            save_every=50,
             seed=0,
             targets={"val/auroc": 0.7173, "val/nmae": 0.3584},
             run_name=f"adapter-{RUN}",
             project=project("adapter"),
             entity="rtv2",
-            wandb_disabled=True,
+            wandb_disabled=False,
         ),
         resources=Resources(
             partition="il",
             account="infolab",
             qos="il",
             # ~49 h at 70 s/step; 72 leaves room for a slow node.
-            time="0:30:00",
+            # ~8.3 h at 0.0938 s/draw; 24 leaves room for a slow node.
+        time="1-00:00:00",
             # One rank per gpu: roach maps SLURM_PROCID -> RANK and SLURM_NTASKS ->
             # WORLD_SIZE (roach/slurm/run.py:19), so ntasks=None gives 4 ranks.
-            gpus="a100:1",
+            gpus="a100:4",
             cpus_per_task=14,
             ntasks=None,
             exclusive=False,
