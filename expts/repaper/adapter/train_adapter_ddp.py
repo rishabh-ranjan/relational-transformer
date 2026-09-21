@@ -134,7 +134,7 @@ def main(
             id=f"{run_id}-{attempt}",
             group=run_id,
             resume="never",
-            config={**params, "world_size": world_size, "accum": accum},
+            config={**params, "world_size": world_size, "accum_for": accum_for},
             dir=str(out),
             settings=wandb.Settings(
                 console_multipart=True, console_chunk_max_seconds=60
