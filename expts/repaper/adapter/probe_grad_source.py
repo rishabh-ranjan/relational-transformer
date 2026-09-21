@@ -111,7 +111,11 @@ def main(
                 with torch.autograd.detect_anomaly(check_nan=True):
                     loss.backward()
             except Exception as e:
-                err = f"{type(e).__name__}: {str(e)[:400]}"
+                # The whole message, not a prefix: detect_anomaly appends
+                # "Traceback of forward call that caused the error", which
+                # names the line that built the offending op, and truncating
+                # it threw away the only thing worth having.
+                err = f"{type(e).__name__}: {e}"
             g = adapter.weight.grad
             dx = seen.get("dx")
             print(

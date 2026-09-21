@@ -17,9 +17,10 @@ submit(
         features_root=f"{SHARE}/features_join_u12",
         tabpfn_dir=f"{SHARE}/tabpfn",
         tasks=[
+            # one that NaN'd and one that did not, so the forward traceback
+            # can be read against a working case
             ("join-se-writing", "user-new-badge-adoption"),
             ("join-nhtsa-fars", "vehicles-first_mo"),
-            ("join-nhtsa-fars", "vehicles-dr_pres"),
         ],
         n_ctx=512,
         n_query=256,
