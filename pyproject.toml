@@ -45,7 +45,7 @@ dependencies = [
 dev = [
     # Submits experiments and is the job-side entry point (roach.slurm.run);
     # pin and the submitting environment must agree (see its README).
-    "roach @ git+https://github.com/rishabh-ranjan/roach@v0.5.7",
+    "roach @ git+https://github.com/rishabh-ranjan/roach@v0.5.28",
     # Builds the FAISS indices the sampler's opt-in vecdb feature reads
     # (expts/repaper/baselines/build_vector_db.py).
     # EXAONE Tabular v1.0, a tabular foundation model used as a rel2tabv2
@@ -162,7 +162,7 @@ setuptools = "<81"
 
 [tool.pixi.feature.featurize.pypi-dependencies]
 # Jobs enter through `python -m roach.slurm.run` whatever environment they run in.
-roach = { git = "https://github.com/rishabh-ranjan/roach", tag = "v0.5.7" }
+roach = { git = "https://github.com/rishabh-ranjan/roach", tag = "v0.5.28" }
 relbench = "==2.1.2"
 fastdfs = "*"
 duckdb = "*"
@@ -198,7 +198,7 @@ index-strategy = "unsafe-best-match"
 
 [tool.pixi.feature.gnn.pypi-dependencies]
 # Jobs enter through `python -m roach.slurm.run` whatever environment they run in.
-roach = { git = "https://github.com/rishabh-ranjan/roach", tag = "v0.5.7" }
+roach = { git = "https://github.com/rishabh-ranjan/roach", tag = "v0.5.28" }
 # The same commit as the default environment: `relbench.modeling` and the local
 # `load_dataset(path)` path both come from here, and the two pins must not drift.
 relbench = { git = "https://github.com/stanford-star/relbench", rev = "bac62c99cf1a60fbfd7c61c5fd7cb183453b7997", extras = ["example"] }
