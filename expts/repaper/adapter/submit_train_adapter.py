@@ -41,10 +41,12 @@ REPO_ROOT = str(Path(__file__).resolve().parents[3])
 #           and is expected to start *worse* than the control, not at it.
 # No output bias in either: TabPFN z-norms each column against the context, so
 # an output bias is subtracted straight back off and gets zero gradient.
-ARMS = [("linear", 0, 10.0, "il"), ("linear", 0, 25.0, "il-lo")]
+# clip 10.0 went in as 191541; this is the remaining one.
+ARMS = [("linear", 0, 25.0, "il-lo")]
+# ARMS = [("linear", 0, 10.0, "il"), ("linear", 0, 25.0, "il-lo")]
 # ARMS = [("linear", 0, 1.0, "il"), ("mlp", 64, 1.0, "il-lo")]
 
-for adapter_kind, hidden_dim, grad_norm_max, tier in ARMS:
+for adapter_kind, hidden_dim, grad_norm_max, qos in ARMS:
     RUN = f"join-v3-{adapter_kind}-clip{grad_norm_max:g}"
     submit(
         "expts.repaper.adapter.train_adapter:main",
@@ -105,9 +107,9 @@ for adapter_kind, hidden_dim, grad_norm_max, tier in ARMS:
             wandb_disabled=False,
         ),
         resources=Resources(
-            partition=tier,
+            partition="il",
             account="infolab",
-            qos=tier,
+            qos=qos,
             time="12:00:00",
             gpus="a100:1",
             cpus_per_task=14,
