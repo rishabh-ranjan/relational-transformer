@@ -278,6 +278,11 @@ def main(
         x = adapter(emb.to(device).float())
         yy = y.to(device)
         est = ests[e["task_type"]]
+        # A task can vary over its whole pool and still draw a context that does
+        # not; fit_with_differentiable_input raises on std<=1e-12 rather than
+        # returning, so the draw has to be rejected before it gets there.
+        if e["task_type"] == "reg" and float(yy[:n_ctx].std()) < 1e-6:
+            return None, None, None
         if e["task_type"] == "clf":
             lab = (yy > 0).long()
             est.fit_with_differentiable_input(x[:n_ctx], lab[:n_ctx])
@@ -323,7 +328,14 @@ def main(
     rng = np.random.default_rng(seed)
     t0 = time.time()
     logged_step, logged_t = 0, t0
-    n_bad = 0
+    n_bad = n_degenerate = 0
+    # TabPFN runs its forward under fp16 autocast on gpu
+    # (infer_autocast_inference_mode), and the backward inherits it, so the
+    # gradients reaching the adapter overflow to inf at full scale -- every
+    # step of the first attempt was dropped with a perfectly finite loss. A
+    # scaler is the standard remedy: it backs the scale off until the
+    # gradients represent, and skips only the steps that overflow on the way.
+    scaler = torch.amp.GradScaler("cuda")
     running = {"clf": [], "reg": []}
     for step in range(total_steps):
         for g in opt.param_groups:
@@ -345,25 +357,34 @@ def main(
             e = train_entries[int(rng.choice(len(train_entries), p=train_pool.p))]
             emb, y, n_ctx = draw(rng, train_pool, e, n_ctx_lo, n_ctx_hi, n_query)
             loss, _pred, _truth = loss_and_pred(e, emb, y, n_ctx)
+            if loss is None:
+                n_degenerate += 1
+                continue
             if not torch.isfinite(loss):
                 bad.append((e["db"], e["task"], e["task_type"], n_ctx, "loss"))
                 continue
-            (loss / tasks_per_step).backward()
-            if not all(
-                p.grad is None or torch.isfinite(p.grad).all()
-                for p in adapter.parameters()
-            ):
-                bad.append(
-                    (e["db"], e["task"], e["task_type"], n_ctx, f"grad@{float(loss):.4g}")
-                )
+            scaler.scale(loss / tasks_per_step).backward()
             running[e["task_type"]].append(float(loss))
-        if bad:
+        # unscale before inspecting or clipping: the gradients in .grad are
+        # multiplied by the scaler's factor until this runs, and clipping an
+        # inf gradient is what turns it into NaN.
+        scaler.unscale_(opt)
+        if bad or not all(
+            p.grad is None or torch.isfinite(p.grad).all()
+            for p in adapter.parameters()
+        ):
             n_bad += 1
-            print(f"step {step:>6} non-finite, step dropped: {bad}", flush=True)
+            if n_bad <= 20 or n_bad % 100 == 0:
+                print(
+                    f"step {step:>6} non-finite, step dropped "
+                    f"(scale {scaler.get_scale():.0f}): {bad}",
+                    flush=True,
+                )
             opt.zero_grad(set_to_none=True)
         else:
             torch.nn.utils.clip_grad_norm_(adapter.parameters(), grad_norm_max)
-            opt.step()
+            scaler.step(opt)
+        scaler.update()
 
         if step % 20 == 0:
             msg = " ".join(
@@ -372,7 +393,8 @@ def main(
             dw = float((adapter.weight - torch.eye(d_feat, device=device)).norm())
             print(
                 f"step {step:>6} {msg} |W-I| {dw:.4f} "
-                f"dropped {n_bad} {(time.time() - t0) / 60:.1f} min",
+                f"dropped {n_bad} degen {n_degenerate} scale {scaler.get_scale():.0f} "
+                f"{(time.time() - t0) / 60:.1f} min",
                 flush=True,
             )
             if use_wandb:
@@ -390,6 +412,8 @@ def main(
                         ),
                         "train/w_minus_i": dw,
                         "train/steps_dropped": n_bad,
+                        "train/ctx_degenerate": n_degenerate,
+                        "train/grad_scale": scaler.get_scale(),
                         "train/lr": opt.param_groups[0]["lr"],
                         "train/minutes": (now - t0) / 60,
                         **(
