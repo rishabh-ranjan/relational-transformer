@@ -23,10 +23,11 @@ from expts.repaper.config import (
 # step, 128x the single-gpu run.
 #
 # COST: ~0.55 s per task draw measured on v1/v3 (2.19-2.30 s/step at 4 tasks),
-# so 128 tasks per rank per step is ~70 s/step and 10,000 steps is ~195 h
-# = 8.1 days. `il` caps at 7 days, so this reaches roughly step 8,600 and stops;
-# checkpoints land every save_every steps, so nothing is lost. 8 ranks would
-# finish 10k in ~4.1 days.
+# so 128 tasks per rank per step is ~70 s/step. 10,000 steps would be ~195 h
+# = 8.1 days, over il's 7-day cap, so this runs 2,500 -- still 1.28M task
+# draws, 32x the 40k of the whole v1 run, and it completes rather than being
+# cut off mid-schedule. 8 ranks would fit 10k in ~4.1 days if this one says a
+# bigger batch is what was missing.
 REPO_ROOT = str(Path(__file__).resolve().parents[3])
 
 RUN = "join-v4-ddp-linear"
@@ -53,7 +54,7 @@ submit(
         # than silently running a different batch.
         total_tasks_per_step=512,
         tasks_per_micro=4,
-        total_steps=10_000,
+        total_steps=2_500,
         lr=1e-4,
         # Zero, deliberately. AdamW's decay pulls a weight toward 0, and this
         # weight starts at I -- decaying it is decaying the rt-j featurizer
@@ -81,7 +82,8 @@ submit(
         partition="il",
         account="infolab",
         qos="il",
-        time="7-00:00:00",
+        # ~49 h at 70 s/step; 72 leaves room for a slow node.
+        time="3-00:00:00",
         # One rank per gpu: roach maps SLURM_PROCID -> RANK and SLURM_NTASKS ->
         # WORLD_SIZE (roach/slurm/run.py:19), so ntasks=None gives 4 ranks.
         gpus="a100:4",
