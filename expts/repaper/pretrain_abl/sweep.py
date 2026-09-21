@@ -26,28 +26,47 @@ def queued(host: str | None) -> set[str]:
     return set(out.stdout.split())
 
 
+# 2026-09-21 12:15, read off the cluster: blackwell1 is all il-lo one-gpu
+# jobs and a --test-only of both shapes preempts in at once, so the two
+# starved ILC mask arms move to b200s and resume by run_id; mask50 keeps its
+# running ampere node, the marlowe twins their nodes (busy-check skips them).
+B200_IL_2 = dataclasses.replace(
+    ilc.BLACKWELL, gpus="b200:2", qos="il", time="7-00:00:00", cpus_per_task=36
+)
+B200_ILLO_4 = dataclasses.replace(
+    ilc.BLACKWELL, gpus="b200:4", qos="il-lo", time="3-00:00:00", cpus_per_task=36
+)
+
+
 def main() -> None:
     placements = (
-        (
-            ilc.ILC,
-            dataclasses.replace(ilc.AMPERE_LO, nodes=1, exclude="ampere4"),
-            "",
-            2**17,
-            16,
-        ),
+        (ilc.ILC, B200_IL_2, "", 2**18, 16, "mask25", "26-09-19_10-09-20_445370634"),
+        (ilc.ILC, B200_ILLO_4, "", 2**18, 16, "mask75", "26-09-19_10-09-29_652249948"),
+        # (
+        #     ilc.ILC,
+        #     dataclasses.replace(ilc.AMPERE_LO, nodes=1, exclude="ampere4"),
+        #     "",
+        #     2**17,
+        #     16,
+        #     None,
+        #     None,
+        # ),
+        # torch import dies on n26 (libnvJitLink.so.13 missing there)
         (
             marlowe.MARLOWE,
-            # 2026-09-19 23:40: torch import dies on n26 (libnvJitLink.so.13 missing
-            # there; the same env runs on n23/n24)
             dataclasses.replace(marlowe.H100, cpus_per_task=14, exclude="n26"),
             "-mw",
             2**17,
             14,
+            None,
+            None,
         ),
     )
     busy = {"": queued(None), "-mw": queued("marlowe")}
-    for cluster, resources, suffix, tokens_per_gpu, num_workers in placements:
+    for cluster, resources, suffix, tokens_per_gpu, num_workers, only, run_id in placements:
         for run_name, mask_prob_max, db_task_list in ARMS:
+            if only is not None and run_name != only:
+                continue
             name = f"abl-{run_name}{suffix}"
             if name in busy[suffix]:
                 print(f"  {name:28s} queued already")
@@ -125,7 +144,7 @@ def main() -> None:
                 ),
                 resources=resources,
                 name=name,
-                run_id=None,
+                run_id=run_id,
                 inside=None,
                 repo_root=str(Path(__file__).resolve().parents[3]),
                 cluster=cluster,
