@@ -135,11 +135,7 @@ for i, (card, dbs, rows) in enumerate(shards()):
             dbs=dbs,
             db_task_list="expts/pretrain/all_5gb_cutoff.json",
             pre_dir=PRE_DIR,
-            # _v2 so the sweep does not wait on the delete of the first,
-            # substitution-corrupted dump: 34k small files over nfs takes a
-            # while to unlink. Renamed to features_join_u12 once both finish,
-            # which is the path submit_train_adapter.py reads.
-            features_root=f"{SHARE}/features_join_u12_v2",
+            features_root=f"{SHARE}/features_join_u12",
             ckpt=CKPT,
             local_ctx_size=256,
             bfs_width=32,
