@@ -248,15 +248,21 @@ def main(
             fit_mode="fit_preprocessors",
             differentiable_input=True,
             random_state=seed,
-            # Not "auto": infer_autocast_inference_mode turns that into fp16
-            # autocast on gpu, an activation overflows in the forward, and the
-            # backward through that inf is non-finite while the loss stays
-            # finite -- an inf logit still softmaxes to a real probability.
-            # Being independent of the loss scale is the signature, and it is
-            # why a GradScaler halved from 65536 to 0 without ever recovering.
-            # rt-j embeddings reach a per-dim mean of 12.8, so the activations
-            # are nowhere near the randn the probe fed it.
+            # fp32 because it is what the A/B that found the fix below was
+            # run under; autocast was never the cause (PowBackward0 nan'd
+            # identically in both) and reverting to it, with n_ctx_hi back at
+            # 2048, is an untested speedup rather than a correctness question.
             inference_precision=torch.float32,
+            # The one step in TabPFN's torch preprocessing pipeline that runs
+            # unconditionally is TorchSoftClipOutliersStep -- everything else
+            # sits behind enable_gpu_preprocessing, which defaults off. It
+            # divides by a per-column robust scale and repairs degenerate
+            # columns forward-only, with a masked_fill_ after the division, so
+            # the forward is finite while autograd still differentiates
+            # through a divide by zero and 0 * inf = nan lands on the ** 2.
+            # Turning it off made both failing probe tasks finite and left the
+            # already-working one identical to 6 significant figures.
+            inference_config={"OUTLIER_REMOVAL_STD": None},
         )
         warm = torch.randn(32, d_feat, device=device)
         y = torch.arange(32, device=device) % 2
@@ -291,6 +297,10 @@ def main(
         # not; fit_with_differentiable_input raises on std<=1e-12 rather than
         # returning, so the draw has to be rejected before it gets there.
         if e["task_type"] == "reg" and float(yy[:n_ctx].std()) < 1e-6:
+            return None, None, None
+        # RemoveConstantFeaturesStep raises rather than returning when every
+        # column is constant, which a context of near-identical rows can be.
+        if float(x[:n_ctx].std(dim=0).max()) == 0.0:
             return None, None, None
         if e["task_type"] == "clf":
             lab = (yy > 0).long()
