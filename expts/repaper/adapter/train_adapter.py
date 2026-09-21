@@ -298,7 +298,14 @@ def loss_and_pred(ests, adapter, task_type, emb, y, n_ctx, device, autocast_dtyp
         else contextlib.nullcontext()
     )
     with ctx:
-        x = adapter(emb.to(device).float())
+        # .float() back immediately: autocast makes the adapter's own Linear
+        # emit bf16, and TabPFN's AddFingerprintFeaturesStep hashes its input
+        # via X.detach().cpu().numpy(), which raises "unsupported ScalarType
+        # BFloat16" because numpy has no bf16. Handing TabPFN fp32 costs
+        # nothing -- autocast casts per *op*, so the projections inside the
+        # transformer are still bf16 and flash attention is still eligible;
+        # only this one 512x512 matmul stays fp32.
+        x = adapter(emb.to(device).float()).float()
         yy = y.to(device)
         est = ests[task_type]
         # A task can vary over its whole pool and still draw a context that
