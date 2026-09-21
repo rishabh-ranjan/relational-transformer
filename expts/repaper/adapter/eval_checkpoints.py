@@ -26,6 +26,8 @@ def main(
 
     from rt.eval.metrics import metric_for
 
+    from expts.repaper.adapter.train_adapter import build_adapter
+
     # Did the adapter learn its own objective at all? The per-window training
     # loss cannot answer that: every window averages a different random sample
     # of tasks, and that between-task variance swamps any plausible gain
@@ -100,20 +102,14 @@ def main(
 
     ests = {"clf": tabpfn("clf"), "reg": tabpfn("reg")}
 
-    def build(state):
-        if state is None:
+    def build(ck):
+        if ck is None:
             return nn.Identity().to(device)
-        if any(k.startswith("0.") for k in state):
-            hidden = state["0.weight"].shape[0]
-            a = nn.Sequential(
-                nn.Linear(d_feat, hidden, bias=True),
-                nn.ReLU(),
-                nn.Linear(hidden, d_feat, bias=False),
-            )
-        else:
-            a = nn.Linear(d_feat, d_feat, bias="bias" in state)
-        a.load_state_dict(state)
-        return a.to(device).eval()
+        a = build_adapter(
+            ck["adapter_kind"], d_feat, ck["hidden_dim"], ck["stats_path"], device
+        )
+        a.load_state_dict(ck["state_dict"])
+        return a.eval()
 
     @torch.no_grad()
     def score(adapter):
@@ -171,12 +167,13 @@ def main(
     for label, path in [("identity", None), *[(p.name, p) for p in paths]] + (
         [("final", final)] if final.exists() else []
     ):
-        state = None
-        step = 0
-        if path is not None:
-            ck_obj = torch.load(path, map_location="cpu", weights_only=True)
-            state, step = ck_obj["state_dict"], ck_obj["step"]
-        res = score(build(state))
+        ck = (
+            None
+            if path is None
+            else torch.load(path, map_location="cpu", weights_only=True)
+        )
+        step = 0 if ck is None else ck["step"]
+        res = score(build(ck))
         rows.append({"label": label, "step": step, **res})
         print(
             f"  {label:<24} step {step:>5}  "

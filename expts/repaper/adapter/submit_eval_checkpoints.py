@@ -11,7 +11,7 @@ from expts.repaper.config import (
     SHARE,
 )
 
-# Did v1 learn its own objective at all? The per-window training loss cannot
+# Did the run learn its own objective at all? The per-window training loss cannot
 # say: each window averages a different random sample of tasks, and that
 # between-task variance swamps any plausible gain (the fitted slope over 10k
 # steps was +0.029 +- 0.046 for clf, -0.054 +- 0.246 for reg -- both
@@ -24,7 +24,7 @@ from expts.repaper.config import (
 # generalisation result. If it is flat, v1 never learned and the negative
 # result says nothing about the method.
 REPO_ROOT = str(Path(__file__).resolve().parents[3])
-RUN = "join-v1"
+RUN = "join-v3-linear"
 
 submit(
     "expts.repaper.adapter.eval_checkpoints:main",

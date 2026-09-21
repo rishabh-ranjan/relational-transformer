@@ -36,7 +36,7 @@ REPO_ROOT = str(Path(__file__).resolve().parents[3])
 ARMS = [("linear", 0), ("mlp", 64)]
 
 for adapter_kind, hidden_dim in ARMS:
-    RUN = f"join-v2-{adapter_kind}"
+    RUN = f"join-v3-{adapter_kind}"
     submit(
         "expts.repaper.adapter.train_adapter:main",
         args=dict(
@@ -54,6 +54,11 @@ for adapter_kind, hidden_dim in ARMS:
             # the per-task standard error.
             relbench_n_query=4096,
             tabpfn_dir=f"{SHARE}/tabpfn",
+            # The frozen (x - mu) / sigma the adapter opens with, measured over
+            # the whole dump under this same mixture by feature_stats.py. v1
+            # and v2 fed rt-j's raw norm_out output straight into the trainable
+            # map, and four massive-activation dims owned the gradient.
+            stats_path=f"{SHARE}/feature_stats_join_u12.npz",
             out_dir=f"{OUT_ROOT}/adapter/{RUN}",
             d_feat=512,
             min_rows=512,

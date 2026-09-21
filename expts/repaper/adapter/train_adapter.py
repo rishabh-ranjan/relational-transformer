@@ -87,6 +87,84 @@ def draw(rng, pool, e, n_ctx_lo, n_ctx_hi, n_query):
     return emb, y, n_ctx
 
 
+def build_adapter(adapter_kind, d_feat, hidden_dim, stats_path, device):
+    import numpy as np
+    import torch
+    from torch import nn
+
+    # rt-j's norm_out is an RMSNorm: it fixes the norm of each row (measured
+    # sd/mean 0.0049) and says nothing about a column across rows. Four
+    # massive-activation dims (119, 206, 303, 399) carry ~90% of the squared
+    # row norm, dim 303 alone has mean -13.07 with sigma 0.02, and
+    # per-dimension sigma spans 79x. dL/dW is an outer product with that
+    # input, so those four dims own the gradient and the other 508 are
+    # invisible to it.
+    #
+    # The fix is a frozen (x - mu) / sigma, measured once over the whole Join
+    # dump under the training mixture (feature_stats.py). Frozen and global,
+    # not a BatchNorm: the statistics we need are of the training marginal,
+    # and a batch here is one task's draw, whose per-dimension sigma moves by
+    # 60x from task to task on exactly the high-energy dims -- a running
+    # estimate would disagree with itself between train and eval mode where it
+    # matters most, and would couple the context rows to the query rows.
+    #
+    # For the linear arm this is free at the function level: TabPFN z-norms
+    # every column against the context, and z-norm is invariant to a positive
+    # affine map per column, so standardise-then-identity is the same
+    # predictor as identity. Only the geometry of the parameter space changes.
+    class Standardize(nn.Module):
+        def __init__(self, mean, scale):
+            super().__init__()
+            self.register_buffer("mean", mean)
+            self.register_buffer("scale", scale)
+
+        def forward(self, x):
+            return (x - self.mean) / self.scale
+
+    st = np.load(Path(stats_path).expanduser())
+    assert st["mean"].shape == (d_feat,), st["mean"].shape
+    standardize = Standardize(
+        torch.from_numpy(st["mean"].copy()), torch.from_numpy(st["scale"].copy())
+    )
+    print(
+        f"standardiser from {stats_path}: "
+        f"|mu| max {float(np.abs(st['mean']).max()):.3f}, "
+        f"sigma [{float(st['std'].min()):.5f}, {float(st['std'].max()):.4f}], "
+        f"{int(st['dead'].sum())} dims below the floor left unscaled",
+        flush=True,
+    )
+
+    # No bias anywhere the output is read: TabPFN z-norms every column against
+    # the context, so an output bias is subtracted straight back off and its
+    # gradient is zero by construction.
+    if adapter_kind == "linear":
+        # Identity, so step 0 is exactly the un-adapted rt-j featurizer (the
+        # standardiser in front of it is invisible to TabPFN, see above) and
+        # every later step is attributable to training.
+        head = nn.Linear(d_feat, d_feat, bias=False)
+        with torch.no_grad():
+            head.weight.copy_(torch.eye(d_feat))
+    elif adapter_kind == "mlp":
+        # A bottleneck cannot be initialised at identity, so unlike the linear
+        # arm this one does NOT start from the un-adapted featurizer: its step
+        # 0 is a random projection through hidden_dim dims and is expected to
+        # be worse.
+        head = nn.Sequential(
+            nn.Linear(d_feat, hidden_dim, bias=True),
+            nn.ReLU(),
+            nn.Linear(hidden_dim, d_feat, bias=False),
+        )
+        with torch.no_grad():
+            for m in head:
+                if isinstance(m, nn.Linear):
+                    nn.init.xavier_uniform_(m.weight)
+                    if m.bias is not None:
+                        m.bias.zero_()
+    else:
+        raise AssertionError(f"unknown adapter_kind {adapter_kind!r}")
+    return nn.Sequential(standardize, head).to(device)
+
+
 def summarize(per_task):
     import numpy as np
 
@@ -160,6 +238,7 @@ def main(
     relbench_n_ctx: int,
     relbench_n_query: int,
     tabpfn_dir: str,
+    stats_path: str,
     out_dir: str,
     d_feat: int,
     min_rows: int,
@@ -234,32 +313,7 @@ def main(
     train_entries = load_index(features_root, min_rows)
     train_pool = Pool(train_entries)
 
-    # No bias anywhere the output is read: TabPFN z-norms every column against
-    # the context, so an output bias is subtracted straight back off and its
-    # gradient is zero by construction.
-    if adapter_kind == "linear":
-        # Identity, not Xavier: step 0 is then exactly the un-adapted rt-j
-        # featurizer, so every later step is attributable to training.
-        adapter = nn.Linear(d_feat, d_feat, bias=False).to(device)
-        with torch.no_grad():
-            adapter.weight.copy_(torch.eye(d_feat))
-    elif adapter_kind == "mlp":
-        # A bottleneck cannot be initialised at identity, so unlike the linear
-        # arm this one does NOT start from the un-adapted featurizer: its step
-        # 0 is a random projection through 64 dims and is expected to be worse.
-        adapter = nn.Sequential(
-            nn.Linear(d_feat, hidden_dim, bias=True),
-            nn.ReLU(),
-            nn.Linear(hidden_dim, d_feat, bias=False),
-        ).to(device)
-        with torch.no_grad():
-            for m in adapter:
-                if isinstance(m, nn.Linear):
-                    nn.init.xavier_uniform_(m.weight)
-                    if m.bias is not None:
-                        m.bias.zero_()
-    else:
-        raise AssertionError(f"unknown adapter_kind {adapter_kind!r}")
+    adapter = build_adapter(adapter_kind, d_feat, hidden_dim, stats_path, device)
     init_flat = torch.cat([p.detach().flatten() for p in adapter.parameters()]).clone()
     opt = torch.optim.AdamW(adapter.parameters(), lr=lr, weight_decay=wd)
 
@@ -513,12 +567,24 @@ def main(
 
         if save_every and step % save_every == 0:
             torch.save(
-                {"step": step, "state_dict": adapter.state_dict()},
+                {
+                    "step": step,
+                    "adapter_kind": adapter_kind,
+                    "hidden_dim": hidden_dim,
+                    "stats_path": stats_path,
+                    "state_dict": adapter.state_dict(),
+                },
                 out / f"adapter_step{step}.pt",
             )
 
     torch.save(
-        {"step": total_steps, "state_dict": adapter.state_dict()},
+        {
+            "step": total_steps,
+            "adapter_kind": adapter_kind,
+            "hidden_dim": hidden_dim,
+            "stats_path": stats_path,
+            "state_dict": adapter.state_dict(),
+        },
         out / "adapter_final.pt",
     )
     print(f"done in {(time.time() - t0) / 60:.1f} min", flush=True)
