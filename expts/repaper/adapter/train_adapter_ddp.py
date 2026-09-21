@@ -166,6 +166,15 @@ def main(
     # n_features is the adapter's OUTPUT width: that is what TabPFN sees,
     # and its cost scales with it.
     ests = make_ests(tabpfn_dir, device, seed, d_out, precision)
+    # Eval keeps its own fp32 estimators and stays on the legacy
+    # (unbatched, preprocessing-inside-TabPFN) path. Two reasons: val numbers
+    # remain comparable across precision arms, and forced bf16 cannot run that
+    # path at all -- TabPFN's GPU preprocessing has a torch fingerprint step
+    # that hashes via .numpy() and numpy has no bf16. A second 219M copy costs
+    # ~0.9 GB against an 18 GiB peak.
+    ests_eval = ests if precision == "fp32" else make_ests(
+        tabpfn_dir, device, seed, d_out, "fp32"
+    )
 
     # Every rank evaluates the same 21 val tasks so the metric does not depend
     # on which rank reports it; only rank 0 logs. Loading is per-rank memmap
@@ -370,7 +379,7 @@ def main(
             gnorms = []
 
         if eval_every and step % eval_every == 0:
-            rb = evaluate_relbench(relbench, ests, adapter, device)
+            rb = evaluate_relbench(relbench, ests_eval, adapter, device)
             if is_main:
                 print(
                     f"step {step:>6} relbench val: "
