@@ -229,6 +229,120 @@ def load_relbench(pre_dir, features_root, labels_root, n_ctx, n_query, seed):
     return out
 
 
+def make_ests(tabpfn_dir, device, seed, d_feat):
+    import torch
+    from tabpfn import TabPFNClassifier, TabPFNRegressor
+
+    model_path = Path(tabpfn_dir).expanduser() / "tabpfn-v3.5-20260909.safetensors"
+    assert model_path.exists(), f"TabPFN checkpoint {model_path} not found"
+    ests = {}
+    for task_type in ("clf", "reg"):
+        cls = TabPFNClassifier if task_type == "clf" else TabPFNRegressor
+        est = cls(
+            n_estimators=1,
+            model_path=model_path,
+            device=device,
+            fit_mode="fit_preprocessors",
+            differentiable_input=True,
+            random_state=seed,
+            # fp32 because it is what the A/B that found the fix below was
+            # run under; autocast was never the cause (PowBackward0 nan'd
+            # identically in both) and reverting to it, with n_ctx_hi back at
+            # 2048, is an untested speedup rather than a correctness question.
+            inference_precision=torch.float32,
+            # The one step in TabPFN's torch preprocessing pipeline that runs
+            # unconditionally is TorchSoftClipOutliersStep -- everything else
+            # sits behind enable_gpu_preprocessing, which defaults off. It
+            # divides by a per-column robust scale and repairs degenerate
+            # columns forward-only, with a masked_fill_ after the division, so
+            # the forward is finite while autograd still differentiates
+            # through a divide by zero and 0 * inf = nan lands on the ** 2.
+            # Turning it off made both failing probe tasks finite and left the
+            # already-working one identical to 6 significant figures.
+            inference_config={"OUTLIER_REMOVAL_STD": None},
+        )
+        warm = torch.randn(32, d_feat, device=device)
+        y = torch.arange(32, device=device) % 2
+        est.fit_with_differentiable_input(warm, y if task_type == "clf" else y.float())
+        if task_type == "reg":
+            # The standard fit moves the bar distribution to the device and the
+            # differentiable one does not, so its borders sit on the cpu and the
+            # loss dies in searchsorted.
+            est.znorm_space_bardist_ = est.znorm_space_bardist_.to(device)
+        for model in est.models_:
+            for prm in model.parameters():
+                prm.requires_grad_(False)
+        ests[task_type] = est
+    return ests
+
+
+def loss_and_pred(ests, adapter, task_type, emb, y, n_ctx, device):
+    import torch
+    from torch import nn
+
+    x = adapter(emb.to(device).float())
+    yy = y.to(device)
+    est = ests[task_type]
+    # A task can vary over its whole pool and still draw a context that does
+    # not; fit_with_differentiable_input raises on std<=1e-12 rather than
+    # returning, so the draw has to be rejected before it gets there.
+    if task_type == "reg" and float(yy[:n_ctx].std()) < 1e-6:
+        return None, None, None
+    # RemoveConstantFeaturesStep raises rather than returning when every
+    # column is constant, which a context of near-identical rows can be.
+    if float(x[:n_ctx].std(dim=0).max()) == 0.0:
+        return None, None, None
+    if task_type == "clf":
+        lab = (yy > 0).long()
+        est.fit_with_differentiable_input(x[:n_ctx], lab[:n_ctx])
+        logits = est.forward(x[n_ctx:], use_inference_mode=True, return_logits=True)
+        loss = nn.functional.cross_entropy(logits, lab[n_ctx:])
+        return loss, torch.softmax(logits, -1)[:, 1], lab[n_ctx:]
+    est.fit_with_differentiable_input(x[:n_ctx], yy[:n_ctx])
+    logits, _per, _b = est.forward(x[n_ctx:], use_inference_mode=True)
+    z = (yy[n_ctx:] - est.y_train_mean_) / est.y_train_std_
+    loss = est.znorm_space_bardist_(
+        logits.transpose(0, 1).unsqueeze(0), z.unsqueeze(0)
+    ).mean()
+    mean = est.znorm_space_bardist_.mean(logits.transpose(0, 1))
+    return loss, mean * est.y_train_std_ + est.y_train_mean_, yy[n_ctx:]
+
+
+def evaluate_relbench(relbench, ests, adapter, device):
+    import torch
+
+    from rt.eval.metrics import metric_for
+
+    # auroc for clf, MAE for reg. The preprocessed target is already
+    # z-scored -- the space rt.eval.relbench denormalises out of -- so MAE
+    # on it is the nmae the result tables carry, comparable across tasks
+    # and against the 0.7173 / 0.3584 rt-j baseline.
+    per_task = {}
+    with torch.no_grad():
+        for t in relbench:
+            ce, cy = t["ctx"]
+            qe, qy = t["query"]
+            _loss, pred, truth = loss_and_pred(
+                ests,
+                adapter,
+                t["task_type"],
+                torch.cat([ce, qe]),
+                torch.cat([cy, qy]),
+                len(cy),
+                device,
+            )
+            try:
+                _n, v = metric_for(
+                    t["task_type"],
+                    truth.float().cpu().numpy(),
+                    pred.float().cpu().numpy(),
+                )
+            except ValueError:
+                continue
+            per_task[f"{t['db']}/{t['task']}"] = (t["task_type"], float(v))
+    return summarize(per_task)
+
+
 def main(
     *,
     features_root: str,
@@ -268,15 +382,10 @@ def main(
 
     import numpy as np
     import torch
-    from torch import nn
-    from tabpfn import TabPFNClassifier, TabPFNRegressor
 
     device = "cuda"
     out = Path(out_dir).expanduser()
     out.mkdir(parents=True, exist_ok=True)
-
-    model_path = Path(tabpfn_dir).expanduser() / "tabpfn-v3.5-20260909.safetensors"
-    assert model_path.exists(), f"TabPFN checkpoint {model_path} not found"
 
     assert min_rows > n_query + 64, (
         f"min_rows {min_rows} leaves no context after {n_query} queries"
@@ -328,45 +437,7 @@ def main(
         # t = (step - warmup_steps) / max(1, total_steps - warmup_steps)
         # return lr_min + 0.5 * (lr - lr_min) * (1.0 + math.cos(math.pi * t))
 
-    def tabpfn(task_type):
-        cls = TabPFNClassifier if task_type == "clf" else TabPFNRegressor
-        est = cls(
-            n_estimators=1,
-            model_path=model_path,
-            device=device,
-            fit_mode="fit_preprocessors",
-            differentiable_input=True,
-            random_state=seed,
-            # fp32 because it is what the A/B that found the fix below was
-            # run under; autocast was never the cause (PowBackward0 nan'd
-            # identically in both) and reverting to it, with n_ctx_hi back at
-            # 2048, is an untested speedup rather than a correctness question.
-            inference_precision=torch.float32,
-            # The one step in TabPFN's torch preprocessing pipeline that runs
-            # unconditionally is TorchSoftClipOutliersStep -- everything else
-            # sits behind enable_gpu_preprocessing, which defaults off. It
-            # divides by a per-column robust scale and repairs degenerate
-            # columns forward-only, with a masked_fill_ after the division, so
-            # the forward is finite while autograd still differentiates
-            # through a divide by zero and 0 * inf = nan lands on the ** 2.
-            # Turning it off made both failing probe tasks finite and left the
-            # already-working one identical to 6 significant figures.
-            inference_config={"OUTLIER_REMOVAL_STD": None},
-        )
-        warm = torch.randn(32, d_feat, device=device)
-        y = torch.arange(32, device=device) % 2
-        est.fit_with_differentiable_input(warm, y if task_type == "clf" else y.float())
-        if task_type == "reg":
-            # The standard fit moves the bar distribution to the device and the
-            # differentiable one does not, so its borders sit on the cpu and the
-            # loss dies in searchsorted.
-            est.znorm_space_bardist_ = est.znorm_space_bardist_.to(device)
-        for model in est.models_:
-            for p in model.parameters():
-                p.requires_grad_(False)
-        return est
-
-    ests = {"clf": tabpfn("clf"), "reg": tabpfn("reg")}
+    ests = make_ests(tabpfn_dir, device, seed, d_feat)
     print("tabpfn frozen; only the adapter trains", flush=True)
 
     relbench = load_relbench(
@@ -377,61 +448,6 @@ def main(
         relbench_n_query,
         seed,
     )
-
-    def loss_and_pred(e, emb, y, n_ctx):
-        x = adapter(emb.to(device).float())
-        yy = y.to(device)
-        est = ests[e["task_type"]]
-        # A task can vary over its whole pool and still draw a context that does
-        # not; fit_with_differentiable_input raises on std<=1e-12 rather than
-        # returning, so the draw has to be rejected before it gets there.
-        if e["task_type"] == "reg" and float(yy[:n_ctx].std()) < 1e-6:
-            return None, None, None
-        # RemoveConstantFeaturesStep raises rather than returning when every
-        # column is constant, which a context of near-identical rows can be.
-        if float(x[:n_ctx].std(dim=0).max()) == 0.0:
-            return None, None, None
-        if e["task_type"] == "clf":
-            lab = (yy > 0).long()
-            est.fit_with_differentiable_input(x[:n_ctx], lab[:n_ctx])
-            logits = est.forward(x[n_ctx:], use_inference_mode=True, return_logits=True)
-            loss = nn.functional.cross_entropy(logits, lab[n_ctx:])
-            return loss, torch.softmax(logits, -1)[:, 1], lab[n_ctx:]
-        est.fit_with_differentiable_input(x[:n_ctx], yy[:n_ctx])
-        logits, _per, _b = est.forward(x[n_ctx:], use_inference_mode=True)
-        z = (yy[n_ctx:] - est.y_train_mean_) / est.y_train_std_
-        loss = est.znorm_space_bardist_(
-            logits.transpose(0, 1).unsqueeze(0), z.unsqueeze(0)
-        ).mean()
-        mean = est.znorm_space_bardist_.mean(logits.transpose(0, 1))
-        return loss, mean * est.y_train_std_ + est.y_train_mean_, yy[n_ctx:]
-
-    @torch.no_grad()
-    def evaluate_relbench():
-        from rt.eval.metrics import metric_for
-
-        # auroc for clf, MAE for reg. The preprocessed target is already
-        # z-scored -- the space rt.eval.relbench denormalises out of -- so MAE
-        # on it is the nmae the result tables carry, comparable across tasks
-        # and against the 0.7173 / 0.3584 rt-j baseline.
-        per_task = {}
-        for t in relbench:
-            ce, cy = t["ctx"]
-            qe, qy = t["query"]
-            e = {"task_type": t["task_type"]}
-            emb = torch.cat([ce, qe])
-            y = torch.cat([cy, qy])
-            _loss, pred, truth = loss_and_pred(e, emb, y, len(cy))
-            try:
-                _n, v = metric_for(
-                    t["task_type"],
-                    truth.float().cpu().numpy(),
-                    pred.float().cpu().numpy(),
-                )
-            except ValueError:
-                continue
-            per_task[f"{t['db']}/{t['task']}"] = (t["task_type"], float(v))
-        return summarize(per_task)
 
     rng = np.random.default_rng(seed)
     t0 = time.time()
@@ -463,7 +479,9 @@ def main(
         for _ in range(tasks_per_step):
             e = train_entries[int(rng.choice(len(train_entries), p=train_pool.p))]
             emb, y, n_ctx = draw(rng, train_pool, e, n_ctx_lo, n_ctx_hi, n_query)
-            loss, _pred, _truth = loss_and_pred(e, emb, y, n_ctx)
+            loss, _pred, _truth = loss_and_pred(
+                ests, adapter, e["task_type"], emb, y, n_ctx, device
+            )
             if loss is None:
                 n_degenerate += 1
                 continue
@@ -553,7 +571,7 @@ def main(
             gnorms = []
 
         if eval_every and step % eval_every == 0:
-            rb = evaluate_relbench()
+            rb = evaluate_relbench(relbench, ests, adapter, device)
             print(
                 f"step {step:>6} relbench val: "
                 f"auroc {rb['clf'][0]} (n={rb['clf'][1]}) "
