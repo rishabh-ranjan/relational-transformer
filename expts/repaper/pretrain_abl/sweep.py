@@ -155,7 +155,7 @@ def main() -> None:
                 # marlowe's NFS home breaks pixi's env-build lock, so 8 ranks
                 # racing the first `pixi run` at a fresh clone die on a
                 # half-built env; prepare builds it once instead
-                setup=("pixi install",) if suffix == "-mw" else None,
+                setup=("pixi install",) if suffix == "-mw" else (),
             )
 
 
