@@ -437,7 +437,11 @@ def main(
     t0 = time.time()
     logged_step, logged_t = 0, t0
     n_bad = n_degenerate = 0
-    gnorm = float("nan")
+    # Every step's pre-clip norm, not just the last one in the window: with
+    # grad_norm_max left at 1.0 deliberately, the question v3 has to answer is
+    # whether the clip still binds, and a single sampled step 20 apart cannot
+    # say what fraction of steps are clipped.
+    gnorms = []
     running = {"clf": [], "reg": []}
     for step in range(total_steps):
         cur_lr = lr_at(step)
@@ -485,8 +489,12 @@ def main(
             # clip_grad_norm_ returns the total norm *before* clipping, which
             # is the quantity worth logging: after clipping it is just
             # min(norm, grad_norm_max).
-            gnorm = float(
-                torch.nn.utils.clip_grad_norm_(adapter.parameters(), grad_norm_max)
+            gnorms.append(
+                float(
+                    torch.nn.utils.clip_grad_norm_(
+                        adapter.parameters(), grad_norm_max
+                    )
+                )
             )
             opt.step()
 
@@ -499,8 +507,11 @@ def main(
             # w_minus_i only means anything for the identity-initialised
             # linear one, where the two coincide.
             drift = float((flat - init_flat).norm())
+            g = np.array(gnorms) if gnorms else np.array([np.nan])
             print(
                 f"step {step:>6} {msg} drift {drift:.4f} "
+                f"gnorm {np.mean(g):.4g} max {np.max(g):.4g} "
+                f"clipped {float(np.mean(g > grad_norm_max)):.2f} "
                 f"dropped {n_bad} degen {n_degenerate} "
                 f"{(time.time() - t0) / 60:.1f} min",
                 flush=True,
@@ -519,7 +530,9 @@ def main(
                             np.mean([x for v in running.values() for x in v])
                         ),
                         "train/dist_from_init": drift,
-                        "train/grad_norm": gnorm,
+                        "train/grad_norm": float(np.mean(g)),
+                        "train/grad_norm_max": float(np.max(g)),
+                        "train/frac_clipped": float(np.mean(g > grad_norm_max)),
                         "train/steps_dropped": n_bad,
                         "train/ctx_degenerate": n_degenerate,
                         "train/lr": opt.param_groups[0]["lr"],
@@ -537,6 +550,7 @@ def main(
                 )
                 logged_step, logged_t = step, now
             running = {"clf": [], "reg": []}
+            gnorms = []
 
         if eval_every and step % eval_every == 0:
             rb = evaluate_relbench()
