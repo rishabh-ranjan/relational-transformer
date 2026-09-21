@@ -5,23 +5,19 @@ from roach.slurm.clusters.ilc import ILC
 
 from expts.repaper.config import CLONE_ROOT, LOG_ROOT, SECRETS_DIR, SHARE
 
-# The adapter loop runs one task draw per tabpfn forward, at 0.558 s/draw and
-# 5.71 TFLOP/s -- 29% of the a100's fp32 peak, with attention shaped
-# (1, 554, 16, 64) and 58 separate sdpa calls per forward. bf16 measured 0.98x
-# at batch 1, which says the loop is shape-limited, not arithmetic-limited, so
-# the only lever left is a bigger batch. fit_with_differentiable_input is
-# batch-1 only; fit_from_preprocessed builds InferenceEngineBatchedNoPrepro-
-# cessing with inference_mode=not differentiable_input, so gradients still
-# flow and the dataset batch is the model's own batch dim.
+# Run 1 (job 191915, d_out=512) answered the gate and then said the batch is
+# not the lever at that width: fit_from_preprocessed DOES take the
+# differentiable path and produce a finite adapter gradient, per-draw losses
+# inside a B=2 batch match their B=1 values to 1e-7, but s/draw went
+# 0.365 -> 0.348 -> 0.335 from B=1 to B=4 at n_ctx=256, i.e. 9%, and B=8 OOM'd
+# at 75.6 GiB. Forced bf16 (inference_precision, not autocast) was worth far
+# more on its own: 2.0-2.4x at B=1 across the ladder.
 #
-# This measures the frontier: peak memory and s/draw over n_ctx x B x dtype x
-# activation checkpointing, and -- first, because it gates everything -- whether
-# the batched engine computes the same loss at B=1. It cannot: the batched
-# engine skips preprocessing, and the live path adds a fingerprint column
-# (FINGERPRINT_FEATURE, a per-row cpu hash). So the comparison is run three
-# ways: legacy with the fingerprint (what trains today), legacy without it, and
-# batched (which cannot have it). If the middle and the last agree, the
-# fingerprint is the whole difference and it is a config flag.
+# Run 2 is the same probe at the width the v6 arm actually trains, d_out=64.
+# TabPFN is cell-level, so the feature axis is ~8x narrower and the 51-63 GiB
+# per draw of run 1 becomes ~6, which is what makes a real batch possible.
+# fp32 first and bf16 second, because at 6 GiB memory is no longer the binding
+# constraint and forcing bf16 costs the fingerprint feature. B runs to 32.
 REPO_ROOT = str(Path(__file__).resolve().parents[3])
 
 submit(
@@ -31,15 +27,19 @@ submit(
         tabpfn_dir=f"{SHARE}/tabpfn",
         stats_path=f"{SHARE}/feature_stats_join_u12.npz",
         d_feat=512,
+        # What v6 trains: the adapter projects to 64, so this is also the
+        # feature count tabpfn sees (plus the fingerprint column).
+        d_out=64,
         min_rows=512,
         n_query=256,
         # The v6 ladder's rungs, so the answer maps straight onto the run.
         sweep_n_ctx=[256, 512, 1024],
-        sweep_batch=[1, 2, 4, 8, 16, 32],
+        sweep_batch=[1, 2, 4, 8, 12, 16, 24, 32],
         sweep_precision=["fp32", "bf16"],
-        # False first: without checkpointing the frontier is low and the arm
-        # OOMs out early, so it is nearly free and it is the baseline the
-        # checkpointed arm is read against.
+        # False first: that is the arm a training loop would actually run, and
+        # it is the baseline the checkpointed arm has to beat. save_peak_memory
+        # _factor is deliberately left at the model default -- chunked_evaluate
+        # asserts not x.requires_grad, so it cannot coexist with backprop.
         sweep_recompute=[False, True],
         n_tasks=8,
         warmup=2,
@@ -48,9 +48,6 @@ submit(
         # env, five checkpoint loads and the table. Every row prints as it is
         # measured, so a job cut short still reports what it got.
         budget_s=1400.0,
-        # The v6 arm projects to 64 dims, which shrinks the feature axis 8x and
-        # moves the frontier with it. Measured last, only if the budget is left.
-        probe_d_out=64,
         seed=0,
     ),
     resources=Resources(

@@ -164,6 +164,7 @@ def main(
     tabpfn_dir: str,
     stats_path: str,
     d_feat: int,
+    d_out: int,
     min_rows: int,
     n_query: int,
     sweep_n_ctx: list[int],
@@ -174,7 +175,6 @@ def main(
     warmup: int,
     iters: int,
     budget_s: float,
-    probe_d_out: int,
     seed: int,
 ) -> None:
     import ml_dtypes  # noqa: F401
@@ -248,7 +248,7 @@ def main(
             )
     print(f"staged {len(draws)} draw stacks of {bmax}", flush=True)
 
-    adapter = build_adapter("linear", d_feat, d_feat, 0, stats_path, device)
+    adapter = build_adapter("linear", d_feat, d_out, 0, stats_path, device)
     rows = []
 
     def emit(rec):
@@ -262,9 +262,9 @@ def main(
     print("\n=== B=1 loss equivalence: legacy vs fit_from_preprocessed ===", flush=True)
     n_ctx0 = min(sweep_n_ctx)
     emb, lab = draws[("clf", n_ctx0)]
-    clf_fp = _fresh_est("clf", tabpfn_dir, device, seed, d_feat, "fp32", True)
-    clf_nofp = _fresh_est("clf", tabpfn_dir, device, seed, d_feat, "fp32", False)
-    clf_bat = _fresh_est("clf", tabpfn_dir, device, seed, d_feat, "fp32", False)
+    clf_fp = _fresh_est("clf", tabpfn_dir, device, seed, d_out, "fp32", True)
+    clf_nofp = _fresh_est("clf", tabpfn_dir, device, seed, d_out, "fp32", False)
+    clf_bat = _fresh_est("clf", tabpfn_dir, device, seed, d_out, "fp32", False)
     perf0 = _perf_options(clf_bat, False)
 
     def gnorm(loss):
@@ -394,8 +394,8 @@ def main(
         torch.cuda.empty_cache()
 
     print("\n=== regressor batched path ===", flush=True)
-    reg_leg = _fresh_est("reg", tabpfn_dir, device, seed, d_feat, "fp32", True)
-    reg_bat = _fresh_est("reg", tabpfn_dir, device, seed, d_feat, "fp32", False)
+    reg_leg = _fresh_est("reg", tabpfn_dir, device, seed, d_out, "fp32", True)
+    reg_bat = _fresh_est("reg", tabpfn_dir, device, seed, d_out, "fp32", False)
     remb, ry = draws[("reg", n_ctx0)]
     rl_v, _grl, e_rl = guarded(
         "legacy_reg",
@@ -431,7 +431,7 @@ def main(
     print("\n=== legacy fit_with_differentiable_input baselines (B=1) ===", flush=True)
     for prec in sweep_precision:
         for fingerprint in (True, False):
-            est = _fresh_est("clf", tabpfn_dir, device, seed, d_feat, prec, fingerprint)
+            est = _fresh_est("clf", tabpfn_dir, device, seed, d_out, prec, fingerprint)
             path = "legacy" if fingerprint else "legacy-nofp"
             for n_ctx in sweep_n_ctx:
                 e1, l1 = draws[("clf", n_ctx)]
@@ -479,7 +479,7 @@ def main(
     # ---------------- phase 3: batched sweep ----------------
     print("\n=== batched fit_from_preprocessed sweep ===", flush=True)
     for prec in sweep_precision:
-        est = _fresh_est("clf", tabpfn_dir, device, seed, d_feat, prec, False)
+        est = _fresh_est("clf", tabpfn_dir, device, seed, d_out, prec, False)
         for recompute in sweep_recompute:
             perf = _perf_options(est, recompute)
             for n_ctx in sweep_n_ctx:
@@ -544,66 +544,6 @@ def main(
         gc.collect()
         torch.cuda.empty_cache()
 
-    # ---------------- phase 4: narrow adapter output ----------------
-    if probe_d_out and probe_d_out != d_feat and left() > 240:
-        print(f"\n=== d_out={probe_d_out} spot check ===", flush=True)
-        narrow = build_adapter("linear", d_feat, probe_d_out, 0, stats_path, device)
-        for prec in sweep_precision:
-            est = _fresh_est("clf", tabpfn_dir, device, seed, probe_d_out, prec, False)
-            perf = _perf_options(est, False)
-            for n_ctx in sweep_n_ctx:
-                e1, l1 = draws[("clf", n_ctx)]
-                for b in sweep_batch:
-                    if left() < 60:
-                        continue
-                    try:
-                        s, lv, peak = _time_config(
-                            lambda e=e1, l=l1, n=n_ctx, bb=b, es=est, p=perf: (
-                                _batched_clf_loss(
-                                    es, narrow, e[:bb], l[:bb], n, p, device
-                                )[0]
-                            ),
-                            narrow,
-                            warmup,
-                            iters,
-                        )
-                        emit(
-                            {
-                                "path": "batched",
-                                "d_out": probe_d_out,
-                                "precision": prec,
-                                "n_ctx": n_ctx,
-                                "B": b,
-                                "recompute": False,
-                                "s_per_draw": s / b,
-                                "peak_gib": peak,
-                                "loss": lv,
-                            }
-                        )
-                    except Exception as exc:  # noqa: BLE001
-                        traceback.print_exc()
-                        oom = _oom(exc)
-                        emit(
-                            {
-                                "path": "batched",
-                                "d_out": probe_d_out,
-                                "precision": prec,
-                                "n_ctx": n_ctx,
-                                "B": b,
-                                "recompute": False,
-                                "oom": oom,
-                                "error": f"{type(exc).__name__}: {str(exc)[:300]}",
-                            }
-                        )
-                        narrow.zero_grad(set_to_none=True)
-                        gc.collect()
-                        torch.cuda.empty_cache()
-                        if oom:
-                            break
-            est = None
-            gc.collect()
-            torch.cuda.empty_cache()
-
     # ---------------- table ----------------
     print("\n=== TABLE ===", flush=True)
     print(
@@ -626,7 +566,7 @@ def main(
             b0 = base.get(n_ctx)
             sp = f"{b0 / r['s_per_draw']:7.2f}" if b0 else "      -"
             print(
-                f"{r['path']:12s} {r.get('d_out', d_feat):5d} {r['precision']:5s} "
+                f"{r['path']:12s} {r.get('d_out', d_out):5d} {r['precision']:5s} "
                 f"{n_ctx:6d} {r['B']:3d} {r['recompute']!s:>6s} "
                 f"{r['peak_gib']:8.1f} {r['s_per_draw']:8.4f} {sp}",
                 flush=True,
@@ -634,7 +574,7 @@ def main(
         else:
             tag = "OOM" if r.get("oom") else r.get("skipped", "ERR")
             print(
-                f"{r['path']:12s} {r.get('d_out', d_feat):5d} {r['precision']:5s} "
+                f"{r['path']:12s} {r.get('d_out', d_out):5d} {r['precision']:5s} "
                 f"{n_ctx:6d} {r['B']:3d} {r['recompute']!s:>6s} {tag:>8s}",
                 flush=True,
             )
