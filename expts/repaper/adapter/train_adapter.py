@@ -94,9 +94,68 @@ def draw(rng, pool, e, n_ctx_lo, n_ctx_hi, n_query):
     return emb, y, n_ctx
 
 
+def load_relbench(pre_dir, features_root, labels_root, n_ctx, n_query, seed):
+    import numpy as np
+    import torch
+
+    # The val monitor the checkpoint is selected on. rt_features is the same
+    # quantity the Join dump holds, and labels_relbench carries every val row
+    # plus the context draw -- and no test row, so this cannot score test.
+    pre, feat, lab = (Path(x).expanduser() for x in (pre_dir, features_root, labels_root))
+    rng = np.random.default_rng(seed)
+    out = []
+    for db, name in sorted(
+        map(tuple, json.loads((pre / "db-task-lists/forecast.json").read_text()))
+    ):
+        spec = {t["name"]: t for t in json.loads((pre / db / "meta.json").read_text())["tasks"]}[name]
+        task_type = {"binary_classification": "clf", "regression": "reg"}[spec["task_type"]]
+        z = np.load(lab / db / f"{name}.npz")
+        idx, y = z["node_idxs"], z["labels"]
+        is_val = (idx >= z["val_lo"]) & (idx < z["val_hi"])
+        fm = json.loads((feat / db / "rt_features" / f"{name}_meta.json").read_text())
+        vecs = np.memmap(
+            feat / db / "rt_features" / f"{name}_vectors.bin",
+            dtype=np.float32,
+            mode="r",
+            shape=(fm["total_nodes"], fm["n_features"]),
+        )
+
+        def take(mask, k):
+            where = np.flatnonzero(mask)
+            if len(where) > k:
+                where = np.sort(rng.choice(where, size=k, replace=False))
+            rows = idx[where] - fm["min_offset"]
+            return (
+                torch.from_numpy(np.ascontiguousarray(vecs[rows])),
+                torch.from_numpy(y[where].astype("float32")),
+            )
+
+        ce, cy = take(~is_val, n_ctx)
+        qe, qy = take(is_val, n_query)
+        out.append(
+            {
+                "db": db,
+                "task": name,
+                "task_type": task_type,
+                "ctx": (ce, cy),
+                "query": (qe, qy),
+            }
+        )
+        print(
+            f"  relbench {db}/{name}: {len(cy)} ctx + {len(qy)} val, {task_type}",
+            flush=True,
+        )
+    return out
+
+
 def main(
     *,
     features_root: str,
+    relbench_pre_dir: str,
+    relbench_features_root: str,
+    relbench_labels_root: str,
+    relbench_n_ctx: int,
+    relbench_n_query: int,
     tabpfn_dir: str,
     out_dir: str,
     d_feat: int,
@@ -168,6 +227,15 @@ def main(
     ests = {"clf": tabpfn("clf"), "reg": tabpfn("reg")}
     print("tabpfn frozen; only the adapter trains", flush=True)
 
+    relbench = load_relbench(
+        relbench_pre_dir,
+        relbench_features_root,
+        relbench_labels_root,
+        relbench_n_ctx,
+        relbench_n_query,
+        seed,
+    )
+
     def loss_and_pred(e, emb, y, n_ctx):
         x = adapter(emb.to(device).float())
         yy = y.to(device)
@@ -191,10 +259,10 @@ def main(
     def evaluate(pool, n_tasks, rng):
         from rt.eval.metrics import metric_for
 
-        # clf is auroc. reg is MAE over the trivial constant predictor's MAE:
-        # raw MAE is not comparable across tasks whose targets are on different
-        # scales, and the mean of it over a held-out set would be whichever
-        # task happens to have the widest target.
+        # auroc for clf, MAE for reg. The preprocessed target is already
+        # z-scored -- the space rt.eval.relbench denormalises out of -- so MAE
+        # on it is the nmae the result tables carry, comparable across tasks
+        # and against the 0.7173 / 0.3584 rt-j baseline.
         scores = {"clf": [], "reg": []}
         order = rng.permutation(len(pool.entries))[:n_tasks]
         for i in order:
@@ -215,14 +283,31 @@ def main(
                 _n, v = metric_for(e["task_type"], t, p)
             except ValueError:
                 continue
-            if e["task_type"] == "reg":
-                ctx_median = float(np.median(y[:n_ctx].numpy()))
-                denom = float(np.abs(t - ctx_median).mean())
-                if denom <= 0:
-                    continue
-                v = v / denom
             scores[e["task_type"]].append(float(v))
         return {k: (float(np.mean(v)) if v else None, len(v)) for k, v in scores.items()}
+
+    @torch.no_grad()
+    def evaluate_relbench():
+        from rt.eval.metrics import metric_for
+
+        per = {"clf": [], "reg": []}
+        for t in relbench:
+            ce, cy = t["ctx"]
+            qe, qy = t["query"]
+            e = {"task_type": t["task_type"]}
+            emb = torch.cat([ce, qe])
+            y = torch.cat([cy, qy])
+            _loss, pred, truth = loss_and_pred(e, emb, y, len(cy))
+            try:
+                _n, v = metric_for(
+                    t["task_type"],
+                    truth.float().cpu().numpy(),
+                    pred.float().cpu().numpy(),
+                )
+            except ValueError:
+                continue
+            per[t["task_type"]].append(float(v))
+        return {k: (float(np.mean(v)) if v else None, len(v)) for k, v in per.items()}
 
     rng = np.random.default_rng(seed)
     t0 = time.time()
@@ -256,10 +341,18 @@ def main(
 
         if eval_every and step % eval_every == 0:
             held = evaluate(held_pool, eval_tasks, np.random.default_rng(0))
+            rb = evaluate_relbench()
             print(
                 f"step {step:>6} held-out dbs: "
                 f"auroc {held['clf'][0]} (n={held['clf'][1]}) "
                 f"nmae {held['reg'][0]} (n={held['reg'][1]})",
+                flush=True,
+            )
+            print(
+                f"step {step:>6} relbench val: "
+                f"auroc {rb['clf'][0]} (n={rb['clf'][1]}) "
+                f"nmae {rb['reg'][0]} (n={rb['reg'][1]})"
+                f"   [rt-j baseline 0.7173 / 0.3584 at 2**18 context]",
                 flush=True,
             )
 
