@@ -41,10 +41,13 @@ REPO_ROOT = str(Path(__file__).resolve().parents[3])
 #           and is expected to start *worse* than the control, not at it.
 # No output bias in either: TabPFN z-norms each column against the context, so
 # an output bias is subtracted straight back off and gets zero gradient.
+# All on qos il, not il-lo: the il a100 cap is 10 per user and this is 3 jobs,
+# so spreading tiers buys nothing and il-lo is priority 100, preemptible by il
+# -- and a roach preempt reads as a wall-clock expiry.
 # clip 10.0 went in as 191541; this is the remaining one.
-ARMS = [("linear", 0, 25.0, "il-lo")]
-# ARMS = [("linear", 0, 10.0, "il"), ("linear", 0, 25.0, "il-lo")]
-# ARMS = [("linear", 0, 1.0, "il"), ("mlp", 64, 1.0, "il-lo")]
+ARMS = [("linear", 0, 25.0, "il")]
+# ARMS = [("linear", 0, 10.0, "il"), ("linear", 0, 25.0, "il")]
+# ARMS = [("linear", 0, 1.0, "il"), ("mlp", 64, 1.0, "il")]
 
 for adapter_kind, hidden_dim, grad_norm_max, qos in ARMS:
     RUN = f"join-v3-{adapter_kind}-clip{grad_norm_max:g}"
