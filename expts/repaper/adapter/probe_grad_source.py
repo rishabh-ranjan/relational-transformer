@@ -75,6 +75,12 @@ def main(
                 adapter.bias.zero_()
             est = make(task_type, precision)
             n_c = min(n_ctx, len(y) - n_query)
+            # The forward has to run inside detect_anomaly too: it only
+            # records "Traceback of forward call that caused the error" for
+            # ops *created* while anomaly mode is on, so wrapping backward
+            # alone yields the op name and nothing else.
+            anomaly = torch.autograd.detect_anomaly(check_nan=True)
+            anomaly.__enter__()
             x = adapter(emb.to(device).float())
             seen = {}
             x.register_hook(lambda g: seen.__setitem__("dx", g.detach()))
@@ -108,14 +114,11 @@ def main(
             )
             err = None
             try:
-                with torch.autograd.detect_anomaly(check_nan=True):
-                    loss.backward()
+                loss.backward()
             except Exception as e:
-                # The whole message, not a prefix: detect_anomaly appends
-                # "Traceback of forward call that caused the error", which
-                # names the line that built the offending op, and truncating
-                # it threw away the only thing worth having.
                 err = f"{type(e).__name__}: {e}"
+            finally:
+                anomaly.__exit__(None, None, None)
             g = adapter.weight.grad
             dx = seen.get("dx")
             print(
