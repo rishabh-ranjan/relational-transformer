@@ -330,14 +330,39 @@ def main(
         opt.zero_grad(set_to_none=True)
         # One task is one very correlated gradient, so a step is several of
         # them accumulated rather than a bigger draw from one task.
+        #
+        # Every task is checked for a non-finite gradient before the step, and
+        # the whole step is dropped if any produced one. This is not belt and
+        # braces: an inf gradient is *converted into NaN* by clipping, since
+        # clip_coef = max_norm / (inf + eps) = 0 and inf * 0 = NaN, and AdamW
+        # then writes NaN into the weights permanently. That killed the first
+        # run at step 0 with a finite loss and a NaN |W-I|. The offending task
+        # is named so a systematic source shows itself rather than being
+        # silently skipped 10,000 times.
+        bad = []
         for _ in range(tasks_per_step):
             e = train_entries[int(rng.choice(len(train_entries), p=train_pool.p))]
             emb, y, n_ctx = draw(rng, train_pool, e, n_ctx_lo, n_ctx_hi, n_query)
             loss, _pred, _truth = loss_and_pred(e, emb, y, n_ctx)
+            if not torch.isfinite(loss):
+                bad.append((e["db"], e["task"], e["task_type"], n_ctx, "loss"))
+                continue
             (loss / tasks_per_step).backward()
+            if not all(
+                p.grad is None or torch.isfinite(p.grad).all()
+                for p in adapter.parameters()
+            ):
+                bad.append(
+                    (e["db"], e["task"], e["task_type"], n_ctx, f"grad@{float(loss):.4g}")
+                )
             running[e["task_type"]].append(float(loss))
-        torch.nn.utils.clip_grad_norm_(adapter.parameters(), grad_norm_max)
-        opt.step()
+        if bad:
+            n_bad += 1
+            print(f"step {step:>6} non-finite, step dropped: {bad}", flush=True)
+            opt.zero_grad(set_to_none=True)
+        else:
+            torch.nn.utils.clip_grad_norm_(adapter.parameters(), grad_norm_max)
+            opt.step()
 
         if step % 20 == 0:
             msg = " ".join(
@@ -346,7 +371,7 @@ def main(
             dw = float((adapter.weight - torch.eye(d_feat, device=device)).norm())
             print(
                 f"step {step:>6} {msg} |W-I| {dw:.4f} "
-                f"{(time.time() - t0) / 60:.1f} min",
+                f"dropped {n_bad} {(time.time() - t0) / 60:.1f} min",
                 flush=True,
             )
             if use_wandb:
@@ -363,6 +388,7 @@ def main(
                             np.mean([x for v in running.values() for x in v])
                         ),
                         "train/w_minus_i": dw,
+                        "train/steps_dropped": n_bad,
                         "train/lr": opt.param_groups[0]["lr"],
                         "train/minutes": (now - t0) / 60,
                         **(

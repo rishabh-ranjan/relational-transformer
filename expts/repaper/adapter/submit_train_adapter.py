@@ -36,7 +36,12 @@ submit(
         # 8192 context rows for the in-loop metric; the dump also holds the
         # 2**18 draw, so checking that it generalises costs no refeaturizing.
         relbench_n_ctx=8192,
-        relbench_n_query=1024,
+        # 1024 was sized off the probe's OOM at 8192x256, which was measured
+        # with gradients on and does not apply to a no_grad eval. Query rows
+        # attend to the context and not to each other, so this axis is linear
+        # and chunkable; the context is the expensive one. 4096 roughly halves
+        # the per-task standard error.
+        relbench_n_query=4096,
         tabpfn_dir=f"{SHARE}/tabpfn",
         out_dir=f"{OUT_ROOT}/adapter/{RUN}",
         d_feat=512,
