@@ -25,7 +25,15 @@ from expts.repaper.config import (
 # gradients on (2048x256 peaked at 33.3 GiB, 8192x256 died).
 REPO_ROOT = str(Path(__file__).resolve().parents[3])
 
-# Two arms of the same recipe, differing only in the adapter:
+# Sweeping the clip. With the standardiser in, join-v3-linear still clipped
+# 100% of steps at grad_norm_max=1.0 (per-step norms p50 ~8, window maxima
+# 34-85, one 590), so Adam is being handed a direction with its magnitude
+# pinned -- the same regime v1 learned nothing in. 10.0 sits just above the
+# per-step median and 25.0 above the p90, so the bulk of steps pass through
+# unscaled and only the tail is caught. join-v3-linear (clip 1.0) keeps
+# running as the third point.
+#
+# The adapter arms, for when the clip is settled:
 #   linear  512 -> 512, no bias, initialised at identity, so step 0 is exactly
 #           the un-adapted rt-j featurizer and every later step is attributable
 #   mlp     512 -> 64 -> 512 with relu, xavier. A bottleneck cannot be
@@ -33,11 +41,11 @@ REPO_ROOT = str(Path(__file__).resolve().parents[3])
 #           and is expected to start *worse* than the control, not at it.
 # No output bias in either: TabPFN z-norms each column against the context, so
 # an output bias is subtracted straight back off and gets zero gradient.
-ARMS = [("linear", 0)]
-# ARMS = [("linear", 0), ("mlp", 64)]
+ARMS = [("linear", 0, 10.0, "il"), ("linear", 0, 25.0, "il-lo")]
+# ARMS = [("linear", 0, 1.0, "il"), ("mlp", 64, 1.0, "il-lo")]
 
-for adapter_kind, hidden_dim in ARMS:
-    RUN = f"join-v3-{adapter_kind}"
+for adapter_kind, hidden_dim, grad_norm_max, tier in ARMS:
+    RUN = f"join-v3-{adapter_kind}-clip{grad_norm_max:g}"
     submit(
         "expts.repaper.adapter.train_adapter:main",
         args=dict(
@@ -80,7 +88,7 @@ for adapter_kind, hidden_dim in ARMS:
             # away, not regularising the adapter toward it.
             wd=0.0,
             warmup_steps=100,
-            grad_norm_max=1.0,
+            grad_norm_max=grad_norm_max,
             # Step 0 is evaluated too, and at identity that is the un-adapted rt-j
             # featurizer: the control measured by the same code, for free.
             eval_every=250,
@@ -97,9 +105,9 @@ for adapter_kind, hidden_dim in ARMS:
             wandb_disabled=False,
         ),
         resources=Resources(
-            partition="il",
+            partition=tier,
             account="infolab",
-            qos="il",
+            qos=tier,
             time="12:00:00",
             gpus="a100:1",
             cpus_per_task=14,
