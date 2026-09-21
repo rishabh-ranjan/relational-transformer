@@ -109,7 +109,14 @@ def featurize_dbs(
             quiet=True,
             ignore_data_errors=False,
             mmap_populate=True,
-            timeout_per_item=3600.0,
+            # Not 3600: check_deadline is the only bound on a pathological
+            # BFS, and at an hour a single row can hold a batch -- and so a
+            # gpu -- indefinitely, which is what hung two shards on
+            # join-motogp/sessions-number and join-europeana/items-year. A row
+            # that cannot be built in a minute is not worth having, and on
+            # timeout it takes the same path as any other failure: panic,
+            # substitute, and the node check below drops it.
+            timeout_per_item=60.0,
             vector_db_path=None,
             db_cutoff=None,
             legacy_boolean=False,
