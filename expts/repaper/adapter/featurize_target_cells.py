@@ -4,13 +4,26 @@ import zlib
 from pathlib import Path
 
 
+# Every row of these two times out in the sampler's bfs. The 60s deadline
+# bounds a row, not a batch, so at 32 threads a 1024-row batch still costs
+# ~32 min and a 4096-row task ~2 hours to produce almost nothing: both sat at
+# exactly 0 bytes for 13 minutes on two separate attempts. Their databases are
+# fine and their sibling tasks dumped normally, so this is per task, not per db.
+BLACKLIST = {
+    ("join-motogp", "sessions-number"),
+    ("join-europeana", "items-year"),
+}
+
+
 def listed_tasks(pre_dir: str, db: str, db_task_list: str) -> list[tuple[str, object]]:
     from rt.data import get_tasks, resolve_db_task_list
 
     meta = json.loads((Path(pre_dir).expanduser() / db / "meta.json").read_text())
     known = {t["name"] for t in meta.get("tasks", [])}
     names = sorted(
-        n for d, n in resolve_db_task_list(db_task_list) if d == db and n in known
+        n
+        for d, n in resolve_db_task_list(db_task_list)
+        if d == db and n in known and (d, n) not in BLACKLIST
     )
     # One call per name, not one call for all of them: get_tasks keys an
     # autocomplete task by its entity table, so two of them on the same table
