@@ -30,80 +30,93 @@ from expts.repaper.config import (
 # bigger batch is what was missing.
 REPO_ROOT = str(Path(__file__).resolve().parents[3])
 
-RUN = "join-v4-ddp-linear"
+# The fp32 arm is job 191576, already running on ampere3 -- do not resubmit it.
+# This is the bf16 arm: same seed, so it draws the *identical* task sequence,
+# and precision is the only difference. A subagent measured the fp32 run at
+# 97-98% gpu util, 5.71 TFLOP/s on 3.2 TFLOP/draw = 29% of the a100's 19.5
+# TFLOP/s fp32 non-tensor-core peak, with TF32 off (allow_tf32 False,
+# float32_matmul_precision "highest") -- so it is compute-bound on the wrong
+# execution units. bf16 puts matmuls on tensor cores and lets sdpa select
+# FlashAttention. Expected 2-3x, shape-limited rather than FLOP-limited
+# (attention is (1, 554, 16, 64): batch 1, 16 heads over 108 SMs).
+ARMS = [("bf16", "join-v5-ddp-linear-bf16")]
+# ARMS = [(None, "join-v4-ddp-linear")]
 
-submit(
-    "expts.repaper.adapter.train_adapter_ddp:main",
-    args=dict(
-        features_root=f"{SHARE}/features_join_u12",
-        relbench_pre_dir=PRE_DIR,
-        relbench_features_root=f"{SHARE}/features_rt-j",
-        relbench_labels_root=f"{SHARE}/labels_relbench",
-        relbench_n_ctx=8192,
-        relbench_n_query=4096,
-        tabpfn_dir=f"{SHARE}/tabpfn",
-        stats_path=f"{SHARE}/feature_stats_join_u12.npz",
-        out_dir=f"{OUT_ROOT}/adapter/{RUN}",
-        d_feat=512,
-        min_rows=512,
-        n_ctx_lo=256,
-        n_ctx_hi=1024,
-        n_query=256,
-        # 4 ranks x 4 tasks x 32 accum. The script asserts the divisibility, so
-        # changing the rank count without changing this fails at startup rather
-        # than silently running a different batch.
-        total_tasks_per_step=512,
-        tasks_per_micro=4,
-        total_steps=2_500,
-        lr=1e-4,
-        # Zero, deliberately. AdamW's decay pulls a weight toward 0, and this
-        # weight starts at I -- decaying it is decaying the rt-j featurizer
-        # away, not regularising the adapter toward it.
-        wd=0.0,
-        warmup_steps=100,
-        # 10.0, the middle arm of the single-gpu clip sweep. A 512-task
-        # gradient should also be far steadier than a 4-task one, so this
-        # ought to bind on a small minority of steps; train/frac_clipped says.
-        grad_norm_max=10.0,
-        adapter_kind="linear",
-        hidden_dim=0,
-        # At ~70 s/step these are ~30 min and ~1 h of wall clock, not the
-        # 10 min and 20 min they were on one gpu.
-        eval_every=25,
-        save_every=50,
-        seed=0,
-        targets={"val/auroc": 0.7173, "val/nmae": 0.3584},
-        run_name=f"adapter-{RUN}",
-        project=project("adapter"),
-        entity="rtv2",
-        wandb_disabled=False,
-    ),
-    resources=Resources(
-        partition="il",
-        account="infolab",
-        qos="il",
-        # ~49 h at 70 s/step; 72 leaves room for a slow node.
-        time="3-00:00:00",
-        # One rank per gpu: roach maps SLURM_PROCID -> RANK and SLURM_NTASKS ->
-        # WORLD_SIZE (roach/slurm/run.py:19), so ntasks=None gives 4 ranks.
-        gpus="a100:4",
-        cpus_per_task=14,
-        ntasks=None,
-        exclusive=False,
-        mem="240G",
-        mem_per_gpu=None,
-        constraint="ampere",
-        nodelist=None,
-        reservation=None,
-        dependency=None,
-        exclude="ampere4,ampere6,ampere7,ampere9",
-    ),
-    name=f"adapter-train-{RUN}",
-    run_id=None,
-    repo_root=REPO_ROOT,
-    cluster=ILC,
-    job_env="expts/job_env.sh",
-    log_root=f"{LOG_ROOT}/repaper/adapter/slurm-logs",
-    clone_root=CLONE_ROOT,
-    secrets_dir=SECRETS_DIR,
-)
+for autocast, RUN in ARMS:
+
+    submit(
+        "expts.repaper.adapter.train_adapter_ddp:main",
+        args=dict(
+            features_root=f"{SHARE}/features_join_u12",
+            relbench_pre_dir=PRE_DIR,
+            relbench_features_root=f"{SHARE}/features_rt-j",
+            relbench_labels_root=f"{SHARE}/labels_relbench",
+            relbench_n_ctx=8192,
+            relbench_n_query=4096,
+            tabpfn_dir=f"{SHARE}/tabpfn",
+            stats_path=f"{SHARE}/feature_stats_join_u12.npz",
+            out_dir=f"{OUT_ROOT}/adapter/{RUN}",
+            d_feat=512,
+            min_rows=512,
+            n_ctx_lo=256,
+            n_ctx_hi=1024,
+            n_query=256,
+            # 4 ranks x 4 tasks x 32 accum. The script asserts the divisibility, so
+            # changing the rank count without changing this fails at startup rather
+            # than silently running a different batch.
+            total_tasks_per_step=512,
+            tasks_per_micro=4,
+            total_steps=2_500,
+            lr=1e-4,
+            # Zero, deliberately. AdamW's decay pulls a weight toward 0, and this
+            # weight starts at I -- decaying it is decaying the rt-j featurizer
+            # away, not regularising the adapter toward it.
+            wd=0.0,
+            warmup_steps=100,
+            # 10.0, the middle arm of the single-gpu clip sweep. A 512-task
+            # gradient should also be far steadier than a 4-task one, so this
+            # ought to bind on a small minority of steps; train/frac_clipped says.
+            grad_norm_max=10.0,
+            autocast=autocast,
+            adapter_kind="linear",
+            hidden_dim=0,
+            # At ~70 s/step these are ~30 min and ~1 h of wall clock, not the
+            # 10 min and 20 min they were on one gpu.
+            eval_every=25,
+            save_every=50,
+            seed=0,
+            targets={"val/auroc": 0.7173, "val/nmae": 0.3584},
+            run_name=f"adapter-{RUN}",
+            project=project("adapter"),
+            entity="rtv2",
+            wandb_disabled=False,
+        ),
+        resources=Resources(
+            partition="il",
+            account="infolab",
+            qos="il",
+            # ~49 h at 70 s/step; 72 leaves room for a slow node.
+            time="3-00:00:00",
+            # One rank per gpu: roach maps SLURM_PROCID -> RANK and SLURM_NTASKS ->
+            # WORLD_SIZE (roach/slurm/run.py:19), so ntasks=None gives 4 ranks.
+            gpus="a100:4",
+            cpus_per_task=14,
+            ntasks=None,
+            exclusive=False,
+            mem="240G",
+            mem_per_gpu=None,
+            constraint="ampere",
+            nodelist=None,
+            reservation=None,
+            dependency=None,
+            exclude="ampere4,ampere6,ampere7,ampere9",
+        ),
+        name=f"adapter-train-{RUN}",
+        run_id=None,
+        repo_root=REPO_ROOT,
+        cluster=ILC,
+        job_env="expts/job_env.sh",
+        log_root=f"{LOG_ROOT}/repaper/adapter/slurm-logs",
+        clone_root=CLONE_ROOT,
+        secrets_dir=SECRETS_DIR,
+    )

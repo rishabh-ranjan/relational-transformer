@@ -28,6 +28,7 @@ def main(
     hidden_dim: int,
     warmup_steps: int,
     grad_norm_max: float,
+    autocast: str | None,
     eval_every: int,
     save_every: int,
     seed: int,
@@ -82,6 +83,9 @@ def main(
         "nccl", timeout=timedelta(hours=1), device_id=torch.device(device)
     )
     is_main = rank == 0
+    # Eval deliberately stays fp32 whatever training runs in, so val numbers
+    # are comparable across precision arms and only the training path varies.
+    autocast_dtype = {None: None, "bf16": torch.bfloat16}[autocast]
 
     assert total_tasks_per_step % (world_size * tasks_per_micro) == 0, (
         f"total_tasks_per_step {total_tasks_per_step} not divisible by "
@@ -182,7 +186,14 @@ def main(
                 e = train_entries[int(rng.choice(len(train_entries), p=train_pool.p))]
                 emb, y, n_ctx = draw(rng, train_pool, e, n_ctx_lo, n_ctx_hi, n_query)
                 loss, _pred, _truth = loss_and_pred(
-                    ests, adapter, e["task_type"], emb, y, n_ctx, device
+                    ests,
+                    adapter,
+                    e["task_type"],
+                    emb,
+                    y,
+                    n_ctx,
+                    device,
+                    autocast_dtype,
                 )
                 if loss is None:
                     n_degenerate += 1

@@ -276,30 +276,56 @@ def make_ests(tabpfn_dir, device, seed, d_feat):
     return ests
 
 
-def loss_and_pred(ests, adapter, task_type, emb, y, n_ctx, device):
+def loss_and_pred(ests, adapter, task_type, emb, y, n_ctx, device, autocast_dtype=None):
+    import contextlib
+
     import torch
     from torch import nn
 
-    x = adapter(emb.to(device).float())
-    yy = y.to(device)
-    est = ests[task_type]
-    # A task can vary over its whole pool and still draw a context that does
-    # not; fit_with_differentiable_input raises on std<=1e-12 rather than
-    # returning, so the draw has to be rejected before it gets there.
-    if task_type == "reg" and float(yy[:n_ctx].std()) < 1e-6:
-        return None, None, None
-    # RemoveConstantFeaturesStep raises rather than returning when every
-    # column is constant, which a context of near-identical rows can be.
-    if float(x[:n_ctx].std(dim=0).max()) == 0.0:
-        return None, None, None
+    # autocast_dtype=torch.bfloat16 puts the matmuls on the tensor cores and,
+    # more importantly, makes q/k/v bf16 so torch's sdpa_kernel priority list
+    # (FLASH, EFFICIENT, CUDNN, MATH -- attention/scaled_dot_product_attention
+    # .py:181) can finally select FlashAttention: flash needs fp16/bf16 and
+    # sm80+, and on an a100 dtype was the only thing disqualifying it.
+    #
+    # bf16 rather than fp16 on purpose. TabPFN's own "autocast" setting is fp16
+    # on gpu (utils.py:269) and fp16's 5-bit exponent with a 65504 ceiling is
+    # the shape of the original inf; bf16 keeps fp32's 8-bit exponent and only
+    # loses mantissa, which cannot manufacture an inf that fp32 would not.
+    ctx = (
+        torch.autocast("cuda", dtype=autocast_dtype)
+        if autocast_dtype is not None
+        else contextlib.nullcontext()
+    )
+    with ctx:
+        x = adapter(emb.to(device).float())
+        yy = y.to(device)
+        est = ests[task_type]
+        # A task can vary over its whole pool and still draw a context that
+        # does not; fit_with_differentiable_input raises on std<=1e-12 rather
+        # than returning, so the draw has to be rejected before it gets there.
+        if task_type == "reg" and float(yy[:n_ctx].std()) < 1e-6:
+            return None, None, None
+        # RemoveConstantFeaturesStep raises rather than returning when every
+        # column is constant, which a context of near-identical rows can be.
+        if float(x[:n_ctx].std(dim=0).max()) == 0.0:
+            return None, None, None
+        if task_type == "clf":
+            lab = (yy > 0).long()
+            est.fit_with_differentiable_input(x[:n_ctx], lab[:n_ctx])
+            logits = est.forward(
+                x[n_ctx:], use_inference_mode=True, return_logits=True
+            )
+        else:
+            est.fit_with_differentiable_input(x[:n_ctx], yy[:n_ctx])
+            logits, _per, _b = est.forward(x[n_ctx:], use_inference_mode=True)
+    # The loss stays fp32 whatever the forward ran in. The bar distribution
+    # searchsorts the logits against fp32 bucket borders, and a reduction is
+    # where reduced precision costs accuracy without buying throughput.
+    logits = logits.float()
     if task_type == "clf":
-        lab = (yy > 0).long()
-        est.fit_with_differentiable_input(x[:n_ctx], lab[:n_ctx])
-        logits = est.forward(x[n_ctx:], use_inference_mode=True, return_logits=True)
         loss = nn.functional.cross_entropy(logits, lab[n_ctx:])
         return loss, torch.softmax(logits, -1)[:, 1], lab[n_ctx:]
-    est.fit_with_differentiable_input(x[:n_ctx], yy[:n_ctx])
-    logits, _per, _b = est.forward(x[n_ctx:], use_inference_mode=True)
     z = (yy[n_ctx:] - est.y_train_mean_) / est.y_train_std_
     loss = est.znorm_space_bardist_(
         logits.transpose(0, 1).unsqueeze(0), z.unsqueeze(0)
