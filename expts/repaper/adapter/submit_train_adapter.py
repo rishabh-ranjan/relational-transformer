@@ -10,6 +10,7 @@ from expts.repaper.config import (
     PRE_DIR,
     SECRETS_DIR,
     SHARE,
+    project,
 )
 
 # Phase 2: train the linear adapter between a frozen RT-J and a frozen TabPFN.
@@ -40,7 +41,6 @@ submit(
         out_dir=f"{OUT_ROOT}/adapter/{RUN}",
         d_feat=512,
         min_rows=512,
-        holdout_mod=10,
         n_ctx_lo=256,
         n_ctx_hi=2048,
         n_query=256,
@@ -56,10 +56,17 @@ submit(
         # Step 0 is evaluated too, and at identity that is the un-adapted rt-j
         # featurizer: the control measured by the same code, for free.
         eval_every=250,
-        eval_tasks=64,
-        eval_n_ctx=2048,
         save_every=500,
         seed=0,
+        # The rt-j featurizer without an adapter, on the same 21 val tasks:
+        # every val panel folds this in as its reference line.
+        targets={"val/auroc": 0.7173, "val/nmae": 0.3584},
+        run_name=f"adapter-{RUN}",
+        project=project("adapter"),
+        # The run key cannot reach the rtv2 team; see workspace.py.
+        # entity="rtv2",
+        entity="vedanga-stanford-university",
+        wandb_disabled=False,
     ),
     resources=Resources(
         partition="il",
@@ -79,6 +86,9 @@ submit(
         exclude="ampere4,ampere6,ampere7,ampere9",
     ),
     name=f"adapter-train-{RUN}",
+    # roach mints one and injects it into args; paste one here to relaunch an
+    # existing run into the same wandb group.
+    run_id=None,
     repo_root=REPO_ROOT,
     cluster=ILC,
     job_env="expts/job_env.sh",

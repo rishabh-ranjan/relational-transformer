@@ -1,15 +1,15 @@
 import json
 import math
+import os
 import time
-import zlib
 from pathlib import Path
 
 
-def load_index(features_root: str, min_rows: int, holdout_mod: int):
+def load_index(features_root: str, min_rows: int):
     import numpy as np
 
     root = Path(features_root).expanduser()
-    train, held = [], []
+    tasks = []
     skipped = {"rows": 0, "degenerate": 0}
     for mp in sorted(root.glob("*/*_meta.json")):
         m = json.loads(mp.read_text())
@@ -36,22 +36,15 @@ def load_index(features_root: str, min_rows: int, holdout_mod: int):
             # lower, so the weight has to come off the true row count.
             "weight": float(min(m["total_nodes"], 100_000)),
         }
-        # Held out by database, not by row: an unseen schema is the thing the
-        # adapter has to generalise to, and held-out rows of a task whose other
-        # rows are the context is just the training objective measured again.
-        # crc32, not hash(): python salts str hashes per process, so hash()
-        # would reshuffle the holdout on every run and on every resume.
-        (held if zlib.crc32(db.encode()) % holdout_mod == 0 else train).append(entry)
+        tasks.append(entry)
     print(
-        f"index: {len(train)} train tasks, {len(held)} held-out tasks "
-        f"({len({e['db'] for e in train})}/{len({e['db'] for e in held})} dbs), "
-        f"skipped {skipped}",
+        f"index: {len(tasks)} train tasks "
+        f"({len({e['db'] for e in tasks})} dbs), skipped {skipped}",
         flush=True,
     )
-    for split, es in (("train", train), ("held", held)):
-        by = {t: sum(1 for e in es if e["task_type"] == t) for t in ("clf", "reg")}
-        print(f"  {split}: {by}", flush=True)
-    return train, held
+    by = {t: sum(1 for e in tasks if e["task_type"] == t) for t in ("clf", "reg")}
+    print(f"  train: {by}", flush=True)
+    return tasks
 
 
 class Pool:
@@ -92,6 +85,16 @@ def draw(rng, pool, e, n_ctx_lo, n_ctx_hi, n_query):
     idx = rng.choice(e["n"], size=n_ctx + n_query, replace=False)
     emb, y = pool.read(e, np.sort(idx))
     return emb, y, n_ctx
+
+
+def summarize(per_task):
+    import numpy as np
+
+    out = {}
+    for tt in ("clf", "reg"):
+        vs = {k: v for k, (t, v) in per_task.items() if t == tt}
+        out[tt] = (float(np.mean(list(vs.values()))) if vs else None, len(vs), vs)
+    return out
 
 
 def load_relbench(pre_dir, features_root, labels_root, n_ctx, n_query, seed):
@@ -160,7 +163,6 @@ def main(
     out_dir: str,
     d_feat: int,
     min_rows: int,
-    holdout_mod: int,
     n_ctx_lo: int,
     n_ctx_hi: int,
     n_query: int,
@@ -171,11 +173,17 @@ def main(
     warmup_steps: int,
     grad_norm_max: float,
     eval_every: int,
-    eval_tasks: int,
-    eval_n_ctx: int,
     save_every: int,
     seed: int,
+    targets: dict[str, float],
+    run_id: str,
+    run_name: str | None,
+    project: str,
+    entity: str | None,
+    wandb_disabled: bool,
 ) -> None:
+    params = dict(locals())
+
     import numpy as np
     import torch
     from torch import nn
@@ -184,14 +192,44 @@ def main(
     device = "cuda"
     out = Path(out_dir).expanduser()
     out.mkdir(parents=True, exist_ok=True)
+
     model_path = Path(tabpfn_dir).expanduser() / "tabpfn-v3.5-20260909.safetensors"
     assert model_path.exists(), f"TabPFN checkpoint {model_path} not found"
 
     assert min_rows > n_query + 64, (
         f"min_rows {min_rows} leaves no context after {n_query} queries"
     )
-    train_entries, held_entries = load_index(features_root, min_rows, holdout_mod)
-    train_pool, held_pool = Pool(train_entries), Pool(held_entries)
+
+    use_wandb = not wandb_disabled
+    if use_wandb:
+        import wandb
+
+        job = os.environ.get("SLURM_JOB_ID")
+        attempt = (
+            f"{job}.{os.environ.get('SLURM_STEP_ID', '0')}"
+            f".{os.environ.get('SLURM_RESTART_COUNT', '0')}"
+            if job
+            else f"{int(time.time())}"
+        )
+        wandb.init(
+            project=project,
+            entity=entity,
+            name=f"{run_name}-{attempt}" if run_name else attempt,
+            id=f"{run_id}-{attempt}",
+            group=run_id,
+            resume="never",
+            config=params,
+            dir=str(out),
+            settings=wandb.Settings(
+                console_multipart=True,
+                console_chunk_max_seconds=60,
+            ),
+        )
+        wandb.define_metric("step")
+        wandb.define_metric("*", step_metric="step")
+
+    train_entries = load_index(features_root, min_rows)
+    train_pool = Pool(train_entries)
 
     # Identity, not Xavier: step 0 is then exactly the un-adapted rt-j
     # featurizer, so every later step is attributable to training.
@@ -256,41 +294,14 @@ def main(
         return loss, mean * est.y_train_std_ + est.y_train_mean_, yy[n_ctx:]
 
     @torch.no_grad()
-    def evaluate(pool, n_tasks, rng):
+    def evaluate_relbench():
         from rt.eval.metrics import metric_for
 
         # auroc for clf, MAE for reg. The preprocessed target is already
         # z-scored -- the space rt.eval.relbench denormalises out of -- so MAE
         # on it is the nmae the result tables carry, comparable across tasks
         # and against the 0.7173 / 0.3584 rt-j baseline.
-        scores = {"clf": [], "reg": []}
-        order = rng.permutation(len(pool.entries))[:n_tasks]
-        for i in order:
-            e = pool.entries[int(i)]
-            n_ctx = min(eval_n_ctx, e["n"] - n_query)
-            if n_ctx < 64:
-                continue
-            idx = np.sort(
-                np.random.default_rng(int(i)).choice(
-                    e["n"], size=n_ctx + n_query, replace=False
-                )
-            )
-            emb, y = pool.read(e, idx)
-            _loss, pred, truth = loss_and_pred(e, emb, y, n_ctx)
-            t = truth.float().cpu().numpy()
-            p = pred.float().cpu().numpy()
-            try:
-                _n, v = metric_for(e["task_type"], t, p)
-            except ValueError:
-                continue
-            scores[e["task_type"]].append(float(v))
-        return {k: (float(np.mean(v)) if v else None, len(v)) for k, v in scores.items()}
-
-    @torch.no_grad()
-    def evaluate_relbench():
-        from rt.eval.metrics import metric_for
-
-        per = {"clf": [], "reg": []}
+        per_task = {}
         for t in relbench:
             ce, cy = t["ctx"]
             qe, qy = t["query"]
@@ -306,11 +317,12 @@ def main(
                 )
             except ValueError:
                 continue
-            per[t["task_type"]].append(float(v))
-        return {k: (float(np.mean(v)) if v else None, len(v)) for k, v in per.items()}
+            per_task[f"{t['db']}/{t['task']}"] = (t["task_type"], float(v))
+        return summarize(per_task)
 
     rng = np.random.default_rng(seed)
     t0 = time.time()
+    logged_step, logged_t = 0, t0
     running = {"clf": [], "reg": []}
     for step in range(total_steps):
         for g in opt.param_groups:
@@ -337,17 +349,38 @@ def main(
                 f"{(time.time() - t0) / 60:.1f} min",
                 flush=True,
             )
+            if use_wandb:
+                now = time.time()
+                wandb.log(
+                    {
+                        "step": step,
+                        **{
+                            f"train/loss/{k}": float(np.mean(v))
+                            for k, v in running.items()
+                            if v
+                        },
+                        "train/loss/mean": float(
+                            np.mean([x for v in running.values() for x in v])
+                        ),
+                        "train/w_minus_i": dw,
+                        "train/lr": opt.param_groups[0]["lr"],
+                        "train/minutes": (now - t0) / 60,
+                        **(
+                            {
+                                "train/steps_per_sec": (step - logged_step)
+                                / (now - logged_t)
+                            }
+                            if step > logged_step
+                            else {}
+                        ),
+                    },
+                    step=step,
+                )
+                logged_step, logged_t = step, now
             running = {"clf": [], "reg": []}
 
         if eval_every and step % eval_every == 0:
-            held = evaluate(held_pool, eval_tasks, np.random.default_rng(0))
             rb = evaluate_relbench()
-            print(
-                f"step {step:>6} held-out dbs: "
-                f"auroc {held['clf'][0]} (n={held['clf'][1]}) "
-                f"nmae {held['reg'][0]} (n={held['reg'][1]})",
-                flush=True,
-            )
             print(
                 f"step {step:>6} relbench val: "
                 f"auroc {rb['clf'][0]} (n={rb['clf'][1]}) "
@@ -355,6 +388,28 @@ def main(
                 f"   [rt-j baseline 0.7173 / 0.3584 at 2**18 context]",
                 flush=True,
             )
+            if use_wandb:
+                metric = {"clf": "auroc", "reg": "nmae"}
+                wandb.log(
+                    {
+                        "step": step,
+                        **{
+                            f"val/{metric[tt]}": mean
+                            for tt, (mean, _n, _per) in rb.items()
+                            if mean is not None
+                        },
+                        **{
+                            f"val/n_{tt}": n for tt, (_mean, n, _per) in rb.items()
+                        },
+                        **{
+                            f"val/{metric[tt]}/{task}": v
+                            for tt, (_mean, _n, per) in rb.items()
+                            for task, v in per.items()
+                        },
+                        **{f"target/{k}": v for k, v in targets.items()},
+                    },
+                    step=step,
+                )
 
         if save_every and step % save_every == 0:
             torch.save(
@@ -367,3 +422,5 @@ def main(
         out / "adapter_final.pt",
     )
     print(f"done in {(time.time() - t0) / 60:.1f} min", flush=True)
+    if use_wandb:
+        wandb.finish()
