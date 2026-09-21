@@ -32,6 +32,24 @@ from expts.repaper.config import CKPT, CLONE_ROOT, LOG_ROOT, SECRETS_DIR, SHARE
 PRE_DIR = "~/scratch/hf/stanford-star/the-join-preprocessed"
 REPO_ROOT = str(Path(__file__).resolve().parents[3])
 
+# rustler stores exactly MAX_F2P_NBRS = 5 f2p neighbours per cell (fly.rs:47)
+# and a row in a wider table panics seq_build, which then swaps in a different
+# random row rather than failing. Seven of the 523 dbs have such a table --
+# 2.2% of tasks, 2.7% of the mixture weight -- and they are what made two
+# shards spin for an hour writing a gigabyte of panic messages each. The
+# comment is the widest table's fkey count, from the manifests; the
+# preprocessing pipeline applies the same MAX_FKEYS = 5 rule
+# (expts/preprocess/plurel_filtered_list.py) but this build predates it.
+EXCLUDE_DBS = {
+    "join-airline",  # 33
+    "join-bird-european-football-2",  # 26
+    "join-bird-soccer-2016",  # 10
+    "join-tubepricing",  # 10
+    "join-adventureworks2014",  # 8
+    "join-bird-superhero",  # 7
+    "join-spider-voter-2",  # 6
+}
+
 # 4 b200 and 20 a100. A b200 is ~2.5x an a100 per step (expts/fine_tune), so the
 # b200 shards carry 2.5x the rows and every shard lands at about the same wall
 # clock -- ~1.2M rows on an a100, ~3.1M on a b200, half an hour each at the
@@ -50,6 +68,8 @@ def shards() -> list[tuple[str, list[str], int]]:
     for db, name in json.loads(
         (Path(REPO_ROOT) / "expts/pretrain/all_5gb_cutoff.json").read_text()
     ):
+        if db in EXCLUDE_DBS:
+            continue
         by_db.setdefault(db, set()).add(name)
 
     load = []
