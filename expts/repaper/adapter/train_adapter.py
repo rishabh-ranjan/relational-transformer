@@ -318,10 +318,15 @@ def main(
     opt = torch.optim.AdamW(adapter.parameters(), lr=lr, weight_decay=wd)
 
     def lr_at(step):
+        # v1's schedule: warmup, then flat. v2 ran cosine lr -> lr_min and it
+        # changed nothing, but nothing was learning in v2 either, so the decay
+        # was never tested. With the conditioning fixed it is a confound to add
+        # back later, not now. Uncomment the two lines for cosine.
         if step < warmup_steps:
             return lr * (step + 1) / warmup_steps
-        t = (step - warmup_steps) / max(1, total_steps - warmup_steps)
-        return lr_min + 0.5 * (lr - lr_min) * (1.0 + math.cos(math.pi * t))
+        return lr
+        # t = (step - warmup_steps) / max(1, total_steps - warmup_steps)
+        # return lr_min + 0.5 * (lr - lr_min) * (1.0 + math.cos(math.pi * t))
 
     def tabpfn(task_type):
         cls = TabPFNClassifier if task_type == "clf" else TabPFNRegressor

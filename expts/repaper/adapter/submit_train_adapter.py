@@ -33,7 +33,8 @@ REPO_ROOT = str(Path(__file__).resolve().parents[3])
 #           and is expected to start *worse* than the control, not at it.
 # No output bias in either: TabPFN z-norms each column against the context, so
 # an output bias is subtracted straight back off and gets zero gradient.
-ARMS = [("linear", 0), ("mlp", 64)]
+ARMS = [("linear", 0)]
+# ARMS = [("linear", 0), ("mlp", 64)]
 
 for adapter_kind, hidden_dim in ARMS:
     RUN = f"join-v3-{adapter_kind}"
@@ -70,8 +71,8 @@ for adapter_kind, hidden_dim in ARMS:
             n_query=256,
             tasks_per_step=4,
             total_steps=10_000,
-            # cosine from lr to lr_min over the post-warmup steps; v1 held 1e-4
-            # flat for all 10k and |W-I| never plateaued.
+            # warmup then flat, as v1. lr_min is only read by the cosine branch
+            # commented out in train_adapter.lr_at.
             lr=1e-4,
             lr_min=1e-5,
             # Zero, deliberately. AdamW's decay pulls a weight toward 0, and this
