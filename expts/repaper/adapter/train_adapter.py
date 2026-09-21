@@ -693,3 +693,103 @@ def main(
     print(f"done in {(time.time() - t0) / 60:.1f} min", flush=True)
     if use_wandb:
         wandb.finish()
+
+
+def preprocess_draw(est, x, y_ctx, n_ctx):
+    from tabpfn.preprocessing.configs import (
+        FeatureSubsamplingMethod,
+        SampleSubsamplingMethod,
+    )
+    from tabpfn.preprocessing.ensemble import TabPFNEnsemblePreprocessor
+    from tabpfn.utils import infer_random_state
+
+    # Verbatim what fit_with_differentiable_input does internally
+    # (classifier.py:1306-1324), so the stacked path sees the *same* input
+    # tensor as the one-at-a-time path -- z-norm against the context, the
+    # fingerprint hash column, and the column shuffle all still applied. The
+    # shuffle is a real permutation even at n_estimators=1 and ColumnAggregator
+    # puts RoPE on the column axis, so dropping it would change the model's
+    # input, not just its bookkeeping.
+    static_seed, _ = infer_random_state(est.random_state)
+    pre = TabPFNEnsemblePreprocessor(
+        configs=est.ensemble_configs_,
+        n_samples=n_ctx,
+        feature_schema=est.inferred_feature_schema_,
+        random_state=static_seed,
+        n_preprocessing_jobs=1,
+        feature_subsampling_method=FeatureSubsamplingMethod(
+            est.inference_config_.FEATURE_SUBSAMPLING_METHOD
+        ),
+        constant_feature_count=(
+            est.inference_config_.FEATURE_SUBSAMPLING_CONSTANT_FEATURE_COUNT
+        ),
+        subsample_samples=est.inference_config_.SUBSAMPLE_SAMPLES,
+        sample_subsampling_method=SampleSubsamplingMethod(
+            est.inference_config_.SAMPLE_SUBSAMPLING_METHOD
+        ),
+        y_train=y_ctx,
+        task_type=est.estimator_type,
+    )
+    mem = pre.fit_transform_ensemble_members(X_train=x[:n_ctx], y_train=y_ctx)[0]
+    return mem.X_train, mem.transform_X_test(x[n_ctx:]), mem.config
+
+
+def batched_loss(est, task_type, xs, ys, n_ctx, device):
+    import torch
+    from torch import nn
+    from tabpfn.preprocessing.datamodel import FeatureModality
+
+    # One fused forward for B draws that share (n_ctx, n_query, n_features).
+    # Verified equivalent to running them one at a time: the only reduction in
+    # the architecture that crosses the dataset axis is num_present_classes
+    # (tabpfn_v3_5.py:2261), and it only widens a one-hot whose absent columns
+    # contribute exactly zero. Re-running a draw at B=1 is bit-identical; the
+    # residual under batching is fp32 reassociation (~1e-6) and does not depend
+    # on which draws share the batch.
+    Xtr, Xte, cfgs, ytr, extra = [], [], [], [], []
+    for x, y in zip(xs, ys):
+        if task_type == "clf":
+            yb = (y > 0).long()[:n_ctx].float()
+            extra.append((y > 0).long()[n_ctx:])
+        else:
+            yf = y[:n_ctx].float()
+            mu = yf.mean()
+            # Population std, as regressor.py:1183-1201. torch's default
+            # correction=1 would not match.
+            sd = torch.clamp(yf.std(correction=0), min=1e-20)
+            yb = (yf - mu) / sd
+            extra.append((mu, sd, y[n_ctx:].float()))
+        a, b, c = preprocess_draw(est, x, yb, n_ctx)
+        Xtr.append(a)
+        Xte.append(b)
+        cfgs.append(c)
+        ytr.append(yb)
+    # RemoveConstantFeaturesStep drops columns per draw off the *context*, so
+    # two draws in one batch can disagree on width. Fail with the reason named
+    # rather than inside torch.stack.
+    widths = {t.shape[1] for t in Xtr}
+    assert len(widths) == 1, f"draws disagree on feature width: {sorted(widths)}"
+
+    est.fit_from_preprocessed(
+        [torch.stack(Xtr)],
+        [torch.stack(ytr)],
+        [[[]] for _ in range(len(xs))],
+        [cfgs],
+        performance_options=est.models_[0].get_default_performance_options(),
+    )
+    Xte_s = [torch.stack(Xte)]
+    if task_type == "clf":
+        logits = est.forward(Xte_s, use_inference_mode=True, return_logits=True)
+        yq = torch.stack(extra).to(device)
+        return nn.functional.cross_entropy(logits.permute(1, 2, 0), yq)
+    # TabPFNRegressor.forward raises for B>1 (regressor.py:2123), so go to the
+    # executor. Nothing is lost: on the differentiable path target_transforms
+    # is [None], temperature is 1.0 and there is one estimator, so the
+    # wrapper's post-processing is the identity.
+    est.executor_.use_torch_inference_mode(use_inference=False)
+    ((out, _cfg),) = est.executor_.iter_outputs(
+        Xte_s, autocast=est.use_autocast_, task_type="regression"
+    )
+    lg = out.float().permute(1, 0, 2)
+    z = torch.stack([(q - mu) / sd for mu, sd, q in extra])
+    return est.znorm_space_bardist_(lg, z).mean()

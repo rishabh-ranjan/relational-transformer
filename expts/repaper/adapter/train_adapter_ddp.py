@@ -20,7 +20,7 @@ def main(
     n_ctx_list: list[int],
     n_query: int,
     total_tasks_per_step: int,
-    tasks_per_micro: int,
+    micro_batch_list: list[int],
     total_steps: int,
     lr: float,
     wd: float,
@@ -57,12 +57,12 @@ def main(
 
     from expts.repaper.adapter.train_adapter import (
         Pool,
+        batched_loss,
         build_adapter,
         draw_fixed,
         evaluate_relbench,
         load_index,
         load_relbench,
-        loss_and_pred,
         make_ests,
         pick_task,
     )
@@ -91,11 +91,22 @@ def main(
     )
     is_main = rank == 0
 
-    assert total_tasks_per_step % (world_size * tasks_per_micro) == 0, (
-        f"total_tasks_per_step {total_tasks_per_step} not divisible by "
-        f"world_size {world_size} * tasks_per_micro {tasks_per_micro}"
+    assert len(micro_batch_list) == len(n_ctx_list), (
+        f"micro_batch_list {micro_batch_list} must align with n_ctx_list "
+        f"{n_ctx_list}"
     )
-    accum = total_tasks_per_step // (world_size * tasks_per_micro)
+    # One rung per STEP, as rt-j pretraining does (datasets.py:279): the rung
+    # fixes n_ctx, which fixes the micro-batch B that keeps peak memory flat,
+    # which fixes the accumulation count. Asserting exact divisibility means a
+    # bad rung fails at startup rather than silently training a different
+    # global batch.
+    accum_for = {}
+    for c, b in zip(n_ctx_list, micro_batch_list):
+        assert total_tasks_per_step % (world_size * b) == 0, (
+            f"total_tasks_per_step {total_tasks_per_step} not divisible by "
+            f"world_size {world_size} * micro_batch {b} for n_ctx {c}"
+        )
+        accum_for[c] = total_tasks_per_step // (world_size * b)
     assert min_rows >= min(n_ctx_list) + n_query, (
         f"min_rows {min_rows} cannot supply the shortest rung "
         f"{min(n_ctx_list)} + {n_query} queries"
@@ -170,11 +181,25 @@ def main(
 
     # THE point of this script: each rank must draw *different* tasks, or four
     # ranks compute one gradient four times and the batch is still 4 tasks.
+    # Task-type pools, so a micro-step can draw a homogeneous batch without
+    # changing the marginal: P(kind) is that kind's share of the mixture
+    # weight, and within a kind tasks keep their relative weights.
+    by_kind = {
+        k: [e for e in train_entries if e["task_type"] == k] for k in ("clf", "reg")
+    }
+    w_kind = {
+        k: np.array([e["weight"] for e in v], dtype=np.float64)
+        for k, v in by_kind.items()
+    }
+    p_kind = {k: w / w.sum() for k, w in w_kind.items()}
+    p_clf = w_kind["clf"].sum() / (w_kind["clf"].sum() + w_kind["reg"].sum())
+
     rng = np.random.default_rng(seed + 10_000 * rank)
     if is_main:
         print(
-            f"ddp: world_size {world_size}, {tasks_per_micro} tasks x {accum} "
-            f"accum x {world_size} ranks = {total_tasks_per_step} tasks/step",
+            f"ddp: world_size {world_size}, micro_batch {micro_batch_list} "
+            f"for n_ctx {n_ctx_list}, {total_tasks_per_step} tasks/step, "
+            f"P(clf) {p_clf:.3f}",
             flush=True,
         )
 
@@ -182,7 +207,6 @@ def main(
     logged_step, logged_t = 0, t0
     n_bad = n_degenerate = 0
     gnorms = []
-    scale = 1.0 / (world_size * accum * tasks_per_micro)
     for step in range(total_steps):
         for g in opt.param_groups:
             g["lr"] = lr_at(step)
@@ -190,37 +214,50 @@ def main(
         local_bad = 0
         loss_sum = torch.zeros(2, device=device)
         loss_cnt = torch.zeros(2, device=device)
-        for micro in range(accum):
-            # One rung per micro-step, shared by every draw in it, so their
-            # shapes match and they can be stacked. Seeded off (step, micro)
-            # and NOT off rank, so all ranks walk the same rung sequence and
-            # none straggles on a long rung while the others wait at the
-            # all_reduce -- rt-j pretraining does exactly this
-            # (datasets.py:279, random.Random(self.seed + step)).
-            rung = np.random.default_rng([seed, step, micro])
-            n_ctx = int(rung.choice(n_ctx_list))
-            for _ in range(tasks_per_micro):
-                e = pick_task(rng, train_entries, train_pool.p, n_ctx + n_query)
+        # One rung per step, and not seeded off rank, so every rank runs the
+        # same shape and none straggles at the all_reduce.
+        n_ctx = int(np.random.default_rng([seed, step]).choice(n_ctx_list))
+        micro_b = micro_batch_list[n_ctx_list.index(n_ctx)]
+        accum = accum_for[n_ctx]
+        scale = 1.0 / (world_size * accum * micro_b)
+        for _ in range(accum):
+            # A fused batch must be homogeneous in task type: task_type is one
+            # string per forward and selects both the target encoder and the
+            # output head. Drawing the type per micro-step in proportion to
+            # its share of the mixture weight keeps the marginal over tasks
+            # exactly right while making every batch stackable.
+            kind = "clf" if rng.random() < p_clf else "reg"
+            xs, ys = [], []
+            for _ in range(micro_b):
+                e = pick_task(
+                    rng, by_kind[kind], p_kind[kind], n_ctx + n_query
+                )
                 if e is None:
                     n_degenerate += 1
                     continue
                 emb, y = draw_fixed(rng, train_pool, e, n_ctx, n_query)
-                loss, _pred, _truth = loss_and_pred(
-                    ests, adapter, e["task_type"], emb, y, n_ctx, device
-                )
-                if loss is None:
+                x = adapter(emb.to(device).float())
+                yy = y.to(device)
+                if kind == "reg" and float(yy[:n_ctx].std()) < 1e-6:
                     n_degenerate += 1
                     continue
-                if not torch.isfinite(loss):
-                    local_bad += 1
+                if float(x[:n_ctx].std(dim=0).max()) == 0.0:
+                    n_degenerate += 1
                     continue
-                # Fixed denominator, not the number that survived: a rank that
-                # skips a draw contributes zero for it, which is what the
-                # single-gpu run does, and needs no extra collective.
-                (loss * scale).backward()
-                i = 0 if e["task_type"] == "clf" else 1
-                loss_sum[i] += float(loss)
-                loss_cnt[i] += 1
+                xs.append(x)
+                ys.append(yy)
+            if not xs:
+                continue
+            loss = batched_loss(ests[kind], kind, xs, ys, n_ctx, device)
+            if not torch.isfinite(loss):
+                local_bad += 1
+                continue
+            # scale is 1/(world_size*accum*micro_b) and batched_loss returns a
+            # mean over the batch, so multiply back by the draws in it.
+            (loss * scale * len(xs)).backward()
+            i = 0 if kind == "clf" else 1
+            loss_sum[i] += float(loss) * len(xs)
+            loss_cnt[i] += len(xs)
 
         # A step must be dropped on *every* rank or on none: if one rank skips
         # opt.step() the ranks' weights diverge permanently and the all_reduce

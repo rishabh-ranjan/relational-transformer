@@ -68,7 +68,9 @@ REPO_ROOT = str(Path(__file__).resolve().parents[3])
 # the GPU pipeline hashes via .numpy() AFTER the bf16 cast at
 # inference.py:1308), and that changes the model inputs. Measure d_out=64
 # on its own first -- if it drops peak memory enough, bf16 is not needed.
-ARMS = [("fp32", "join-v6-smoke-proj64")]
+# SMOKE first: 1 gpu, 5 steps, batched path, no eval, no wandb.
+ARMS = [("bf16", "join-v7-smoke-batched")]
+# ARMS = [("bf16", "join-v7-ddp-proj64-batched")]
 # ARMS = [(None, "join-v4-ddp-linear")]
 
 for autocast, RUN in ARMS:
@@ -94,7 +96,12 @@ for autocast, RUN in ARMS:
             # changing the rank count without changing this fails at startup rather
             # than silently running a different batch.
             total_tasks_per_step=128,
-            tasks_per_micro=4,
+            # Aligned with n_ctx_list. Chosen so peak memory is roughly flat
+            # across rungs and total_tasks_per_step divides exactly at every
+            # one. Measured frontier at d_out=64/bf16: s/draw is flat past
+            # B~8-12, so 32/16/8 captures essentially all of it while leaving
+            # over half the card free for the relbench eval draw.
+            micro_batch_list=[32, 16, 8],
             total_steps=5,
             lr=1e-4,
             # Zero, deliberately. AdamW's decay pulls a weight toward 0, and this
