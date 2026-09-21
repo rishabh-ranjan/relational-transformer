@@ -169,7 +169,10 @@ def main(
     tasks_per_step: int,
     total_steps: int,
     lr: float,
+    lr_min: float,
     wd: float,
+    adapter_kind: str,
+    hidden_dim: int,
     warmup_steps: int,
     grad_norm_max: float,
     eval_every: int,
@@ -231,13 +234,40 @@ def main(
     train_entries = load_index(features_root, min_rows)
     train_pool = Pool(train_entries)
 
-    # Identity, not Xavier: step 0 is then exactly the un-adapted rt-j
-    # featurizer, so every later step is attributable to training.
-    adapter = nn.Linear(d_feat, d_feat, bias=True).to(device)
-    with torch.no_grad():
-        adapter.weight.copy_(torch.eye(d_feat))
-        adapter.bias.zero_()
+    # No bias anywhere the output is read: TabPFN z-norms every column against
+    # the context, so an output bias is subtracted straight back off and its
+    # gradient is zero by construction.
+    if adapter_kind == "linear":
+        # Identity, not Xavier: step 0 is then exactly the un-adapted rt-j
+        # featurizer, so every later step is attributable to training.
+        adapter = nn.Linear(d_feat, d_feat, bias=False).to(device)
+        with torch.no_grad():
+            adapter.weight.copy_(torch.eye(d_feat))
+    elif adapter_kind == "mlp":
+        # A bottleneck cannot be initialised at identity, so unlike the linear
+        # arm this one does NOT start from the un-adapted featurizer: its step
+        # 0 is a random projection through 64 dims and is expected to be worse.
+        adapter = nn.Sequential(
+            nn.Linear(d_feat, hidden_dim, bias=True),
+            nn.ReLU(),
+            nn.Linear(hidden_dim, d_feat, bias=False),
+        ).to(device)
+        with torch.no_grad():
+            for m in adapter:
+                if isinstance(m, nn.Linear):
+                    nn.init.xavier_uniform_(m.weight)
+                    if m.bias is not None:
+                        m.bias.zero_()
+    else:
+        raise AssertionError(f"unknown adapter_kind {adapter_kind!r}")
+    init_flat = torch.cat([p.detach().flatten() for p in adapter.parameters()]).clone()
     opt = torch.optim.AdamW(adapter.parameters(), lr=lr, weight_decay=wd)
+
+    def lr_at(step):
+        if step < warmup_steps:
+            return lr * (step + 1) / warmup_steps
+        t = (step - warmup_steps) / max(1, total_steps - warmup_steps)
+        return lr_min + 0.5 * (lr - lr_min) * (1.0 + math.cos(math.pi * t))
 
     def tabpfn(task_type):
         cls = TabPFNClassifier if task_type == "clf" else TabPFNRegressor
@@ -348,10 +378,12 @@ def main(
     t0 = time.time()
     logged_step, logged_t = 0, t0
     n_bad = n_degenerate = 0
+    gnorm = float("nan")
     running = {"clf": [], "reg": []}
     for step in range(total_steps):
+        cur_lr = lr_at(step)
         for g in opt.param_groups:
-            g["lr"] = lr * min(1.0, (step + 1) / max(1, warmup_steps))
+            g["lr"] = cur_lr
         opt.zero_grad(set_to_none=True)
         # One task is one very correlated gradient, so a step is several of
         # them accumulated rather than a bigger draw from one task.
@@ -391,16 +423,25 @@ def main(
                 )
             opt.zero_grad(set_to_none=True)
         else:
-            torch.nn.utils.clip_grad_norm_(adapter.parameters(), grad_norm_max)
+            # clip_grad_norm_ returns the total norm *before* clipping, which
+            # is the quantity worth logging: after clipping it is just
+            # min(norm, grad_norm_max).
+            gnorm = float(
+                torch.nn.utils.clip_grad_norm_(adapter.parameters(), grad_norm_max)
+            )
             opt.step()
 
         if step % 20 == 0:
             msg = " ".join(
                 f"{k} {np.mean(v):.4f}" for k, v in running.items() if v
             )
-            dw = float((adapter.weight - torch.eye(d_feat, device=device)).norm())
+            flat = torch.cat([p.detach().flatten() for p in adapter.parameters()])
+            # dist_from_init is the comparable drift measure across both arms;
+            # w_minus_i only means anything for the identity-initialised
+            # linear one, where the two coincide.
+            drift = float((flat - init_flat).norm())
             print(
-                f"step {step:>6} {msg} |W-I| {dw:.4f} "
+                f"step {step:>6} {msg} drift {drift:.4f} "
                 f"dropped {n_bad} degen {n_degenerate} "
                 f"{(time.time() - t0) / 60:.1f} min",
                 flush=True,
@@ -418,7 +459,8 @@ def main(
                         "train/loss/mean": float(
                             np.mean([x for v in running.values() for x in v])
                         ),
-                        "train/w_minus_i": dw,
+                        "train/dist_from_init": drift,
+                        "train/grad_norm": gnorm,
                         "train/steps_dropped": n_bad,
                         "train/ctx_degenerate": n_degenerate,
                         "train/lr": opt.param_groups[0]["lr"],
