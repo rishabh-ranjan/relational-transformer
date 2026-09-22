@@ -76,7 +76,15 @@ REPO_ROOT = str(Path(__file__).resolve().parents[3])
 # batch, so 2500 steps at 1e-4 moves each weight at most ~0.25 in total.
 # With the gradient now at SNR ~0.95 rather than 0.084, bigger steps in a
 # trustworthy direction are the point.
-ARMS = [("bf16", "join-v8-ddp-proj64-cosine")]
+# v9: v8 with the cosine peak at 1e-3 instead of 5e-4. Adam's step is ~lr
+# regardless of batch size, so peak lr is what sets how far the adapter can
+# actually travel; v7 at a flat 1e-4 moves each weight at most ~0.25 over
+# 2500 steps. The gradient is now at SNR ~0.95 (B_simple = (18/0.76)^2 =
+# 561, so 512 draws is the canonical one-noise-scale operating point), so
+# the direction is worth taking big steps in. Runs alongside v8 as an lr
+# sweep; everything else is identical.
+ARMS = [("bf16", "join-v9-ddp-proj64-cosine1e-3")]
+# ARMS = [("bf16", "join-v8-ddp-proj64-cosine")]
 # ARMS = [("bf16", "join-v7-ddp-proj64-batched")]
 # ARMS = [(None, "join-v4-ddp-linear")]
 
@@ -110,7 +118,7 @@ for autocast, RUN in ARMS:
             # over half the card free for the relbench eval draw.
             micro_batch_list=[32, 16, 8],
             total_steps=10_000,
-            lr=5e-4,
+            lr=1e-3,
             lr_min=1e-5,
             # Zero, deliberately. AdamW's decay pulls a weight toward 0, and this
             # weight starts at I -- decaying it is decaying the rt-j featurizer
