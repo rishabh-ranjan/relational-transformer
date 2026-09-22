@@ -167,6 +167,26 @@ def build_adapter(adapter_kind, d_feat, d_out, hidden_dim, stats_path, device):
                     nn.init.xavier_uniform_(m.weight)
                     if m.bias is not None:
                         m.bias.zero_()
+    elif adapter_kind == "swiglu":
+        # rt-j's own FFN shape (model/net.py:88-99): w2(silu(w1(x)) * w3(x)),
+        # every bias off. One difference: net.py zero-inits w2 because that FFN
+        # sits in a residual block and so starts as a no-op. There is no
+        # residual here, so a zero w2 would emit an all-constant feature matrix
+        # and TabPFN's RemoveConstantFeaturesStep would raise on the first
+        # draw. Xavier throughout instead.
+        class SwiGLU(nn.Module):
+            def __init__(self, d_in, d_hidden, d_out):
+                super().__init__()
+                self.w1 = nn.Linear(d_in, d_hidden, bias=False)
+                self.w3 = nn.Linear(d_in, d_hidden, bias=False)
+                self.w2 = nn.Linear(d_hidden, d_out, bias=False)
+                for m in (self.w1, self.w2, self.w3):
+                    nn.init.xavier_uniform_(m.weight)
+
+            def forward(self, x):
+                return self.w2(nn.functional.silu(self.w1(x)) * self.w3(x))
+
+        head = SwiGLU(d_feat, hidden_dim, d_out)
     else:
         raise AssertionError(f"unknown adapter_kind {adapter_kind!r}")
     return nn.Sequential(standardize, head).to(device)

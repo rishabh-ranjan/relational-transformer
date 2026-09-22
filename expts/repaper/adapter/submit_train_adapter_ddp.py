@@ -91,7 +91,11 @@ REPO_ROOT = str(Path(__file__).resolve().parents[3])
 # 192924 stopped with USR1 at step 14, 192932 and 192937 resumed at step 15
 # with swa n and the AdamW moments intact). il-lo is therefore open; the
 # qos below is the only line that has to change for it.
-ARMS = [("bf16", "join-v10-ddp-proj64-swa")]
+# v10: v9's recipe with a SwiGLU adapter instead of a linear map --
+# 512 -> 64 -> 64, rt-j's own FFN shape (net.py:88-99). On il-lo, which is
+# only safe now that the trainer resumes from resume.pt after a preempt.
+ARMS = [("bf16", "join-v10-ddp-swiglu64")]
+# ARMS = [("bf16", "join-v9-ddp-proj64-cosine1e-3")]
 # ARMS = [("bf16", "join-v9-ddp-proj64-cosine1e-3")]
 # ARMS = [("bf16", "join-v8-ddp-proj64-cosine")]
 # ARMS = [("bf16", "join-v7-ddp-proj64-batched")]
@@ -148,8 +152,8 @@ for autocast, RUN in ARMS:
             # gauges.
             swa_momentum=0.9995,
             precision=autocast,
-            adapter_kind="linear",
-            hidden_dim=0,
+            adapter_kind="swiglu",
+            hidden_dim=64,
             # At ~70 s/step these are ~30 min and ~1 h of wall clock, not the
             # 10 min and 20 min they were on one gpu.
             # 4x the steps, so eval and checkpoint cadence scale with it:
@@ -175,8 +179,8 @@ for autocast, RUN in ARMS:
             # Now that the run writes resume.pt and picks it back up, il-lo is
             # open: uncapped instead of 10 a100s, 21 d instead of 7, at the
             # price of a requeue that costs the minutes since the last save.
-            qos="il",
-            # qos="il-lo",
+            # qos="il",
+            qos="il-lo",
             # ~49 h at 70 s/step; 72 leaves room for a slow node.
             # ~8.3 h at 0.0938 s/draw; 24 leaves room for a slow node.
         # ~15 h train + ~2.1 h eval; 48 h leaves room for a slow node.
