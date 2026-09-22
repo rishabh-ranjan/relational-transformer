@@ -32,23 +32,11 @@ from expts.repaper.config import CKPT, CLONE_ROOT, LOG_ROOT, SECRETS_DIR, SHARE
 PRE_DIR = "~/scratch/hf/stanford-star/the-join-preprocessed"
 REPO_ROOT = str(Path(__file__).resolve().parents[3])
 
-# rustler stores exactly MAX_F2P_NBRS = 5 f2p neighbours per cell (fly.rs:47)
-# and a row in a wider table panics seq_build, which then swaps in a different
-# random row rather than failing. Seven of the 523 dbs have such a table --
-# 2.2% of tasks, 2.7% of the mixture weight -- and they are what made two
-# shards spin for an hour writing a gigabyte of panic messages each. The
-# comment is the widest table's fkey count, from the manifests; the
+# The 7 dbs with a table over 5 fkeys. Moved next to the featurizer so every
+# dump of this corpus inherits the exclusion; see the comment there. The
 # preprocessing pipeline applies the same MAX_FKEYS = 5 rule
 # (expts/preprocess/plurel_filtered_list.py) but this build predates it.
-EXCLUDE_DBS = {
-    "join-airline",  # 33
-    "join-bird-european-football-2",  # 26
-    "join-bird-soccer-2016",  # 10
-    "join-tubepricing",  # 10
-    "join-adventureworks2014",  # 8
-    "join-bird-superhero",  # 7
-    "join-spider-voter-2",  # 6
-}
+from expts.repaper.adapter.featurize_target_cells import EXCLUDE_DBS
 
 # 4 b200 and 20 a100. A b200 is ~2.5x an a100 per step (expts/fine_tune), so the
 # b200 shards carry 2.5x the rows and every shard lands at about the same wall
@@ -144,6 +132,7 @@ for i, (card, dbs, rows) in enumerate(shards()):
             batch_size=1024,
             min_rows=128,
             max_rows=4096,
+            rows_plan_path=None,
             expected_gib=rows * 1024 / 2**30 * 1.2,
         ),
         resources=Resources(

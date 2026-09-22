@@ -14,6 +14,22 @@ BLACKLIST = {
     ("join-europeana", "items-year"),
 }
 
+# rustler stores exactly MAX_F2P_NBRS = 5 f2p neighbours per cell (fly.rs:47)
+# and a row in a wider table panics seq_build, which then swaps in a different
+# random row rather than failing. Seven of the 523 dbs have such a table --
+# 2.2% of tasks, 2.7% of the mixture weight -- and they are what made two
+# shards spin for an hour writing a gigabyte of panic messages each. The
+# comment is the widest table's fkey count, from the manifests.
+EXCLUDE_DBS = {
+    "join-airline",  # 33
+    "join-bird-european-football-2",  # 26
+    "join-bird-soccer-2016",  # 10
+    "join-tubepricing",  # 10
+    "join-adventureworks2014",  # 8
+    "join-bird-superhero",  # 7
+    "join-spider-voter-2",  # 6
+}
+
 
 def listed_tasks(pre_dir: str, db: str, db_task_list: str) -> list[tuple[str, object]]:
     from rt.data import get_tasks, resolve_db_task_list
@@ -68,6 +84,7 @@ def featurize_dbs(
     min_rows: int,
     max_rows: int,
     expected_gib: float,
+    rows_plan_path: str | None,
 ) -> None:
     import time
 
@@ -89,9 +106,22 @@ def featurize_dbs(
     # construction, not merely the same layer, and RelBench needs no dump of its
     # own -- rt_features already holds every row of all 21 tasks.
 
+    plan = None
+    if rows_plan_path:
+        doc = json.loads(Path(rows_plan_path).expanduser().read_text())
+        plan = doc["rows"]
+        print(
+            f"row plan: {len(plan)} tasks, alpha {doc['alpha']:.6f}, "
+            f"floor {doc['floor']}, {doc['sum_requested']:,} rows requested",
+            flush=True,
+        )
+
     total_written = 0
     t_start = time.time()
     for db in dbs:
+        if db in EXCLUDE_DBS:
+            print(f"[{db}] excluded: a table over 5 fkeys, skipping", flush=True)
+            continue
         named = listed_tasks(pre_dir, db, db_task_list)
         if not named:
             print(f"[{db}] no listed task in this build, skipping", flush=True)
@@ -136,13 +166,20 @@ def featurize_dbs(
         )
 
         db_written = 0
-        n_done = n_skipped = db_sub = 0
+        n_done = n_skipped = db_sub = n_unplanned = 0
         for dataset_idx, (name, task) in enumerate(named):
             bin_path = out_dir / f"{name}_target.bin"
             meta_path = out_dir / f"{name}_meta.json"
             if bin_path.exists() and meta_path.exists():
                 n_done += 1
                 continue
+
+            want = max_rows
+            if plan is not None:
+                want = plan.get(f"{db}/{name}")
+                if want is None:
+                    n_unplanned += 1
+                    continue
 
             rows, total_nodes = pool_rows(
                 np,
@@ -151,7 +188,7 @@ def featurize_dbs(
                 name=name,
                 table=task.table_name,
                 shuffle_seed=shuffle_seed,
-                max_rows=max_rows,
+                max_rows=want,
             )
             if len(rows) < min_rows:
                 n_skipped += 1
@@ -286,6 +323,8 @@ def featurize_dbs(
                         # so P(task) is set by this, not by what we dumped.
                         "total_nodes": total_nodes,
                         "sampled_rows": n_rows,
+                        "requested_rows": int(want),
+                        "row_rule": "prop" if plan is not None else "cap",
                         # Rows seq() could not build and silently swapped out,
                         # dropped here rather than written under the wrong node.
                         "n_substituted": n_sub,
@@ -310,8 +349,8 @@ def featurize_dbs(
 
         gib = total_written / 2**30
         print(
-            f"[{db}] {n_done} tasks, {n_skipped} skipped, {db_sub} substituted "
-            f"rows dropped, {db_written / 2**20:.0f} MiB "
+            f"[{db}] {n_done} tasks, {n_skipped} skipped, {n_unplanned} not in "
+            f"plan, {db_sub} substituted rows dropped, {db_written / 2**20:.0f} MiB "
             f"| cumulative {gib:.2f} of an expected "
             f"{expected_gib:.2f} GiB, {(time.time() - t_start) / 60:.1f} min",
             flush=True,
