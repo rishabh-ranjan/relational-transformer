@@ -174,10 +174,10 @@ def featurize_dbs(
                 n_done += 1
                 continue
 
-            want = max_rows
+            want_rows = max_rows
             if plan is not None:
-                want = plan.get(f"{db}/{name}")
-                if want is None:
+                want_rows = plan.get(f"{db}/{name}")
+                if want_rows is None:
                     n_unplanned += 1
                     continue
 
@@ -188,7 +188,7 @@ def featurize_dbs(
                 name=name,
                 table=task.table_name,
                 shuffle_seed=shuffle_seed,
-                max_rows=want,
+                max_rows=want_rows,
             )
             if len(rows) < min_rows:
                 n_skipped += 1
@@ -323,7 +323,7 @@ def featurize_dbs(
                         # so P(task) is set by this, not by what we dumped.
                         "total_nodes": total_nodes,
                         "sampled_rows": n_rows,
-                        "requested_rows": int(want),
+                        "requested_rows": int(want_rows),
                         "row_rule": "prop" if plan is not None else "cap",
                         # Rows seq() could not build and silently swapped out,
                         # dropped here rather than written under the wrong node.
