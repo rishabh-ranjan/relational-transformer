@@ -13,6 +13,12 @@ import numpy as np  # noqa: E402
 import torch  # noqa: E402
 
 HERE = Path(__file__).resolve().parent
+# Reports live in results/ in the TASK tree, not the repo (result-reporting
+# skill). HERE is still the repo dir and is what git provenance is read from.
+OUT = Path(
+    "/lfs/furiosa/0/vedanga/ctui-tasks/furiosa.stanford.edu"
+    "/TASK_20260918_160208/results"
+)
 RESULTS_JSON = Path(
     "~/scratch/relational-transformer/repaper/adapter/swa-eval-v8/results.json"
 ).expanduser()
@@ -193,7 +199,7 @@ fig.suptitle(
     color=INK, fontsize=11, x=0.01, y=0.99, ha="left", va="top",
 )
 fig.tight_layout(rect=(0, 0, 1, 0.95))
-fig.savefig(HERE / "swa_v8_curves.png", dpi=170, facecolor=SURFACE)
+fig.savefig(OUT / "swa_v8_curves.png", dpi=170, facecolor=SURFACE)
 plt.close(fig)
 
 fig, axes = plt.subplots(1, 4, figsize=(12, 3.0), facecolor=SURFACE)
@@ -216,7 +222,7 @@ fig.suptitle(
     color=INK, fontsize=11, x=0.01, y=0.99, ha="left", va="top",
 )
 fig.tight_layout(rect=(0, 0, 1, 0.90))
-fig.savefig(HERE / "swa_v8_bootstrap.png", dpi=170, facecolor=SURFACE)
+fig.savefig(OUT / "swa_v8_bootstrap.png", dpi=170, facecolor=SURFACE)
 plt.close(fig)
 
 fig, ax = plt.subplots(figsize=(7.2, 3.4), facecolor=SURFACE)
@@ -237,11 +243,11 @@ fig.suptitle(
     color=INK, fontsize=11, x=0.01, y=0.99, ha="left", va="top",
 )
 fig.tight_layout(rect=(0, 0, 1, 0.90))
-fig.savefig(HERE / "swa_v8_geometry.png", dpi=170, facecolor=SURFACE)
+fig.savefig(OUT / "swa_v8_geometry.png", dpi=170, facecolor=SURFACE)
 plt.close(fig)
 
 # ---------------- result object + provenance ----------------
-(HERE / "swa_v8_result.pkl").write_bytes(
+(OUT / "swa_v8_result.pkl").write_bytes(
     pickle.dumps(
         {
             "config": {
@@ -269,7 +275,7 @@ sacct = subprocess.run(
 ).stdout.strip().splitlines()
 st = {l.split("|")[0]: l.split("|") for l in sacct}
 
-prov = HERE / "swa_v8_provenance.csv"
+prov = OUT / "swa_v8_provenance.csv"
 with prov.open("w", newline="") as f:
     w = csv.writer(f)
     w.writerow(
@@ -539,8 +545,8 @@ checkpoints. **One node and one commit per row**; the eval ran entirely on
   then `PYTHONPATH=. pixi run -e default python /lfs/furiosa/0/vedanga/ctui-tasks/furiosa.stanford.edu/TASK_20260918_160208/results/make_swa_report.py`.
 """
 
-(HERE / "swa_v8.md").write_text(md)
-print(f"wrote {HERE / 'swa_v8.md'}")
+(OUT / "swa_v8.md").write_text(md)
+print(f"wrote {OUT / 'swa_v8.md'}")
 print(f"tests flagged: {len(flagged)} / {n_tests}")
 for l in flagged:
     print("  " + l)
