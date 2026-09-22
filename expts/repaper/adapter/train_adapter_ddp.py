@@ -1,5 +1,6 @@
 import math
 import os
+import signal
 import time
 from pathlib import Path
 
@@ -34,6 +35,7 @@ def main(
     precision: str,
     eval_every: int,
     save_every: int,
+    resume_save_mins: float,
     seed: int,
     targets: dict[str, float],
     run_id: str,
@@ -167,6 +169,58 @@ def main(
     for prm in swa_adapter.parameters():
         prm.requires_grad_(False)
 
+    # Preemption resume, copied from rt-j pretraining (_train.py:405 loads,
+    # :613 saves). This is what makes il-lo usable: slurm requeues a preempted
+    # job with the same run id and out_dir, and this file is the difference
+    # between the second attempt continuing and it starting over.
+    #
+    # Rank 0 reads and broadcasts rather than every rank opening the file. The
+    # invariant the script rests on is that the ranks hold bit-identical
+    # weights after every opt.step() -- the broadcast at init and the
+    # all-reduced bad-step flag below are both there to keep it -- and a resume
+    # has to re-establish it. Broadcasting gives that by construction: one
+    # decision about whether a resume file exists at all, so no rank can start
+    # fresh while the others resume, and one set of bytes installed everywhere,
+    # so no question of when a write becomes visible on which node. The blob is
+    # ~5 MB for a 262k-parameter adapter, so it costs nothing to send.
+    resume_path = out / "resume.pt"
+    start_step = 0
+    n_bad = n_degenerate = 0
+    gnorms = []
+    elapsed = 0.0
+    blob = [
+        torch.load(resume_path, map_location="cpu", weights_only=True)
+        if is_main and resume_path.exists()
+        else None
+    ]
+    dist.broadcast_object_list(blob, src=0, device=torch.device(device))
+    ck = blob[0]
+    if ck is not None:
+        adapter.load_state_dict(ck["adapter"])
+        # AdamW's exp_avg/exp_avg_sq, and its step counter with them. Dropping
+        # these is not cosmetic: the second moment needs ~1/(1-beta2) = 1000
+        # steps to re-warm, and until it has, every weight takes a step of
+        # roughly the full lr in whatever direction the first minibatch after
+        # the restart points.
+        opt.load_state_dict(ck["opt"])
+        # Asserts the momentum matches, so resuming into a different
+        # swa_momentum fails here rather than silently averaging two windows.
+        swa.load_state_dict(ck["swa"])
+        # From the blob, not recomputed: dist_from_init is measured against the
+        # weights the run *started* from, which after a restart are no longer
+        # the weights in the adapter.
+        init_flat = ck["init_flat"].to(device)
+        start_step = ck["step"]
+        n_bad, n_degenerate = ck["n_bad"], ck["n_degenerate"]
+        gnorms = ck["gnorms"]
+        elapsed = ck["elapsed"]
+        if is_main:
+            print(
+                f"resumed from {resume_path} at step {start_step}, "
+                f"swa n {swa.n}, {elapsed / 60:.1f} min already spent",
+                flush=True,
+            )
+
     def lr_at(step):
         # Warmup, then cosine lr -> lr_min over the remaining steps.
         if step < warmup_steps:
@@ -214,7 +268,6 @@ def main(
     p_kind = {k: w / w.sum() for k, w in w_kind.items()}
     p_clf = w_kind["clf"].sum() / (w_kind["clf"].sum() + w_kind["reg"].sum())
 
-    rng = np.random.default_rng(seed + 10_000 * rank)
     if is_main:
         print(
             f"ddp: world_size {world_size}, micro_batch {micro_batch_list} "
@@ -223,11 +276,65 @@ def main(
             flush=True,
         )
 
-    t0 = time.time()
-    logged_step, logged_t = 0, t0
-    n_bad = n_degenerate = 0
-    gnorms = []
-    for step in range(total_steps):
+    # Shifted back by the time earlier attempts spent, so train/minutes is the
+    # run's wall clock and not this attempt's.
+    t0 = time.time() - elapsed
+    logged_step, logged_t = start_step, time.time()
+    last_resume_t = time.perf_counter()
+
+    def save_resume(next_step):
+        if not is_main:
+            return
+        # Temp file then os.replace: preemption can land in the middle of this
+        # write, and a truncated resume.pt is worse than none -- the requeued
+        # attempt would fail to load it and start from zero.
+        tmp = out / f"resume.pt.{os.getpid()}.tmp"
+        try:
+            with open(tmp, "wb") as f:
+                torch.save(
+                    {
+                        "step": next_step,
+                        "adapter": {
+                            k: v.detach().cpu()
+                            for k, v in adapter.state_dict().items()
+                        },
+                        "opt": opt.state_dict(),
+                        "swa": swa.state_dict(),
+                        "init_flat": init_flat.detach().cpu(),
+                        "n_bad": n_bad,
+                        "n_degenerate": n_degenerate,
+                        "gnorms": gnorms,
+                        "elapsed": time.time() - t0,
+                    },
+                    f,
+                )
+                f.flush()
+                os.fsync(f.fileno())
+            os.replace(tmp, resume_path)
+        except BaseException:
+            tmp.unlink(missing_ok=True)
+            raise
+
+    # One rank per gpu is one slurm task per gpu, so preemption's SIGTERM
+    # reaches every rank directly, and roach's batch script turns the wall
+    # clock into the same SIGTERM (bootstrap.sh:220) so the two look identical
+    # from here. USR1 as well: that is what stopping a run by hand sends
+    # (pkill -USR1 -f roach.slurm.run). Without a handler the default
+    # disposition kills the process outright and the step in flight is lost.
+    caught = {"flag": False}
+
+    def _on_signal(signum, frame):
+        caught["flag"] = True
+        print(
+            f"rank {rank} caught signal {signum}: save resume and exit at the "
+            f"next step boundary",
+            flush=True,
+        )
+
+    signal.signal(signal.SIGTERM, _on_signal)
+    signal.signal(signal.SIGUSR1, _on_signal)
+
+    for step in range(start_step, total_steps):
         for g in opt.param_groups:
             g["lr"] = lr_at(step)
         opt.zero_grad(set_to_none=True)
@@ -239,6 +346,13 @@ def main(
         n_ctx = int(np.random.default_rng([seed, step]).choice(n_ctx_list))
         micro_b = micro_batch_list[n_ctx_list.index(n_ctx)]
         accum = accum_for[n_ctx]
+        # Reseeded per step from (seed, rank, step) instead of one stream
+        # carried through the run, so the task draws are a pure function of
+        # those three -- as the rung already is. That is what makes the sampler
+        # need no checkpointing at all: a resumed attempt draws exactly what an
+        # uninterrupted one would have drawn at that step, so it can neither
+        # repeat the tasks it already saw nor land on another rank's.
+        rng = np.random.default_rng([seed, rank, step])
         scale = 1.0 / (world_size * accum * micro_b)
         for _ in range(accum):
             # A fused batch must be homogeneous in task type: task_type is one
@@ -288,11 +402,18 @@ def main(
             p.grad is not None and not torch.isfinite(p.grad).all()
             for p in adapter.parameters()
         )
-        bad = torch.tensor(
-            float(local_bad + nonfinite_grad), device=device, dtype=torch.float64
+        # The preempt flag rides along in the same all_reduce: stopping, like
+        # dropping a step, must happen on every rank or on none, or the ranks
+        # that kept going would block in the next collective until the hour
+        # timeout.
+        flags = torch.tensor(
+            [float(local_bad + nonfinite_grad), float(caught["flag"])],
+            device=device,
+            dtype=torch.float64,
         )
-        dist.all_reduce(bad, op=dist.ReduceOp.SUM)
-        if float(bad) > 0:
+        dist.all_reduce(flags, op=dist.ReduceOp.SUM)
+        bad, preempt = float(flags[0]), float(flags[1]) > 0
+        if bad > 0:
             n_bad += 1
             if is_main and (n_bad <= 20 or n_bad % 100 == 0):
                 print(f"step {step:>6} non-finite on some rank, dropped", flush=True)
@@ -456,6 +577,26 @@ def main(
                 },
                 out / f"adapter_step{step}.pt",
             )
+
+        # step + 1: this step is done, so the next attempt starts at the next
+        # one. Time-based, as pretraining's resume_save_mins is
+        # (pretrain/submit_ilc.py:65), because preemption is a wall-clock event
+        # and a step-based cadence bounds the loss in steps, not in minutes.
+        if preempt or time.perf_counter() - last_resume_t >= resume_save_mins * 60:
+            save_resume(step + 1)
+            last_resume_t = time.perf_counter()
+            if is_main:
+                print(f"step {step:>6} resume saved", flush=True)
+        if preempt:
+            if is_main:
+                print(f"step {step:>6} preempted, exiting to be requeued", flush=True)
+            if use_wandb:
+                wandb.finish()
+            # Rank 0 has written the file by now; the barrier only keeps a fast
+            # rank from tearing down nccl under a slow one.
+            dist.barrier()
+            dist.destroy_process_group()
+            return
 
     swa.sync_to(swa_adapter.named_parameters())
     if is_main:

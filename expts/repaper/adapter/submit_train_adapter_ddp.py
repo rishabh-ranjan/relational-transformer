@@ -151,6 +151,11 @@ for autocast, RUN in ARMS:
             # over 10k steps would cost 8.5 h of the ~17 h run.
             eval_every=100,
             save_every=200,
+            # rt-j pretraining's cadence (pretrain/submit_ilc.py:65). Time and
+            # not steps because preemption is a wall-clock event: what a
+            # requeue costs is the minutes since the last write, and on il-lo
+            # slurm gives 300 s of grace, so at worst 20 min is redone.
+            resume_save_mins=20.0,
             seed=0,
             targets={"val/auroc": 0.7173, "val/nmae": 0.3584},
             run_name=f"adapter-{RUN}",
@@ -161,7 +166,11 @@ for autocast, RUN in ARMS:
         resources=Resources(
             partition="il",
             account="infolab",
+            # Now that the run writes resume.pt and picks it back up, il-lo is
+            # open: uncapped instead of 10 a100s, 21 d instead of 7, at the
+            # price of a requeue that costs the minutes since the last save.
             qos="il",
+            # qos="il-lo",
             # ~49 h at 70 s/step; 72 leaves room for a slow node.
             # ~8.3 h at 0.0938 s/draw; 24 leaves room for a slow node.
         # ~15 h train + ~2.1 h eval; 48 h leaves room for a slow node.
