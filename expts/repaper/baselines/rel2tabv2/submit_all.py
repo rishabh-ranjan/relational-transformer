@@ -122,6 +122,21 @@ def queued() -> set[str]:
 busy = queued()
 skipped_no_blob = []
 
+# Backfill under a two-a100 budget. entity-exaone is the only arm with cells
+# left, and EXAONE cannot go to the idle rtx8000s -- its attention calls
+# F.scaled_dot_product_attention, which has no sm_75 kernel (the rel-event wave
+# lost 64 jobs to exactly that). So the four run two at a time: 192955 holds one
+# slot, the first submission below takes the other, and the rest wait on a
+# predecessor so nothing ever makes a third.
+#
+# Set to None to submit normally again.
+CHAIN_AFTER = {
+    ("rel-hm", "item-sales"): None,
+    ("rel-stack", "post-votes"): "192955",
+    ("rel-trial", "site-success"): ("rel-hm", "item-sales"),
+}
+chained: dict[tuple[str, str], str] = {}
+
 for db, table in TASKS:
     for arm, (
         method,
@@ -138,7 +153,10 @@ for db, table in TASKS:
         if not blob_ready(features_root, subdir, db, table):
             skipped_no_blob.append(f"{arm}/{db}/{table}")
             continue
-        submit(
+        after = CHAIN_AFTER.get((db, table), None) if CHAIN_AFTER else None
+        if isinstance(after, tuple):
+            after = chained[after]
+        job = submit(
             "expts.repaper.baselines.rel2tabv2.run:main",
             args=dict(
                 method=method,
@@ -226,7 +244,9 @@ for db, table in TASKS:
             log_root=f"{LOG_ROOT}/repaper/baselines/slurm-logs",
             clone_root=CLONE_ROOT,
             secrets_dir=SECRETS_DIR,
+            after=after,
         )
+        chained[(db, table)] = job.id
 
 if skipped_no_blob:
     print(f"\n{len(skipped_no_blob)} runs waiting on a blob:")
