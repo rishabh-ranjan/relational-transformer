@@ -3,6 +3,22 @@ import time
 from pathlib import Path
 
 
+def _flat(block, n_rows, block_names, what):
+    """One row per task row, some number of columns, or a named failure.
+
+    Reshaping rather than trusting the rank puts a per-row scalar (1-D, length
+    n) and a per-row vector on the same footing, and the asserts turn anything
+    else into a message that names the block instead of an "IndexError:
+    Dimension out of range" from torch.cat three lines later (job 192868).
+    """
+    assert block.shape[0] == n_rows, f"{what}: {block.shape[0]} rows, expected {n_rows}"
+    flat = block.reshape(n_rows, -1)
+    assert flat.shape[1] == len(block_names), (
+        f"{what}: {flat.shape[1]} columns but {len(block_names)} names"
+    )
+    return flat
+
+
 def featurize_db(
     *,
     db: str,
@@ -98,6 +114,7 @@ def featurize_db(
         entity_sel = torch.from_numpy(entity_idx)
         cutoff = np.concatenate([to_unix_time(f[task.time_col]) for f in frames])
 
+        n_rows_out = len(entity_idx)
         tf = data[task.entity_table].tf
         blocks, names, skipped = [], [], []
         for st, cols in tf.col_names_dict.items():
@@ -109,12 +126,13 @@ def featurize_db(
                 if block.dim() == 2:
                     block = block.unsqueeze(-1)
                 per_col = block.shape[-1]
-                blocks.append(block.reshape(len(entity_idx), -1))
-                names += [
+                nm = [
                     f"{c}[{i}]" if per_col > 1 else c
                     for c in cols
                     for i in range(per_col)
                 ]
+                blocks.append(_flat(block, n_rows_out, nm, f"{st} block"))
+                names += nm
             elif hasattr(feat, "values") and hasattr(feat, "offset"):
                 # MultiEmbeddingTensor: the text columns after the embedder, so
                 # each column is a fixed width and they sit concatenated in
@@ -124,12 +142,17 @@ def featurize_db(
                 # skipped: on rel-f1's drivers these five columns are 1500 of
                 # the row's 1510 features.
                 bounds = feat.offset.tolist()
-                blocks.append(feat[entity_sel].values.float())
-                names += [
+                nm = [
                     f"{cols[j]}[{i}]"
                     for j in range(len(cols))
                     for i in range(bounds[j + 1] - bounds[j])
                 ]
+                blocks.append(
+                    _flat(
+                        feat[entity_sel].values.float(), n_rows_out, nm, f"{st} block"
+                    )
+                )
+                names += nm
             else:
                 # MultiNestedTensor: one cell holds a variable-length list, so
                 # there is no fixed width to flatten into. Skipped rather than
@@ -147,15 +170,33 @@ def featurize_db(
         # The task row's own non-target columns. The entity id is deliberately
         # included: it is what the task table carries, and a predictor is free
         # to ignore it.
-        blocks.append(torch.from_numpy(entity_idx).float().unsqueeze(1))
-        names.append(f"__entity__{task.entity_col}")
-        blocks.append(torch.from_numpy(cutoff).float().unsqueeze(1))
-        names.append(f"__cutoff__{task.time_col}")
-
+        for block, nm, what in [
+            (
+                torch.from_numpy(entity_idx).float(),
+                f"__entity__{task.entity_col}",
+                "entity id",
+            ),
+            (torch.from_numpy(cutoff).float(), f"__cutoff__{task.time_col}", "cutoff"),
+        ]:
+            blocks.append(_flat(block, n_rows_out, [nm], what))
+            names.append(nm)
         if "time" in data[task.entity_table]:
             ent_time = data[task.entity_table].time[entity_sel].float()
-            blocks.append((torch.from_numpy(cutoff).float() - ent_time).unsqueeze(1))
+            age = torch.from_numpy(cutoff).float() - ent_time
+            blocks.append(
+                _flat(age, n_rows_out, ["__entity_age_seconds__"], "entity age")
+            )
             names.append("__entity_age_seconds__")
+
+        # An entity table whose every column was variable-width leaves only the
+        # id and the cutoff. That is a real, if thin, arm -- but it is not what
+        # the blob claims to be, so say it in the log.
+        if not names[:-2]:
+            print(
+                f"[{db}] {table}: entity table {task.entity_table} contributed "
+                f"no fixed-width columns; features are the id and cutoff only",
+                flush=True,
+            )
 
         feats = torch.cat(blocks, dim=1).numpy().astype(np.float32)
         assert feats.shape[0] == total_nodes, f"{feats.shape[0]} vs {total_nodes}"
