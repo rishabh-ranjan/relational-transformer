@@ -536,7 +536,7 @@ checkpoints. **One node and one commit per row**; the eval ran entirely on
   relbench labels `~/scratch/hf/relational-transformer/repaper/labels_relbench`;
   TabPFN `~/scratch/hf/relational-transformer/repaper/tabpfn`.
 - Reproduce: `PYTHONPATH=. pixi run -e default python expts/repaper/adapter/submit_swa_eval.py`
-  then `PYTHONPATH=. pixi run -e default python expts/repaper/adapter/results/make_swa_report.py`.
+  then `PYTHONPATH=. pixi run -e default python /lfs/furiosa/0/vedanga/ctui-tasks/furiosa.stanford.edu/TASK_20260918_160208/results/make_swa_report.py`.
 """
 
 (HERE / "swa_v8.md").write_text(md)
