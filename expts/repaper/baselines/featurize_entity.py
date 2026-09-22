@@ -50,6 +50,7 @@ def featurize_db(
     from relbench.modeling.graph import make_pkey_fkey_graph
     from relbench.modeling.utils import get_stype_proposal, to_unix_time
     from torch_frame.config.text_embedder import TextEmbedderConfig
+    from torch_frame.data import MultiEmbeddingTensor
 
     from expts.repaper.baselines.gnn_text_embedder import GloveTextEmbedding
     from expts.repaper.baselines.rel2tab.featurizer import (
@@ -133,14 +134,19 @@ def featurize_db(
                 ]
                 blocks.append(_flat(block, n_rows_out, nm, f"{st} block"))
                 names += nm
-            elif hasattr(feat, "values") and hasattr(feat, "offset"):
-                # MultiEmbeddingTensor: the text columns after the embedder, so
-                # each column is a fixed width and they sit concatenated in
-                # .values with .offset giving the boundaries. It is not a
-                # torch.Tensor and reports shape (rows, cols, -1), so it has to
-                # be unpacked rather than indexed like one -- and it must not be
-                # skipped: on rel-f1's drivers these five columns are 1500 of
-                # the row's 1510 features.
+            elif isinstance(feat, MultiEmbeddingTensor):
+                # The text columns after the embedder: each is a fixed width
+                # and they sit concatenated in .values with .offset giving the
+                # boundaries. Not a torch.Tensor, and it reports shape
+                # (rows, cols, -1), so it is unpacked rather than indexed -- and
+                # it must not be skipped: on rel-f1's drivers these five columns
+                # are 1500 of the row's 1509 features.
+                #
+                # isinstance, not hasattr(values, offset): MultiNestedTensor has
+                # both of those too, and its .values is a 1-D concatenation of
+                # variable-length lists. Duck-typing here sent rel-amazon's
+                # `product` multicategorical column down this branch and gave a
+                # 1-D block (192868).
                 bounds = feat.offset.tolist()
                 nm = [
                     f"{cols[j]}[{i}]"
@@ -154,7 +160,8 @@ def featurize_db(
                 )
                 names += nm
             else:
-                # MultiNestedTensor: one cell holds a variable-length list, so
+                # MultiNestedTensor and anything else: one cell holds a
+                # variable-length list, so
                 # there is no fixed width to flatten into. Skipped rather than
                 # summarised, because any summary (count, first k) would be a
                 # modelling choice smuggled into a featurizer whose point is
