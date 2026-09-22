@@ -83,7 +83,10 @@ REPO_ROOT = str(Path(__file__).resolve().parents[3])
 # 561, so 512 draws is the canonical one-noise-scale operating point), so
 # the direction is worth taking big steps in. Runs alongside v8 as an lr
 # sweep; everything else is identical.
-ARMS = [("bf16", "join-v9-ddp-proj64-cosine1e-3")]
+# v10: v9 plus an EMA of the head weights, evaluated and checkpointed
+# alongside the live iterate. Nothing about training changes.
+ARMS = [("bf16", "join-v10-ddp-proj64-swa")]
+# ARMS = [("bf16", "join-v9-ddp-proj64-cosine1e-3")]
 # ARMS = [("bf16", "join-v8-ddp-proj64-cosine")]
 # ARMS = [("bf16", "join-v7-ddp-proj64-batched")]
 # ARMS = [(None, "join-v4-ddp-linear")]
@@ -129,6 +132,15 @@ for autocast, RUN in ARMS:
             # gradient should also be far steadier than a 4-task one, so this
             # ought to bind on a small minority of steps; train/frac_clipped says.
             grad_norm_max=10.0,
+            # rt-j pretraining's value (pretrain/submit_ilc.py:57). The
+            # gradient here has SNR ~0.95 per step at 512 draws, so the iterate
+            # sits in a noise ball; Polyak-Ruppert averaging is the standard
+            # answer. 1/(1-m) = 2000 steps of effective window against a 10k
+            # run. Well-posed: the objective's only gauge freedom is per-row
+            # positive rescaling of the head, that direction has exactly zero
+            # gradient, and wd=0.0, so nothing pushes iterates into different
+            # gauges.
+            swa_momentum=0.9995,
             precision=autocast,
             adapter_kind="linear",
             hidden_dim=0,

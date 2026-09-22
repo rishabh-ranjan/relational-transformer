@@ -30,6 +30,7 @@ def main(
     hidden_dim: int,
     warmup_steps: int,
     grad_norm_max: float,
+    swa_momentum: float,
     precision: str,
     eval_every: int,
     save_every: int,
@@ -49,6 +50,7 @@ def main(
     # micro-step -- the case expandable_segments exists for.
     os.environ.setdefault("PYTORCH_CUDA_ALLOC_CONF", "expandable_segments:True")
 
+    import copy
     import fnmatch
     import socket
     from datetime import timedelta
@@ -68,6 +70,7 @@ def main(
         make_ests,
         pick_task,
     )
+    from rt.train.swa import SwaState
 
     # Why data parallel at all: rt-j pretraining averaged `total_bs=1024`
     # *independently drawn* items per optimiser step across 8 a100s
@@ -158,6 +161,11 @@ def main(
         dist.broadcast(prm.data, src=0)
     init_flat = torch.cat([p.detach().flatten() for p in adapter.parameters()]).clone()
     opt = torch.optim.AdamW(adapter.parameters(), lr=lr, weight_decay=wd)
+
+    swa = SwaState(adapter.named_parameters(), momentum=swa_momentum)
+    swa_adapter = copy.deepcopy(adapter)
+    for prm in swa_adapter.parameters():
+        prm.requires_grad_(False)
 
     def lr_at(step):
         # Warmup, then cosine lr -> lr_min over the remaining steps.
@@ -321,6 +329,7 @@ def main(
                 )
             )
             opt.step()
+            swa.update(adapter.named_parameters())
 
         if step % 20 == 0:
             dist.all_reduce(loss_sum, op=dist.ReduceOp.SUM)
@@ -383,12 +392,20 @@ def main(
 
         if eval_every and step % eval_every == 0:
             rb = evaluate_relbench(relbench, ests_eval, adapter, device)
+            swa.sync_to(swa_adapter.named_parameters())
+            rb_swa = evaluate_relbench(relbench, ests_eval, swa_adapter, device)
             if is_main:
                 print(
                     f"step {step:>6} relbench val: "
                     f"auroc {rb['clf'][0]} (n={rb['clf'][1]}) "
                     f"nmae {rb['reg'][0]} (n={rb['reg'][1]})"
                     f"   [rt-j baseline 0.7173 / 0.3584 at 2**18 context]",
+                    flush=True,
+                )
+                print(
+                    f"step {step:>6} relbench val swa (n={swa.n}): "
+                    f"auroc {rb_swa['clf'][0]} (n={rb_swa['clf'][1]}) "
+                    f"nmae {rb_swa['reg'][0]} (n={rb_swa['reg'][1]})",
                     flush=True,
                 )
             if use_wandb:
@@ -407,12 +424,24 @@ def main(
                             for tt, (_mean, _n, per) in rb.items()
                             for task, v in per.items()
                         },
+                        **{
+                            f"val/swa/{metric[tt]}": mean
+                            for tt, (mean, _n, _per) in rb_swa.items()
+                            if mean is not None
+                        },
+                        **{
+                            f"val/swa/{metric[tt]}/{task}": v
+                            for tt, (_mean, _n, per) in rb_swa.items()
+                            for task, v in per.items()
+                        },
+                        "train/swa_n": swa.n,
                         **{f"target/{k}": v for k, v in targets.items()},
                     },
                     step=step,
                 )
 
         if save_every and step % save_every == 0 and is_main:
+            swa.sync_to(swa_adapter.named_parameters())
             torch.save(
                 {
                     "step": step,
@@ -421,10 +450,14 @@ def main(
                     "hidden_dim": hidden_dim,
                     "stats_path": stats_path,
                     "state_dict": adapter.state_dict(),
+                    "swa_state_dict": swa_adapter.state_dict(),
+                    "swa_n": swa.n,
+                    "swa_momentum": swa_momentum,
                 },
                 out / f"adapter_step{step}.pt",
             )
 
+    swa.sync_to(swa_adapter.named_parameters())
     if is_main:
         torch.save(
             {
@@ -434,6 +467,9 @@ def main(
                 "hidden_dim": hidden_dim,
                 "stats_path": stats_path,
                 "state_dict": adapter.state_dict(),
+                "swa_state_dict": swa_adapter.state_dict(),
+                "swa_n": swa.n,
+                "swa_momentum": swa_momentum,
             },
             out / "adapter_final.pt",
         )
