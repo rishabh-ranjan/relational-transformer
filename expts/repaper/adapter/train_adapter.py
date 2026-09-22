@@ -90,6 +90,7 @@ def draw(rng, pool, e, n_ctx_lo, n_ctx_hi, n_query):
 def build_adapter(adapter_kind, d_feat, d_out, hidden_dim, stats_path, device):
     import numpy as np
     import torch
+
     from torch import nn
 
     # rt-j's norm_out is an RMSNorm: it fixes the norm of each row (measured
@@ -447,6 +448,8 @@ def main(
     import numpy as np
     import torch
 
+    from rt.train._train import seed_everything
+
     device = "cuda"
     out = Path(out_dir).expanduser()
     out.mkdir(parents=True, exist_ok=True)
@@ -486,6 +489,7 @@ def main(
     train_entries = load_index(features_root, min_rows)
     train_pool = Pool(train_entries)
 
+    seed_everything(seed)
     adapter = build_adapter(
         adapter_kind, d_feat, d_feat, hidden_dim, stats_path, device
     )

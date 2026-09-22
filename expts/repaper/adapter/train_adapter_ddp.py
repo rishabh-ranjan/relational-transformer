@@ -72,6 +72,7 @@ def main(
         make_ests,
         pick_task,
     )
+    from rt.train._train import seed_everything
     from rt.train.swa import SwaState
 
     # Why data parallel at all: rt-j pretraining averaged `total_bs=1024`
@@ -153,6 +154,15 @@ def main(
     train_entries = load_index(features_root, min_rows)
     train_pool = Pool(train_entries)
 
+    # Seed BEFORE the adapter is built. At d_out != d_feat the head is
+    # xavier-initialised off torch's global RNG, and nothing was seeding it --
+    # so `seed` did not determine the starting point and v7/v8/v9 each began
+    # from a different random rank-64 projection, confounding their lr
+    # comparison with their init. Seeded identically on every rank rather than
+    # pretraining's `seed + rank`: there the per-rank offset decorrelates data
+    # loading, whereas here the ranks must agree on the initial weights and the
+    # sampler already draws from an explicit default_rng([seed, rank, step]).
+    seed_everything(seed)
     adapter = build_adapter(
         adapter_kind, d_feat, d_out, hidden_dim, stats_path, device
     )
