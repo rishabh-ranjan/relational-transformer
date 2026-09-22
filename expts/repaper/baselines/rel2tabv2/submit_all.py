@@ -70,6 +70,24 @@ ARMS = {
     # every result's `tags`.
     "gnn-exaone": ("gnn_exaone", GNN_ROOT, "gnn_features", "gnn-c512-s0", False),
     "gnn-tabpfn": ("gnn_tabpfn", GNN_ROOT, "gnn_features", "gnn-c512-s0", False),
+    # Zero hops: the entity table's own encoded row, plus the entity id and the
+    # cutoff. The floor the other three featurizers are measured against, and
+    # deterministic -- it reads the same materialization the gnn arm does and
+    # gathers one row per task row.
+    "entity-exaone": (
+        "entity_exaone",
+        f"{SHARE}/features_entity",
+        "entity_features",
+        "entity",
+        True,
+    ),
+    "entity-tabpfn": (
+        "entity_tabpfn",
+        f"{SHARE}/features_entity",
+        "entity_features",
+        "entity",
+        True,
+    ),
 }
 
 # The run loads the whole blob into memory: rel-amazon at 512 wide is ~5.4 M rows
@@ -178,6 +196,7 @@ for db, table in TASKS:
                     # from the arm name later.
                     features_regenerable=regenerable,
                     gnn_channels=512 if featurizer.startswith("gnn") else None,
+                    hops=0 if featurizer == "entity" else None,
                 ),
             ),
             resources=Resources(

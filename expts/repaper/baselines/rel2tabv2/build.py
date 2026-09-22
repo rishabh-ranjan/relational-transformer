@@ -47,16 +47,20 @@ def build_rel2tab(
     # method string like the taps family and run.main's signature is unchanged.
     adapter_spec = re.fullmatch(r"rtadapter([A-Za-z0-9_-]+)", family)
     adapter_name = adapter_spec.group(1) if adapter_spec else None
-    assert family in (
-        "rdblearn",
-        "sql",
-        "rt",
-        "plurel",
-        "relagent",
-        "gnn",
-    ) or tap_unit in (1, 4, 8, 12) or adapter_name is not None, (
-        f"unknown feature family {family!r} in method {method!r}"
-    )
+    assert (
+        family
+        in (
+            "rdblearn",
+            "sql",
+            "rt",
+            "plurel",
+            "relagent",
+            "gnn",
+            "entity",
+        )
+        or tap_unit in (1, 4, 8, 12)
+        or adapter_name is not None
+    ), f"unknown feature family {family!r} in method {method!r}"
     assert predictor_name in (
         "lgbm",
         "tabicl",
@@ -76,9 +80,7 @@ def build_rel2tab(
     elif tap_unit is not None:
         from expts.repaper.baselines.rel2tabv2.taps import TapsFeaturizer
 
-        featurizer = TapsFeaturizer(
-            features_root, [(db, table)], tap_unit, tap_subset
-        )
+        featurizer = TapsFeaturizer(features_root, [(db, table)], tap_unit, tap_subset)
     else:
         featurizer = PrecomputedFeaturizer(
             features_root,
@@ -89,6 +91,7 @@ def build_rel2tab(
                 "plurel": "plurel_features",
                 "relagent": "relagent_features",
                 "gnn": "gnn_features",
+                "entity": "entity_features",
             }[family],
             [(db, table)],
         )
