@@ -67,7 +67,7 @@ def sample(ds, dataset_idx, nodes):
     return batch, t1 - t0, t2 - t1
 
 
-def worker(pre_dir, pairs, config, jobs, q):
+def worker(pre_dir, pairs, config, jobs, q, done):
     tasks = resolve_tasks(pre_dir, pairs)
     ds = make_dataset(tasks, pre_dir, config, mmap_populate=True)
     for dataset_idx, nodes in jobs:
@@ -76,6 +76,87 @@ def worker(pre_dir, pairs, config, jobs, q):
             v.share_memory_()
         q.put(batch)
     q.put(None)
+    done.wait()
+
+
+def consume(model, q, n_workers, cs, device, pinned):
+    import torch
+
+    copy_stream = torch.cuda.Stream()
+    compute = torch.cuda.current_stream()
+
+    def chunks():
+        finished = 0
+        while finished < n_workers:
+            b = q.get()
+            if b is None:
+                finished += 1
+                continue
+            n = b["node_idxs"].shape[0]
+            for s in range(0, n, cs):
+                yield {k: v[s : s + cs] for k, v in b.items()}
+
+    def stage(host):
+        if pinned:
+            host = {k: v.pin_memory() for k, v in host.items()}
+        with torch.cuda.stream(copy_stream):
+            dev = {k: v.to(device, non_blocking=True) for k, v in host.items()}
+        ev = torch.cuda.Event()
+        ev.record(copy_stream)
+        return host, dev, ev
+
+    rows = 0
+    t_first = None
+    it = chunks()
+    prev = stage(next(it))
+    t_first = time.perf_counter()
+    with torch.inference_mode():
+        for host in it:
+            nxt = stage(host)
+            _, dev, ev = prev
+            compute.wait_event(ev)
+            for v in dev.values():
+                v.record_stream(compute)
+            model(dev, return_embeddings=True)
+            rows += dev["node_idxs"].shape[0]
+            prev = nxt
+        _, dev, ev = prev
+        compute.wait_event(ev)
+        model(dev, return_embeddings=True)
+        rows += dev["node_idxs"].shape[0]
+    torch.cuda.synchronize()
+    return rows, t_first, time.perf_counter()
+
+
+def run_overlap(report, dump, log, model, cs, plan, pairs, pre_dir, config, n_overlap_workers, device):
+    import multiprocessing
+
+    report["overlap"] = {"chunk": cs}
+    ctx = multiprocessing.get_context("spawn")
+    for nw in n_overlap_workers:
+        for pinned in (False, True):
+            jobs = [(di, nodes) for di, _e, _idx, nodes in plan]
+            shards = [jobs[i::nw] for i in range(nw)]
+            q = ctx.Queue(maxsize=4 * nw)
+            done = ctx.Event()
+            procs = [
+                ctx.Process(target=worker, args=(pre_dir, pairs, config, sh, q, done), daemon=True)
+                for sh in shards
+            ]
+            tp = time.perf_counter()
+            for p in procs:
+                p.start()
+            rows, t_first, t_end = consume(model, q, nw, cs, device, pinned)
+            done.set()
+            for p in procs:
+                p.join()
+            key = f"workers_{nw}_{'pinned' if pinned else 'unpinned'}"
+            report["overlap"][key] = {
+                "rows_per_s_after_first_chunk": rows / (t_end - t_first),
+                "startup_s": t_first - tp,
+            }
+            log(f"overlap {key}: {report['overlap'][key]}")
+            dump()
 
 
 def main(
@@ -88,12 +169,13 @@ def main(
     rows_per_task: int,
     chunk_sizes: list[int],
     n_overlap_workers: list[int],
+    overlap_chunk: int,
+    overlap_only: bool,
     seed: int,
 ) -> None:
     import ml_dtypes
     import numpy as np
     import torch
-    import torch.multiprocessing as mp
 
     from expts.repaper.adapter.pool_head import PoolHead
     from expts.repaper.adapter.train_adapter import load_index
@@ -129,6 +211,19 @@ def main(
     net, config = load_rt_model(ckpt, device=device, compile=False)
     net = net.to(torch.bfloat16).eval()
 
+    plan = []
+    for dataset_idx, e in enumerate(chosen):
+        rows = np.load(e["rows"])
+        idx = np.sort(rng.choice(e["n"], size=rows_per_task, replace=False))
+        plan.append((dataset_idx, e, idx, rows["node_idxs"][idx]))
+
+    if overlap_only:
+        net_c, _ = load_rt_model(ckpt, device=device, compile=True)
+        net_c = net_c.to(torch.bfloat16).eval()
+        run_overlap(report, dump, log, net_c, overlap_chunk, plan, pairs, pre_dir, config, n_overlap_workers, device)
+        log("done")
+        return
+
     rss0 = rss_gib()
     t0 = time.perf_counter()
     tasks = resolve_tasks(pre_dir, pairs)
@@ -136,12 +231,6 @@ def main(
     report["sampler_setup_s"] = time.perf_counter() - t0
     report["sampler_rss_gib"] = rss_gib() - rss0
     log(f"sampler setup {report['sampler_setup_s']:.1f}s, +{report['sampler_rss_gib']:.1f} GiB rss")
-
-    plan = []
-    for dataset_idx, e in enumerate(chosen):
-        rows = np.load(e["rows"])
-        idx = np.sort(rng.choice(e["n"], size=rows_per_task, replace=False))
-        plan.append((dataset_idx, e, idx, rows["node_idxs"][idx]))
 
     batches = []
     samp_s = proc_s = 0.0
@@ -305,47 +394,6 @@ def main(
         log(f"head {key}: {report['head'][key]}")
     dump()
 
-    cs = max(c for c in chunk_sizes if isinstance(report["forward"].get(f"eager_{c}"), dict))
-    report["overlap"] = {}
     del batches, allb
-    ctx = mp.get_context("spawn")
-    for nw in n_overlap_workers:
-        jobs = [(di, nodes) for di, _e, _idx, nodes in plan]
-        shards = [jobs[i::nw] for i in range(nw)]
-        q = ctx.Queue(maxsize=4 * nw)
-        procs = [
-            ctx.Process(target=worker, args=(pre_dir, pairs, config, sh, q), daemon=True)
-            for sh in shards
-        ]
-        tp = time.perf_counter()
-        for p in procs:
-            p.start()
-        done = 0
-        rows_done = 0
-        t_first = None
-        with torch.inference_mode():
-            while done < nw:
-                b = q.get()
-                if b is None:
-                    done += 1
-                    continue
-                if t_first is None:
-                    t_first = time.perf_counter()
-                    rows_first = b["node_idxs"].shape[0]
-                for s in range(0, b["node_idxs"].shape[0], cs):
-                    gb = {k: v[s : s + cs].to(device, non_blocking=True) for k, v in b.items()}
-                    net(gb, return_embeddings=True)
-                rows_done += b["node_idxs"].shape[0]
-                del b
-        torch.cuda.synchronize()
-        t_end = time.perf_counter()
-        for p in procs:
-            p.join()
-        report["overlap"][f"workers_{nw}"] = {
-            "rows_per_s_steady": (rows_done - rows_first) / (t_end - t_first),
-            "startup_s": t_first - tp,
-        }
-        log(f"overlap {nw} workers: {report['overlap'][f'workers_{nw}']}")
-        dump()
-
+    run_overlap(report, dump, log, net_c, overlap_chunk, plan, pairs, pre_dir, config, n_overlap_workers, device)
     log("done")
