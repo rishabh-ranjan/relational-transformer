@@ -85,7 +85,14 @@ REPO_ROOT = str(Path(__file__).resolve().parents[3])
 # sweep; everything else is identical.
 # v10: v9 plus an EMA of the head weights, evaluated and checkpointed
 # alongside the live iterate. Nothing about training changes.
-ARMS = [("bf16", "join-v10-ddp-proj64-swa")]
+# SMOKE: the resume path, on 1 gpu, in minutes. wandb on and eval_every
+# small, because the last three breakages in this file were all in a code
+# path the smoke had switched off. Three jobs in sequence: this one is
+# interrupted mid-run with USR1, the second resumes it to the end, and the
+# third runs the same 30 steps in -ref uninterrupted to compare against.
+ARMS = [("bf16", "join-v10-resume-smoke")]
+# ARMS = [("bf16", "join-v10-resume-smoke-ref")]
+# ARMS = [("bf16", "join-v10-ddp-proj64-swa")]
 # ARMS = [("bf16", "join-v9-ddp-proj64-cosine1e-3")]
 # ARMS = [("bf16", "join-v8-ddp-proj64-cosine")]
 # ARMS = [("bf16", "join-v7-ddp-proj64-batched")]
@@ -100,34 +107,45 @@ for autocast, RUN in ARMS:
             relbench_pre_dir=PRE_DIR,
             relbench_features_root=f"{SHARE}/features_rt-j",
             relbench_labels_root=f"{SHARE}/labels_relbench",
-            relbench_n_ctx=8192,
-            relbench_n_query=4096,
+            relbench_n_ctx=512,
+            relbench_n_query=256,
+            # relbench_n_ctx=8192,
+            # relbench_n_query=4096,
             tabpfn_dir=f"{SHARE}/tabpfn",
             stats_path=f"{SHARE}/feature_stats_join_u12.npz",
             out_dir=f"{OUT_ROOT}/adapter/{RUN}",
             d_feat=512,
             d_out=64,
             min_rows=512,
-            n_ctx_list=[256, 512, 1024],
-            n_query=256,
+            n_ctx_list=[256, 512],
+            n_query=64,
+            # n_ctx_list=[256, 512, 1024],
+            # n_query=256,
             # 4 ranks x 4 tasks x 32 accum. The script asserts the divisibility, so
             # changing the rank count without changing this fails at startup rather
             # than silently running a different batch.
-            total_tasks_per_step=512,
+            # 1 rank x 4 tasks x 2 accum, and x 2 x 4 on the second rung:
+            # world_size is 1 here, so the divisibility assert reads
+            # 8 % (1 * b) for b in (4, 2).
+            total_tasks_per_step=8,
+            # total_tasks_per_step=512,
             # Aligned with n_ctx_list. Chosen so peak memory is roughly flat
             # across rungs and total_tasks_per_step divides exactly at every
             # one. Measured frontier at d_out=64/bf16: s/draw is flat past
             # B~8-12, so 32/16/8 captures essentially all of it while leaving
             # over half the card free for the relbench eval draw.
-            micro_batch_list=[32, 16, 8],
-            total_steps=10_000,
+            micro_batch_list=[4, 2],
+            total_steps=30,
+            # micro_batch_list=[32, 16, 8],
+            # total_steps=10_000,
             lr=1e-3,
             lr_min=1e-5,
             # Zero, deliberately. AdamW's decay pulls a weight toward 0, and this
             # weight starts at I -- decaying it is decaying the rt-j featurizer
             # away, not regularising the adapter toward it.
             wd=0.0,
-            warmup_steps=100,
+            warmup_steps=5,
+            # warmup_steps=100,
             # 10.0, the middle arm of the single-gpu clip sweep. A 512-task
             # gradient should also be far steadier than a 4-task one, so this
             # ought to bind on a small minority of steps; train/frac_clipped says.
@@ -149,13 +167,16 @@ for autocast, RUN in ARMS:
             # 4x the steps, so eval and checkpoint cadence scale with it:
             # eval is 76.8 s and was 36% of v7's wall clock, and 400 evals
             # over 10k steps would cost 8.5 h of the ~17 h run.
-            eval_every=100,
-            save_every=200,
+            eval_every=10,
+            save_every=5,
+            # eval_every=100,
+            # save_every=200,
             # rt-j pretraining's cadence (pretrain/submit_ilc.py:65). Time and
             # not steps because preemption is a wall-clock event: what a
             # requeue costs is the minutes since the last write, and on il-lo
             # slurm gives 300 s of grace, so at worst 20 min is redone.
-            resume_save_mins=20.0,
+            resume_save_mins=0.5,
+            # resume_save_mins=20.0,
             seed=0,
             targets={"val/auroc": 0.7173, "val/nmae": 0.3584},
             run_name=f"adapter-{RUN}",
@@ -174,14 +195,17 @@ for autocast, RUN in ARMS:
             # ~49 h at 70 s/step; 72 leaves room for a slow node.
             # ~8.3 h at 0.0938 s/draw; 24 leaves room for a slow node.
         # ~15 h train + ~2.1 h eval; 48 h leaves room for a slow node.
-        time="2-00:00:00",
+        time="01:00:00",
+        # time="2-00:00:00",
             # One rank per gpu: roach maps SLURM_PROCID -> RANK and SLURM_NTASKS ->
             # WORLD_SIZE (roach/slurm/run.py:19), so ntasks=None gives 4 ranks.
-            gpus="a100:4",
+            gpus="a100:1",
+            # gpus="a100:4",
             cpus_per_task=14,
             ntasks=None,
             exclusive=False,
-            mem="240G",
+            mem="60G",
+            # mem="240G",
             mem_per_gpu=None,
             constraint="ampere",
             nodelist=None,
