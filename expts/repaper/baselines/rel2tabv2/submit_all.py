@@ -130,9 +130,13 @@ skipped_no_blob = []
 # predecessor so nothing ever makes a third.
 #
 # Set to None to submit normally again.
+# Held off the cluster until midnight and then two at a time: the first two
+# start together, the third waits on one of them. Their start time is set with
+# `scontrol update JobId=<id> StartTime=...` after submission, since roach's
+# Resources carries no --begin.
 CHAIN_AFTER = {
     ("rel-hm", "item-sales"): None,
-    ("rel-stack", "post-votes"): "192955",
+    ("rel-stack", "post-votes"): None,
     ("rel-trial", "site-success"): ("rel-hm", "item-sales"),
 }
 chained: dict[tuple[str, str], str] = {}
