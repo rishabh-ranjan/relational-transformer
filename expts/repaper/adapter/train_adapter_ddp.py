@@ -615,6 +615,11 @@ def main(
             out / "adapter_final.pt",
         )
         print(f"done in {(time.time() - t0) / 60:.1f} min", flush=True)
+    # A finished run leaves a resume.pt that says total_steps, as pretraining
+    # does (_train.py:974). Without it the last periodic write stands, and a
+    # resubmission into this out_dir would redo the steps after it and
+    # overwrite adapter_final.pt with a worse iterate.
+    save_resume(total_steps)
     if use_wandb:
         wandb.finish()
     dist.destroy_process_group()
