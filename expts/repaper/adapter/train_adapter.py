@@ -167,26 +167,39 @@ def build_adapter(adapter_kind, d_feat, d_out, hidden_dim, stats_path, device):
                     nn.init.xavier_uniform_(m.weight)
                     if m.bias is not None:
                         m.bias.zero_()
-    elif adapter_kind == "swiglu":
+    elif adapter_kind in ("swiglu", "swiglu_bias"):
         # rt-j's own FFN shape (model/net.py:88-99): w2(silu(w1(x)) * w3(x)),
         # every bias off. One difference: net.py zero-inits w2 because that FFN
         # sits in a residual block and so starts as a no-op. There is no
         # residual here, so a zero w2 would emit an all-constant feature matrix
         # and TabPFN's RemoveConstantFeaturesStep would raise on the first
         # draw. Xavier throughout instead.
+        # swiglu_bias adds a bias to the two INPUT projections. That is not
+        # the same question as the output bias: an output bias is provably
+        # inert, because TabPFN z-norms each feature column against the
+        # context and subtracts it straight back off, so it gets exactly zero
+        # gradient. w1 and w3 feed a silu gate and a multiply, both nonlinear,
+        # so a bias there moves each hidden unit along the gate's curve and
+        # genuinely changes the function. rt-j drops it (net.py:92-94) because
+        # bias-free is the modern transformer-FFN convention with a norm
+        # immediately before, not because it does nothing here.
         class SwiGLU(nn.Module):
-            def __init__(self, d_in, d_hidden, d_out):
+            def __init__(self, d_in, d_hidden, d_out, in_bias):
                 super().__init__()
-                self.w1 = nn.Linear(d_in, d_hidden, bias=False)
-                self.w3 = nn.Linear(d_in, d_hidden, bias=False)
+                self.w1 = nn.Linear(d_in, d_hidden, bias=in_bias)
+                self.w3 = nn.Linear(d_in, d_hidden, bias=in_bias)
                 self.w2 = nn.Linear(d_hidden, d_out, bias=False)
                 for m in (self.w1, self.w2, self.w3):
                     nn.init.xavier_uniform_(m.weight)
+                    if m.bias is not None:
+                        nn.init.zeros_(m.bias)
 
             def forward(self, x):
                 return self.w2(nn.functional.silu(self.w1(x)) * self.w3(x))
 
-        head = SwiGLU(d_feat, hidden_dim, d_out)
+        head = SwiGLU(
+            d_feat, hidden_dim, d_out, adapter_kind == "swiglu_bias"
+        )
     else:
         raise AssertionError(f"unknown adapter_kind {adapter_kind!r}")
     return nn.Sequential(standardize, head).to(device)

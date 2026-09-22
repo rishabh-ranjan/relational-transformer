@@ -94,7 +94,13 @@ REPO_ROOT = str(Path(__file__).resolve().parents[3])
 # v10: v9's recipe with a SwiGLU adapter instead of a linear map --
 # 512 -> 64 -> 64, rt-j's own FFN shape (net.py:88-99). On il-lo, which is
 # only safe now that the trainer resumes from resume.pt after a preempt.
-ARMS = [("bf16", "join-v10-ddp-swiglu64")]
+# v11: v10 with a bias on the two SwiGLU INPUT projections. The output
+# bias stays off because it is provably inert -- TabPFN z-norms each
+# column against the context and subtracts it back off, zero gradient --
+# but w1/w3 feed a silu gate and a multiply, so a bias there shifts each
+# hidden unit along the gate curve and does change the function.
+ARMS = [("bf16", "join-v11-ddp-swiglu64-inbias")]
+# ARMS = [("bf16", "join-v10-ddp-swiglu64")]
 # ARMS = [("bf16", "join-v9-ddp-proj64-cosine1e-3")]
 # ARMS = [("bf16", "join-v9-ddp-proj64-cosine1e-3")]
 # ARMS = [("bf16", "join-v8-ddp-proj64-cosine")]
@@ -152,7 +158,7 @@ for autocast, RUN in ARMS:
             # gauges.
             swa_momentum=0.9995,
             precision=autocast,
-            adapter_kind="swiglu",
+            adapter_kind="swiglu_bias",
             hidden_dim=64,
             # At ~70 s/step these are ~30 min and ~1 h of wall clock, not the
             # 10 min and 20 min they were on one gpu.
@@ -179,8 +185,8 @@ for autocast, RUN in ARMS:
             # Now that the run writes resume.pt and picks it back up, il-lo is
             # open: uncapped instead of 10 a100s, 21 d instead of 7, at the
             # price of a requeue that costs the minutes since the last save.
-            # qos="il",
-            qos="il-lo",
+            qos="il",
+            # qos="il-lo",
             # ~49 h at 70 s/step; 72 leaves room for a slow node.
             # ~8.3 h at 0.0938 s/draw; 24 leaves room for a slow node.
         # ~15 h train + ~2.1 h eval; 48 h leaves room for a slow node.
