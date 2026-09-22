@@ -71,7 +71,13 @@ REPO_ROOT = str(Path(__file__).resolve().parents[3])
 # Smoke (job 191935, 1 gpu) cleared the fused path: both task types ran,
 # gradient nonzero, 0 dropped, 0 degenerate, peak 18.0 GiB, and
 # 0.0938 s/draw against production 0.5581 = 6.0x.
-ARMS = [("bf16", "join-v7-ddp-proj64-batched")]
+# v8: v7 for 10k steps with a cosine schedule, peak 5e-4 -> 1e-5.
+# 5e-4 is pretraining's lr and 5x v7's; Adam's step is ~lr regardless of
+# batch, so 2500 steps at 1e-4 moves each weight at most ~0.25 in total.
+# With the gradient now at SNR ~0.95 rather than 0.084, bigger steps in a
+# trustworthy direction are the point.
+ARMS = [("bf16", "join-v8-ddp-proj64-cosine")]
+# ARMS = [("bf16", "join-v7-ddp-proj64-batched")]
 # ARMS = [(None, "join-v4-ddp-linear")]
 
 for autocast, RUN in ARMS:
@@ -103,8 +109,9 @@ for autocast, RUN in ARMS:
             # B~8-12, so 32/16/8 captures essentially all of it while leaving
             # over half the card free for the relbench eval draw.
             micro_batch_list=[32, 16, 8],
-            total_steps=2_500,
-            lr=1e-4,
+            total_steps=10_000,
+            lr=5e-4,
+            lr_min=1e-5,
             # Zero, deliberately. AdamW's decay pulls a weight toward 0, and this
             # weight starts at I -- decaying it is decaying the rt-j featurizer
             # away, not regularising the adapter toward it.
@@ -119,8 +126,11 @@ for autocast, RUN in ARMS:
             hidden_dim=0,
             # At ~70 s/step these are ~30 min and ~1 h of wall clock, not the
             # 10 min and 20 min they were on one gpu.
-            eval_every=25,
-            save_every=50,
+            # 4x the steps, so eval and checkpoint cadence scale with it:
+            # eval is 76.8 s and was 36% of v7's wall clock, and 400 evals
+            # over 10k steps would cost 8.5 h of the ~17 h run.
+            eval_every=100,
+            save_every=200,
             seed=0,
             targets={"val/auroc": 0.7173, "val/nmae": 0.3584},
             run_name=f"adapter-{RUN}",
@@ -134,7 +144,8 @@ for autocast, RUN in ARMS:
             qos="il",
             # ~49 h at 70 s/step; 72 leaves room for a slow node.
             # ~8.3 h at 0.0938 s/draw; 24 leaves room for a slow node.
-        time="1-00:00:00",
+        # ~15 h train + ~2.1 h eval; 48 h leaves room for a slow node.
+        time="2-00:00:00",
             # One rank per gpu: roach maps SLURM_PROCID -> RANK and SLURM_NTASKS ->
             # WORLD_SIZE (roach/slurm/run.py:19), so ntasks=None gives 4 ranks.
             gpus="a100:4",

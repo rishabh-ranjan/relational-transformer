@@ -1,3 +1,4 @@
+import math
 import os
 import time
 from pathlib import Path
@@ -23,6 +24,7 @@ def main(
     micro_batch_list: list[int],
     total_steps: int,
     lr: float,
+    lr_min: float,
     wd: float,
     adapter_kind: str,
     hidden_dim: int,
@@ -158,10 +160,11 @@ def main(
     opt = torch.optim.AdamW(adapter.parameters(), lr=lr, weight_decay=wd)
 
     def lr_at(step):
-        # Warmup then flat, as rt-j pretraining (lr_decay_steps=0).
+        # Warmup, then cosine lr -> lr_min over the remaining steps.
         if step < warmup_steps:
             return lr * (step + 1) / warmup_steps
-        return lr
+        t = (step - warmup_steps) / max(1, total_steps - warmup_steps)
+        return lr_min + 0.5 * (lr - lr_min) * (1.0 + math.cos(math.pi * t))
 
     # n_features is the adapter's OUTPUT width: that is what TabPFN sees,
     # and its cost scales with it.
