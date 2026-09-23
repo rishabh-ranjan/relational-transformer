@@ -18,7 +18,6 @@ def main(
     head_chunk: int,
     stats_rows: int,
     n_queries: int,
-    d_out: int,
     check_rows: int,
     check_ctx: int,
     check_chunk: int,
@@ -143,8 +142,8 @@ def main(
     s = tokens[:stats_rows][~pad[:stats_rows]].float()
     mean, std = s.mean(0), s.std(0).clamp_min(1e-4)
     del s
-    head = PoolHead(d_model, n_queries, d_out, mean=mean, scale=std).to(dev_rt)
-    ests = make_ests(tabpfn_dir, dev_pfn, seed, d_out, tabpfn_precision)
+    head = PoolHead(d_model, n_queries, mean=mean, scale=std).to(dev_rt)
+    ests = make_ests(tabpfn_dir, dev_pfn, seed, n_queries, tabpfn_precision)
     report["tabpfn_precision"] = tabpfn_precision
     for est in ests.values():
         for m in est.models_:

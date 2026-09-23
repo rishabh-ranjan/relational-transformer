@@ -22,7 +22,6 @@ submit(
         head_chunk=2048,
         stats_rows=4096,
         n_queries=64,
-        d_out=64,
         check_rows=2048,
         check_ctx=1536,
         check_chunk=512,

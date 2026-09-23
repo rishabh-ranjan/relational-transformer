@@ -367,7 +367,7 @@ def main(
                 log(f"forward {key}: {report['forward'][key]}")
                 dump()
 
-    head = PoolHead(512, 64, 64).to(device)
+    head = PoolHead(512, 64).to(device)
     report["head"] = {}
     for rows in (850 * 8, 850 * 32):
         key = f"rows_{rows}"

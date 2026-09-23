@@ -2,10 +2,11 @@ import math
 
 import torch
 from torch import nn
+from torch.nn import functional as F
 
 
 class PoolHead(nn.Module):
-    def __init__(self, d_model: int, n_queries: int, d_out: int, mean=None, scale=None):
+    def __init__(self, d_model: int, n_queries: int, mean=None, scale=None):
         super().__init__()
         self.register_buffer(
             "mean", torch.zeros(d_model) if mean is None else torch.as_tensor(mean).float()
@@ -16,9 +17,14 @@ class PoolHead(nn.Module):
         self.q = nn.Parameter(torch.randn(n_queries, d_model) / math.sqrt(d_model))
         self.wk = nn.Linear(d_model, d_model, bias=False)
         self.wv = nn.Linear(d_model, n_queries, bias=False)
-        self.out = nn.Linear(n_queries, d_out, bias=False)
-        for lin in (self.wk, self.wv, self.out):
+        self.w1 = nn.Linear(n_queries, n_queries, bias=True)
+        self.w3 = nn.Linear(n_queries, n_queries, bias=True)
+        self.w2 = nn.Linear(n_queries, n_queries, bias=False)
+        for lin in (self.wk, self.wv, self.w1, self.w3):
             nn.init.xavier_uniform_(lin.weight)
+        nn.init.zeros_(self.w1.bias)
+        nn.init.zeros_(self.w3.bias)
+        nn.init.zeros_(self.w2.weight)
         self.d_model = d_model
 
     def forward(self, x: torch.Tensor, is_padding: torch.Tensor) -> torch.Tensor:
@@ -29,4 +35,4 @@ class PoolHead(nn.Module):
         attn = logits.softmax(dim=1)
         v = self.wv(z)
         h = (attn * v).sum(dim=1)
-        return self.out(h)
+        return h + self.w2(F.silu(self.w1(h)) * self.w3(h))

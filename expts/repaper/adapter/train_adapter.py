@@ -772,6 +772,10 @@ def preprocess_draw(est, x, y_ctx, n_ctx):
 
 
 def batched_loss(est, task_type, xs, ys, n_ctx, device):
+    return batched_outputs(est, task_type, xs, ys, n_ctx, device)[0]
+
+
+def batched_outputs(est, task_type, xs, ys, n_ctx, device):
     import torch
     from torch import nn
     from tabpfn.preprocessing.datamodel import FeatureModality
@@ -818,7 +822,8 @@ def batched_loss(est, task_type, xs, ys, n_ctx, device):
     if task_type == "clf":
         logits = est.forward(Xte_s, use_inference_mode=True, return_logits=True)
         yq = torch.stack(extra).to(device)
-        return nn.functional.cross_entropy(logits.permute(1, 2, 0), yq)
+        loss = nn.functional.cross_entropy(logits.permute(1, 2, 0), yq)
+        return loss, logits.float().softmax(-1)[..., 1].t(), yq
     # TabPFNRegressor.forward raises for B>1 (regressor.py:2123), so go to the
     # executor. Nothing is lost: on the differentiable path target_transforms
     # is [None], temperature is 1.0 and there is one estimator, so the
@@ -829,4 +834,8 @@ def batched_loss(est, task_type, xs, ys, n_ctx, device):
     )
     lg = out.float().permute(1, 0, 2)
     z = torch.stack([(q - mu) / sd for mu, sd, q in extra])
-    return est.znorm_space_bardist_(lg, z).mean()
+    loss = est.znorm_space_bardist_(lg, z).mean()
+    mu = torch.stack([m for m, _s, _q in extra])[:, None]
+    sd = torch.stack([s for _m, s, _q in extra])[:, None]
+    pred = est.znorm_space_bardist_.mean(lg) * sd + mu
+    return loss, pred, torch.stack([q for _m, _s, q in extra])
