@@ -99,7 +99,19 @@ REPO_ROOT = str(Path(__file__).resolve().parents[3])
 # column against the context and subtracts it back off, zero gradient --
 # but w1/w3 feed a silu gate and a multiply, so a bias there shifts each
 # hidden unit along the gate curve and does change the function.
-ARMS = [("bf16", "join-v11-ddp-swiglu64-inbias")]
+# v12: v9's recipe (linear 512->64, cosine 1e-3) on the row-PROPORTIONAL
+# dump instead of the flat-capped one. 192 GB vs 34 GB, 339 dbs, 11,126
+# task metas. The standardiser is deliberately NOT recomputed: the
+# training marginal is sum_t p_t * (uniform over that task's dumped rows),
+# and proportional sampling changes neither p_t (still prop-to
+# min(total_nodes, 1e5)) nor a task's feature distribution, so mu/sigma
+# should be unchanged -- and reusing them keeps the data source the only
+# variable against v9. Checked separately by a stats job.
+#
+# NOT bit-identical to v9 otherwise: v12 also gets SWA, the seeding fix
+# and resume, none of which v9 had.
+ARMS = [("bf16", "join-v12-ddp-proj64-proprows")]
+# ARMS = [("bf16", "join-v11-ddp-swiglu64-inbias")]
 # ARMS = [("bf16", "join-v10-ddp-swiglu64")]
 # ARMS = [("bf16", "join-v9-ddp-proj64-cosine1e-3")]
 # ARMS = [("bf16", "join-v9-ddp-proj64-cosine1e-3")]
@@ -112,7 +124,7 @@ for autocast, RUN in ARMS:
     submit(
         "expts.repaper.adapter.train_adapter_ddp:main",
         args=dict(
-            features_root=f"{SHARE}/features_join_u12",
+            features_root=f"{SHARE}/features_join_u12_prop",
             relbench_pre_dir=PRE_DIR,
             relbench_features_root=f"{SHARE}/features_rt-j",
             relbench_labels_root=f"{SHARE}/labels_relbench",
@@ -158,8 +170,8 @@ for autocast, RUN in ARMS:
             # gauges.
             swa_momentum=0.9995,
             precision=autocast,
-            adapter_kind="swiglu_bias",
-            hidden_dim=64,
+            adapter_kind="linear",
+            hidden_dim=0,
             # At ~70 s/step these are ~30 min and ~1 h of wall clock, not the
             # 10 min and 20 min they were on one gpu.
             # 4x the steps, so eval and checkpoint cadence scale with it:
