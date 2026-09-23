@@ -241,8 +241,9 @@ def head_parts(head, x, p):
     attn = logits.softmax(dim=1)
     v = head.wv(z)
     h = (attn * v).sum(dim=1)
-    f = h + head.w2(F.silu(head.w1(h)) * head.w3(h))
-    return z, logits, attn, v, h, f
+    a = F.silu(head.w1(h)) * head.w3(h)
+    f = h + head.w2(a)
+    return z, logits, attn, v, h, a, f
 
 
 def head_decomp(head, tokens, pad, g, n_ctx, chunk):
@@ -254,10 +255,16 @@ def head_decomp(head, tokens, pad, g, n_ctx, chunk):
     acc = {"ctx": [torch.zeros_like(p) for p in params], "query": [torch.zeros_like(p) for p in params]}
     sq = {k: {"ctx": 0.0, "query": 0.0} for k in ("df", "dh", "dv", "dlogits", "dz")}
     amax, check = [], None
+    mom = {k: [0.0, 0.0, []] for k in ("h", "a")}
     for i in range(0, need, chunk):
         j = min(i + chunk, need)
         part = "ctx" if i < n_ctx else "query"
-        z, lo, attn, v, h, f = head_parts(head, tokens[i:j], pad[i:j])
+        z, lo, attn, v, h, a, f = head_parts(head, tokens[i:j], pad[i:j])
+        for k, t in (("h", h), ("a", a)):
+            t = t.detach().double()
+            mom[k][0] = mom[k][0] + t.sum(0)
+            mom[k][1] = mom[k][1] + t.square().sum(0)
+            mom[k][2].append(t.norm(dim=1).float())
         if check is None:
             with torch.no_grad():
                 check = float((f - head(tokens[i:j], pad[i:j])).abs().max())
@@ -283,7 +290,19 @@ def head_decomp(head, tokens, pad, g, n_ctx, chunk):
     tot = math.sqrt(sum(v["total"] ** 2 for v in per.values()))
     for v in per.values():
         v["share_sq"] = v["total"] ** 2 / max(tot**2, 1e-30)
+    acts = {}
+    for k, (s1, s2, rn) in mom.items():
+        mean = s1 / need
+        std = (s2 / need - mean.square()).clamp(min=0).sqrt()
+        acts[k] = {
+            "row_norm": qs(torch.cat(rn).cpu().numpy()),
+            "mean_vec_norm": float(mean.norm()),
+            "coord_std": qs(std.cpu().numpy()),
+            "coord_absmean": qs(mean.abs().cpu().numpy()),
+            "rms_std_over_rms_mean": float(std.square().mean().sqrt() / mean.square().mean().sqrt().clamp(min=1e-30)),
+        }
     return {
+        "acts": acts,
         "gnorm": tot,
         "gnorm_ctx_only": math.sqrt(sum(float(a.square().sum()) for a in acc["ctx"])),
         "gnorm_query_only": math.sqrt(sum(float(a.square().sum()) for a in acc["query"])),
@@ -344,7 +363,10 @@ def probe_rows(ests, weights, cells, pad, y, kind, n_ctx, chunk, jitter_frac, wi
         log(f"tabpfn {wname}: loss {runs[wname]['loss']:.4f} |dL/df| {float(runs[wname]['g'].norm()):.4g} peak {peak:.1f}GiB")
     fck = feats["ckpt"][0]
     mu, sig = fck[:n_ctx].mean(0), fck[:n_ctx].std(0)
-    controls = {"std_input": tabpfn_pass(ests, kind, (fck - mu) / sig, y, n_ctx, dev, False)}
+    controls = {
+        "repeat": tabpfn_pass(ests, kind, fck, y, n_ctx, dev, False),
+        "std_input": tabpfn_pass(ests, kind, (fck - mu) / sig, y, n_ctx, dev, False),
+    }
     if kind == "reg":
         yc = y[:n_ctx]
         lo_q, hi_q = torch.quantile(yc, winsor_q), torch.quantile(yc, 1 - winsor_q)
@@ -552,7 +574,72 @@ def probe_rows(ests, weights, cells, pad, y, kind, n_ctx, chunk, jitter_frac, wi
     qd["nll"] = qs(nll.cpu().numpy())
     qd["spearman_rownorm_vs_nll_query"] = spearman(rn[n_ctx:].cpu().numpy(), nll.cpu().numpy())
     rec["query_loss"] = qd
-    return rec
+    return rec, g
+
+
+
+
+def setup(join_pre_dir, task_list, ckpt, tabpfn_dir, ckpt_dir, steps, n_tasks_total, n_queries, need, seed, log):
+    import numpy as np
+    import torch
+
+    from expts.repaper.adapter.pool_head import PoolHead
+    from expts.repaper.adapter.probe_pool_throughput import LOCAL_CTX, make_dataset
+    from expts.repaper.adapter.train_adapter import make_ests
+    from expts.repaper.baselines.rel2tab.featurizer import table_offset_and_len
+    from rt.data import get_tasks
+    from rt.model import load_rt_model
+
+    dev = "cuda:0"
+    rows = json.loads(Path(__file__).with_name(task_list).read_text())
+    assert len(rows) == n_tasks_total, (len(rows), n_tasks_total)
+    order = np.random.default_rng([seed, 1]).permutation(len(rows))
+    net, config = load_rt_model(ckpt, device=dev, compile=True)
+    net = net.to(torch.bfloat16).eval()
+    for p in net.parameters():
+        p.requires_grad_(False)
+    d_model = net.d_model
+    tasks, didx = [], {}
+    for k, ti in enumerate(sorted({int(order[s]) for s in steps})):
+        db, name, kind, _n, _sub = rows[ti]
+        (tk,) = get_tasks(join_pre_dir, [(db, name)], ("train",))
+        assert tk.task_type == kind, (db, name, tk.task_type, kind)
+        lo, n = table_offset_and_len(join_pre_dir, db, tk.table_name)
+        tasks.append({"db": db, "task": name, "kind": kind, "t": tk, "lo": lo, "n": n})
+        didx[ti] = k
+    ds = make_dataset([e["t"] for e in tasks], join_pre_dir, config, mmap_populate=False)
+    log(f"sampler over {len(tasks)} tasks built")
+    ests = make_ests(tabpfn_dir, dev, seed, n_queries, "bf16")
+    log(f"tabpfn loaded; bar distribution {ests['reg'].znorm_space_bardist_.num_bars} buckets")
+    ck_dir = Path(ckpt_dir).expanduser()
+    avail = sorted(int(p.stem.replace("pool_step", "")) for p in ck_dir.glob("pool_step*.pt"))
+
+    def load_head(step):
+        ck = torch.load(ck_dir / f"pool_step{step}.pt", map_location="cpu", weights_only=True)
+        h = PoolHead(d_model, n_queries).to(dev)
+        h.load_state_dict(ck["state_dict"])
+        return h
+
+    cells = {
+        "tokens": torch.empty(need, LOCAL_CTX, d_model, dtype=torch.bfloat16, device=dev),
+        "host": torch.empty(need, LOCAL_CTX, d_model, dtype=torch.bfloat16, pin_memory=True),
+    }
+    pad = torch.empty(need, LOCAL_CTX, dtype=torch.bool, device=dev)
+    labels = torch.empty(need, dtype=torch.float32, device=dev)
+
+    def embed(step):
+        from expts.repaper.adapter.train_pool import embed_rows
+
+        ti = int(order[step])
+        e = tasks[didx[ti]]
+        cand = np.random.default_rng([seed, step]).permutation(e["n"]) + e["lo"]
+        if cells["tokens"] is None:
+            cells["tokens"] = torch.empty(need, LOCAL_CTX, d_model, dtype=torch.bfloat16, device=dev)
+        with torch.inference_mode():
+            filled, n_sub, _a, _b = embed_rows(net, ds, didx[ti], cand, cells["tokens"], pad, labels, need, dev)
+        return e, filled, n_sub
+
+    return {"ests": ests, "avail": avail, "load_head": load_head, "cells": cells, "pad": pad, "labels": labels, "embed": embed, "dev": dev}
 
 
 def main(
@@ -575,18 +662,8 @@ def main(
 ) -> None:
     os.environ.setdefault("PYTORCH_CUDA_ALLOC_CONF", "expandable_segments:True")
 
-    import numpy as np
     import torch
 
-    from expts.repaper.adapter.pool_head import PoolHead
-    from expts.repaper.adapter.probe_pool_throughput import LOCAL_CTX, make_dataset
-    from expts.repaper.adapter.train_adapter import make_ests
-    from expts.repaper.adapter.train_pool import embed_rows
-    from expts.repaper.baselines.rel2tab.featurizer import table_offset_and_len
-    from rt.data import get_tasks
-    from rt.model import load_rt_model
-
-    dev = "cuda:0"
     need = n_ctx + n_query
     out = Path(out_dir).expanduser()
     out.mkdir(parents=True, exist_ok=True)
@@ -595,98 +672,163 @@ def main(
     def log(msg):
         print(f"[{(time.time() - t_start) / 60:7.1f} min] {msg}", flush=True)
 
-    rows = json.loads(Path(__file__).with_name(task_list).read_text())
-    assert len(rows) == n_tasks_total, (len(rows), n_tasks_total)
-    order = np.random.default_rng([seed, 1]).permutation(len(rows))
     todo = [s for s in steps if not (out / f"step{s}.json").exists()]
     log(f"{len(steps)} steps requested, {len(todo)} to do: {todo}")
     if not todo:
         return
-
-    net, config = load_rt_model(ckpt, device=dev, compile=True)
-    net = net.to(torch.bfloat16).eval()
-    for p in net.parameters():
-        p.requires_grad_(False)
-    d_model = net.d_model
-
-    uniq = sorted({int(order[s]) for s in todo})
-    tasks, didx = [], {}
-    for k, ti in enumerate(uniq):
-        db, name, kind, _n, _sub = rows[ti]
-        (tk,) = get_tasks(join_pre_dir, [(db, name)], ("train",))
-        assert tk.task_type == kind, (db, name, tk.task_type, kind)
-        lo, n = table_offset_and_len(join_pre_dir, db, tk.table_name)
-        tasks.append({"db": db, "task": name, "kind": kind, "t": tk, "lo": lo, "n": n})
-        didx[ti] = k
-    ds = make_dataset([e["t"] for e in tasks], join_pre_dir, config, mmap_populate=False)
-    log(f"sampler over {len(tasks)} tasks built")
-
-    ests = make_ests(tabpfn_dir, dev, seed, n_queries, "bf16")
-    log(f"tabpfn loaded; bar distribution {ests['reg'].znorm_space_bardist_.num_bars} buckets")
-
-    ck_dir = Path(ckpt_dir).expanduser()
-    avail = sorted(int(p.stem.replace("pool_step", "")) for p in ck_dir.glob("pool_step*.pt"))
+    env = setup(join_pre_dir, task_list, ckpt, tabpfn_dir, ckpt_dir, todo, n_tasks_total, n_queries, need, seed, log)
     heads = {}
 
     def get_head(step):
         if step not in heads:
-            ck = torch.load(ck_dir / f"pool_step{step}.pt", map_location="cpu", weights_only=True)
-            h = PoolHead(d_model, n_queries).to(dev)
-            h.load_state_dict(ck["state_dict"])
-            heads[step] = h
+            heads[step] = env["load_head"](step)
         return heads[step]
-
-    cells = {
-        "tokens": torch.empty(need, LOCAL_CTX, d_model, dtype=torch.bfloat16, device=dev),
-        "host": torch.empty(need, LOCAL_CTX, d_model, dtype=torch.bfloat16, pin_memory=True),
-    }
-    pad = torch.empty(need, LOCAL_CTX, dtype=torch.bool, device=dev)
-    labels = torch.empty(need, dtype=torch.float32, device=dev)
 
     for s in todo:
         t0 = time.perf_counter()
-        ti = int(order[s])
-        e = tasks[didx[ti]]
-        kind = e["kind"]
+        ck_step = max(a for a in env["avail"] if a <= s)
+        e, filled, n_sub = env["embed"](s)
         name = f"{e['db']}/{e['task']}"
-        ck_step = max(a for a in avail if a <= s)
-        log(f"step {s} {kind} {name}: embedding (ckpt pool_step{ck_step})")
-        cand = np.random.default_rng([seed, s]).permutation(e["n"]) + e["lo"]
-        with torch.inference_mode():
-            filled, n_sub, _a, _b = embed_rows(net, ds, didx[ti], cand, cells["tokens"], pad, labels, need, dev)
-        rec = {"step": s, "task": name, "kind": kind, "ckpt_step": ck_step, "filled": filled, "substituted": n_sub}
+        rec = {"step": s, "task": name, "kind": e["kind"], "ckpt_step": ck_step, "filled": filled, "substituted": n_sub}
         if filled < need:
             rec["skipped"] = f"only {filled} rows"
             (out / f"step{s}.json").write_text(json.dumps(rec, indent=1))
             log(f"step {s}: skipped, only {filled} rows")
             continue
-        log(f"step {s}: embedded {filled} rows ({n_sub} substituted) in {time.perf_counter() - t0:.0f}s")
+        log(f"step {s} {e['kind']} {name}: embedded {filled} rows ({n_sub} substituted) in {time.perf_counter() - t0:.0f}s (ckpt pool_step{ck_step})")
         weights = {"ckpt": get_head(ck_step)}
         if ck_step != 0:
             weights["init"] = get_head(0)
-        rec.update(
-            probe_rows(
-                ests,
-                weights,
-                cells,
-                pad,
-                labels.clone(),
-                kind,
-                n_ctx,
-                head_chunk,
-                jitter_frac,
-                winsor_q,
-                seed,
-                lambda m, s=s: log(f"step {s}: {m}"),
-            )
+        part, _g = probe_rows(
+            env["ests"], weights, env["cells"], env["pad"], env["labels"].clone(), e["kind"], n_ctx, head_chunk,
+            jitter_frac, winsor_q, seed, lambda m, s=s: log(f"step {s}: {m}"),
         )
+        rec.update(part)
         rec["seconds"] = time.perf_counter() - t0
         (out / f"step{s}.json").write_text(json.dumps(rec, indent=1))
-        log(
-            f"step {s} done {rec['seconds']:.0f}s: loss {rec['loss']:.4f} gnorm {rec['gnorm']:.4g} "
-            f"ctx-only {rec['head']['ckpt']['gnorm_ctx_only']:.4g} query-only {rec['head']['ckpt']['gnorm_query_only']:.4g} "
-            f"spearman(g,1/sigma) {rec['columns']['summary']['spearman_g_vs_inv_sigma']} "
-            + " ".join(f"{k} {v['gnorm']:.4g}" for k, v in rec["controls"].items())
-        )
+        log(f"step {s} done {rec['seconds']:.0f}s: loss {rec['loss']:.4f} gnorm {rec['gnorm']:.4g}")
+        torch.cuda.empty_cache()
+    log("done")
+
+
+def replay(
+    *,
+    join_pre_dir: str,
+    task_list: str,
+    ckpt: str,
+    tabpfn_dir: str,
+    ckpt_dir: str,
+    out_dir: str,
+    probe_steps: list[int],
+    last_step: int,
+    n_ctx: int,
+    n_query: int,
+    n_queries: int,
+    head_chunk: int,
+    n_tasks_total: int,
+    lr: float,
+    lr_min: float,
+    warmup_steps: int,
+    total_steps: int,
+    grad_norm_max: float,
+    jitter_frac: float,
+    winsor_q: float,
+    seed: int,
+) -> None:
+    os.environ.setdefault("PYTORCH_CUDA_ALLOC_CONF", "expandable_segments:True")
+
+    import torch
+
+    from expts.repaper.adapter.train_adapter import batched_outputs
+    from expts.repaper.adapter.train_pool import head_features
+
+    need = n_ctx + n_query
+    out = Path(out_dir).expanduser()
+    out.mkdir(parents=True, exist_ok=True)
+    t_start = time.time()
+
+    def log(msg):
+        print(f"[{(time.time() - t_start) / 60:7.1f} min] {msg}", flush=True)
+
+    env = setup(join_pre_dir, task_list, ckpt, tabpfn_dir, ckpt_dir, list(range(last_step + 1)), n_tasks_total, n_queries, need, seed, log)
+    dev, cells, pad, labels = env["dev"], env["cells"], env["pad"], env["labels"]
+    head = env["load_head"](0)
+    init_head = env["load_head"](0)
+    opt = torch.optim.AdamW(head.parameters(), lr=lr, weight_decay=0.0)
+    state_path = out / "replay.pt"
+    start = 0
+    if state_path.exists():
+        st = torch.load(state_path, map_location="cpu", weights_only=True)
+        head.load_state_dict(st["head"])
+        opt.load_state_dict(st["opt"])
+        start = st["step"]
+        log(f"resumed replay at step {start}")
+
+    def lr_at(step):
+        if step < warmup_steps:
+            return lr * (step + 1) / warmup_steps
+        tt = (step - warmup_steps) / max(1, total_steps - warmup_steps)
+        return lr_min + 0.5 * (lr - lr_min) * (1.0 + math.cos(math.pi * tt))
+
+    for step in range(start, last_step + 1):
+        t0 = time.perf_counter()
+        rec = {"step": step}
+        if step in env["avail"]:
+            ref = env["load_head"](step)
+            rec["vs_saved_ckpt"] = {
+                n: float((p.detach() - q.detach()).norm() / q.detach().norm().clamp(min=1e-12))
+                for (n, p), (_m, q) in zip(head.named_parameters(), ref.named_parameters())
+            }
+            log(f"step {step}: replay vs pool_step{step}.pt rel diff " + " ".join(f"{n} {v:.2e}" for n, v in rec["vs_saved_ckpt"].items()))
+        e, filled, n_sub = env["embed"](step)
+        kind = e["kind"]
+        rec.update({"task": f"{e['db']}/{e['task']}", "kind": kind, "filled": filled, "substituted": n_sub})
+        y = labels.clone()
+        reason = None
+        if filled < need:
+            reason = f"only {filled} rows"
+        elif kind == "reg" and float(y[:n_ctx].std()) < 1e-6:
+            reason = "constant context label"
+        elif kind == "clf" and (y[:n_ctx] > 0).float().mean().item() in (0.0, 1.0):
+            reason = "one class in context"
+        g = None
+        if reason is None and step in probe_steps and not (out / f"step{step}.json").exists():
+            prec, g = probe_rows(
+                env["ests"], {"ckpt": head, "init": init_head}, cells, pad, y, kind, n_ctx, head_chunk,
+                jitter_frac, winsor_q, seed, lambda m, s=step: log(f"step {s}: {m}"),
+            )
+            prec.update({"step": step, "task": rec["task"], "kind": kind, "ckpt_step": "replay", "filled": filled, "substituted": n_sub})
+            (out / f"step{step}.json").write_text(json.dumps(prec, indent=1))
+            rec["probed"] = True
+        elif reason is None:
+            f = head_features(head, cells["tokens"], pad, need, head_chunk)
+            cells["host"].copy_(cells["tokens"])
+            cells["tokens"] = None
+            leaf = f.to(dev).requires_grad_(True)
+            loss, _p, _t = batched_outputs(env["ests"][kind], kind, [leaf], [y], n_ctx, dev)
+            loss.backward()
+            g = leaf.grad.detach()
+            rec["loss"] = float(loss)
+            del leaf, loss
+            cells["tokens"] = cells["host"].to(dev)
+        if g is not None and bool(torch.isfinite(g).all()):
+            for gr in opt.param_groups:
+                gr["lr"] = lr_at(step)
+            opt.zero_grad(set_to_none=True)
+            for i in range(0, need, head_chunk):
+                j = min(i + head_chunk, need)
+                head(cells["tokens"][i:j], pad[i:j]).backward(g[i:j])
+            rec["per_param"] = {n: float(p.grad.norm()) for n, p in head.named_parameters()}
+            rec["gnorm"] = float(torch.nn.utils.clip_grad_norm_(head.parameters(), grad_norm_max))
+            opt.step()
+        else:
+            rec["skipped"] = reason or "non-finite"
+        rec["seconds"] = time.perf_counter() - t0
+        with open(out / "replay.jsonl", "a") as fh:
+            fh.write(json.dumps(rec) + "\n")
+        tmp = out / f"replay.pt.{os.getpid()}.tmp"
+        torch.save({"step": step + 1, "head": head.state_dict(), "opt": opt.state_dict()}, tmp)
+        os.replace(tmp, state_path)
+        log(f"replay step {step} {kind} {rec['task']} loss {rec.get('loss', float('nan')):.4f} gnorm {rec.get('gnorm', float('nan')):.4g} {rec['seconds']:.0f}s" + (" probed" if rec.get("probed") else ""))
         torch.cuda.empty_cache()
     log("done")

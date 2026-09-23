@@ -7,9 +7,11 @@ from expts.repaper.config import CKPT, CLONE_ROOT, LOG_ROOT, OUT_ROOT, SECRETS_D
 
 REPO_ROOT = str(Path(__file__).resolve().parents[3])
 
-submit(
-    "expts.repaper.adapter.probe_pool_grad:main",
-    args=dict(
+MODE = "replay"
+
+if MODE == "ckpt":
+    target = "expts.repaper.adapter.probe_pool_grad:main"
+    args = dict(
         join_pre_dir="~/scratch/hf/stanford-star/the-join-preprocessed",
         task_list="pool_tasks.json",
         ckpt=CKPT,
@@ -25,12 +27,41 @@ submit(
         jitter_frac=0.05,
         winsor_q=0.01,
         seed=0,
-    ),
+    )
+else:
+    target = "expts.repaper.adapter.probe_pool_grad:replay"
+    args = dict(
+        join_pre_dir="~/scratch/hf/stanford-star/the-join-preprocessed",
+        task_list="pool_tasks.json",
+        ckpt=CKPT,
+        tabpfn_dir=f"{SHARE}/tabpfn",
+        ckpt_dir=f"{OUT_ROOT}/adapter/pool-v1",
+        out_dir=f"{LOG_ROOT}/repaper/adapter/probe-pool-grad-replay",
+        probe_steps=[0, 1, 8, 11, 12, 16, 24, 38, 46, 48, 50, 56, 62, 100, 127, 128],
+        last_step=128,
+        n_ctx=2**16,
+        n_query=2**14,
+        n_queries=64,
+        head_chunk=2048,
+        n_tasks_total=2608,
+        lr=3e-4,
+        lr_min=1e-5,
+        warmup_steps=100,
+        total_steps=2500,
+        grad_norm_max=10.0,
+        jitter_frac=0.05,
+        winsor_q=0.01,
+        seed=0,
+    )
+
+submit(
+    target,
+    args=args,
     resources=Resources(
         partition="il",
         account="infolab",
         qos="il-lo",
-        time="4:00:00",
+        time="6:00:00",
         gpus="b200:1",
         cpus_per_task=16,
         ntasks=1,
@@ -43,7 +74,7 @@ submit(
         dependency=None,
         exclude=None,
     ),
-    name="adapter-probe-pool-grad",
+    name=f"adapter-probe-pool-grad-{MODE}",
     repo_root=REPO_ROOT,
     cluster=ILC,
     job_env="expts/job_env.sh",
