@@ -118,6 +118,8 @@ def main(
     relbench_n_query: int,
     n_queries: int,
     head_chunk: int,
+    tabpfn_device: str,
+    offload_cells: bool,
     total_steps: int,
     lr: float,
     lr_min: float,
@@ -153,8 +155,8 @@ def main(
     from rt.train._train import seed_everything
     from rt.train.swa import SwaState
 
-    assert torch.cuda.device_count() >= 2, torch.cuda.device_count()
-    dev0, dev1 = "cuda:0", "cuda:1"
+    dev0, dev1 = "cuda:0", tabpfn_device
+    assert torch.cuda.device_count() > int(dev1.split(":")[1]), torch.cuda.device_count()
     need = n_ctx + n_query
     out = Path(out_dir).expanduser()
     out.mkdir(parents=True, exist_ok=True)
@@ -219,10 +221,19 @@ def main(
         swa_head = copy.deepcopy(head)
         for p in swa_head.parameters():
             p.requires_grad_(False)
-        tokens = torch.empty(need, LOCAL_CTX, d_model, dtype=torch.bfloat16, device=dev0)
+        buf = {"tokens": torch.empty(need, LOCAL_CTX, d_model, dtype=torch.bfloat16, device=dev0)}
         pad = torch.empty(need, LOCAL_CTX, dtype=torch.bool, device=dev0)
         labels = torch.empty(need, dtype=torch.float32, device=dev0)
-    log(f"head: {sum(p.numel() for p in head.parameters())} params; token buffer {tokens.numel() * 2 / 2**30:.1f} GiB")
+    host = torch.empty(need, LOCAL_CTX, d_model, dtype=torch.bfloat16, pin_memory=True) if offload_cells else None
+    log(
+        f"head: {sum(p.numel() for p in head.parameters())} params; cell buffer "
+        f"{buf['tokens'].numel() * 2 / 2**30:.1f} GiB; tabpfn on {dev1}; offload_cells {offload_cells}"
+    )
+
+    def cells():
+        if buf["tokens"] is None:
+            buf["tokens"] = torch.empty(need, LOCAL_CTX, d_model, dtype=torch.bfloat16, device=dev0)
+        return buf["tokens"]
     init_flat = torch.cat([p.detach().flatten() for p in head.parameters()]).clone()
     opt = torch.optim.AdamW(head.parameters(), lr=lr, weight_decay=wd)
     swa = SwaState(head.named_parameters(), momentum=swa_momentum)
@@ -293,6 +304,7 @@ def main(
                 log(f"step {step:>5} eval abandoned for a stop signal")
                 return
             t1 = time.perf_counter()
+            tokens = cells()
             with torch.cuda.device(dev0), torch.inference_mode():
                 nc, s1, _a, _b = embed_rows(net, ev["ds"], ev["didx"], ev["ctx"], tokens, pad, labels, len(ev["ctx"]), dev0)
                 nq, s2, _a, _b = embed_rows(
@@ -372,6 +384,7 @@ def main(
         rng = np.random.default_rng([seed, step])
         cand = rng.permutation(e["n"]) + e["lo"]
         tm = {}
+        tokens = cells()
         with torch.cuda.device(dev0), torch.inference_mode():
             filled, n_sub, tm["sample_s"], tm["rtj_s"] = embed_rows(
                 net, ds, int(order[step]), cand, tokens, pad, labels, need, dev0
@@ -398,6 +411,12 @@ def main(
             counts["skipped"] += 1
             log(f"step {step:>5} {e['db']}/{e['task']} skipped: {reason}")
         else:
+            if offload_cells:
+                t = time.perf_counter()
+                host.copy_(tokens)
+                del tokens
+                buf["tokens"] = None
+                tm["offload_s"] = time.perf_counter() - t
             t = time.perf_counter()
             with torch.cuda.device(dev1):
                 torch.cuda.reset_peak_memory_stats(dev1)
@@ -410,6 +429,12 @@ def main(
                     ok = bool(torch.isfinite(g).all())
                 torch.cuda.synchronize(dev1)
             tm["tabpfn_s"] = time.perf_counter() - t
+            del leaf
+            if offload_cells:
+                t = time.perf_counter()
+                buf["tokens"] = host.to(dev0)
+                tokens = buf["tokens"]
+                tm["reload_s"] = time.perf_counter() - t
             if ok:
                 t = time.perf_counter()
                 with torch.cuda.device(dev0):
