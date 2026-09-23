@@ -91,6 +91,7 @@ def collate(round_dir: str, out_dir: str) -> None:
                             "rdblearn": "rdblearn_features",
                             "rt": "rt_features",
                             "gnn": "gnn_features",
+                            "entity": "entity_features",
                             "sql": "sql_features",
                         }[result["method"].rsplit("_", 1)[0]],
                         result["db"],
