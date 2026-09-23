@@ -40,7 +40,7 @@ submit(
         nodelist=None,
         reservation=None,
         dependency=None,
-        exclude="ampere4",
+        exclude="ampere4,ampere7",
     ),
     name="adapter-probe-pool-throughput",
     repo_root=REPO_ROOT,

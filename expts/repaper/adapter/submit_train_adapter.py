@@ -124,7 +124,7 @@ for adapter_kind, hidden_dim, grad_norm_max, qos in ARMS:
             nodelist=None,
             reservation=None,
             dependency=None,
-            exclude="ampere4",
+            exclude="ampere4,ampere7",
         ),
         name=f"adapter-train-{RUN}",
         # roach mints one and injects it into args; paste one here to relaunch an

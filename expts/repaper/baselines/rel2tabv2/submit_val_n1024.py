@@ -129,7 +129,7 @@ for db, table in TASKS:
             nodelist=None,
             reservation=None,
             dependency=None,
-            exclude="ampere4,hyperturing1,blackwell1,turing1,turing2,turing3,hyperion1,hyperion3",
+            exclude="ampere4,ampere7,hyperturing1,blackwell1,turing1,turing2,turing3,hyperion1,hyperion3",
         ),
         name=name,
         repo_root=REPO_ROOT,

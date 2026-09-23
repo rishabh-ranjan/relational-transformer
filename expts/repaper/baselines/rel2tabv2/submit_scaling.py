@@ -153,7 +153,7 @@ for n_rows in CONTEXT_ROWS:
                 nodelist=None,
                 reservation=None,
                 dependency=None,
-                exclude="ampere4",
+                exclude="ampere4,ampere7",
             ),
             name=name,
             repo_root=REPO_ROOT,

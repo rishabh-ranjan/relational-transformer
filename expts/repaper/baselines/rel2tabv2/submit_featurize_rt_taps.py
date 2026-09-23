@@ -98,7 +98,7 @@ for db, tables in TASKS_BY_DB.items():
             nodelist=None,
             reservation=None,
             dependency=None,
-            exclude="ampere4",
+            exclude="ampere4,ampere7",
         ),
         name=f"rel2tabv2-feat-taps-{db}",
         repo_root=REPO_ROOT,

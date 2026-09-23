@@ -93,7 +93,7 @@ for i, (card, dbs, rows) in enumerate(shards()):
             nodelist=None if card == "a100" else "blackwell1",
             reservation=None,
             dependency=None,
-            exclude="ampere4" if card == "a100" else None,
+            exclude="ampere4,ampere7" if card == "a100" else None,
         ),
         name=name,
         repo_root=REPO_ROOT,

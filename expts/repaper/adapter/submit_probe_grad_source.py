@@ -43,7 +43,7 @@ submit(
         nodelist=None,
         reservation=None,
         dependency=None,
-        exclude="ampere4",
+        exclude="ampere4,ampere7",
     ),
     name="adapter-probe-grad-source",
     repo_root=REPO_ROOT,

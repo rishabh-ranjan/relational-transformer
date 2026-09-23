@@ -136,7 +136,6 @@ skipped_no_blob = []
 # Resources carries no --begin.
 CHAIN_AFTER = {
     ("rel-hm", "item-sales"): None,
-    ("rel-stack", "post-votes"): None,
     ("rel-trial", "site-success"): ("rel-hm", "item-sales"),
 }
 chained: dict[tuple[str, str], str] = {}
@@ -224,11 +223,10 @@ for db, table in TASKS:
             resources=Resources(
                 partition="il",
                 account="infolab",
-                # il-lo, not il: it leaves the higher tier free for others.
-                # These runs do not checkpoint, so a preemption restarts a cell
-                # from zero -- acceptable because run.main skips a cell whose
-                # json exists, so a requeue only redoes its own work.
-                qos="il-lo",
+                # Back on il: il-lo preempted 194156 three hours in and it
+                # restarted from zero, which is the whole cost of a run that
+                # does not checkpoint.
+                qos="il",
                 time="12:00:00" if db in BIG else "4:00:00",
                 # a100, and never rtx8000 or 2080ti: EXAONE has no SDPA kernel
                 # on sm_75. b200 is capped at 2 for the whole il partition by
@@ -243,17 +241,25 @@ for db, table in TASKS:
                 nodelist=None,
                 reservation=None,
                 dependency=None,
-                # ampere6, ampere7 and ampere9 came back in on 2026-09-23.
+                # ampere6 and ampere9 came back in on 2026-09-23; ampere7 did
+                # not, see below.
                 # Their reasons were real -- 6 and 9 stopped responding on
                 # 08-27/28, and 7's seventh a100 came up with 16 MB free -- but
                 # a month on all three are healthy, carrying other people's
                 # jobs, and ampere7 advertises 7 a100s rather than 8, so the bad
-                # card is out of slurm's config. A node that is genuinely broken
-                # gets drained by the admins; a hand-kept list cannot notice
-                # that it healed, and this one had us queued on Priority while
-                # ampere7 sat on three idle a100s. ampere4 stays out until its
-                # local disk (99% full on 2026-08-25) is checked on the node.
-                exclude="ampere4",
+                # card is out of slurm's config.
+                #
+                # ampere7 was let back in on the same reasoning and put straight
+                # back out: 194155 died there with CUDA OOM at the first EXAONE
+                # forward, finding 49.84 GiB of someone else's process already
+                # resident on the card slurm had given it -- the exact 2026-08
+                # complaint. scontrol shows all seven cards singly allocated and
+                # the node healthy, so this failure is invisible from the
+                # outside and only a job discovers it. ampere4 stays out too:
+                # its local disk was 99% full on 2026-08-25 and a probe job to
+                # recheck it wrote to the node's own /tmp, so it told us
+                # nothing.
+                exclude="ampere4,ampere7",
             ),
             name=name,
             repo_root=REPO_ROOT,

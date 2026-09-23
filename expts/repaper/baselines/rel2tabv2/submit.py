@@ -173,7 +173,7 @@ def gpu_resources(db: str, table: str) -> Resources:
         nodelist="blackwell1" if card == "b200" else None,
         reservation=None,
         dependency=None,
-        exclude="ampere4" if card == "a100" else None,
+        exclude="ampere4,ampere7" if card == "a100" else None,
     )
 
 
