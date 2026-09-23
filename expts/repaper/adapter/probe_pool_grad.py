@@ -645,6 +645,122 @@ def probe_rows(ests, weights, cells, pad, y, kind, n_ctx, chunk, jitter_frac, wi
 
 
 
+def pvec(head, tokens, pad, g, chunk):
+    import torch
+
+    need = len(g)
+    head.zero_grad(set_to_none=True)
+    for i in range(0, need, chunk):
+        j = min(i + chunk, need)
+        if bool(g[i:j].any()):
+            head(tokens[i:j], pad[i:j]).backward(g[i:j])
+    v = torch.cat([(p.grad if p.grad is not None else torch.zeros_like(p)).flatten() for p in head.parameters()]).double()
+    w2 = head.w2.weight.grad
+    w2n = float(w2.norm()) if w2 is not None else 0.0
+    head.zero_grad(set_to_none=True)
+    return v, w2n
+
+
+def noise_split(vs):
+    import torch
+
+    k = len(vs)
+    m = torch.stack(vs).mean(0)
+    msq = sum(float(v.square().sum()) for v in vs) / k
+    noise_sq = max(0.0, (msq - float(m.square().sum())) * k / (k - 1))
+    return {
+        "k": k,
+        "mean_gnorm": sum(float(v.norm()) for v in vs) / k,
+        "gnorm_of_mean": float(m.norm()),
+        "signal_norm_est": max(0.0, msq - noise_sq) ** 0.5,
+        "noise_norm_est": noise_sq**0.5,
+    }
+
+
+def snr_rows(ests, ests32, head, cells, pad, y, kind, n_ctx, chunk, sub_ctx, sub_q, log):
+    import torch
+
+    from expts.repaper.adapter.train_pool import head_features
+
+    dev = pad.device
+    need = len(y)
+    f = head_features(head, cells["tokens"], pad, need, chunk)
+    mu, sig = f[:n_ctx].mean(0), f[:n_ctx].std(0)
+    cells["host"].copy_(cells["tokens"])
+    cells["tokens"] = None
+    torch.cuda.empty_cache()
+    variants = {
+        "base": (f, None, 1.0),
+        "base_fp1": (f, 1, 1.0),
+        "base_fp2": (f, 2, 1.0),
+        "base_fp3": (f, 3, 1.0),
+        "std_fp1": ((f - mu) / sig, 1, sig),
+        "base_const": (f, "const", 1.0),
+        "std_const": ((f - mu) / sig, "const", sig),
+        "shift_const": (f + 0.5 * sig, "const", 1.0),
+        "scale2_const": (f * 2.0, "const", 0.5),
+    }
+    gs, losses = {}, {}
+    for name, (x, fp, div) in variants.items():
+        r = tabpfn_pass(ests, kind, x, y, n_ctx, dev, False, fp=fp)
+        gs[name] = r["g"] * (1.0 / div if isinstance(div, float) else 1.0 / div)
+        losses[name] = r["loss"]
+    ridx = torch.cat([torch.arange(sub_ctx, device=dev), torch.arange(n_ctx, n_ctx + sub_q, device=dev)])
+    fs, ys = f[ridx], y[ridx]
+    mus, sigs = fs[:sub_ctx].mean(0), fs[:sub_ctx].std(0)
+    sub = {}
+    for prec, es in (("bf16", ests), ("fp32", ests32)):
+        for name, (x, div) in {
+            "base_const": (fs, 1.0),
+            "std_const": ((fs - mus) / sigs, sigs),
+            "shift_const": (fs + 0.5 * sigs, 1.0),
+            "scale2_const": (fs * 2.0, 0.5),
+        }.items():
+            r = tabpfn_pass(es, kind, x, ys, sub_ctx, dev, False, fp="const")
+            gf = torch.zeros(need, f.shape[1], device=dev)
+            gf[ridx] = r["g"] * (1.0 / div if isinstance(div, float) else 1.0 / div)
+            gs[f"sub_{prec}_{name}"] = gf
+            losses[f"sub_{prec}_{name}"] = r["loss"]
+    log("losses " + " ".join(f"{k} {v:.4f}" for k, v in losses.items()))
+    cells["tokens"] = cells["host"].to(dev)
+    vs, w2 = {}, {}
+    for name, g in gs.items():
+        vs[name], w2[name] = pvec(head, cells["tokens"], pad, g, chunk)
+    names = list(vs)
+    cos = {
+        a: {b: float(torch.nn.functional.cosine_similarity(vs[a], vs[b], dim=0)) for b in names}
+        for a in names
+    }
+    fcos = {
+        a: {b: float(torch.nn.functional.cosine_similarity(gs[a].flatten(), gs[b].flatten(), dim=0)) for b in names}
+        for a in names
+    }
+    groups = {
+        "fullrows_bf16_numeric": ["base_const", "std_const", "shift_const", "scale2_const"],
+        "fullrows_bf16_fingerprint": ["base_fp1", "base_fp2", "base_fp3", "base_const"],
+        "fullrows_bf16_all": names[:9],
+        "subrows_bf16_numeric": [f"sub_bf16_{n}" for n in ("base_const", "std_const", "shift_const", "scale2_const")],
+        "subrows_fp32_numeric": [f"sub_fp32_{n}" for n in ("base_const", "std_const", "shift_const", "scale2_const")],
+    }
+    rec = {
+        "loss": losses,
+        "gnorm": {n: float(v.norm()) for n, v in vs.items()},
+        "w2_gnorm": w2,
+        "dLdf_norm": {n: float(g.norm()) for n, g in gs.items()},
+        "cos_theta": cos,
+        "cos_dLdf": fcos,
+        "groups": {k: noise_split([vs[n] for n in v]) for k, v in groups.items()},
+        "sub_rows": [sub_ctx, sub_q],
+    }
+    log(
+        "gnorm "
+        + " ".join(f"{k} {v:.4g}" for k, v in rec["gnorm"].items())
+        + " | "
+        + " ".join(f"{k} signal {v['signal_norm_est']:.3g} noise {v['noise_norm_est']:.3g}" for k, v in rec["groups"].items())
+    )
+    return rec
+
+
 def setup(join_pre_dir, task_list, ckpt, tabpfn_dir, ckpt_dir, steps, n_tasks_total, n_queries, need, seed, log):
     import numpy as np
     import torch
@@ -897,5 +1013,68 @@ def replay(
         torch.save({"step": step + 1, "head": head.state_dict(), "opt": opt.state_dict()}, tmp)
         os.replace(tmp, state_path)
         log(f"replay step {step} {kind} {rec['task']} loss {rec.get('loss', float('nan')):.4f} gnorm {rec.get('gnorm', float('nan')):.4g} {rec['seconds']:.0f}s" + (" probed" if rec.get("probed") else ""))
+        torch.cuda.empty_cache()
+    log("done")
+
+
+def snr(
+    *,
+    join_pre_dir: str,
+    task_list: str,
+    ckpt: str,
+    tabpfn_dir: str,
+    ckpt_dir: str,
+    out_dir: str,
+    steps: list[int],
+    n_ctx: int,
+    n_query: int,
+    n_queries: int,
+    head_chunk: int,
+    n_tasks_total: int,
+    sub_ctx: int,
+    sub_q: int,
+    seed: int,
+) -> None:
+    os.environ.setdefault("PYTORCH_CUDA_ALLOC_CONF", "expandable_segments:True")
+
+    import torch
+
+    from expts.repaper.adapter.train_adapter import make_ests
+
+    need = n_ctx + n_query
+    out = Path(out_dir).expanduser()
+    out.mkdir(parents=True, exist_ok=True)
+    t_start = time.time()
+
+    def log(msg):
+        print(f"[{(time.time() - t_start) / 60:7.1f} min] {msg}", flush=True)
+
+    todo = [s for s in steps if not (out / f"step{s}.json").exists()]
+    log(f"{len(steps)} steps requested, {len(todo)} to do: {todo}")
+    if not todo:
+        return
+    env = setup(join_pre_dir, task_list, ckpt, tabpfn_dir, ckpt_dir, todo, n_tasks_total, n_queries, need, seed, log)
+    ests32 = make_ests(tabpfn_dir, env["dev"], seed, n_queries, "fp32")
+    heads = {}
+    for s in todo:
+        t0 = time.perf_counter()
+        ck_step = max(a for a in env["avail"] if a <= s)
+        if ck_step not in heads:
+            heads[ck_step] = env["load_head"](ck_step)
+        e, filled, n_sub = env["embed"](s)
+        rec = {"step": s, "task": f"{e['db']}/{e['task']}", "kind": e["kind"], "ckpt_step": ck_step, "filled": filled}
+        if filled < need:
+            rec["skipped"] = f"only {filled} rows"
+        else:
+            log(f"step {s} {e['kind']} {rec['task']}: embedded in {time.perf_counter() - t0:.0f}s (ckpt pool_step{ck_step})")
+            rec.update(
+                snr_rows(
+                    env["ests"], ests32, heads[ck_step], env["cells"], env["pad"], env["labels"].clone(), e["kind"],
+                    n_ctx, head_chunk, sub_ctx, sub_q, lambda m, s=s: log(f"step {s}: {m}"),
+                )
+            )
+        rec["seconds"] = time.perf_counter() - t0
+        (out / f"step{s}.json").write_text(json.dumps(rec, indent=1))
+        log(f"step {s} done {rec['seconds']:.0f}s")
         torch.cuda.empty_cache()
     log("done")
