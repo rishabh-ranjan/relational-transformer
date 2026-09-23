@@ -58,13 +58,14 @@ def embed_rows(net, ds, didx, nodes, tokens, pad, labels, need, device):
     return filled, n_sub, samp_s, fwd_s
 
 
-def head_features(head, tokens, pad, n, chunk):
+def head_features(head, tokens, pad, n, n_ctx, chunk):
     import torch
 
     with torch.no_grad():
-        return torch.cat(
-            [head(tokens[i : min(i + chunk, n)], pad[i : min(i + chunk, n)]) for i in range(0, n, chunk)]
+        h = torch.cat(
+            [head.pool(tokens[i : min(i + chunk, n)], pad[i : min(i + chunk, n)]) for i in range(0, n, chunk)]
         )
+        return h, head.mix(h, n_ctx)
 
 
 def build_relbench(pre_dir, db_task_list, config, n_ctx_max, n_query_max, seed):
@@ -117,7 +118,7 @@ def main(
     relbench_n_ctx: int,
     relbench_n_query: int,
     n_queries: int,
-    swiglu_norm: bool,
+    swiglu_norm: str,
     head_chunk: int,
     tabpfn_device: str,
     tabpfn_precision: str,
@@ -315,7 +316,7 @@ def main(
             y = labels[: nc + nq].clone()
             for key, h in (("head", head), ("swa", swa_head)):
                 with torch.cuda.device(dev0):
-                    f = head_features(h, tokens, pad, nc + nq, head_chunk)
+                    _h, f = head_features(h, tokens, pad, nc + nq, nc, head_chunk)
                 with torch.cuda.device(dev1), torch.no_grad():
                     _loss, pred, tgt = batched_outputs(
                         ests[ev["kind"]], ev["kind"], [f.to(dev1)], [y.to(dev1)], nc, dev1
@@ -414,7 +415,7 @@ def main(
             reason = "one class in context"
         t = time.perf_counter()
         with torch.cuda.device(dev0):
-            f = head_features(head, tokens, pad, need, head_chunk) if reason is None else None
+            hp, f = head_features(head, tokens, pad, need, n_ctx, head_chunk) if reason is None else (None, None)
         if reason is None and float(f[:n_ctx].std(dim=0).max()) == 0.0:
             reason = "constant features"
         tm["head_fwd_s"] = time.perf_counter() - t
@@ -452,9 +453,12 @@ def main(
             if ok:
                 t = time.perf_counter()
                 with torch.cuda.device(dev0):
+                    hl = hp.detach().requires_grad_(True)
+                    head.mix(hl, n_ctx).backward(g)
+                    gh = hl.grad
                     for i in range(0, need, head_chunk):
                         j = min(i + head_chunk, need)
-                        head(tokens[i:j], pad[i:j]).backward(g[i:j])
+                        head.pool(tokens[i:j], pad[i:j]).backward(gh[i:j])
                     torch.cuda.synchronize(dev0)
                 tm["head_bwd_s"] = time.perf_counter() - t
                 ok = all(torch.isfinite(p.grad).all() for p in head.parameters())
