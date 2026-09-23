@@ -13,7 +13,6 @@ def main(
     db: str,
     task: str,
     n_rows: int,
-    n_ctx: int,
     local_ctx_size: int,
     embed_chunk: int,
     head_chunk: int,
@@ -24,6 +23,7 @@ def main(
     check_ctx: int,
     check_chunk: int,
     tabpfn_modes: list[str],
+    tabpfn_rows: list[int],
     lr: float,
     seed: int,
 ) -> None:
@@ -48,8 +48,6 @@ def main(
         "db": db,
         "task": task,
         "n_rows": n_rows,
-        "n_ctx": n_ctx,
-        "n_query": n_rows - n_ctx,
     }
 
     def dump():
@@ -161,15 +159,19 @@ def main(
             f = head(tokens[j], pad[j])
             f.backward(g[i : i + chunk])
 
+    phase = {"at": None, "fwd_peak_gib": None}
+
     def tabpfn_grad(f, y, nctx, mode):
         leaf = f.detach().to(dev_pfn).requires_grad_(True)
         ac = torch.bfloat16 if mode == "autocast_bf16" else None
         sync()
+        phase["at"], phase["fwd_peak_gib"] = "fwd", None
         t = time.perf_counter()
         loss, _p, _l = loss_and_pred(ests, lambda e: e, "clf", leaf, y, nctx, dev_pfn, ac)
         assert loss is not None
         sync()
         t_fwd = time.perf_counter() - t
+        phase["at"], phase["fwd_peak_gib"] = "bwd", gib(dev_pfn)
         t = time.perf_counter()
         loss.backward()
         sync()
@@ -221,34 +223,50 @@ def main(
     log(f"head pass 1: {report['head_pass1_s']:.2f}s, dev0 peak {report['head_pass1_peak_gib_dev0']:.1f} GiB")
 
     report["tabpfn"] = {}
-    grad = None
-    for mode in tabpfn_modes:
-        torch.cuda.reset_peak_memory_stats(dev_pfn)
-        try:
-            loss, g, t_fwd, t_bwd = tabpfn_grad(f, y, n_ctx, mode)
-            report["tabpfn"][mode] = {
-                "loss": loss,
-                "fwd_s": t_fwd,
-                "bwd_s": t_bwd,
-                "peak_gib_dev1": gib(dev_pfn),
-                "feature_grad_norm": float(g.norm()),
-                "feature_grad_finite": bool(torch.isfinite(g).all()),
-                "ctx_query_grad_norm": [float(g[:n_ctx].norm()), float(g[n_ctx:].norm())],
-            }
-            if grad is None:
-                grad, grad_mode, loss0 = g, mode, loss
-        except torch.OutOfMemoryError as exc:
-            report["tabpfn"][mode] = {"OOM": str(exc)[:300], "peak_gib_dev1": gib(dev_pfn)}
-        torch.cuda.empty_cache()
-        log(f"tabpfn {mode}: {report['tabpfn'][mode]}")
-        dump()
-    assert grad is not None, "every tabpfn mode ran out of memory"
+    best = None
+    for r in tabpfn_rows:
+        assert r <= n_rows and r % 4 == 0, r
+        nc = 3 * r // 4
+        fr, yr = f[:r], y[:r]
+        rung = report["tabpfn"][str(r)] = {"n_ctx": nc, "n_query": r - nc}
+        fits = False
+        for mode in tabpfn_modes:
+            torch.cuda.reset_peak_memory_stats(dev_pfn)
+            try:
+                loss, g, t_fwd, t_bwd = tabpfn_grad(fr, yr, nc, mode)
+                rung[mode] = {
+                    "loss": loss,
+                    "fwd_s": t_fwd,
+                    "bwd_s": t_bwd,
+                    "fwd_peak_gib_dev1": phase["fwd_peak_gib"],
+                    "peak_gib_dev1": gib(dev_pfn),
+                    "feature_grad_norm": float(g.norm()),
+                    "feature_grad_finite": bool(torch.isfinite(g).all()),
+                    "ctx_query_grad_norm": [float(g[:nc].norm()), float(g[nc:].norm())],
+                }
+                fits = True
+                best = (r, nc, mode, loss, g)
+            except torch.OutOfMemoryError as exc:
+                rung[mode] = {
+                    "OOM_in": phase["at"],
+                    "fwd_peak_gib_dev1": phase["fwd_peak_gib"],
+                    "msg": str(exc)[:200],
+                }
+            g = None
+            torch.cuda.empty_cache()
+            log(f"tabpfn rows {r} {mode}: {rung[mode]}")
+            dump()
+        if not fits:
+            break
+    assert best is not None, "every tabpfn size ran out of memory"
+    r, nc, grad_mode, loss0, grad = best
+    idx = perm[:r]
 
     head.zero_grad()
     torch.cuda.reset_peak_memory_stats(dev_rt)
     sync()
     t = time.perf_counter()
-    backprop(perm, head_chunk, grad)
+    backprop(idx, head_chunk, grad)
     sync()
     report["head_pass2_s"] = time.perf_counter() - t
     report["head_pass2_peak_gib_dev0"] = gib(dev_rt)
@@ -256,16 +274,16 @@ def main(
         n: {"norm": float(p.grad.norm()), "finite": bool(torch.isfinite(p.grad).all())}
         for n, p in head.named_parameters()
     }
-    log(f"head pass 2: {report['head_pass2_s']:.2f}s, grads {report['head_grad']}")
+    log(f"head pass 2 on {r} rows: {report['head_pass2_s']:.2f}s, grads {report['head_grad']}")
 
     opt = torch.optim.AdamW(head.parameters(), lr=lr, weight_decay=0.0)
     opt.step()
-    f_after = features(perm, head_chunk)
+    f_after = features(idx, head_chunk)
     with torch.no_grad():
         leaf = f_after.to(dev_pfn)
         ac = torch.bfloat16 if grad_mode == "autocast_bf16" else None
-        loss1, _p, _l = loss_and_pred(ests, lambda e: e, "clf", leaf, y, n_ctx, dev_pfn, ac)
-    report["step"] = {"mode": grad_mode, "lr": lr, "loss_before": loss0, "loss_after": float(loss1)}
+        loss1, _p, _l = loss_and_pred(ests, lambda e: e, "clf", leaf, y[:r], nc, dev_pfn, ac)
+    report["step"] = {"rows": r, "mode": grad_mode, "lr": lr, "loss_before": loss0, "loss_after": float(loss1)}
     report["peak_gib"] = {"dev0": gib(dev_rt), "dev1": gib(dev_pfn)}
     log(f"step: {report['step']}")
     dump()
