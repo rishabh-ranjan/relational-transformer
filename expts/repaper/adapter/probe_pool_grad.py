@@ -798,7 +798,7 @@ def setup(join_pre_dir, task_list, ckpt, tabpfn_dir, ckpt_dir, steps, n_tasks_to
 
     def load_head(step):
         ck = torch.load(ck_dir / f"pool_step{step}.pt", map_location="cpu", weights_only=True)
-        h = PoolHead(d_model, n_queries).to(dev)
+        h = PoolHead(d_model, n_queries, swiglu_norm=False).to(dev)
         h.load_state_dict(ck["state_dict"])
         return h
 

@@ -6,7 +6,7 @@ from torch.nn import functional as F
 
 
 class PoolHead(nn.Module):
-    def __init__(self, d_model: int, n_queries: int, mean=None, scale=None):
+    def __init__(self, d_model: int, n_queries: int, swiglu_norm: bool, mean=None, scale=None):
         super().__init__()
         self.register_buffer(
             "mean", torch.zeros(d_model) if mean is None else torch.as_tensor(mean).float()
@@ -20,6 +20,7 @@ class PoolHead(nn.Module):
         self.w1 = nn.Linear(n_queries, n_queries, bias=True)
         self.w3 = nn.Linear(n_queries, n_queries, bias=True)
         self.w2 = nn.Linear(n_queries, n_queries, bias=False)
+        self.norm = nn.LayerNorm(n_queries) if swiglu_norm else nn.Identity()
         for lin in (self.wk, self.wv, self.w1, self.w3):
             nn.init.xavier_uniform_(lin.weight)
         nn.init.zeros_(self.w1.bias)
@@ -35,4 +36,5 @@ class PoolHead(nn.Module):
         attn = logits.softmax(dim=1)
         v = self.wv(z)
         h = (attn * v).sum(dim=1)
-        return h + self.w2(F.silu(self.w1(h)) * self.w3(h))
+        u = self.norm(h)
+        return h + self.w2(F.silu(self.w1(u)) * self.w3(u))

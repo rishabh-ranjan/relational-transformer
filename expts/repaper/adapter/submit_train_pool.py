@@ -9,7 +9,8 @@ REPO_ROOT = str(Path(__file__).resolve().parents[3])
 
 # RUN = "pool-v1-smoke"
 # RUN = "pool-v1"
-RUN = "pool-v2-fp32-half"
+# RUN = "pool-v2-fp32-half"
+RUN = "pool-v3-fp32-half-ln"
 
 submit(
     "expts.repaper.adapter.train_pool:main",
@@ -29,6 +30,8 @@ submit(
         relbench_n_ctx=2**16,
         relbench_n_query=2**14,
         n_queries=64,
+        swiglu_norm=True,
+        # swiglu_norm=False,
         head_chunk=2048,
         tabpfn_device="cuda:0",
         tabpfn_precision="fp32",

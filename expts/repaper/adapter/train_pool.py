@@ -117,6 +117,7 @@ def main(
     relbench_n_ctx: int,
     relbench_n_query: int,
     n_queries: int,
+    swiglu_norm: bool,
     head_chunk: int,
     tabpfn_device: str,
     tabpfn_precision: str,
@@ -216,7 +217,7 @@ def main(
     st = np.load(Path(stats_path).expanduser())
     seed_everything(seed)
     with torch.cuda.device(dev0):
-        head = PoolHead(d_model, n_queries, mean=st["mean"], scale=st["scale"]).to(dev0)
+        head = PoolHead(d_model, n_queries, swiglu_norm, mean=st["mean"], scale=st["scale"]).to(dev0)
         swa_head = copy.deepcopy(head)
         for p in swa_head.parameters():
             p.requires_grad_(False)
@@ -284,6 +285,7 @@ def main(
             {
                 "step": step,
                 "n_queries": n_queries,
+                "swiglu_norm": swiglu_norm,
                 "stats_path": stats_path,
                 "state_dict": head.state_dict(),
                 "swa_state_dict": swa_head.state_dict(),
