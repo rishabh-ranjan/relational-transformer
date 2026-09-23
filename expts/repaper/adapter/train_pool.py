@@ -481,6 +481,7 @@ def main(
             f"step {step:>5} {e['kind']} {e['db']}/{e['task']} "
             + (f"loss {float(loss):.4f} gnorm {gnorm:.4g} " if gnorm is not None else "")
             + f"drift {drift:.4f} lr {rec['train/lr']:.2e} sub {n_sub} "
+            + f"peak {rec['train/peak_gib_dev1']:.1f}GiB "
             + " ".join(f"{k} {v:.1f}" for k, v in tm.items())
         )
         if use_wandb:

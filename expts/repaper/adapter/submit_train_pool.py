@@ -29,7 +29,7 @@ submit(
         head_chunk=2048,
         tabpfn_device="cuda:0",
         offload_cells=True,
-        total_steps=3,
+        total_steps=5,
         # total_steps=2500,
         lr=3e-4,
         lr_min=1e-5,
