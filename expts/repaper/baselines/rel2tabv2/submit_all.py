@@ -243,7 +243,13 @@ for db, table in TASKS:
                 nodelist=None,
                 reservation=None,
                 dependency=None,
-                exclude="ampere4,ampere6,ampere7,ampere9",
+                # ampere7 is back in: the list grew out of 810883f, which
+                # excluded ampere9 for not responding, and 4/6/7 were carried
+                # along after it without a reason of their own. ampere7 is
+                # healthy -- MIXED, no drain reason, other people's jobs running
+                # on it -- and advertises 7 a100s rather than 8, which is likely
+                # all that ever marked it out.
+                exclude="ampere4,ampere6,ampere9",
             ),
             name=name,
             repo_root=REPO_ROOT,
