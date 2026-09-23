@@ -223,10 +223,13 @@ for db, table in TASKS:
             resources=Resources(
                 partition="il",
                 account="infolab",
-                # Back on il: il-lo preempted 194156 three hours in and it
-                # restarted from zero, which is the whole cost of a run that
-                # does not checkpoint.
-                qos="il",
+                # il-interactive, because the other two are worse here: the
+                # plain il qos left this account on 2026-09-23 (infolab now has
+                # il-cpu*, il-data, il-interactive, il-lo), and il-lo preempted
+                # 194156 three hours in so it restarted from zero. This tier is
+                # not preemptible, its 12 h wall covers these, and its 2-gpu cap
+                # enforces the two-slot budget rather than relying on the chain.
+                qos="il-interactive",
                 time="12:00:00" if db in BIG else "4:00:00",
                 # a100, and never rtx8000 or 2080ti: EXAONE has no SDPA kernel
                 # on sm_75. b200 is capped at 2 for the whole il partition by
