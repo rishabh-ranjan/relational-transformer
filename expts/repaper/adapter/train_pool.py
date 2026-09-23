@@ -289,6 +289,10 @@ def main(
         t0 = time.perf_counter()
         n_sub = 0
         for ev in relbench:
+            if caught["flag"]:
+                log(f"step {step:>5} eval abandoned for a stop signal")
+                return
+            t1 = time.perf_counter()
             with torch.cuda.device(dev0), torch.inference_mode():
                 nc, s1, _a, _b = embed_rows(net, ev["ds"], ev["didx"], ev["ctx"], tokens, pad, labels, len(ev["ctx"]), dev0)
                 nq, s2, _a, _b = embed_rows(
@@ -308,6 +312,11 @@ def main(
                     res[key][ev["name"]] = float(roc_auc_score(tgt, pred))
                 else:
                     res[key][ev["name"]] = float(np.abs(pred - tgt).mean())
+            log(
+                f"step {step:>5} eval {ev['name']}: ctx {nc} query {nq} "
+                f"head {res['head'][ev['name']]:.4f} swa {res['swa'][ev['name']]:.4f} "
+                f"{time.perf_counter() - t1:.0f}s"
+            )
         kinds = {ev["name"]: ev["kind"] for ev in relbench}
         summary = {}
         for key in res:
@@ -341,9 +350,19 @@ def main(
     signal.signal(signal.SIGUSR1, on_signal)
     last_resume = time.perf_counter()
 
+    def stop(next_step):
+        save_resume(next_step)
+        log(f"resume saved at step {next_step}, exiting to be requeued")
+        if use_wandb:
+            wandb.finish()
+
     for step in range(start_step, total_steps):
+        if caught["flag"]:
+            return stop(step)
         if eval_every and step % eval_every == 0:
             evaluate(step)
+            if caught["flag"]:
+                return stop(step)
         if save_every and step % save_every == 0:
             save_ckpt(step, f"pool_step{step}.pt")
 
@@ -442,15 +461,12 @@ def main(
         if use_wandb:
             wandb.log(rec, step=step)
 
-        if caught["flag"] or time.perf_counter() - last_resume >= resume_save_mins * 60:
+        if caught["flag"]:
+            return stop(step + 1)
+        if time.perf_counter() - last_resume >= resume_save_mins * 60:
             save_resume(step + 1)
             last_resume = time.perf_counter()
             log(f"step {step:>5} resume saved")
-        if caught["flag"]:
-            log("exiting to be requeued")
-            if use_wandb:
-                wandb.finish()
-            return
 
     evaluate(total_steps)
     save_ckpt(total_steps, "pool_final.pt")
