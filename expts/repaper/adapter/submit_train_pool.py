@@ -7,8 +7,8 @@ from expts.repaper.config import CKPT, CLONE_ROOT, LOG_ROOT, OUT_ROOT, PRE_DIR, 
 
 REPO_ROOT = str(Path(__file__).resolve().parents[3])
 
-RUN = "pool-v1-smoke"
-# RUN = "pool-v1"
+# RUN = "pool-v1-smoke"
+RUN = "pool-v1"
 
 submit(
     "expts.repaper.adapter.train_pool:main",
@@ -29,19 +29,19 @@ submit(
         head_chunk=2048,
         tabpfn_device="cuda:0",
         offload_cells=True,
-        total_steps=5,
-        # total_steps=2500,
+        # total_steps=5,
+        total_steps=2500,
         lr=3e-4,
         lr_min=1e-5,
         wd=0.0,
-        warmup_steps=1,
-        # warmup_steps=100,
+        # warmup_steps=1,
+        warmup_steps=100,
         grad_norm_max=10.0,
         swa_momentum=0.9995,
-        eval_every=2,
-        # eval_every=250,
-        save_every=2,
-        # save_every=250,
+        # eval_every=2,
+        eval_every=250,
+        # save_every=2,
+        save_every=250,
         resume_save_mins=20.0,
         seed=0,
         run_name=f"adapter-{RUN}",
@@ -53,8 +53,8 @@ submit(
         partition="il",
         account="infolab",
         qos="il-lo",
-        time="3:00:00",
-        # time="5-00:00:00",
+        # time="3:00:00",
+        time="5-00:00:00",
         gpus="b200:1",
         cpus_per_task=32,
         ntasks=1,
