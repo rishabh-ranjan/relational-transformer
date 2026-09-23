@@ -169,15 +169,13 @@ def main(
     if use_wandb:
         import wandb
 
-        job = os.environ.get("SLURM_JOB_ID")
-        attempt = f"{job}.{os.environ.get('SLURM_RESTART_COUNT', '0')}" if job else f"{int(time.time())}"
         wandb.init(
             project=project,
             entity=entity,
-            name=f"{run_name}-{attempt}",
-            id=f"{run_id}-{attempt}",
+            name=run_name,
+            id=run_id,
             group=run_id,
-            resume="never",
+            resume="allow",
             config=params,
             dir=str(out),
             settings=wandb.Settings(console_multipart=True, console_chunk_max_seconds=60),
