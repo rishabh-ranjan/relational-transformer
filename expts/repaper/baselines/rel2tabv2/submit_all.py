@@ -224,7 +224,11 @@ for db, table in TASKS:
             resources=Resources(
                 partition="il",
                 account="infolab",
-                qos="il",
+                # il-lo, not il: it leaves the higher tier free for others.
+                # These runs do not checkpoint, so a preemption restarts a cell
+                # from zero -- acceptable because run.main skips a cell whose
+                # json exists, so a requeue only redoes its own work.
+                qos="il-lo",
                 time="12:00:00" if db in BIG else "4:00:00",
                 # a100, and never rtx8000 or 2080ti: EXAONE has no SDPA kernel
                 # on sm_75. b200 is capped at 2 for the whole il partition by
