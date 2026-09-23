@@ -321,7 +321,13 @@ def head_decomp(head, tokens, pad, g, n_ctx, chunk):
     tot = math.sqrt(sum(v["total"] ** 2 for v in per.values()))
     for v in per.values():
         v["share_sq"] = v["total"] ** 2 / max(tot**2, 1e-30)
-    acts = {}
+    sum_g = g.double().sum(0)
+    a_mean = mom["a"][0] / need
+    acts = {
+        "sum_g_norm": float(sum_g.norm()),
+        "sum_g_over_rss": float(sum_g.norm() / g.double().norm().clamp(min=1e-30)),
+        "w2_mean_term_norm": float(sum_g.norm() * a_mean.norm()),
+    }
     for k, (s1, s2, rn) in mom.items():
         mean = s1 / need
         std = (s2 / need - mean.square()).clamp(min=0).sqrt()
@@ -427,12 +433,29 @@ def probe_rows(ests, weights, cells, pad, y, kind, n_ctx, chunk, jitter_frac, wi
     rec["loss"] = main_run["loss"]
     log(f"gnorm {' '.join(f'{w} {v['gnorm']:.4g}' for w, v in rec['head'].items())}")
 
+    def invariant_part(gg, ff):
+        fc = ff - ff.mean(0)
+        g1 = gg - gg.mean(0)
+        return g1 - (g1 * fc).sum(0) / (fc * fc).sum(0).clamp(min=1e-30) * fc
+
+    def proj_stats(gg, ff):
+        gp = invariant_part(gg, ff)
+        return {
+            "violating_frac": float((gg - gp).norm() / gg.norm().clamp(min=1e-30)),
+            "mean_frac": float(gg.mean(0).norm() * math.sqrt(len(gg)) / gg.norm().clamp(min=1e-30)),
+            "gnorm_invariant_part": pgrad(head, tokens, pad, gp, chunk)[0],
+            "gnorm_violating_part": pgrad(head, tokens, pad, gg - gp, chunk)[0],
+        }
+
+    rec["projection"] = {w: proj_stats(runs[w]["g"], feats[w][0]) for w in weights}
+    log("projection " + " ".join(f"{w} viol {v['violating_frac']:.3f} inv {v['gnorm_invariant_part']:.4g} viol-part {v['gnorm_violating_part']:.4g}" for w, v in rec["projection"].items()))
     rec["controls"] = {}
     for k, v in controls.items():
         gk = v["g"] / sig if k.endswith("std_input") else v["g"]
         gn, per = pgrad(head, tokens, pad, gk, chunk)
         pair = {"fp_seed1_std_input": "fp_seed1", "fp_const_std_input": "fp_const"}.get(k)
         rec["controls"][k] = {
+            "projection": proj_stats(gk, fck),
             "cos_dLdf_vs_pair": (
                 float(F.cosine_similarity(gk.flatten(), (controls[pair]["g"]).flatten(), dim=0)) if pair else None
             ),
