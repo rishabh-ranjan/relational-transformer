@@ -7,9 +7,9 @@ from expts.repaper.config import CKPT, CLONE_ROOT, LOG_ROOT, OUT_ROOT, SECRETS_D
 
 REPO_ROOT = str(Path(__file__).resolve().parents[3])
 
-MODE = "replay"
+MODE = "fp"
 
-if MODE == "ckpt":
+if MODE in ("ckpt", "fp"):
     target = "expts.repaper.adapter.probe_pool_grad:main"
     args = dict(
         join_pre_dir="~/scratch/hf/stanford-star/the-join-preprocessed",
@@ -17,7 +17,7 @@ if MODE == "ckpt":
         ckpt=CKPT,
         tabpfn_dir=f"{SHARE}/tabpfn",
         ckpt_dir=f"{OUT_ROOT}/adapter/pool-v1",
-        out_dir=f"{LOG_ROOT}/repaper/adapter/probe-pool-grad",
+        out_dir=f"{LOG_ROOT}/repaper/adapter/probe-pool-grad" + ("-fp" if MODE == "fp" else ""),
         steps=[100, 0, 62, 48, 46, 38, 127, 11, 56, 1, 16, 128, 24, 8, 50, 12],
         n_ctx=2**16,
         n_query=2**14,
@@ -27,6 +27,7 @@ if MODE == "ckpt":
         jitter_frac=0.05,
         winsor_q=0.01,
         seed=0,
+        n_fp_seeds=6 if MODE == "fp" else 0,
     )
 else:
     target = "expts.repaper.adapter.probe_pool_grad:replay"

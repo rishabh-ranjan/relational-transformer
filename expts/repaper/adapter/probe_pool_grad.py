@@ -199,12 +199,43 @@ def label_stats(y, n_ctx, kind):
     return out
 
 
-def tabpfn_pass(ests, kind, f, y, n_ctx, dev, trace, loss_kind="nll"):
+class Fingerprint:
+    def __init__(self, fp):
+        self.fp = fp
+
+    def __enter__(self):
+        import numpy as np
+        import torch
+        import tabpfn.preprocessing.steps.add_fingerprint_features_step as fmod
+
+        self.fmod, self.orig = fmod, fmod.AddFingerprintFeaturesStep._transform
+        if self.fp is None:
+            return self
+        fp = self.fp
+
+        def patched(step, X, *, is_test=False):
+            n = X.shape[0]
+            if fp == "const":
+                h = np.full(n, 0.5, dtype=np.float32)
+            else:
+                h = np.random.default_rng([int(fp), int(is_test), n]).random(n).astype(np.float32)
+            added = torch.from_numpy(h).reshape(-1, 1).to(X.device) if isinstance(X, torch.Tensor) else h.reshape(-1, 1)
+            return X, added, fmod.FeatureModality.NUMERICAL
+
+        fmod.AddFingerprintFeaturesStep._transform = patched
+        return self
+
+    def __exit__(self, *exc):
+        self.fmod.AddFingerprintFeaturesStep._transform = self.orig
+        return False
+
+
+def tabpfn_pass(ests, kind, f, y, n_ctx, dev, trace, loss_kind="nll", fp=None):
     from expts.repaper.adapter.train_adapter import batched_outputs
 
     bardist = ests["reg"].znorm_space_bardist_
     leaf = f.detach().clone().requires_grad_(True)
-    with Tracer(ests[kind].models_[0], trace) as tr:
+    with Fingerprint(fp), Tracer(ests[kind].models_[0], trace) as tr:
         loss, pred, tgt = batched_outputs(ests[kind], kind, [leaf], [y], n_ctx, dev)
         lg = tr.heads_out
         used = loss
@@ -327,7 +358,7 @@ def pgrad(head, tokens, pad, g, chunk):
     return math.sqrt(sum(v * v for v in per.values())), per
 
 
-def probe_rows(ests, weights, cells, pad, y, kind, n_ctx, chunk, jitter_frac, winsor_q, seed, log):
+def probe_rows(ests, weights, cells, pad, y, kind, n_ctx, chunk, jitter_frac, winsor_q, seed, log, n_fp_seeds=0):
     import numpy as np
     import torch
     import torch.nn.functional as F
@@ -375,6 +406,14 @@ def probe_rows(ests, weights, cells, pad, y, kind, n_ctx, chunk, jitter_frac, wi
         noise = (torch.rand(need, device=dev, generator=gen) - 0.5) * jitter_frac * yc.std(correction=0)
         controls["jitter"] = tabpfn_pass(ests, kind, fck, y + noise, n_ctx, dev, False)
         controls["mse_loss"] = tabpfn_pass(ests, kind, fck, y, n_ctx, dev, False, loss_kind="mse")
+    for k in range(1, n_fp_seeds + 1):
+        controls[f"fp_seed{k}"] = tabpfn_pass(ests, kind, fck, y, n_ctx, dev, False, fp=k)
+    if n_fp_seeds:
+        controls["fp_seed1_std_input"] = tabpfn_pass(ests, kind, (fck - mu) / sig, y, n_ctx, dev, False, fp=1)
+        controls["fp_const"] = tabpfn_pass(ests, kind, fck, y, n_ctx, dev, False, fp="const")
+        controls["fp_const_std_input"] = tabpfn_pass(ests, kind, (fck - mu) / sig, y, n_ctx, dev, False, fp="const")
+        if kind == "reg":
+            controls["fp_const_winsor"] = tabpfn_pass(ests, kind, fck, y.clamp(lo_q, hi_q), n_ctx, dev, False, fp="const")
     log("controls " + ", ".join(f"{k} loss {v['loss_used']:.4f}" for k, v in controls.items()))
 
     if cells.get("host") is not None:
@@ -390,9 +429,13 @@ def probe_rows(ests, weights, cells, pad, y, kind, n_ctx, chunk, jitter_frac, wi
 
     rec["controls"] = {}
     for k, v in controls.items():
-        gk = v["g"] / sig if k == "std_input" else v["g"]
+        gk = v["g"] / sig if k.endswith("std_input") else v["g"]
         gn, per = pgrad(head, tokens, pad, gk, chunk)
+        pair = {"fp_seed1_std_input": "fp_seed1", "fp_const_std_input": "fp_const"}.get(k)
         rec["controls"][k] = {
+            "cos_dLdf_vs_pair": (
+                float(F.cosine_similarity(gk.flatten(), (controls[pair]["g"]).flatten(), dim=0)) if pair else None
+            ),
             "loss": v["loss"],
             "loss_used": v["loss_used"],
             "gnorm": gn,
@@ -659,6 +702,7 @@ def main(
     jitter_frac: float,
     winsor_q: float,
     seed: int,
+    n_fp_seeds: int,
 ) -> None:
     os.environ.setdefault("PYTORCH_CUDA_ALLOC_CONF", "expandable_segments:True")
 
@@ -701,7 +745,7 @@ def main(
             weights["init"] = get_head(0)
         part, _g = probe_rows(
             env["ests"], weights, env["cells"], env["pad"], env["labels"].clone(), e["kind"], n_ctx, head_chunk,
-            jitter_frac, winsor_q, seed, lambda m, s=s: log(f"step {s}: {m}"),
+            jitter_frac, winsor_q, seed, lambda m, s=s: log(f"step {s}: {m}"), n_fp_seeds,
         )
         rec.update(part)
         rec["seconds"] = time.perf_counter() - t0
