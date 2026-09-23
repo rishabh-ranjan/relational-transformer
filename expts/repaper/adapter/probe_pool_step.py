@@ -22,7 +22,7 @@ def main(
     check_rows: int,
     check_ctx: int,
     check_chunk: int,
-    tabpfn_modes: list[str],
+    tabpfn_precision: str,
     tabpfn_rows: list[int],
     lr: float,
     seed: int,
@@ -32,7 +32,7 @@ def main(
 
     from expts.repaper.adapter.pool_head import PoolHead
     from expts.repaper.adapter.probe_pool_throughput import LOCAL_CTX, make_dataset, resolve_tasks
-    from expts.repaper.adapter.train_adapter import loss_and_pred, make_ests
+    from expts.repaper.adapter.train_adapter import batched_loss, make_ests
     from expts.repaper.baselines.rel2tab.featurizer import table_offset_and_len
     from rt.data import process_batch
     from rt.model import load_rt_model
@@ -144,7 +144,8 @@ def main(
     mean, std = s.mean(0), s.std(0).clamp_min(1e-4)
     del s
     head = PoolHead(d_model, n_queries, d_out, mean=mean, scale=std).to(dev_rt)
-    ests = make_ests(tabpfn_dir, dev_pfn, seed, d_out, "fp32")
+    ests = make_ests(tabpfn_dir, dev_pfn, seed, d_out, tabpfn_precision)
+    report["tabpfn_precision"] = tabpfn_precision
     for est in ests.values():
         for m in est.models_:
             assert not any(p.requires_grad for p in m.parameters())
@@ -161,14 +162,15 @@ def main(
 
     phase = {"at": None, "fwd_peak_gib": None}
 
-    def tabpfn_grad(f, y, nctx, mode):
+    def pfn_loss(x, y, nctx):
+        return batched_loss(ests["clf"], "clf", [x], [y.to(dev_pfn)], nctx, dev_pfn)
+
+    def tabpfn_grad(f, y, nctx):
         leaf = f.detach().to(dev_pfn).requires_grad_(True)
-        ac = torch.bfloat16 if mode == "autocast_bf16" else None
         sync()
         phase["at"], phase["fwd_peak_gib"] = "fwd", None
         t = time.perf_counter()
-        loss, _p, _l = loss_and_pred(ests, lambda e: e, "clf", leaf, y, nctx, dev_pfn, ac)
-        assert loss is not None
+        loss = pfn_loss(leaf, y, nctx)
         sync()
         t_fwd = time.perf_counter() - t
         phase["at"], phase["fwd_peak_gib"] = "bwd", gib(dev_pfn)
@@ -187,12 +189,12 @@ def main(
     head.zero_grad()
     f = head(tokens[ci], pad[ci])
     leaf = f.to(dev_pfn)
-    loss_a, _p, _l = loss_and_pred(ests, lambda e: e, "clf", leaf, cy, check_ctx, dev_pfn)
+    loss_a = pfn_loss(leaf, cy, check_ctx)
     loss_a.backward()
     g_single = head_grads().clone()
     head.zero_grad()
     f2 = features(ci, check_chunk)
-    loss_b, g_f, _a, _b = tabpfn_grad(f2, cy, check_ctx, "fp32")
+    loss_b, g_f, _a, _b = tabpfn_grad(f2, cy, check_ctx)
     backprop(ci, check_chunk, g_f)
     g_two = head_grads().clone()
     head.zero_grad()
@@ -230,10 +232,10 @@ def main(
         fr, yr = f[:r], y[:r]
         rung = report["tabpfn"][str(r)] = {"n_ctx": nc, "n_query": r - nc}
         fits = False
-        for mode in tabpfn_modes:
+        for mode in (tabpfn_precision,):
             torch.cuda.reset_peak_memory_stats(dev_pfn)
             try:
-                loss, g, t_fwd, t_bwd = tabpfn_grad(fr, yr, nc, mode)
+                loss, g, t_fwd, t_bwd = tabpfn_grad(fr, yr, nc)
                 rung[mode] = {
                     "loss": loss,
                     "fwd_s": t_fwd,
@@ -281,8 +283,7 @@ def main(
     f_after = features(idx, head_chunk)
     with torch.no_grad():
         leaf = f_after.to(dev_pfn)
-        ac = torch.bfloat16 if grad_mode == "autocast_bf16" else None
-        loss1, _p, _l = loss_and_pred(ests, lambda e: e, "clf", leaf, y[:r], nc, dev_pfn, ac)
+        loss1 = pfn_loss(leaf, y[:r], nc)
     report["step"] = {"rows": r, "mode": grad_mode, "lr": lr, "loss_before": loss0, "loss_after": float(loss1)}
     report["peak_gib"] = {"dev0": gib(dev_rt), "dev1": gib(dev_pfn)}
     log(f"step: {report['step']}")
