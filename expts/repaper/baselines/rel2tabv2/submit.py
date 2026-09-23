@@ -89,7 +89,7 @@ ARMS = {
 # }
 
 # 2026-09-16, 96 jobs to place. Every a100 in the partition is allocated except
-# 2 on ampere7 (which this exclude list drops), while blackwell1 sits entirely
+# 2 on ampere7 (which this exclude list dropped until 2026-09-23), while blackwell1 sits entirely
 # idle with 8 b200. il caps total gpus at 10 whatever their type, and the b200
 # sub-cap is 2 for the whole partition rather than 2 per qos -- partition il
 # carries QoS=il-part (gres/gpu:b200=2), so a b200 job counts against that 2
@@ -173,7 +173,7 @@ def gpu_resources(db: str, table: str) -> Resources:
         nodelist="blackwell1" if card == "b200" else None,
         reservation=None,
         dependency=None,
-        exclude="ampere4,ampere6,ampere7,ampere9" if card == "a100" else None,
+        exclude="ampere4" if card == "a100" else None,
     )
 
 

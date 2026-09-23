@@ -68,7 +68,7 @@ for db, table in [
             nodelist=None,
             reservation=None,
             dependency=None,
-            exclude="ampere4,ampere6,ampere7,ampere9",
+            exclude="ampere4",
         ),
         name=f"rel2tabv2-probe-taps-{db}-{table}",
         repo_root=REPO_ROOT,

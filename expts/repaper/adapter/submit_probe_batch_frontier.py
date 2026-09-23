@@ -65,7 +65,7 @@ submit(
         nodelist=None,
         reservation=None,
         dependency=None,
-        exclude="ampere4,ampere6,ampere7,ampere9",
+        exclude="ampere4",
     ),
     name="adapter-probe-batch-frontier",
     repo_root=REPO_ROOT,

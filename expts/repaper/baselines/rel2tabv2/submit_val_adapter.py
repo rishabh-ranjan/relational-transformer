@@ -137,7 +137,7 @@ for db, table in TASKS:
             nodelist=None,
             reservation=None,
             dependency=None,
-            exclude="ampere4,ampere6,ampere7,ampere9",
+            exclude="ampere4",
         ),
         name=name,
         repo_root=REPO_ROOT,

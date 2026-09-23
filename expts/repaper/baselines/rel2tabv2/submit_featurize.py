@@ -111,7 +111,7 @@ def rt_resources(db: str, card: str, qos: str) -> Resources:
         nodelist="blackwell1" if card == "b200" else None,
         reservation=None,
         dependency=None,
-        exclude="ampere4,ampere6,ampere7,ampere9" if card == "a100" else None,
+        exclude="ampere4" if card == "a100" else None,
     )
 
 

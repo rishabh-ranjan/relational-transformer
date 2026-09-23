@@ -188,7 +188,7 @@ for db in DBS:
             else None,
             reservation=None,
             dependency=None,
-            exclude="ampere4,ampere6,ampere7,ampere9"
+            exclude="ampere4"
             if FEAT_RT.get(db, ("il-lo", "a100", 3))[1] == "a100"
             else None,
         ),

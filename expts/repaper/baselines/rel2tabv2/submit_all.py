@@ -243,13 +243,17 @@ for db, table in TASKS:
                 nodelist=None,
                 reservation=None,
                 dependency=None,
-                # ampere7 is back in: the list grew out of 810883f, which
-                # excluded ampere9 for not responding, and 4/6/7 were carried
-                # along after it without a reason of their own. ampere7 is
-                # healthy -- MIXED, no drain reason, other people's jobs running
-                # on it -- and advertises 7 a100s rather than 8, which is likely
-                # all that ever marked it out.
-                exclude="ampere4,ampere6,ampere9",
+                # ampere6, ampere7 and ampere9 came back in on 2026-09-23.
+                # Their reasons were real -- 6 and 9 stopped responding on
+                # 08-27/28, and 7's seventh a100 came up with 16 MB free -- but
+                # a month on all three are healthy, carrying other people's
+                # jobs, and ampere7 advertises 7 a100s rather than 8, so the bad
+                # card is out of slurm's config. A node that is genuinely broken
+                # gets drained by the admins; a hand-kept list cannot notice
+                # that it healed, and this one had us queued on Priority while
+                # ampere7 sat on three idle a100s. ampere4 stays out until its
+                # local disk (99% full on 2026-08-25) is checked on the node.
+                exclude="ampere4",
             ),
             name=name,
             repo_root=REPO_ROOT,

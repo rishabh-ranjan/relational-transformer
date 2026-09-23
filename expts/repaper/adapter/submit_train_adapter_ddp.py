@@ -215,7 +215,7 @@ for autocast, RUN in ARMS:
             nodelist=None,
             reservation=None,
             dependency=None,
-            exclude="ampere4,ampere6,ampere7,ampere9",
+            exclude="ampere4",
         ),
         name=f"adapter-train-{RUN}",
         run_id=None,
