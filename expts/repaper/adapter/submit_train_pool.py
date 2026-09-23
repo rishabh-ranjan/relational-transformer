@@ -8,7 +8,8 @@ from expts.repaper.config import CKPT, CLONE_ROOT, LOG_ROOT, OUT_ROOT, PRE_DIR, 
 REPO_ROOT = str(Path(__file__).resolve().parents[3])
 
 # RUN = "pool-v1-smoke"
-RUN = "pool-v1"
+# RUN = "pool-v1"
+RUN = "pool-v2-fp32-half"
 
 submit(
     "expts.repaper.adapter.train_pool:main",
@@ -21,13 +22,17 @@ submit(
         tabpfn_dir=f"{SHARE}/tabpfn",
         stats_path=f"{SHARE}/feature_stats_join_u12.npz",
         out_dir=f"{OUT_ROOT}/adapter/{RUN}",
-        n_ctx=2**16,
-        n_query=2**14,
+        n_ctx=2**15,
+        # n_ctx=2**16,
+        n_query=2**13,
+        # n_query=2**14,
         relbench_n_ctx=2**16,
         relbench_n_query=2**14,
         n_queries=64,
         head_chunk=2048,
         tabpfn_device="cuda:0",
+        tabpfn_precision="fp32",
+        # tabpfn_precision="bf16",
         offload_cells=True,
         # total_steps=5,
         total_steps=2500,
@@ -68,7 +73,8 @@ submit(
         exclude=None,
     ),
     name=f"adapter-{RUN}",
-    run_id="26-09-23_11-53-16_522641285",
+    run_id=None,
+    # run_id="26-09-23_11-53-16_522641285",
     repo_root=REPO_ROOT,
     cluster=ILC,
     job_env="expts/job_env.sh",

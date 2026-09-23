@@ -119,6 +119,7 @@ def main(
     n_queries: int,
     head_chunk: int,
     tabpfn_device: str,
+    tabpfn_precision: str,
     offload_cells: bool,
     total_steps: int,
     lr: float,
@@ -158,6 +159,7 @@ def main(
     dev0, dev1 = "cuda:0", tabpfn_device
     assert torch.cuda.device_count() > int(dev1.split(":")[1]), torch.cuda.device_count()
     need = n_ctx + n_query
+    cap = max(need, relbench_n_ctx + relbench_n_query)
     out = Path(out_dir).expanduser()
     out.mkdir(parents=True, exist_ok=True)
     t_start = time.time()
@@ -210,7 +212,6 @@ def main(
 
     relbench = build_relbench(relbench_pre_dir, relbench_task_list, config, relbench_n_ctx, relbench_n_query, seed)
     log(f"relbench: {len(relbench)} eval tasks")
-    assert relbench_n_ctx + relbench_n_query <= need
 
     st = np.load(Path(stats_path).expanduser())
     seed_everything(seed)
@@ -219,9 +220,9 @@ def main(
         swa_head = copy.deepcopy(head)
         for p in swa_head.parameters():
             p.requires_grad_(False)
-        buf = {"tokens": torch.empty(need, LOCAL_CTX, d_model, dtype=torch.bfloat16, device=dev0)}
-        pad = torch.empty(need, LOCAL_CTX, dtype=torch.bool, device=dev0)
-        labels = torch.empty(need, dtype=torch.float32, device=dev0)
+        buf = {"tokens": torch.empty(cap, LOCAL_CTX, d_model, dtype=torch.bfloat16, device=dev0)}
+        pad = torch.empty(cap, LOCAL_CTX, dtype=torch.bool, device=dev0)
+        labels = torch.empty(cap, dtype=torch.float32, device=dev0)
     host = torch.empty(need, LOCAL_CTX, d_model, dtype=torch.bfloat16, pin_memory=True) if offload_cells else None
     log(
         f"head: {sum(p.numel() for p in head.parameters())} params; cell buffer "
@@ -230,14 +231,14 @@ def main(
 
     def cells():
         if buf["tokens"] is None:
-            buf["tokens"] = torch.empty(need, LOCAL_CTX, d_model, dtype=torch.bfloat16, device=dev0)
+            buf["tokens"] = torch.empty(cap, LOCAL_CTX, d_model, dtype=torch.bfloat16, device=dev0)
         return buf["tokens"]
     init_flat = torch.cat([p.detach().flatten() for p in head.parameters()]).clone()
     opt = torch.optim.AdamW(head.parameters(), lr=lr, weight_decay=wd)
     swa = SwaState(head.named_parameters(), momentum=swa_momentum)
 
     with torch.cuda.device(dev1):
-        ests = make_ests(tabpfn_dir, dev1, seed, n_queries, "bf16")
+        ests = make_ests(tabpfn_dir, dev1, seed, n_queries, tabpfn_precision)
 
     resume_path = out / "resume.pt"
     start_step = 0
@@ -401,7 +402,7 @@ def main(
                 net, ds, int(order[step]), cand, tokens, pad, labels, need, dev0
             )
         counts["substituted"] += n_sub
-        y = labels.clone()
+        y = labels[:need].clone()
         reason = None
         if filled < need:
             reason = f"only {filled} buildable rows"
@@ -424,7 +425,7 @@ def main(
         else:
             if offload_cells:
                 t = time.perf_counter()
-                host.copy_(tokens)
+                host.copy_(tokens[:need])
                 del tokens
                 buf["tokens"] = None
                 tm["offload_s"] = time.perf_counter() - t
@@ -443,8 +444,8 @@ def main(
             del leaf
             if offload_cells:
                 t = time.perf_counter()
-                buf["tokens"] = host.to(dev0)
-                tokens = buf["tokens"]
+                tokens = cells()
+                tokens[:need].copy_(host)
                 tm["reload_s"] = time.perf_counter() - t
             if ok:
                 t = time.perf_counter()
