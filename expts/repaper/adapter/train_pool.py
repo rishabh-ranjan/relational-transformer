@@ -353,10 +353,22 @@ def main(
         (out / f"val_step{step}.json").write_text(json.dumps({"summary": summary, "per_task": res}, indent=1))
 
     caught = {"flag": False}
+    cur = {"next": start_step, "busy": False, "saved": False}
 
     def on_signal(signum, frame):
         caught["flag"] = True
-        print(f"caught signal {signum}: save resume and exit at the next step boundary", flush=True)
+        print(f"caught signal {signum} during step {cur['next']}", flush=True)
+        if not cur["busy"] and not cur["saved"]:
+            save_resume(cur["next"])
+            cur["saved"] = True
+            print(f"resume saved at step {cur['next']} from the signal handler", flush=True)
+
+    def settle(next_step):
+        cur["next"], cur["busy"] = next_step, False
+        if caught["flag"] and not cur["saved"]:
+            save_resume(next_step)
+            cur["saved"] = True
+            print(f"resume saved at step {next_step} after the update", flush=True)
 
     signal.signal(signal.SIGTERM, on_signal)
     signal.signal(signal.SIGUSR1, on_signal)
@@ -369,6 +381,7 @@ def main(
             wandb.finish()
 
     for step in range(start_step, total_steps):
+        cur["next"] = step
         if caught["flag"]:
             return stop(step)
         if eval_every and step % eval_every == 0:
@@ -447,9 +460,11 @@ def main(
             if step == 0 and ok:
                 assert sum(float(p.grad.abs().sum()) for p in head.parameters()) > 0
             if ok:
+                cur["busy"] = True
                 gnorm = float(torch.nn.utils.clip_grad_norm_(head.parameters(), grad_norm_max))
                 opt.step()
                 swa.update(head.named_parameters())
+                settle(step + 1)
             else:
                 counts["dropped"] += 1
                 log(f"step {step:>5} {e['db']}/{e['task']} non-finite, dropped")
@@ -489,8 +504,11 @@ def main(
 
         if caught["flag"]:
             return stop(step + 1)
+        cur["next"] = step + 1
         if time.perf_counter() - last_resume >= resume_save_mins * 60:
+            cur["busy"] = True
             save_resume(step + 1)
+            settle(step + 1)
             last_resume = time.perf_counter()
             log(f"step {step:>5} resume saved")
 

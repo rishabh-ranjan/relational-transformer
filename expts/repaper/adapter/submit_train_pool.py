@@ -68,7 +68,7 @@ submit(
         exclude=None,
     ),
     name=f"adapter-{RUN}",
-    run_id=None,
+    run_id="26-09-23_11-53-16_522641285",
     repo_root=REPO_ROOT,
     cluster=ILC,
     job_env="expts/job_env.sh",
