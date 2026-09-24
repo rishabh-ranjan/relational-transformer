@@ -57,11 +57,16 @@ def queued(host: str | None) -> set[str]:
 def main() -> None:
     # 2026-09-23: ILC is out of disk, so every arm resumes on marlowe (its
     # run directories were copied over first). torch import dies on n26
-    # (libnvJitLink.so.13 missing there).
+    # (libnvJitLink.so.13 missing there). batch is 148 deep and a 2-day
+    # whole-node job plans two days out, so these resumes take a 6-hour
+    # wall and backfill instead: roach requeues at the limit and each run
+    # picks its checkpoint back up.
     placements = (
         (
             marlowe.MARLOWE,
-            dataclasses.replace(marlowe.H100, cpus_per_task=14, exclude="n26"),
+            dataclasses.replace(
+                marlowe.H100, cpus_per_task=14, exclude="n26", time="6:00:00"
+            ),
             "-mw",
             2**17,
             14,
