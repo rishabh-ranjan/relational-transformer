@@ -98,6 +98,8 @@ def build_relbench(pre_dir, db_task_list, config, n_ctx_max, n_query_max, seed):
                     "didx": didx,
                     "ctx": draw("train", n_ctx_max),
                     "query": draw("val", n_query_max),
+                    "train_lo": sp["train"]["node_idx_offset"],
+                    "train_n": sp["train"]["num_nodes"],
                 }
             )
     return evals
@@ -109,6 +111,7 @@ def main(
     relbench_pre_dir: str,
     relbench_task_list: str,
     task_list: str,
+    train_source: str,
     ckpt: str,
     tabpfn_dir: str,
     stats_path: str,
@@ -196,28 +199,45 @@ def main(
         d_model = net.d_model
     log(f"rt-j loaded, compile=True, {time.perf_counter() - t:.0f}s")
 
-    rows = json.loads(Path(__file__).with_name(task_list).read_text())
-    t = time.perf_counter()
-    tasks = []
-    for db, name, kind, _n, _sub in rows:
-        (tk,) = get_tasks(join_pre_dir, [(db, name)], ("train",))
-        assert tk.task_type == kind, (db, name, tk.task_type, kind)
-        lo, n = table_offset_and_len(join_pre_dir, db, tk.table_name)
-        assert n >= need, (db, name, n)
-        tasks.append({"db": db, "task": name, "kind": kind, "t": tk, "lo": lo, "n": n})
-    log(f"resolved {len(tasks)} tasks over {len({e['db'] for e in tasks})} dbs in {time.perf_counter() - t:.0f}s")
-    t = time.perf_counter()
-    ds = make_dataset([e["t"] for e in tasks], join_pre_dir, config, mmap_populate=False)
-    log(f"join sampler built in {time.perf_counter() - t:.0f}s")
+    assert train_source in ("join", "relbench"), train_source
+    relbench = build_relbench(relbench_pre_dir, relbench_task_list, config, relbench_n_ctx, relbench_n_query, seed)
+    log(f"relbench: {len(relbench)} eval tasks")
+    if train_source == "join":
+        rows = json.loads(Path(__file__).with_name(task_list).read_text())
+        t = time.perf_counter()
+        tasks = []
+        for db, name, kind, _n, _sub in rows:
+            (tk,) = get_tasks(join_pre_dir, [(db, name)], ("train",))
+            assert tk.task_type == kind, (db, name, tk.task_type, kind)
+            lo, n = table_offset_and_len(join_pre_dir, db, tk.table_name)
+            assert n >= need, (db, name, n)
+            tasks.append({"db": db, "task": name, "kind": kind, "t": tk, "lo": lo, "n": n})
+        log(f"resolved {len(tasks)} tasks over {len({e['db'] for e in tasks})} dbs in {time.perf_counter() - t:.0f}s")
+        t = time.perf_counter()
+        ds = make_dataset([e["t"] for e in tasks], join_pre_dir, config, mmap_populate=False)
+        for i, e in enumerate(tasks):
+            e["ds"], e["didx"] = ds, i
+        log(f"join sampler built in {time.perf_counter() - t:.0f}s")
+    else:
+        tasks = [
+            {
+                "db": ev["name"].split("/")[0],
+                "task": ev["name"].split("/")[1],
+                "kind": ev["kind"],
+                "ds": ev["ds"],
+                "didx": ev["didx"],
+                "lo": ev["train_lo"],
+                "n": ev["train_n"],
+            }
+            for ev in relbench
+        ]
+        log(f"training on relbench train splits: {len(tasks)} tasks, train rows {sorted(e['n'] for e in tasks)}")
     order = np.random.default_rng([seed, 1]).permutation(len(tasks))
     epochs = 1
     while len(order) < total_steps:
         order = np.concatenate([order, np.random.default_rng([seed, 1, epochs]).permutation(len(tasks))])
         epochs += 1
     log(f"{total_steps} steps over {len(tasks)} tasks: {total_steps / len(tasks):.2f} epochs")
-
-    relbench = build_relbench(relbench_pre_dir, relbench_task_list, config, relbench_n_ctx, relbench_n_query, seed)
-    log(f"relbench: {len(relbench)} eval tasks")
 
     st = np.load(Path(stats_path).expanduser())
     seed_everything(seed)
@@ -400,27 +420,29 @@ def main(
         for g in opt.param_groups:
             g["lr"] = lr_at(step)
         e = tasks[order[step]]
+        need_t = min(need, e["n"])
+        nctx_t = n_ctx if need_t == need else int(need_t * n_ctx / need)
         rng = np.random.default_rng([seed, step])
         cand = rng.permutation(e["n"]) + e["lo"]
         tm = {}
         tokens = cells()
         with torch.cuda.device(dev0), torch.inference_mode():
             filled, n_sub, tm["sample_s"], tm["rtj_s"] = embed_rows(
-                net, ds, int(order[step]), cand, tokens, pad, labels, need, dev0
+                net, e["ds"], e["didx"], cand, tokens, pad, labels, need_t, dev0
             )
         counts["substituted"] += n_sub
-        y = labels[:need].clone()
+        y = labels[:need_t].clone()
         reason = None
-        if filled < need:
+        if filled < need_t:
             reason = f"only {filled} buildable rows"
-        elif e["kind"] == "reg" and float(y[:n_ctx].std()) < 1e-6:
+        elif e["kind"] == "reg" and float(y[:nctx_t].std()) < 1e-6:
             reason = "constant context label"
-        elif e["kind"] == "clf" and (y[:n_ctx] > 0).float().mean().item() in (0.0, 1.0):
+        elif e["kind"] == "clf" and (y[:nctx_t] > 0).float().mean().item() in (0.0, 1.0):
             reason = "one class in context"
         t = time.perf_counter()
         with torch.cuda.device(dev0):
-            hp, f = head_features(head, tokens, pad, need, n_ctx, head_chunk) if reason is None else (None, None)
-        if reason is None and float(f[:n_ctx].std(dim=0).max()) == 0.0:
+            hp, f = head_features(head, tokens, pad, need_t, nctx_t, head_chunk) if reason is None else (None, None)
+        if reason is None and float(f[:nctx_t].std(dim=0).max()) == 0.0:
             reason = "constant features"
         tm["head_fwd_s"] = time.perf_counter() - t
 
@@ -432,7 +454,7 @@ def main(
         else:
             if offload_cells:
                 t = time.perf_counter()
-                host.copy_(tokens[:need])
+                host[:need_t].copy_(tokens[:need_t])
                 del tokens
                 buf["tokens"] = None
                 tm["offload_s"] = time.perf_counter() - t
@@ -440,7 +462,7 @@ def main(
             with torch.cuda.device(dev1):
                 torch.cuda.reset_peak_memory_stats(dev1)
                 leaf = f.to(dev1).requires_grad_(True)
-                loss, _p, _t = batched_outputs(ests[e["kind"]], e["kind"], [leaf], [y.to(dev1)], n_ctx, dev1)
+                loss, _p, _t = batched_outputs(ests[e["kind"]], e["kind"], [leaf], [y.to(dev1)], nctx_t, dev1)
                 ok = bool(torch.isfinite(loss))
                 if ok:
                     loss.backward()
@@ -452,16 +474,16 @@ def main(
             if offload_cells:
                 t = time.perf_counter()
                 tokens = cells()
-                tokens[:need].copy_(host)
+                tokens[:need_t].copy_(host[:need_t])
                 tm["reload_s"] = time.perf_counter() - t
             if ok:
                 t = time.perf_counter()
                 with torch.cuda.device(dev0):
                     hl = hp.detach().requires_grad_(True)
-                    head.mix(hl, n_ctx).backward(g)
+                    head.mix(hl, nctx_t).backward(g)
                     gh = hl.grad
-                    for i in range(0, need, head_chunk):
-                        j = min(i + head_chunk, need)
+                    for i in range(0, need_t, head_chunk):
+                        j = min(i + head_chunk, need_t)
                         head.pool(tokens[i:j], pad[i:j]).backward(gh[i:j])
                     torch.cuda.synchronize(dev0)
                 tm["head_bwd_s"] = time.perf_counter() - t

@@ -13,7 +13,8 @@ REPO_ROOT = str(Path(__file__).resolve().parents[3])
 # RUN = "pool-v3-fp32-half-ln"
 # RUN = "pool-v4-fp32-half-ctxnorm"
 # RUN = "pool-v5-bf16-ctxnorm"
-RUN = "pool-v6-fp32-half-ctxnorm-forecast"
+# RUN = "pool-v6-fp32-half-ctxnorm-forecast"
+RUN = "pool-v7-fp32-half-ctxnorm-relbench"
 
 submit(
     "expts.repaper.adapter.train_pool:main",
@@ -21,8 +22,10 @@ submit(
         join_pre_dir="~/scratch/hf/stanford-star/the-join-preprocessed",
         relbench_pre_dir=PRE_DIR,
         relbench_task_list=f"{PRE_DIR}/db-task-lists/forecast.json",
-        task_list="pool_tasks_forecast.json",
-        # task_list="pool_tasks.json",
+        # task_list="pool_tasks_forecast.json",
+        task_list="pool_tasks.json",
+        train_source="relbench",
+        # train_source="join",
         ckpt=CKPT,
         tabpfn_dir=f"{SHARE}/tabpfn",
         stats_path=f"{SHARE}/feature_stats_join_u12.npz",
