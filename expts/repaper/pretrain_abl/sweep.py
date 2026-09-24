@@ -11,10 +11,12 @@ from expts.repaper.config import CLONE_ROOT, LOG_ROOT, SECRETS_DIR
 # figures end at one budget. Early stopping is off here: it has already done
 # its job (it picked each arm's checkpoint), and what the figure needs past
 # that point is the curve, not another selection.
+ABL = "2026-09-14-repaper-pretrain-abl"
+
 ARMS = (
-    ("mask25", 0.25, "expts/pretrain/all_5gb_cutoff.json", "26-09-20_06-39-29_813171142"),
-    ("mask50", 0.5, "expts/pretrain/all_5gb_cutoff.json", "26-09-20_06-39-38_479377037"),
-    ("mask75", 0.75, "expts/pretrain/all_5gb_cutoff.json", "26-09-20_06-39-38_944608730"),
+    ("mask25", 0.25, "expts/pretrain/all_5gb_cutoff.json", "26-09-20_06-39-29_813171142", ABL, "mask25-mw"),
+    ("mask50", 0.5, "expts/pretrain/all_5gb_cutoff.json", "26-09-20_06-39-38_479377037", ABL, "mask50-mw"),
+    ("mask75", 0.75, "expts/pretrain/all_5gb_cutoff.json", "26-09-20_06-39-38_944608730", ABL, "mask75-mw"),
     # mix-forecast reached 32769 on its own (ILC, 26-09-21)
 )
 ARMS_ILC = (
@@ -23,6 +25,21 @@ ARMS_ILC = (
         0.0,
         "expts/repaper/pretrain_abl/cutoff-autocomplete.json",
         "26-09-18_10-04-18_555911825",
+        ABL,
+        "mix-autocomplete",
+    ),
+    # The base arm is RT-J's own pretraining run, whose directory is the
+    # provenance of the released checkpoint: it is copied to
+    # `basecurve-from-<run_id>` and the copy is what resumes, so the original
+    # checkpoints and resume.pt are never written again. wandb sees another
+    # attempt of `plurel-join`, which is what the figure's base family reads.
+    (
+        "base",
+        0.0,
+        "expts/pretrain/all_5gb_cutoff.json",
+        "basecurve-from-26-09-11_11-20-03_015265411",
+        "2026-09-09_pretrain",
+        "plurel-join",
     ),
 )
 
@@ -59,8 +76,8 @@ def main() -> None:
     )
     busy = {"": queued(None), "-mw": queued("marlowe")}
     for cluster, resources, suffix, tokens_per_gpu, num_workers, arms in placements:
-        for run_name, mask_prob_max, db_task_list, run_id in arms:
-            name = f"abl-{run_name}{suffix}"
+        for arm, mask_prob_max, db_task_list, run_id, project, wandb_name in arms:
+            name = f"abl-{arm}{suffix}"
             if name in busy[suffix]:
                 print(f"  {name:28s} queued already")
                 continue
@@ -129,9 +146,9 @@ def main() -> None:
                     eval_vector_db_path=None,
                     eval_lcs_bw_pl_grid=[(256, 32, True)],
                     targets={},
-                    project="2026-09-14-repaper-pretrain-abl",
+                    project=project,
                     entity="rtv2",
-                    run_name=f"{run_name}{suffix}",
+                    run_name=wandb_name,
                     wandb_disabled=False,
                     out_root="~/scratch/relational-transformer/pretrain",
                 ),
