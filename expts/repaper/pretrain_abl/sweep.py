@@ -7,12 +7,23 @@ from roach.slurm.clusters import ilc, marlowe
 
 from expts.repaper.config import CLONE_ROOT, LOG_ROOT, SECRETS_DIR
 
+# 2026-09-23: every arm is resumed to the full 32769 steps so the ablation
+# figures end at one budget. Early stopping is off here: it has already done
+# its job (it picked each arm's checkpoint), and what the figure needs past
+# that point is the curve, not another selection.
 ARMS = (
-    ("mask25", 0.25, "expts/pretrain/all_5gb_cutoff.json"),
-    ("mask50", 0.5, "expts/pretrain/all_5gb_cutoff.json"),
-    ("mask75", 0.75, "expts/pretrain/all_5gb_cutoff.json"),
-    # ("mix-forecast", 0.0, "expts/repaper/pretrain_abl/cutoff-forecast.json"),  # done 26-09-21 (ILC, 32769 steps)
-    # ("mix-autocomplete", 0.0, "expts/repaper/pretrain_abl/cutoff-autocomplete.json"),  # done 26-09-19 (ILC, 18k steps)
+    ("mask25", 0.25, "expts/pretrain/all_5gb_cutoff.json", "26-09-20_06-39-29_813171142"),
+    ("mask50", 0.5, "expts/pretrain/all_5gb_cutoff.json", "26-09-20_06-39-38_479377037"),
+    ("mask75", 0.75, "expts/pretrain/all_5gb_cutoff.json", "26-09-20_06-39-38_944608730"),
+    # mix-forecast reached 32769 on its own (ILC, 26-09-21)
+)
+ARMS_ILC = (
+    (
+        "mix-autocomplete",
+        0.0,
+        "expts/repaper/pretrain_abl/cutoff-autocomplete.json",
+        "26-09-18_10-04-18_555911825",
+    ),
 )
 
 
@@ -26,31 +37,16 @@ def queued(host: str | None) -> set[str]:
     return set(out.stdout.split())
 
 
-# 2026-09-21 12:15, read off the cluster: blackwell1 is all il-lo one-gpu
-# jobs and a --test-only of both shapes preempts in at once, so the two
-# starved ILC mask arms move to b200s and resume by run_id; mask50 keeps its
-# running ampere node, the marlowe twins their nodes (busy-check skips them).
-B200_IL_2 = dataclasses.replace(
-    ilc.BLACKWELL, gpus="b200:2", qos="il", time="7-00:00:00", cpus_per_task=36
-)
-B200_ILLO_4 = dataclasses.replace(
-    ilc.BLACKWELL, gpus="b200:4", qos="il-lo", time="3-00:00:00", cpus_per_task=36
-)
-
-
 def main() -> None:
     placements = (
-        (ilc.ILC, B200_IL_2, "", 2**18, 16, "mask25", "26-09-19_10-09-20_445370634"),
-        (ilc.ILC, B200_ILLO_4, "", 2**18, 16, "mask75", "26-09-19_10-09-29_652249948"),
-        # (
-        #     ilc.ILC,
-        #     dataclasses.replace(ilc.AMPERE_LO, nodes=1, exclude="ampere4"),
-        #     "",
-        #     2**17,
-        #     16,
-        #     None,
-        #     None,
-        # ),
+        (
+            ilc.ILC,
+            dataclasses.replace(ilc.AMPERE_LO, nodes=1, exclude="ampere4"),
+            "",
+            2**17,
+            16,
+            ARMS_ILC,
+        ),
         # torch import dies on n26 (libnvJitLink.so.13 missing there)
         (
             marlowe.MARLOWE,
@@ -58,15 +54,12 @@ def main() -> None:
             "-mw",
             2**17,
             14,
-            None,
-            None,
+            ARMS,
         ),
     )
     busy = {"": queued(None), "-mw": queued("marlowe")}
-    for cluster, resources, suffix, tokens_per_gpu, num_workers, only, run_id in placements:
-        for run_name, mask_prob_max, db_task_list in ARMS:
-            if only is not None and run_name != only:
-                continue
+    for cluster, resources, suffix, tokens_per_gpu, num_workers, arms in placements:
+        for run_name, mask_prob_max, db_task_list, run_id in arms:
             name = f"abl-{run_name}{suffix}"
             if name in busy[suffix]:
                 print(f"  {name:28s} queued already")
@@ -108,7 +101,7 @@ def main() -> None:
                     grad_norm_max=1.0,
                     total_bs=1024,
                     total_steps=2**15 + 1,
-                    early_stop_after_steps=10_000,
+                    early_stop_after_steps=None,
                     can_select_init_model=False,
                     swa_momentum=0.9995,
                     seed=0,
