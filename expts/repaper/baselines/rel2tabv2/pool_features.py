@@ -47,6 +47,9 @@ def featurize_task(*, db, table, pre_dir, ckpt, pool_ckpt, features_root, contex
 
     out = blob_dir(features_root, db, table)
     if (out / "meta.json").is_file():
+        meta = json.loads((out / "meta.json").read_text())
+        want = {"pool_ckpt": pool_ckpt, "rtj_ckpt": ckpt, "context_rows": context_rows, "context_seed": context_seed}
+        assert {k: meta[k] for k in want} == want, f"{out} was featurized for {meta}, not {want}"
         print(f"{out} exists; not refeaturizing", flush=True)
         return
     device = "cuda"
