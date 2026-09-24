@@ -3,9 +3,9 @@ import subprocess
 from pathlib import Path
 
 from roach.slurm import submit
-from roach.slurm.clusters import ilc, marlowe
+from roach.slurm.clusters import marlowe
 
-from expts.repaper.config import CLONE_ROOT, LOG_ROOT, SECRETS_DIR
+from expts.repaper.config import LOG_ROOT
 
 # 2026-09-23: every arm is resumed to the full 32769 steps so the ablation
 # figures end at one budget. Early stopping is off here: it has already done
@@ -19,7 +19,7 @@ ARMS = (
     ("mask75", 0.75, "expts/pretrain/all_5gb_cutoff.json", "26-09-20_06-39-38_944608730", ABL, "mask75-mw"),
     # mix-forecast reached 32769 on its own (ILC, 26-09-21)
 )
-ARMS_ILC = (
+ARMS += (
     (
         "mix-autocomplete",
         0.0,
@@ -29,10 +29,10 @@ ARMS_ILC = (
         "mix-autocomplete",
     ),
     # The base arm is RT-J's own pretraining run, whose directory is the
-    # provenance of the released checkpoint: it is copied to
-    # `basecurve-from-<run_id>` and the copy is what resumes, so the original
-    # checkpoints and resume.pt are never written again. wandb sees another
-    # attempt of `plurel-join`, which is what the figure's base family reads.
+    # provenance of the released checkpoint: its ILC directory was copied to
+    # marlowe as `basecurve-from-<run_id>` and the copy is what resumes, so the
+    # original checkpoints and resume.pt are never written again. wandb sees
+    # another attempt of `plurel-join`, which is the figure's base family.
     (
         "base",
         0.0,
@@ -55,16 +55,10 @@ def queued(host: str | None) -> set[str]:
 
 
 def main() -> None:
+    # 2026-09-23: ILC is out of disk, so every arm resumes on marlowe (its
+    # run directories were copied over first). torch import dies on n26
+    # (libnvJitLink.so.13 missing there).
     placements = (
-        (
-            ilc.ILC,
-            dataclasses.replace(ilc.AMPERE_LO, nodes=1, exclude="ampere4"),
-            "",
-            2**17,
-            16,
-            ARMS_ILC,
-        ),
-        # torch import dies on n26 (libnvJitLink.so.13 missing there)
         (
             marlowe.MARLOWE,
             dataclasses.replace(marlowe.H100, cpus_per_task=14, exclude="n26"),
@@ -74,7 +68,7 @@ def main() -> None:
             ARMS,
         ),
     )
-    busy = {"": queued(None), "-mw": queued("marlowe")}
+    busy = {"-mw": queued("marlowe")}
     for cluster, resources, suffix, tokens_per_gpu, num_workers, arms in placements:
         for arm, mask_prob_max, db_task_list, run_id, project, wandb_name in arms:
             name = f"abl-{arm}{suffix}"
@@ -160,8 +154,8 @@ def main() -> None:
                 cluster=cluster,
                 job_env="expts/job_env.sh",
                 log_root=f"{LOG_ROOT}/repaper/pretrain_abl/slurm-logs",
-                clone_root=CLONE_ROOT if suffix == "" else "~/roach_clones",
-                secrets_dir=SECRETS_DIR if suffix == "" else "~/scratch/.secrets",
+                clone_root="~/roach_clones",
+                secrets_dir="~/scratch/.secrets",
                 # marlowe's NFS home breaks pixi's env-build lock, so 8 ranks
                 # racing the first `pixi run` at a fresh clone die on a
                 # half-built env; prepare builds it once instead
