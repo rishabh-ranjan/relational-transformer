@@ -18,9 +18,11 @@ from expts.repaper.config import (
 )
 
 ROUND = "rtj_val_pool"
-POOL = "pool-v1"
+# POOL = "pool-v1"
+POOL = "pool-v4-fp32-half-ctxnorm"
 POOL_CKPT = f"{OUT_ROOT}/adapter/{POOL}/pool_final.pt"
-POOL_SHA256 = "57ca53507808f7dd28c57defc37e88b4ec82f1fdb3c18fb775a4a0b2ae769e11"
+# POOL_SHA256 = "57ca53507808f7dd28c57defc37e88b4ec82f1fdb3c18fb775a4a0b2ae769e11"
+POOL_SHA256 = "5893eeada989ef44d535c19ddcd0cdc677d7dfdf298403808c395f86dcacf23b"
 VARIANT = "head"
 N_ESTIMATORS = 8
 CONTEXT_ROWS = 262144
