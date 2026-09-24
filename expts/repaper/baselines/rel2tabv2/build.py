@@ -47,6 +47,8 @@ def build_rel2tab(
     # method string like the taps family and run.main's signature is unchanged.
     adapter_spec = re.fullmatch(r"rtadapter([A-Za-z0-9_-]+)", family)
     adapter_name = adapter_spec.group(1) if adapter_spec else None
+    pool_spec = re.fullmatch(r"rtpool(head|swa)", family)
+    pool_variant = pool_spec.group(1) if pool_spec else None
     assert (
         family
         in (
@@ -60,6 +62,7 @@ def build_rel2tab(
         )
         or tap_unit in (1, 4, 8, 12)
         or adapter_name is not None
+        or pool_variant is not None
     ), f"unknown feature family {family!r} in method {method!r}"
     assert predictor_name in (
         "lgbm",
@@ -70,7 +73,11 @@ def build_rel2tab(
         "tabpfn",
     ), f"unknown predictor {predictor_name!r} in method {method!r}"
 
-    if adapter_name is not None:
+    if pool_variant is not None:
+        from expts.repaper.baselines.rel2tabv2.pool_features import PoolFeaturizer
+
+        featurizer = PoolFeaturizer(features_root, [(db, table)], pool_variant)
+    elif adapter_name is not None:
         from expts.repaper.baselines.rel2tabv2.adapter import AdapterFeaturizer
         from expts.repaper.config import SHARE
 
