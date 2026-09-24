@@ -210,7 +210,11 @@ def main(
     ds = make_dataset([e["t"] for e in tasks], join_pre_dir, config, mmap_populate=False)
     log(f"join sampler built in {time.perf_counter() - t:.0f}s")
     order = np.random.default_rng([seed, 1]).permutation(len(tasks))
-    assert total_steps <= len(order), (total_steps, len(order))
+    epochs = 1
+    while len(order) < total_steps:
+        order = np.concatenate([order, np.random.default_rng([seed, 1, epochs]).permutation(len(tasks))])
+        epochs += 1
+    log(f"{total_steps} steps over {len(tasks)} tasks: {total_steps / len(tasks):.2f} epochs")
 
     relbench = build_relbench(relbench_pre_dir, relbench_task_list, config, relbench_n_ctx, relbench_n_query, seed)
     log(f"relbench: {len(relbench)} eval tasks")

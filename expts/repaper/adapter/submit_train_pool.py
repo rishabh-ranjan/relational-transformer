@@ -12,7 +12,8 @@ REPO_ROOT = str(Path(__file__).resolve().parents[3])
 # RUN = "pool-v2-fp32-half"
 # RUN = "pool-v3-fp32-half-ln"
 # RUN = "pool-v4-fp32-half-ctxnorm"
-RUN = "pool-v5-bf16-ctxnorm"
+# RUN = "pool-v5-bf16-ctxnorm"
+RUN = "pool-v6-fp32-half-ctxnorm-forecast"
 
 submit(
     "expts.repaper.adapter.train_pool:main",
@@ -20,15 +21,16 @@ submit(
         join_pre_dir="~/scratch/hf/stanford-star/the-join-preprocessed",
         relbench_pre_dir=PRE_DIR,
         relbench_task_list=f"{PRE_DIR}/db-task-lists/forecast.json",
-        task_list="pool_tasks.json",
+        task_list="pool_tasks_forecast.json",
+        # task_list="pool_tasks.json",
         ckpt=CKPT,
         tabpfn_dir=f"{SHARE}/tabpfn",
         stats_path=f"{SHARE}/feature_stats_join_u12.npz",
         out_dir=f"{OUT_ROOT}/adapter/{RUN}",
-        # n_ctx=2**15,
-        n_ctx=2**16,
-        # n_query=2**13,
-        n_query=2**14,
+        n_ctx=2**15,
+        # n_ctx=2**16,
+        n_query=2**13,
+        # n_query=2**14,
         relbench_n_ctx=2**16,
         relbench_n_query=2**14,
         n_queries=64,
@@ -37,8 +39,8 @@ submit(
         # swiglu_norm="none",
         head_chunk=2048,
         tabpfn_device="cuda:0",
-        # tabpfn_precision="fp32",
-        tabpfn_precision="bf16",
+        tabpfn_precision="fp32",
+        # tabpfn_precision="bf16",
         offload_cells=True,
         # total_steps=5,
         total_steps=2500,
