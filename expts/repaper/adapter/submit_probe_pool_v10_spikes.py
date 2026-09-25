@@ -36,7 +36,8 @@ submit(
         head_chunk=2048,
         n_tasks_total=2608,
         seed=0,
-        dump=True,
+        dump=False,
+        cell_dump=True,
     ),
     resources=Resources(
         partition="il",

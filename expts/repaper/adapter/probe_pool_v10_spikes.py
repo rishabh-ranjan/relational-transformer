@@ -52,8 +52,11 @@ def main(
     n_tasks_total: int,
     seed: int,
     dump: bool = False,
+    cell_dump: bool = False,
 ) -> None:
     os.environ.setdefault("PYTORCH_CUDA_ALLOC_CONF", "expandable_segments:True")
+
+    import math
 
     import numpy as np
     import torch
@@ -73,7 +76,7 @@ def main(
 
     out = Path(out_dir).expanduser()
     out.mkdir(parents=True, exist_ok=True)
-    todo = [s for s in spikes if not (out / f"step{s['step']}.json").exists()]
+    todo = [s for s in spikes if not (out / f"step{s['step']}{'_cells.npz' if cell_dump else '.json'}").exists()]
     log(f"todo {[s['step'] for s in todo]}")
     if not todo:
         return
@@ -249,6 +252,55 @@ def main(
                 w2_grad=grads["w2.weight"].float().cpu().numpy(),
                 n_ctx=np.array(n_ctx),
             )
+        if cell_dump:
+            from expts.repaper.adapter.pool_head import TARGET_KEY
+
+            G = grads["w2.weight"].double()
+            share = torch.einsum("ri,rj,ij->r", g.double(), hid.double(), G) / G.square().sum()
+            share[n_ctx:] = 0
+            hidn = hid.norm(dim=1)
+            hidn[n_ctx:] = 0
+            rnd = torch.as_tensor(np.random.default_rng([seed, step, 7]).choice(n_ctx, 6, replace=False), device=dev)
+            sel = torch.unique(torch.cat([share.topk(8).indices, hidn.topk(4).indices, rnd]))
+            hstd = hp[:n_ctx].std(0, unbiased=False)
+            qk = head.wk.weight.t() @ head.q.t()
+            cz = {k: torch.empty(need, LOCAL_CTX, dtype=torch.float16, device=dev) for k in ("zmax", "zrms", "xrms", "attn", "ucontrib")}
+            detail = {k: [] for k in ("z_col", "x", "attn", "ucontrib_vec", "keys", "pad")}
+            with torch.no_grad():
+                for i in range(0, need, head_chunk):
+                    j = min(i + head_chunk, need)
+                    idx_c, cm, cs = colnorm_slice(cn, i, j)
+                    xf = tokens[i:j].float()
+                    zc = (xf - cm[idx_c]) / cs[idx_c]
+                    rms = xf.pow(2).mean(dim=-1, keepdim=True).sqrt().clamp_min(1e-12)
+                    second = xf.sign() * torch.softmax(xf.abs() / (head.signsoftmax_temp * rms), dim=-1)
+                    z = torch.cat([zc, second], dim=-1)
+                    attn = ((z @ qk) / math.sqrt(head.d_model)).masked_fill(pad[i:j, :, None], float("-inf")).softmax(dim=1)
+                    uc = attn * head.wv(z) / hstd
+                    cz["zmax"][i:j] = zc.abs().amax(dim=-1).masked_fill(pad[i:j], 0).half()
+                    cz["zrms"][i:j] = zc.pow(2).mean(dim=-1).sqrt().masked_fill(pad[i:j], 0).half()
+                    cz["xrms"][i:j] = rms[..., 0].masked_fill(pad[i:j], 0).half()
+                    cz["attn"][i:j] = attn.mean(dim=-1).masked_fill(pad[i:j], 0).half()
+                    cz["ucontrib"][i:j] = uc.norm(dim=-1).masked_fill(pad[i:j], 0).half()
+                    m = (sel >= i) & (sel < j)
+                    for r in sel[m].tolist():
+                        k = r - i
+                        detail["z_col"].append(zc[k].cpu())
+                        detail["x"].append(xf[k].cpu())
+                        detail["attn"].append(attn[k].cpu())
+                        detail["ucontrib_vec"].append(uc[k].cpu())
+                        detail["keys"].append(colkeys[r].cpu())
+                        detail["pad"].append(pad[r].cpu())
+            tgt_key_rows = (colkeys[:need] == TARGET_KEY)
+            np.savez_compressed(
+                out / f"step{step}_cells.npz",
+                **{f"cell_{k}": v.cpu().numpy() for k, v in cz.items()},
+                is_target=tgt_key_rows.cpu().numpy(), pad=pad[:need].cpu().numpy(),
+                w2_share=share.cpu().numpy(), hid_norm=hid.norm(dim=1).cpu().numpy(), y=y.cpu().numpy(),
+                sel_rows=sel.cpu().numpy(), n_ctx=np.array(n_ctx), h_ctx_std=hstd.cpu().numpy(),
+                **{f"sel_{k}": torch.stack(v).numpy() for k, v in detail.items()},
+            )
+            log(f"step {step}: cell dump, sel rows {sel.tolist()}")
         (out / f"step{step}.json").write_text(json.dumps(rec, indent=1))
         log(
             f"step {step} {s['task']}: grad_norm {rec['grad_norm']:.4g} (logged {s['logged_grad_norm']}) loss {rec['loss']:.4f} "
