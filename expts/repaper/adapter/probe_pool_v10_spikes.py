@@ -36,6 +36,17 @@ def z_halves(head, x, pad, cn):
     return first.abs()[live], second.abs()[live]
 
 
+def pool_z(head, xf, col_mean, col_std):
+    import torch
+
+    first = (xf - col_mean) / col_std
+    if head.colnorm_tau is not None:
+        first = head.colnorm_tau * torch.tanh(first / head.colnorm_tau)
+    rms = xf.pow(2).mean(dim=-1, keepdim=True).sqrt().clamp_min(1e-12)
+    second = xf.sign() * torch.softmax(xf.abs() / (head.signsoftmax_temp * rms), dim=-1)
+    return torch.cat([first, second], dim=-1)
+
+
 def main(
     *,
     join_pre_dir: str,
@@ -78,7 +89,6 @@ def main(
 
     out = Path(out_dir).expanduser()
     out.mkdir(parents=True, exist_ok=True)
-    assert not (cell_dump and (colnorm_tau is not None or live_scale)), "cell_dump recomputes the pool without the fixes"
     todo = [s for s in spikes if not (out / f"step{s['step']}{'_cells.npz' if cell_dump else '.json'}").exists()]
     log(f"todo {[s['step'] for s in todo]}")
     if not todo:
@@ -126,6 +136,7 @@ def main(
             colnorm_tau=colnorm_tau, live_scale=live_scale,
         ).to(dev)
         head.load_state_dict(ck["state_dict"])
+        assert (ck.get("colnorm_tau"), ck.get("live_scale", False)) in ((colnorm_tau, live_scale), (None, False)), (ck.get("colnorm_tau"), ck.get("live_scale"), colnorm_tau, live_scale)
         log(f"step {step}: head from pool_step{s['ckpt_step']}.pt ({ck['swiglu_norm']}, {ck['input_norm']}, T={ck['signsoftmax_temp']}, tau={colnorm_tau}, live_scale={live_scale})")
 
         if buf["tokens"] is None:
@@ -172,9 +183,7 @@ def main(
                     rowz[i:j], arg = cellmax.max(dim=1)
                     rowzkey[i:j] = colkeys[i:j].gather(1, arg[:, None])[:, 0]
                     rowlive[i:j] = (~pad[i:j]).sum(dim=1)
-                    rms = xf.pow(2).mean(dim=-1, keepdim=True).sqrt().clamp_min(1e-12)
-                    second = xf.sign() * torch.softmax(xf.abs() / (head.signsoftmax_temp * rms), dim=-1)
-                    z = torch.cat([(xf - cm[idx_c]) / cs[idx_c], second], dim=-1)
+                    z = pool_z(head, xf, cm[idx_c], cs[idx_c])
                     logits = (z @ (head.wk.weight.t() @ head.q.t())) / (head.d_model ** 0.5)
                     attn = logits.masked_fill(pad[i:j, :, None], float("-inf")).softmax(dim=1)
                     rowattn[i:j] = attn.amax(dim=1).mean(dim=-1)
@@ -277,10 +286,11 @@ def main(
                     xf = tokens[i:j].float()
                     zc = (xf - cm[idx_c]) / cs[idx_c]
                     rms = xf.pow(2).mean(dim=-1, keepdim=True).sqrt().clamp_min(1e-12)
-                    second = xf.sign() * torch.softmax(xf.abs() / (head.signsoftmax_temp * rms), dim=-1)
-                    z = torch.cat([zc, second], dim=-1)
+                    z = pool_z(head, xf, cm[idx_c], cs[idx_c])
                     attn = ((z @ qk) / math.sqrt(head.d_model)).masked_fill(pad[i:j, :, None], float("-inf")).softmax(dim=1)
                     uc = attn * head.wv(z) / hstd
+                    if head.live_scale:
+                        uc = uc * torch.sqrt((~pad[i:j]).sum(dim=1).float() / LOCAL_CTX)[:, None, None]
                     cz["zmax"][i:j] = zc.abs().amax(dim=-1).masked_fill(pad[i:j], 0).half()
                     cz["zrms"][i:j] = zc.pow(2).mean(dim=-1).sqrt().masked_fill(pad[i:j], 0).half()
                     cz["xrms"][i:j] = rms[..., 0].masked_fill(pad[i:j], 0).half()
