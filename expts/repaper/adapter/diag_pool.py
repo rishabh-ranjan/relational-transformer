@@ -15,7 +15,13 @@ def pool_input(head, x, cn):
         return (x.float() - head.mean) / head.scale
     idx, col_mean, col_std = cn
     xf = x.float()
-    return torch.cat([(xf - col_mean[idx]) / col_std[idx], head.rms(xf)], dim=-1)
+    if head.input_norm == "col_context":
+        second = head.rms(xf)
+    else:
+        assert head.input_norm == "col_context_signsoftmax", head.input_norm
+        rms = xf.pow(2).mean(dim=-1, keepdim=True).sqrt().clamp_min(1e-12)
+        second = xf.sign() * torch.softmax(xf.abs() / (head.signsoftmax_temp * rms), dim=-1)
+    return torch.cat([(xf - col_mean[idx]) / col_std[idx], second], dim=-1)
 
 
 def colnorm_for(head, x, cells):
@@ -99,7 +105,7 @@ def load_models(ckpt, pool_ckpt, compile, device):
     net, config = load_rt_model(ckpt, device=device, compile=compile)
     net = net.to(torch.bfloat16).eval()
     ck = torch.load(Path(pool_ckpt).expanduser(), map_location="cpu", weights_only=True)
-    head = PoolHead(net.d_model, ck["n_queries"], ck.get("swiglu_norm", "none"), input_norm=ck.get("input_norm", "fixed")).to(device)
+    head = PoolHead(net.d_model, ck["n_queries"], ck.get("swiglu_norm", "none"), input_norm=ck.get("input_norm", "fixed"), signsoftmax_temp=ck.get("signsoftmax_temp", 1.0)).to(device)
     head.load_state_dict(ck["state_dict"], strict=True)
     return net, config, ck, head.eval()
 
@@ -206,6 +212,7 @@ def main(
         "step": ck["step"],
         "swiglu_norm": norm,
         "input_norm": head.input_norm,
+        "signsoftmax_temp": head.signsoftmax_temp,
         "attn": {k: tolist(v) for k, v in agg.items()},
         "attn_by": {kind: {n: {k: tolist(v) for k, v in d.items()} for n, d in grp.items()} for kind, grp in by.items()},
         "names": {str(i): names[i] for i in sorted({int(v) for k in ("table_name_idxs", "col_name_idxs") for v in cells[k][~pad].unique().tolist()})},

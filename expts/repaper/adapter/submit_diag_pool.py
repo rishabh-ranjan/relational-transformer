@@ -10,10 +10,11 @@ from expts.repaper.config import CKPT, CLONE_ROOT, LOG_ROOT, OUT_ROOT, PRE_DIR, 
 REPO_ROOT = str(Path(__file__).resolve().parents[3])
 
 # RUNS = [("pool-v4-fp32-half-ctxnorm", "pool_final", "pool-v4-fp32-half-ctxnorm")]
-RUNS = [
-    ("pool-v4-fp32-half-ctxnorm", "pool_step0", "pool-v4-fp32-half-ctxnorm-step0"),
-    ("pool-v8-fp32-half-ctxnorm-colnorm", "pool_step0", "pool-v8-fp32-half-ctxnorm-colnorm-step0"),
-]
+# RUNS = [
+#     ("pool-v4-fp32-half-ctxnorm", "pool_step0", "pool-v4-fp32-half-ctxnorm-step0"),
+#     ("pool-v8-fp32-half-ctxnorm-colnorm", "pool_step0", "pool-v8-fp32-half-ctxnorm-colnorm-step0"),
+# ]
+RUNS = [("pool-v10-fp32-half-ctxnorm-colnorm-signsoftmax-t10", "pool_step0", "pool-v10-fp32-half-ctxnorm-colnorm-signsoftmax-t10-step0")]
 # TASKS = [tuple(p) for p in json.loads(Path(f"{PRE_DIR}/db-task-lists/forecast.json").expanduser().read_text())]
 TASKS = [("rel-event", "user-ignore")]
 if len(sys.argv) > 1:
