@@ -19,10 +19,11 @@ from expts.repaper.config import (
 
 ROUND = "rtj_width_depth"
 CONTEXT_ROWS = 32768
-BFS_WIDTHS = [32, 64, 128]
-LOCAL_CTXS = [256, 512, 1024, 2048]
+# BFS_WIDTHS = [32, 64, 128]
+# LOCAL_CTXS = [256, 512, 1024, 2048]
 # GRID = [(w, c) for w in BFS_WIDTHS for c in LOCAL_CTXS]
-GRID = [(128, 2048), (32, 256)]
+# GRID = [(128, 2048), (32, 256)]
+GRID = [(32, 256), (64, 512), (128, 1024), (256, 2048), (32, 512), (32, 1024), (32, 2048)]
 
 DB_TASK_LIST = f"{PRE_DIR}/db-task-lists/forecast.json"
 TASKS = [tuple(p) for p in json.loads(Path(DB_TASK_LIST).expanduser().read_text())]
