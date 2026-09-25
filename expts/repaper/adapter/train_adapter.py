@@ -775,7 +775,7 @@ def batched_loss(est, task_type, xs, ys, n_ctx, device):
     return batched_outputs(est, task_type, xs, ys, n_ctx, device)[0]
 
 
-def batched_outputs(est, task_type, xs, ys, n_ctx, device):
+def batched_outputs(est, task_type, xs, ys, n_ctx, device, reg_loss="nll", huber_delta=1.0):
     import torch
     from torch import nn
     from tabpfn.preprocessing.datamodel import FeatureModality
@@ -834,8 +834,13 @@ def batched_outputs(est, task_type, xs, ys, n_ctx, device):
     )
     lg = out.float().permute(1, 0, 2)
     z = torch.stack([(q - mu) / sd for mu, sd, q in extra])
-    loss = est.znorm_space_bardist_(lg, z).mean()
+    pred_z = est.znorm_space_bardist_.mean(lg)
+    if reg_loss == "nll":
+        loss = est.znorm_space_bardist_(lg, z).mean()
+    else:
+        assert reg_loss == "huber", reg_loss
+        loss = nn.functional.huber_loss(pred_z, z, delta=huber_delta)
     mu = torch.stack([m for m, _s, _q in extra])[:, None]
     sd = torch.stack([s for _m, s, _q in extra])[:, None]
-    pred = est.znorm_space_bardist_.mean(lg) * sd + mu
+    pred = pred_z * sd + mu
     return loss, pred, torch.stack([q for _m, _s, q in extra])

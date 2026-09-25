@@ -198,7 +198,7 @@ def main(
         buf["tokens"] = None
         head.zero_grad(set_to_none=True)
         leaf = f.detach().requires_grad_(True)
-        loss, _p, _t = batched_outputs(ests[e["kind"]], e["kind"], [leaf], [y], n_ctx, dev)
+        loss, _p, _t = batched_outputs(ests[e["kind"]], e["kind"], [leaf], [y], n_ctx, dev, reg_loss=ck.get("reg_loss", "nll"), huber_delta=ck.get("huber_delta", 1.0))
         loss.backward()
         g = leaf.grad.detach().clone()
         del leaf

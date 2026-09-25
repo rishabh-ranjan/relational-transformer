@@ -189,6 +189,8 @@ def main(
     dedup_ctx: bool,
     grad_accum: int,
     task_batch: int,
+    reg_loss: str,
+    huber_delta: float,
     seed: int,
     run_id: str,
     run_name: str,
@@ -395,6 +397,8 @@ def main(
                 "colnorm_tau": colnorm_tau,
                 "live_scale": live_scale,
                 "signsoftmax_scale_by_dim": signsoftmax_scale_by_dim,
+                "reg_loss": reg_loss,
+                "huber_delta": huber_delta,
                 "stats_path": stats_path,
                 "state_dict": head.state_dict(),
                 "swa_state_dict": swa_head.state_dict(),
@@ -579,7 +583,7 @@ def main(
                 torch.cuda.reset_peak_memory_stats(dev1)
                 leaves = [it["f"][it["idx"]].to(dev1).requires_grad_(True) for it in items]
                 ys = [it["y"][it["idx"]].to(dev1) for it in items]
-                loss, _p, _t = batched_outputs(ests[kind], kind, leaves, ys, m_ctx, dev1)
+                loss, _p, _t = batched_outputs(ests[kind], kind, leaves, ys, m_ctx, dev1, reg_loss=reg_loss, huber_delta=huber_delta)
                 ok = bool(torch.isfinite(loss))
                 if ok:
                     loss.backward()
