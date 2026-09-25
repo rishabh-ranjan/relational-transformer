@@ -19,6 +19,9 @@ submit(
         ckpt_dir=f"{OUT_ROOT}/adapter/{RUN}",
         out_dir=f"{LOG_ROOT}/repaper/adapter/probe-pool-v10-swiglu",
         spikes=[
+            dict(step=38, task="join-se-workplace/users-down_votes", ckpt_step=50, logged_grad_norm=621.5, logged_loss=-4.6839),
+            dict(step=48, task="join-bird-social-media/twitter-retweet_count", ckpt_step=50, logged_grad_norm=581.9, logged_loss=-3.2788),
+            dict(step=128, task="join-se-raspberrypi/users-down_votes", ckpt_step=150, logged_grad_norm=265.0, logged_loss=-4.9007),
             dict(
                 step=216,
                 task="join-se-boardgames/user-post-score-mean-heavytail",
