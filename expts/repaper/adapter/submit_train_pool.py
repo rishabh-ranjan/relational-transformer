@@ -22,7 +22,8 @@ REPO_ROOT = str(Path(__file__).resolve().parents[3])
 # RUN = "pool-v12-fp32-half-ctxnorm-colnorm-signsoftmax-t10-tanh3-livescale-dedup"
 # RUN = "pool-v13-fp32-half-ctxnorm-colnorm-signsoftmax-t10-tanh3-livescale-dedup-ssdim"
 # RUN = "pool-v14-fp32-half-ctxnorm-colnorm-signsoftmax-t10-tanh3-livescale-dedup-ssdim-accum16-lr1e-3"
-RUN = "pool-smoke-b1-v13cfg"
+# RUN = "pool-smoke-b1-v13cfg"
+RUN = "pool-smoke-b8"
 
 submit(
     "expts.repaper.adapter.train_pool:main",
@@ -38,9 +39,11 @@ submit(
         tabpfn_dir=f"{SHARE}/tabpfn",
         stats_path=f"{SHARE}/feature_stats_join_u12.npz",
         out_dir=f"{OUT_ROOT}/adapter/{RUN}",
-        n_ctx=2**15,
+        # n_ctx=2**15,
+        n_ctx=2**12,
         # n_ctx=2**16,
-        n_query=2**13,
+        # n_query=2**13,
+        n_query=2**10,
         # n_query=2**14,
         relbench_n_ctx=2**10,
         relbench_n_query=2**8,
@@ -65,27 +68,27 @@ submit(
         # tabpfn_precision="bf16",
         offload_cells=True,
         # total_steps=5,
-        total_steps=3,
+        total_steps=4,
         # lr=3e-4,
-        lr=3e-4,
+        lr=1e-3,
         lr_min=1e-5,
         wd=0.0,
         # warmup_steps=1,
         warmup_steps=100,
         grad_norm_max=10.0,
         # swa_momentum=0.9995,
-        swa_momentum=0.9995,
+        swa_momentum=0.9995**128,
         # eval_every=2,
         eval_every=0,
         # save_every=2,
         save_every=0,
         resume_save_mins=5.0,
-        spike_dump_gnorm=100.0,
+        spike_dump_gnorm=1.0,
         # spike_dump_gnorm=None,
         # dedup_ctx=False,
         dedup_ctx=True,
-        grad_accum=1,
-        task_batch=1,
+        grad_accum=2,
+        task_batch=8,
         # grad_accum=1,
 
         seed=0,
