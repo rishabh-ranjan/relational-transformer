@@ -18,7 +18,8 @@ REPO_ROOT = str(Path(__file__).resolve().parents[3])
 # RUN = "pool-v8-fp32-half-ctxnorm-colnorm"
 # RUN = "pool-v9-fp32-half-ctxnorm-colnorm-signsoftmax"
 # RUN = "pool-v10-fp32-half-ctxnorm-colnorm-signsoftmax-t10"
-RUN = "pool-v11-fp32-half-ctxnorm-colnorm-signsoftmax-t10-tanh3-livescale"
+# RUN = "pool-v11-fp32-half-ctxnorm-colnorm-signsoftmax-t10-tanh3-livescale"
+RUN = "pool-v12-fp32-half-ctxnorm-colnorm-signsoftmax-t10-tanh3-livescale-dedup"
 
 submit(
     "expts.repaper.adapter.train_pool:main",
@@ -74,8 +75,9 @@ submit(
         resume_save_mins=5.0,
         spike_dump_gnorm=100.0,
         # spike_dump_gnorm=None,
-        dedup_ctx=False,
-        # dedup_ctx=True,
+        # dedup_ctx=False,
+        dedup_ctx=True,
+
         seed=0,
         run_name=f"adapter-{RUN}",
         project=project("adapter"),
@@ -101,8 +103,8 @@ submit(
         exclude=None,
     ),
     name=f"adapter-{RUN}",
-    # run_id=None,
-    run_id="26-09-24_22-50-00_455118805",
+    run_id=None,
+    # run_id="26-09-24_22-50-00_455118805",
     # run_id="26-09-23_11-53-16_522641285",
     repo_root=REPO_ROOT,
     cluster=ILC,
