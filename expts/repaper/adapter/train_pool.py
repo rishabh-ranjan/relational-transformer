@@ -188,6 +188,7 @@ def main(
     spike_dump_gnorm: float | None,
     dedup_ctx: bool,
     grad_accum: int,
+    task_batch: int,
     seed: int,
     run_id: str,
     run_name: str,
@@ -216,7 +217,7 @@ def main(
     dev0, dev1 = "cuda:0", tabpfn_device
     assert torch.cuda.device_count() > int(dev1.split(":")[1]), torch.cuda.device_count()
     need = n_ctx + n_query
-    cap = max(need, relbench_n_ctx + relbench_n_query)
+    cap = max(task_batch * need, relbench_n_ctx + relbench_n_query)
     out = Path(out_dir).expanduser()
     out.mkdir(parents=True, exist_ok=True)
     if spike_dump_gnorm is not None:
@@ -286,12 +287,26 @@ def main(
             for ev in relbench
         ]
         log(f"training on relbench train splits: {len(tasks)} tasks, train rows {sorted(e['n'] for e in tasks)}")
-    order = np.random.default_rng([seed, 1]).permutation(len(tasks))
-    epochs = 1
-    while len(order) < total_steps:
-        order = np.concatenate([order, np.random.default_rng([seed, 1, epochs]).permutation(len(tasks))])
-        epochs += 1
-    log(f"{total_steps} steps over {len(tasks)} tasks: {total_steps / len(tasks):.2f} epochs")
+    def task_stream():
+        yield from np.random.default_rng([seed, 1]).permutation(len(tasks))
+        ep = 1
+        while True:
+            yield from np.random.default_rng([seed, 1, ep]).permutation(len(tasks))
+            ep += 1
+
+    stream = task_stream()
+    step_tasks = []
+    queues = {"clf": [], "reg": []}
+    while len(step_tasks) < total_steps:
+        i = int(next(stream))
+        q = queues[tasks[i]["kind"]]
+        q.append(i)
+        if len(q) == task_batch:
+            step_tasks.append(list(q))
+            q.clear()
+    n_used = total_steps * task_batch
+    log(f"{total_steps} steps x {task_batch} tasks over {len(tasks)} tasks: {n_used / len(tasks):.2f} epochs; "
+        f"{sum(tasks[b[0]]['kind'] == 'clf' for b in step_tasks)} clf steps")
 
     st = np.load(Path(stats_path).expanduser())
     seed_everything(seed)
@@ -304,7 +319,7 @@ def main(
         pad = torch.empty(cap, LOCAL_CTX, dtype=torch.bool, device=dev0)
         labels = torch.empty(cap, dtype=torch.float32, device=dev0)
         keys = torch.empty(cap, LOCAL_CTX, dtype=torch.int64, device=dev0)
-    host = torch.empty(need, LOCAL_CTX, d_model, dtype=torch.bfloat16, pin_memory=True) if offload_cells else None
+    host = torch.empty(task_batch * need, LOCAL_CTX, d_model, dtype=torch.bfloat16, pin_memory=True) if offload_cells else None
     log(
         f"head: {sum(p.numel() for p in head.parameters())} params; cell buffer "
         f"{buf['tokens'].numel() * 2 / 2**30:.1f} GiB; tabpfn on {dev1}; offload_cells {offload_cells}"
@@ -489,107 +504,145 @@ def main(
         if save_every and step % save_every == 0:
             save_ckpt(step, f"pool_step{step}.pt")
 
-        for g in opt.param_groups:
-            g["lr"] = lr_at(step)
-        e = tasks[order[step]]
-        need_t = min(need, e["n"])
-        nctx_t = n_ctx if need_t == need else int(need_t * n_ctx / need)
-        rng = np.random.default_rng([seed, step])
-        cand = rng.permutation(e["n"]) + e["lo"]
-        tm = {}
+        for pg in opt.param_groups:
+            pg["lr"] = lr_at(step)
+        batch = step_tasks[step]
+        e = tasks[batch[0]]
+        kind = e["kind"]
+        tm = {"sample_s": 0.0, "rtj_s": 0.0, "colstats_s": 0.0, "head_fwd_s": 0.0}
         tokens = cells()
-        with torch.cuda.device(dev0), torch.inference_mode():
-            filled, n_sub, tm["sample_s"], tm["rtj_s"] = embed_rows(
-                net, e["ds"], e["didx"], cand, tokens, pad, labels, keys, need_t, dev0
-            )
-            cn = None
-            if input_norm != "fixed" and filled == need_t:
-                t = time.perf_counter()
-                *cn, tm["qonly_cols"] = column_stats(tokens, keys, need_t, nctx_t, 512)
-                tm["colstats_s"] = time.perf_counter() - t
-        counts["substituted"] += n_sub
-        y = labels[:need_t].clone()
-        reason = None
-        if filled < need_t:
-            reason = f"only {filled} buildable rows"
-        elif e["kind"] == "reg" and float(y[:nctx_t].std()) < 1e-6:
-            reason = "constant context label"
-        elif e["kind"] == "clf" and (y[:nctx_t] > 0).float().mean().item() in (0.0, 1.0):
-            reason = "one class in context"
-        t = time.perf_counter()
-        with torch.cuda.device(dev0):
-            hp, f = head_features(head, tokens, pad, need_t, nctx_t, head_chunk, cn) if reason is None else (None, None)
-        if reason is None and float(f[:nctx_t].std(dim=0).max()) == 0.0:
-            reason = "constant features"
-        tm["head_fwd_s"] = time.perf_counter() - t
+        items = []
+        n_sub = 0
+        off = 0
+        for j, ti in enumerate(batch):
+            et = tasks[ti]
+            need_t = min(need, et["n"])
+            nctx_t = n_ctx if need_t == need else int(need_t * n_ctx / need)
+            rng = np.random.default_rng([seed, step] if task_batch == 1 else [seed, step, j])
+            cand = rng.permutation(et["n"]) + et["lo"]
+            sl = slice(off, off + need_t)
+            with torch.cuda.device(dev0), torch.inference_mode():
+                filled, s_sub, s_t, r_t = embed_rows(
+                    net, et["ds"], et["didx"], cand, tokens[sl], pad[sl], labels[sl], keys[sl], need_t, dev0
+                )
+                tm["sample_s"] += s_t
+                tm["rtj_s"] += r_t
+                cn = None
+                if input_norm != "fixed" and filled == need_t:
+                    t = time.perf_counter()
+                    *cn, _q = column_stats(tokens[sl], keys[sl], need_t, nctx_t, 512)
+                    tm["colstats_s"] += time.perf_counter() - t
+            n_sub += s_sub
+            counts["substituted"] += s_sub
+            y = labels[sl].clone()
+            reason = None
+            if filled < need_t:
+                reason = f"only {filled} buildable rows"
+            elif kind == "reg" and float(y[:nctx_t].std()) < 1e-6:
+                reason = "constant context label"
+            elif kind == "clf" and (y[:nctx_t] > 0).float().mean().item() in (0.0, 1.0):
+                reason = "one class in context"
+            t = time.perf_counter()
+            with torch.cuda.device(dev0):
+                hp, f = head_features(head, tokens[sl], pad[sl], need_t, nctx_t, head_chunk, cn) if reason is None else (None, None)
+            if reason is None and float(f[:nctx_t].std(dim=0).max()) == 0.0:
+                reason = "constant features"
+            tm["head_fwd_s"] += time.perf_counter() - t
+            if reason is not None:
+                counts["skipped"] += 1
+                log(f"step {step:>5} {et['db']}/{et['task']} skipped: {reason}")
+                continue
+            sel, nctx_tp = dedup_context(hp, y, nctx_t) if dedup_ctx else (torch.arange(need_t, device=hp.device), nctx_t)
+            items.append({"e": et, "j": j, "sl": sl, "need_t": need_t, "nctx_t": nctx_t, "cn": cn, "y": y, "hp": hp, "f": f, "sel": sel, "nctx_tp": nctx_tp})
+            off += need_t
+        if items:
+            assert len({it["need_t"] - it["nctx_t"] for it in items}) == 1, [(it["need_t"], it["nctx_t"]) for it in items]
+            m_ctx = min(it["nctx_tp"] for it in items)
+            for it in items:
+                it["idx"] = torch.cat([it["sel"][:m_ctx], it["sel"][it["nctx_tp"]:]])
+            tm["dedup_dropped"] = float(sum(it["nctx_t"] - it["nctx_tp"] for it in items))
+            if task_batch > 1:
+                tm["ctx_trimmed"] = float(sum(it["nctx_tp"] - m_ctx for it in items))
 
         opt.zero_grad(set_to_none=True)
         loss = gnorm = None
-        if reason is not None:
-            counts["skipped"] += 1
-            log(f"step {step:>5} {e['db']}/{e['task']} skipped: {reason}")
-        else:
+        task_gn = []
+        if items:
             if offload_cells:
                 t = time.perf_counter()
-                host[:need_t].copy_(tokens[:need_t])
+                host[:off].copy_(tokens[:off])
                 del tokens
                 buf["tokens"] = None
                 tm["offload_s"] = time.perf_counter() - t
-            sel, nctx_tp = (dedup_context(hp, y, nctx_t) if dedup_ctx else (None, nctx_t))
-            tm["dedup_dropped"] = float(nctx_t - nctx_tp)
             t = time.perf_counter()
             with torch.cuda.device(dev1):
                 torch.cuda.reset_peak_memory_stats(dev1)
-                leaf = (f if sel is None else f[sel]).to(dev1).requires_grad_(True)
-                yt = (y if sel is None else y[sel]).to(dev1)
-                loss, _p, _t = batched_outputs(ests[e["kind"]], e["kind"], [leaf], [yt], nctx_tp, dev1)
+                leaves = [it["f"][it["idx"]].to(dev1).requires_grad_(True) for it in items]
+                ys = [it["y"][it["idx"]].to(dev1) for it in items]
+                loss, _p, _t = batched_outputs(ests[kind], kind, leaves, ys, m_ctx, dev1)
                 ok = bool(torch.isfinite(loss))
                 if ok:
                     loss.backward()
-                    g = leaf.grad.to(dev0)
-                    if sel is not None:
-                        g = torch.zeros_like(f).index_copy_(0, sel, g)
-                    ok = bool(torch.isfinite(g).all())
+                    gs = [
+                        torch.zeros_like(it["f"]).index_copy_(0, it["idx"], lf.grad.to(dev0) * len(items))
+                        for it, lf in zip(items, leaves)
+                    ]
+                    ok = all(bool(torch.isfinite(g).all()) for g in gs)
                 torch.cuda.synchronize(dev1)
             tm["tabpfn_s"] = time.perf_counter() - t
-            del leaf
+            del leaves
             if offload_cells:
                 t = time.perf_counter()
                 tokens = cells()
-                tokens[:need_t].copy_(host[:need_t])
+                tokens[:off].copy_(host[:off])
                 tm["reload_s"] = time.perf_counter() - t
-            if ok:
-                t = time.perf_counter()
-                with torch.cuda.device(dev0):
-                    hl = hp.detach().requires_grad_(True)
-                    head.mix(hl, nctx_t).backward(g)
-                    gh = hl.grad
-                    for i in range(0, need_t, head_chunk):
-                        j = min(i + head_chunk, need_t)
-                        head.pool(tokens[i:j], pad[i:j], colnorm_slice(cn, i, j)).backward(gh[i:j])
-                    torch.cuda.synchronize(dev0)
-                tm["head_bwd_s"] = time.perf_counter() - t
-                ok = all(torch.isfinite(p.grad).all() for p in head.parameters())
-            if step == 0 and ok:
-                assert sum(float(p.grad.abs().sum()) for p in head.parameters()) > 0
-            if ok and spike_dump_gnorm is not None:
-                pre = float(torch.stack([p.grad.detach().double().norm() for p in head.parameters()]).norm())
-                if pre > spike_dump_gnorm:
-                    t = time.perf_counter()
-                    save_ckpt(step, f"spikes/pool_step{step}.pt")
-                    dump_spike(out / "spikes" / f"step{step}_tensors.npz", head, hp, g, gh, y, pad[:need_t], nctx_t,
-                               {"step": step, "task": f"{e['db']}/{e['task']}", "kind": e["kind"], "loss": float(loss), "grad_norm": pre})
-                    tm["spike_dump_s"] = time.perf_counter() - t
-                    log(f"step {step:>5} spike dump: pre-clip gnorm {pre:.4g} > {spike_dump_gnorm}")
-            if ok:
-                cur["busy"] = True
-                gnorm = float(torch.stack([p.grad.detach().norm() for p in head.parameters()]).norm())
-                for a, p in zip(acc, head.parameters()):
-                    a.add_(p.grad)
-                acc_n["n"] += 1
+            if not ok:
+                counts["dropped"] += len(items)
+                log(f"step {step:>5} {e['db']}/{e['task']} (+{len(items) - 1}) non-finite loss or dL/df, dropped")
             else:
-                counts["dropped"] += 1
-                log(f"step {step:>5} {e['db']}/{e['task']} non-finite, dropped")
+                t = time.perf_counter()
+                spike_saved = False
+                for it, g in zip(items, gs):
+                    for p in head.parameters():
+                        p.grad = None
+                    sl, need_t, nctx_t, cn = it["sl"], it["need_t"], it["nctx_t"], it["cn"]
+                    with torch.cuda.device(dev0):
+                        hl = it["hp"].detach().requires_grad_(True)
+                        head.mix(hl, nctx_t).backward(g)
+                        gh = hl.grad
+                        tk = tokens[sl]
+                        pk = pad[sl]
+                        for i in range(0, need_t, head_chunk):
+                            jj = min(i + head_chunk, need_t)
+                            head.pool(tk[i:jj], pk[i:jj], colnorm_slice(cn, i, jj)).backward(gh[i:jj])
+                    if not all(bool(torch.isfinite(p.grad).all()) for p in head.parameters()):
+                        counts["dropped"] += 1
+                        log(f"step {step:>5} {it['e']['db']}/{it['e']['task']} non-finite head grad, dropped")
+                        continue
+                    if step == 0:
+                        assert sum(float(p.grad.abs().sum()) for p in head.parameters()) > 0
+                    pre = float(torch.stack([p.grad.detach().double().norm() for p in head.parameters()]).norm())
+                    task_gn.append(pre)
+                    if spike_dump_gnorm is not None and pre > spike_dump_gnorm:
+                        t2 = time.perf_counter()
+                        if not spike_saved:
+                            save_ckpt(step, f"spikes/pool_step{step}.pt")
+                            spike_saved = True
+                        name = f"step{step}_tensors.npz" if task_batch == 1 else f"step{step}_task{it['j']}_tensors.npz"
+                        dump_spike(out / "spikes" / name, head, it["hp"], g, gh, it["y"], pk, nctx_t,
+                                   {"step": step, "task_index_in_batch": it["j"], "task": f"{it['e']['db']}/{it['e']['task']}",
+                                    "kind": kind, "loss_batch_mean": float(loss), "grad_norm": pre, "batch_tasks": len(items),
+                                    "tabpfn_n_ctx": m_ctx})
+                        tm["spike_dump_s"] = tm.get("spike_dump_s", 0.0) + time.perf_counter() - t2
+                        log(f"step {step:>5} spike dump: {it['e']['db']}/{it['e']['task']} pre-clip gnorm {pre:.4g} > {spike_dump_gnorm}")
+                    cur["busy"] = True
+                    for a, p in zip(acc, head.parameters()):
+                        a.add_(p.grad)
+                    acc_n["n"] += 1
+                torch.cuda.synchronize(dev0)
+                tm["head_bwd_s"] = time.perf_counter() - t
+                if task_gn:
+                    gnorm = max(task_gn)
 
         agnorm = None
         if ((step + 1) % grad_accum == 0 or step == total_steps - 1) and acc_n["n"] > 0:
@@ -623,15 +676,19 @@ def main(
             rec.update(
                 {
                     "train/loss": float(loss),
-                    f"train/loss/{e['kind']}": float(loss),
+                    f"train/loss/{kind}": float(loss),
                     "train/grad_norm": gnorm,
+                    "train/grad_norm_task_mean": float(np.mean(task_gn)),
+                    "train/tasks_in_step": len(task_gn),
                 }
             )
         if agnorm is not None:
             rec.update({"train/grad_norm_update": agnorm, "train/clipped": float(agnorm > grad_norm_max)})
         log(
-            f"step {step:>5} {e['kind']} {e['db']}/{e['task']} "
+            f"step {step:>5} {kind} {e['db']}/{e['task']} "
+            + (f"(+{len(batch) - 1} tasks, {len(task_gn)} used) " if task_batch > 1 else "")
             + (f"loss {float(loss):.4f} gnorm {gnorm:.4g} " if gnorm is not None else "")
+            + (f"task gnorm mean {np.mean(task_gn):.4g} " if task_batch > 1 and task_gn else "")
             + (f"update gnorm {agnorm:.4g} " if agnorm is not None and grad_accum > 1 else "")
             + f"drift {drift:.4f} lr {rec['train/lr']:.2e} sub {n_sub} "
             + f"peak {rec['train/peak_gib_dev1']:.1f}GiB "
