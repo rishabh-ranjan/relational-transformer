@@ -7,16 +7,40 @@ CHUNK = 256
 CELL_KEYS = ("node_idxs", "table_name_idxs", "col_name_idxs", "bfs_depths", "is_targets", "is_task_nodes", "sem_types", "is_padding")
 
 
-def head_internals(head, x, pad):
+def pool_input(head, x, cn):
+    import torch
+
+    if head.input_norm == "fixed":
+        assert cn is None
+        return (x.float() - head.mean) / head.scale
+    idx, col_mean, col_std = cn
+    xf = x.float()
+    return torch.cat([(xf - col_mean[idx]) / col_std[idx], head.rms(xf)], dim=-1)
+
+
+def colnorm_for(head, x, cells):
+    from expts.repaper.adapter.pool_head import cell_keys, column_stats
+
+    if head.input_norm == "fixed":
+        return None
+    keys = cell_keys(cells["col_name_idxs"], cells["table_name_idxs"], cells["is_targets"], cells["is_padding"])
+    return column_stats(x, keys, len(x), len(x), 512)[:3]
+
+
+def head_internals(head, x, pad, cn):
     import math
 
-    z = (x.float() - head.mean) / head.scale
+    import torch
+
+    z = pool_input(head, x, cn)
     qk = head.wk.weight.t() @ head.q.t()
     logits = (z @ qk) / math.sqrt(head.d_model)
     logits = logits.masked_fill(pad[..., None], float("-inf"))
     attn = logits.softmax(dim=1)
     h = (attn * head.wv(z)).sum(dim=1)
-    return attn, h
+    ref = torch.cat([head.pool(x[i : i + 128], pad[i : i + 128], None if cn is None else (cn[0][i : i + 128], cn[1], cn[2])) for i in range(0, len(x), 128)])
+    assert torch.allclose(h, ref, atol=1e-3, rtol=1e-4), float((h - ref).abs().max())
+    return attn, h, z
 
 
 def swiglu_internals(head, h, n_ctx):
@@ -75,7 +99,7 @@ def load_models(ckpt, pool_ckpt, compile, device):
     net, config = load_rt_model(ckpt, device=device, compile=compile)
     net = net.to(torch.bfloat16).eval()
     ck = torch.load(Path(pool_ckpt).expanduser(), map_location="cpu", weights_only=True)
-    head = PoolHead(net.d_model, ck["n_queries"], ck.get("swiglu_norm", "none")).to(device)
+    head = PoolHead(net.d_model, ck["n_queries"], ck.get("swiglu_norm", "none"), input_norm=ck.get("input_norm", "fixed")).to(device)
     head.load_state_dict(ck["state_dict"], strict=True)
     return net, config, ck, head.eval()
 
@@ -149,8 +173,11 @@ def main(
         pad = cells["is_padding"]
         is_t = cells["is_targets"].bool()
         target_node = (cells["node_idxs"] * is_t).sum(1)
-        attn, h = head_internals(head, x, pad)
-        feats = {"rtj_target": x[is_t].float(), "attn_out": h}
+        cn = colnorm_for(head, x, cells)
+        attn, h, z = head_internals(head, x, pad, cn)
+        zr = z[~pad]
+        zpick = torch.as_tensor(np.sort(np.random.default_rng([seed, 7]).choice(len(zr), size=min(16384, len(zr)), replace=False)), device=zr.device)
+        feats = {"rtj_target": x[is_t].float(), "pool_input_z": zr[zpick], "attn_out": h}
         feats.update(swiglu_internals(head, h, len(nodes)))
         pairs = torch.stack([cells["table_name_idxs"][~pad], cells["col_name_idxs"][~pad]], 1).unique(dim=0).tolist()
         bad = [(names[t], names[c]) for t, c in pairs if not names[c].endswith(f" of {names[t]}")]
@@ -178,6 +205,7 @@ def main(
         "pool_ckpt": pool_ckpt,
         "step": ck["step"],
         "swiglu_norm": norm,
+        "input_norm": head.input_norm,
         "attn": {k: tolist(v) for k, v in agg.items()},
         "attn_by": {kind: {n: {k: tolist(v) for k, v in d.items()} for n, d in grp.items()} for kind, grp in by.items()},
         "names": {str(i): names[i] for i in sorted({int(v) for k in ("table_name_idxs", "col_name_idxs") for v in cells[k][~pad].unique().tolist()})},
@@ -222,8 +250,7 @@ def hmean(
         target_node = (cells["node_idxs"] * is_t).sum(1)
         seed_row = (cells["node_idxs"] == target_node[:, None]) & real & ~is_t
         other = real & ~is_t & ~seed_row
-        z = (x.float() - head.mean) / head.scale
-        attn, h = head_internals(head, x, pad)
+        attn, h, z = head_internals(head, x, pad, None)
         wv = head.wv.weight.float()
         n = len(nodes)
         a_z = torch.einsum("nsi,nsj->ij", attn, z) / n

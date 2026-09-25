@@ -9,12 +9,17 @@ from expts.repaper.config import CKPT, CLONE_ROOT, LOG_ROOT, OUT_ROOT, PRE_DIR, 
 
 REPO_ROOT = str(Path(__file__).resolve().parents[3])
 
-POOL = "pool-v4-fp32-half-ctxnorm"
-TASKS = [tuple(p) for p in json.loads(Path(f"{PRE_DIR}/db-task-lists/forecast.json").expanduser().read_text())]
+# RUNS = [("pool-v4-fp32-half-ctxnorm", "pool_final", "pool-v4-fp32-half-ctxnorm")]
+RUNS = [
+    ("pool-v4-fp32-half-ctxnorm", "pool_step0", "pool-v4-fp32-half-ctxnorm-step0"),
+    ("pool-v8-fp32-half-ctxnorm-colnorm", "pool_step0", "pool-v8-fp32-half-ctxnorm-colnorm-step0"),
+]
+# TASKS = [tuple(p) for p in json.loads(Path(f"{PRE_DIR}/db-task-lists/forecast.json").expanduser().read_text())]
+TASKS = [("rel-event", "user-ignore")]
 if len(sys.argv) > 1:
     TASKS = [tuple(a.split("/")) for a in sys.argv[1:]]
 
-for db, table in TASKS:
+for (pool, ckpt_name, diag_name), (db, table) in [(r, t) for r in RUNS for t in TASKS]:
     submit(
         "expts.repaper.adapter.diag_pool:main",
         args=dict(
@@ -22,8 +27,8 @@ for db, table in TASKS:
             table=table,
             pre_dir=PRE_DIR,
             ckpt=CKPT,
-            pool_ckpt=f"{OUT_ROOT}/adapter/{POOL}/pool_final.pt",
-            out_dir=f"{OUT_ROOT}/adapter-diag/{POOL}",
+            pool_ckpt=f"{OUT_ROOT}/adapter/{pool}/{ckpt_name}.pt",
+            out_dir=f"{OUT_ROOT}/adapter-diag/{diag_name}",
             n_rows=2**10,
             n_samples=8,
             n_depth=4,
@@ -47,7 +52,7 @@ for db, table in TASKS:
             dependency=None,
             exclude="ampere4,ampere7",
         ),
-        name=f"adapter-diag-{POOL}-{db}-{table}",
+        name=f"adapter-diag-{diag_name}-{db}-{table}",
         repo_root=REPO_ROOT,
         cluster=ILC,
         job_env="expts/job_env.sh",
