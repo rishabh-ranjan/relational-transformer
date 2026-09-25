@@ -282,3 +282,50 @@ def hmean(
         "decomposition_max_err": err, "d_model": head.d_model, "logit_scale": 1 / math.sqrt(head.d_model),
     }, indent=1))
     print(f"{name}: hmean written, decomposition error {err:.2e}", flush=True)
+
+
+def dump_cells(
+    *,
+    db: str,
+    table: str,
+    pre_dir: str,
+    ckpt: str,
+    pool_ckpt: str,
+    out_dir: str,
+    n_rows: int,
+    seed: int,
+    compile: bool,
+) -> None:
+    import numpy as np
+    import torch
+
+    device = "cuda"
+    out = Path(out_dir).expanduser()
+    out.mkdir(parents=True, exist_ok=True)
+    name = f"{db}__{table}"
+    net, config, ck, head = load_models(ckpt, pool_ckpt, compile, device)
+    task, names, nodes, x, cells, _rng = embed_task(db, table, pre_dir, net, config, n_rows, seed, device)
+    real = ~cells["is_padding"]
+    is_t = cells["is_targets"].bool()
+    target_node = (cells["node_idxs"] * is_t).sum(1)
+    kind = torch.full_like(cells["node_idxs"], 2)
+    kind[(cells["node_idxs"] == target_node[:, None]) & ~is_t] = 1
+    kind[is_t] = 0
+    row = torch.arange(len(nodes), device=device)[:, None].expand_as(kind)
+    x_real = x[real]
+    assert torch.isfinite(x_real.float()).all(), name
+    np.savez(
+        out / f"{name}_cells.npz",
+        x=x_real.float().cpu().numpy().astype(np.float16),
+        row=row[real].cpu().numpy(),
+        kind=kind[real].cpu().numpy(),
+        **{k: cells[k][real].cpu().numpy() for k in ("node_idxs", "table_name_idxs", "col_name_idxs", "bfs_depths", "sem_types")},
+        join_mean=head.mean.cpu().numpy(),
+        join_scale=head.scale.cpu().numpy(),
+    )
+    used = sorted({int(v) for k in ("table_name_idxs", "col_name_idxs") for v in cells[k][real].unique().tolist()})
+    (out / f"{name}_cells.json").write_text(json.dumps({
+        "task": f"{db}/{table}", "n_rows": len(nodes), "n_cells": int(real.sum()), "kinds": {"0": "target", "1": "seed_row", "2": "other_rows"},
+        "names": {str(i): names[i] for i in used}, "rtj_ckpt": ckpt, "compile": compile,
+    }, indent=1))
+    print(f"{name}: dumped {int(real.sum())} cells x {x.shape[-1]}", flush=True)
