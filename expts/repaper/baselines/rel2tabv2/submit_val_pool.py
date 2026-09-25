@@ -19,18 +19,20 @@ from expts.repaper.config import (
 
 ROUND = "rtj_val_pool"
 # POOL = "pool-v1"
-POOL = "pool-v4-fp32-half-ctxnorm"
+# POOL = "pool-v4-fp32-half-ctxnorm"
+POOL = "pool-v7-fp32-half-ctxnorm-relbench"
 POOL_CKPT = f"{OUT_ROOT}/adapter/{POOL}/pool_final.pt"
 # POOL_SHA256 = "57ca53507808f7dd28c57defc37e88b4ec82f1fdb3c18fb775a4a0b2ae769e11"
-POOL_SHA256 = "5893eeada989ef44d535c19ddcd0cdc677d7dfdf298403808c395f86dcacf23b"
+# POOL_SHA256 = "5893eeada989ef44d535c19ddcd0cdc677d7dfdf298403808c395f86dcacf23b"
+POOL_SHA256 = "43a10b05677352a4dda9632d95e0f4fa4f3e69a042ab6cf93cdda7e197ccbded"
 VARIANT = "head"
 N_ESTIMATORS = 8
-# CONTEXT_ROWS = 262144
-CONTEXT_ROWS = 32768
+CONTEXT_ROWS = 262144
+# CONTEXT_ROWS = 32768
 ARM = f"rtpool-{POOL}-{VARIANT}-tabpfn{N_ESTIMATORS}-n{CONTEXT_ROWS}"
 METHOD = f"rtpool{VARIANT}_tabpfn"
-# FEATURES_ROOT = f"{SHARE}/features_rt-j-pool/{POOL}"
-FEATURES_ROOT = f"{SHARE}/features_rt-j-pool/{POOL}/n{CONTEXT_ROWS}"
+FEATURES_ROOT = f"{SHARE}/features_rt-j-pool/{POOL}"
+# FEATURES_ROOT = f"{SHARE}/features_rt-j-pool/{POOL}/n{CONTEXT_ROWS}"
 
 DB_TASK_LIST = f"{PRE_DIR}/db-task-lists/forecast.json"
 TASKS = [tuple(p) for p in json.loads(Path(DB_TASK_LIST).expanduser().read_text())]
