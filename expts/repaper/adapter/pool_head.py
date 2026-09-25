@@ -19,18 +19,58 @@ class ContextNorm(nn.Module):
         return (h - mean) / torch.sqrt(var + self.eps) * self.weight + self.bias
 
 
+TARGET_KEY = -1
+PAD_KEY = -2
+
+
+def cell_keys(col_name_idxs, table_name_idxs, is_targets, is_padding):
+    key = col_name_idxs.long() * (1 << 32) + table_name_idxs.long()
+    key = key.masked_fill(is_targets.bool(), TARGET_KEY)
+    return key.masked_fill(is_padding.bool(), PAD_KEY)
+
+
+def column_stats(tokens, keys, n_rows, n_ctx, chunk, eps=1e-8):
+    flat = keys[:n_rows].reshape(-1)
+    uniq, inv = torch.unique(flat, return_inverse=True)
+    idx = inv.reshape(n_rows, -1)
+    d = tokens.shape[-1]
+    s1 = torch.zeros(len(uniq), d, dtype=torch.float64, device=tokens.device)
+    s2 = torch.zeros_like(s1)
+    cnt = torch.zeros(len(uniq), dtype=torch.float64, device=tokens.device)
+    live = (keys[:n_ctx] != PAD_KEY)
+    for i in range(0, n_ctx, chunk):
+        j = min(i + chunk, n_ctx)
+        m = live[i:j].reshape(-1)
+        x = tokens[i:j].reshape(-1, d)[m].double()
+        k = idx[i:j].reshape(-1)[m]
+        s1.index_add_(0, k, x)
+        s2.index_add_(0, k, x * x)
+        cnt.index_add_(0, k, torch.ones_like(k, dtype=torch.float64))
+    seen = cnt > 1
+    mean = torch.where(seen[:, None], s1 / cnt.clamp_min(1)[:, None], torch.zeros_like(s1))
+    var = torch.where(seen[:, None], s2 / cnt.clamp_min(1)[:, None] - mean * mean, torch.ones_like(s1))
+    std = torch.sqrt(var.clamp_min(0) + eps)
+    n_query_only = int((~seen & (uniq != PAD_KEY)).sum())
+    return idx, mean.float(), std.float(), n_query_only
+
+
 class PoolHead(nn.Module):
-    def __init__(self, d_model: int, n_queries: int, swiglu_norm: str, mean=None, scale=None):
+    def __init__(self, d_model: int, n_queries: int, swiglu_norm: str, mean=None, scale=None, input_norm: str = "fixed"):
         super().__init__()
+        assert input_norm in ("fixed", "col_context"), input_norm
+        self.input_norm = input_norm
         self.register_buffer(
             "mean", torch.zeros(d_model) if mean is None else torch.as_tensor(mean).float()
         )
         self.register_buffer(
             "scale", torch.ones(d_model) if scale is None else torch.as_tensor(scale).float()
         )
+        d_in = d_model if input_norm == "fixed" else 2 * d_model
+        if input_norm == "col_context":
+            self.rms = nn.RMSNorm(d_model)
         self.q = nn.Parameter(torch.randn(n_queries, d_model) / math.sqrt(d_model))
-        self.wk = nn.Linear(d_model, d_model, bias=False)
-        self.wv = nn.Linear(d_model, n_queries, bias=False)
+        self.wk = nn.Linear(d_in, d_model, bias=False)
+        self.wv = nn.Linear(d_in, n_queries, bias=False)
         self.w1 = nn.Linear(n_queries, n_queries, bias=True)
         self.w3 = nn.Linear(n_queries, n_queries, bias=True)
         self.w2 = nn.Linear(n_queries, n_queries, bias=False)
@@ -47,8 +87,13 @@ class PoolHead(nn.Module):
         nn.init.zeros_(self.w2.weight)
         self.d_model = d_model
 
-    def pool(self, x: torch.Tensor, is_padding: torch.Tensor) -> torch.Tensor:
-        z = (x.float() - self.mean) / self.scale
+    def pool(self, x: torch.Tensor, is_padding: torch.Tensor, colnorm=None) -> torch.Tensor:
+        if self.input_norm == "fixed":
+            z = (x.float() - self.mean) / self.scale
+        else:
+            idx, col_mean, col_std = colnorm
+            xf = x.float()
+            z = torch.cat([(xf - col_mean[idx]) / col_std[idx], self.rms(xf)], dim=-1)
         qk = self.wk.weight.t() @ self.q.t()
         logits = (z @ qk) / math.sqrt(self.d_model)
         logits = logits.masked_fill(is_padding[..., None], float("-inf"))
@@ -64,5 +109,5 @@ class PoolHead(nn.Module):
             u = self.norm(h)
         return h + self.w2(F.silu(self.w1(u)) * self.w3(u))
 
-    def forward(self, x: torch.Tensor, is_padding: torch.Tensor, n_ctx: int | None = None) -> torch.Tensor:
-        return self.mix(self.pool(x, is_padding), n_ctx)
+    def forward(self, x: torch.Tensor, is_padding: torch.Tensor, n_ctx: int | None = None, colnorm=None) -> torch.Tensor:
+        return self.mix(self.pool(x, is_padding, colnorm), n_ctx)

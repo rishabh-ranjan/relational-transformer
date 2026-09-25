@@ -9,10 +9,11 @@ from pathlib import Path
 CHUNK = 1024
 
 
-def embed_rows(net, ds, didx, nodes, tokens, pad, labels, need, device):
+def embed_rows(net, ds, didx, nodes, tokens, pad, labels, keys, need, device):
     import numpy as np
     import torch
 
+    from expts.repaper.adapter.pool_head import cell_keys
     from expts.repaper.adapter.probe_pool_throughput import LOCAL_CTX
     from rt.data import process_batch
 
@@ -52,18 +53,31 @@ def embed_rows(net, ds, didx, nodes, tokens, pad, labels, need, device):
         tokens[filled : filled + take] = x[keep]
         pad[filled : filled + take] = batch["is_padding"].gather(1, si)[keep]
         labels[filled : filled + take] = lab[keep]
+        keys[filled : filled + take] = cell_keys(
+            batch["col_name_idxs"].gather(1, si),
+            batch["table_name_idxs"].gather(1, si),
+            is_t,
+            batch["is_padding"].gather(1, si),
+        )[keep]
         filled += take
         torch.cuda.synchronize(device)
         fwd_s += time.perf_counter() - t
     return filled, n_sub, samp_s, fwd_s
 
 
-def head_features(head, tokens, pad, n, n_ctx, chunk):
+def colnorm_slice(cn, i, j):
+    return None if cn is None else (cn[0][i:j], cn[1], cn[2])
+
+
+def head_features(head, tokens, pad, n, n_ctx, chunk, cn):
     import torch
 
     with torch.no_grad():
         h = torch.cat(
-            [head.pool(tokens[i : min(i + chunk, n)], pad[i : min(i + chunk, n)]) for i in range(0, n, chunk)]
+            [
+                head.pool(tokens[i : min(i + chunk, n)], pad[i : min(i + chunk, n)], colnorm_slice(cn, i, min(i + chunk, n)))
+                for i in range(0, n, chunk)
+            ]
         )
         return h, head.mix(h, n_ctx)
 
@@ -122,6 +136,7 @@ def main(
     relbench_n_query: int,
     n_queries: int,
     swiglu_norm: str,
+    input_norm: str,
     head_chunk: int,
     tabpfn_device: str,
     tabpfn_precision: str,
@@ -152,7 +167,7 @@ def main(
     import torch
     from sklearn.metrics import roc_auc_score
 
-    from expts.repaper.adapter.pool_head import PoolHead
+    from expts.repaper.adapter.pool_head import PoolHead, column_stats
     from expts.repaper.adapter.probe_pool_throughput import LOCAL_CTX, make_dataset
     from expts.repaper.adapter.train_adapter import batched_outputs, make_ests
     from expts.repaper.baselines.rel2tab.featurizer import table_offset_and_len
@@ -242,13 +257,14 @@ def main(
     st = np.load(Path(stats_path).expanduser())
     seed_everything(seed)
     with torch.cuda.device(dev0):
-        head = PoolHead(d_model, n_queries, swiglu_norm, mean=st["mean"], scale=st["scale"]).to(dev0)
+        head = PoolHead(d_model, n_queries, swiglu_norm, mean=st["mean"], scale=st["scale"], input_norm=input_norm).to(dev0)
         swa_head = copy.deepcopy(head)
         for p in swa_head.parameters():
             p.requires_grad_(False)
         buf = {"tokens": torch.empty(cap, LOCAL_CTX, d_model, dtype=torch.bfloat16, device=dev0)}
         pad = torch.empty(cap, LOCAL_CTX, dtype=torch.bool, device=dev0)
         labels = torch.empty(cap, dtype=torch.float32, device=dev0)
+        keys = torch.empty(cap, LOCAL_CTX, dtype=torch.int64, device=dev0)
     host = torch.empty(need, LOCAL_CTX, d_model, dtype=torch.bfloat16, pin_memory=True) if offload_cells else None
     log(
         f"head: {sum(p.numel() for p in head.parameters())} params; cell buffer "
@@ -311,6 +327,7 @@ def main(
                 "step": step,
                 "n_queries": n_queries,
                 "swiglu_norm": swiglu_norm,
+                "input_norm": input_norm,
                 "stats_path": stats_path,
                 "state_dict": head.state_dict(),
                 "swa_state_dict": swa_head.state_dict(),
@@ -332,15 +349,18 @@ def main(
             t1 = time.perf_counter()
             tokens = cells()
             with torch.cuda.device(dev0), torch.inference_mode():
-                nc, s1, _a, _b = embed_rows(net, ev["ds"], ev["didx"], ev["ctx"], tokens, pad, labels, len(ev["ctx"]), dev0)
-                nq, s2, _a, _b = embed_rows(
-                    net, ev["ds"], ev["didx"], ev["query"], tokens[nc:], pad[nc:], labels[nc:], len(ev["query"]), dev0
+                nc, s1, _a, _b = embed_rows(
+                    net, ev["ds"], ev["didx"], ev["ctx"], tokens, pad, labels, keys, len(ev["ctx"]), dev0
                 )
+                nq, s2, _a, _b = embed_rows(
+                    net, ev["ds"], ev["didx"], ev["query"], tokens[nc:], pad[nc:], labels[nc:], keys[nc:], len(ev["query"]), dev0
+                )
+                cn = column_stats(tokens, keys, nc + nq, nc, 512)[:3] if input_norm == "col_context" else None
             n_sub += s1 + s2
             y = labels[: nc + nq].clone()
             for key, h in (("head", head), ("swa", swa_head)):
                 with torch.cuda.device(dev0):
-                    _h, f = head_features(h, tokens, pad, nc + nq, nc, head_chunk)
+                    _h, f = head_features(h, tokens, pad, nc + nq, nc, head_chunk, cn)
                 with torch.cuda.device(dev1), torch.no_grad():
                     _loss, pred, tgt = batched_outputs(
                         ests[ev["kind"]], ev["kind"], [f.to(dev1)], [y.to(dev1)], nc, dev1
@@ -428,8 +448,13 @@ def main(
         tokens = cells()
         with torch.cuda.device(dev0), torch.inference_mode():
             filled, n_sub, tm["sample_s"], tm["rtj_s"] = embed_rows(
-                net, e["ds"], e["didx"], cand, tokens, pad, labels, need_t, dev0
+                net, e["ds"], e["didx"], cand, tokens, pad, labels, keys, need_t, dev0
             )
+            cn = None
+            if input_norm == "col_context" and filled == need_t:
+                t = time.perf_counter()
+                *cn, tm["qonly_cols"] = column_stats(tokens, keys, need_t, nctx_t, 512)
+                tm["colstats_s"] = time.perf_counter() - t
         counts["substituted"] += n_sub
         y = labels[:need_t].clone()
         reason = None
@@ -441,7 +466,7 @@ def main(
             reason = "one class in context"
         t = time.perf_counter()
         with torch.cuda.device(dev0):
-            hp, f = head_features(head, tokens, pad, need_t, nctx_t, head_chunk) if reason is None else (None, None)
+            hp, f = head_features(head, tokens, pad, need_t, nctx_t, head_chunk, cn) if reason is None else (None, None)
         if reason is None and float(f[:nctx_t].std(dim=0).max()) == 0.0:
             reason = "constant features"
         tm["head_fwd_s"] = time.perf_counter() - t
@@ -484,7 +509,7 @@ def main(
                     gh = hl.grad
                     for i in range(0, need_t, head_chunk):
                         j = min(i + head_chunk, need_t)
-                        head.pool(tokens[i:j], pad[i:j]).backward(gh[i:j])
+                        head.pool(tokens[i:j], pad[i:j], colnorm_slice(cn, i, j)).backward(gh[i:j])
                     torch.cuda.synchronize(dev0)
                 tm["head_bwd_s"] = time.perf_counter() - t
                 ok = all(torch.isfinite(p.grad).all() for p in head.parameters())

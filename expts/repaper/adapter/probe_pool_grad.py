@@ -379,7 +379,7 @@ def probe_rows(ests, weights, cells, pad, y, kind, n_ctx, chunk, jitter_frac, wi
 
     feats = {}
     for wname, head in weights.items():
-        f = head_features(head, cells["tokens"], pad, need, chunk)
+        f = head_features(head, cells["tokens"], pad, need, None, chunk, None)
         with torch.no_grad():
             hh = torch.cat(
                 [
@@ -684,7 +684,7 @@ def snr_rows(ests, ests32, head, cells, pad, y, kind, n_ctx, chunk, sub_ctx, sub
 
     dev = pad.device
     need = len(y)
-    f = head_features(head, cells["tokens"], pad, need, chunk)
+    f = head_features(head, cells["tokens"], pad, need, None, chunk, None)
     mu, sig = f[:n_ctx].mean(0), f[:n_ctx].std(0)
     cells["host"].copy_(cells["tokens"])
     cells["tokens"] = None
@@ -818,7 +818,7 @@ def setup(join_pre_dir, task_list, ckpt, tabpfn_dir, ckpt_dir, steps, n_tasks_to
         if cells["tokens"] is None:
             cells["tokens"] = torch.empty(need, LOCAL_CTX, d_model, dtype=torch.bfloat16, device=dev)
         with torch.inference_mode():
-            filled, n_sub, _a, _b = embed_rows(net, ds, didx[ti], cand, cells["tokens"], pad, labels, need, dev)
+            filled, n_sub, _a, _b = embed_rows(net, ds, didx[ti], cand, cells["tokens"], pad, labels, torch.empty(pad.shape, dtype=torch.int64, device=dev), need, dev)
         return e, filled, n_sub
 
     return {"ests": ests, "avail": avail, "load_head": load_head, "cells": cells, "pad": pad, "labels": labels, "embed": embed, "dev": dev}
@@ -984,7 +984,7 @@ def replay(
             (out / f"step{step}.json").write_text(json.dumps(prec, indent=1))
             rec["probed"] = True
         elif reason is None:
-            f = head_features(head, cells["tokens"], pad, need, head_chunk)
+            f = head_features(head, cells["tokens"], pad, need, None, head_chunk, None)
             cells["host"].copy_(cells["tokens"])
             cells["tokens"] = None
             leaf = f.to(dev).requires_grad_(True)

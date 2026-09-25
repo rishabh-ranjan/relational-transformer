@@ -14,7 +14,8 @@ REPO_ROOT = str(Path(__file__).resolve().parents[3])
 # RUN = "pool-v4-fp32-half-ctxnorm"
 # RUN = "pool-v5-bf16-ctxnorm"
 # RUN = "pool-v6-fp32-half-ctxnorm-forecast"
-RUN = "pool-v7-fp32-half-ctxnorm-relbench"
+# RUN = "pool-v7-fp32-half-ctxnorm-relbench"
+RUN = "pool-v8-fp32-half-ctxnorm-colnorm"
 
 submit(
     "expts.repaper.adapter.train_pool:main",
@@ -24,8 +25,8 @@ submit(
         relbench_task_list=f"{PRE_DIR}/db-task-lists/forecast.json",
         # task_list="pool_tasks_forecast.json",
         task_list="pool_tasks.json",
-        train_source="relbench",
-        # train_source="join",
+        # train_source="relbench",
+        train_source="join",
         ckpt=CKPT,
         tabpfn_dir=f"{SHARE}/tabpfn",
         stats_path=f"{SHARE}/feature_stats_join_u12.npz",
@@ -38,6 +39,8 @@ submit(
         relbench_n_query=2**14,
         n_queries=64,
         swiglu_norm="context",
+        input_norm="col_context",
+        # input_norm="fixed",
         # swiglu_norm="layer",
         # swiglu_norm="none",
         head_chunk=2048,
