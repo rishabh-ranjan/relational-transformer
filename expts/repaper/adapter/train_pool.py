@@ -69,6 +69,25 @@ def colnorm_slice(cn, i, j):
     return None if cn is None else (cn[0][i:j], cn[1], cn[2])
 
 
+def dump_spike(path, head, h, g, gh, y, pad, n_ctx, meta):
+    import numpy as np
+    import torch
+
+    with torch.no_grad():
+        u = head.norm(h, n_ctx) if head.swiglu_norm == "context" else head.norm(h)
+        pre1, pre3 = head.w1(u), head.w3(u)
+        hid = torch.nn.functional.silu(pre1) * pre3
+        f = h + head.w2(hid)
+        ctx_h = h[:n_ctx]
+        arrs = {
+            "h": h, "u": u, "pre1": pre1, "pre3": pre3, "hid": hid, "f": f, "dL_df": g, "dL_dh": gh, "y": y,
+            "h_ctx_mean": ctx_h.mean(0), "h_ctx_std": ctx_h.std(0, unbiased=False), "row_live": (~pad).sum(dim=1),
+        }
+        arrs = {k: v.detach().float().cpu().numpy() for k, v in arrs.items()}
+        grads = {f"grad/{n}": p.grad.detach().float().cpu().numpy() for n, p in head.named_parameters()}
+    np.savez_compressed(path, **arrs, **grads, w2_grad=grads["grad/w2.weight"], n_ctx=np.array(n_ctx), meta=np.array(json.dumps(meta)))
+
+
 def head_features(head, tokens, pad, n, n_ctx, chunk, cn):
     import torch
 
@@ -154,6 +173,7 @@ def main(
     eval_every: int,
     save_every: int,
     resume_save_mins: float,
+    spike_dump_gnorm: float | None,
     seed: int,
     run_id: str,
     run_name: str,
@@ -185,6 +205,8 @@ def main(
     cap = max(need, relbench_n_ctx + relbench_n_query)
     out = Path(out_dir).expanduser()
     out.mkdir(parents=True, exist_ok=True)
+    if spike_dump_gnorm is not None:
+        (out / "spikes").mkdir(exist_ok=True)
     t_start = time.time()
 
     def log(msg):
@@ -521,6 +543,15 @@ def main(
                 ok = all(torch.isfinite(p.grad).all() for p in head.parameters())
             if step == 0 and ok:
                 assert sum(float(p.grad.abs().sum()) for p in head.parameters()) > 0
+            if ok and spike_dump_gnorm is not None:
+                pre = float(torch.stack([p.grad.detach().double().norm() for p in head.parameters()]).norm())
+                if pre > spike_dump_gnorm:
+                    t = time.perf_counter()
+                    save_ckpt(step, f"spikes/pool_step{step}.pt")
+                    dump_spike(out / "spikes" / f"step{step}_tensors.npz", head, hp, g, gh, y, pad[:need_t], nctx_t,
+                               {"step": step, "task": f"{e['db']}/{e['task']}", "kind": e["kind"], "loss": float(loss), "grad_norm": pre})
+                    tm["spike_dump_s"] = time.perf_counter() - t
+                    log(f"step {step:>5} spike dump: pre-clip gnorm {pre:.4g} > {spike_dump_gnorm}")
             if ok:
                 cur["busy"] = True
                 gnorm = float(torch.nn.utils.clip_grad_norm_(head.parameters(), grad_norm_max))
