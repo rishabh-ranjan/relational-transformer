@@ -51,6 +51,7 @@ def main(
     head_chunk: int,
     n_tasks_total: int,
     seed: int,
+    dump: bool = False,
 ) -> None:
     os.environ.setdefault("PYTORCH_CUDA_ALLOC_CONF", "expandable_segments:True")
 
@@ -148,7 +149,28 @@ def main(
                     zbig["first_live"] += int(z1.numel())
             hp, f = head_features(head, tokens, pad, need, n_ctx, head_chunk, cn)
             u = head.norm(hp, n_ctx)
-            hid = torch.nn.functional.silu(head.w1(u)) * head.w3(u)
+            pre1, pre3 = head.w1(u), head.w3(u)
+            hid = torch.nn.functional.silu(pre1) * pre3
+            if dump:
+                rowz = torch.empty(need, device=dev)
+                rowlive = torch.empty(need, device=dev)
+                rowattn = torch.empty(need, device=dev)
+                rowzkey = torch.empty(need, dtype=torch.int64, device=dev)
+                for i in range(0, need, head_chunk):
+                    j = min(i + head_chunk, need)
+                    idx_c, cm, cs = colnorm_slice(cn, i, j)
+                    xf = tokens[i:j].float()
+                    zc = ((xf - cm[idx_c]) / cs[idx_c]).abs().masked_fill(pad[i:j, :, None], 0)
+                    cellmax = zc.amax(dim=-1)
+                    rowz[i:j], arg = cellmax.max(dim=1)
+                    rowzkey[i:j] = colkeys[i:j].gather(1, arg[:, None])[:, 0]
+                    rowlive[i:j] = (~pad[i:j]).sum(dim=1)
+                    rms = xf.pow(2).mean(dim=-1, keepdim=True).sqrt().clamp_min(1e-12)
+                    second = xf.sign() * torch.softmax(xf.abs() / (head.signsoftmax_temp * rms), dim=-1)
+                    z = torch.cat([(xf - cm[idx_c]) / cs[idx_c], second], dim=-1)
+                    logits = (z @ (head.wk.weight.t() @ head.q.t())) / (head.d_model ** 0.5)
+                    attn = logits.masked_fill(pad[i:j, :, None], float("-inf")).softmax(dim=1)
+                    rowattn[i:j] = attn.amax(dim=1).mean(dim=-1)
         log(f"step {step}: features, zmax {zmax}")
 
         host.copy_(tokens)
@@ -213,6 +235,20 @@ def main(
             "rows_substituted": n_sub,
             "query_only_cols": qonly,
         }
+        if dump:
+            ctx_h = hp[:n_ctx]
+            np.savez_compressed(
+                out / f"step{step}_tensors.npz",
+                h=hp.float().cpu().numpy(), u=u.float().cpu().numpy(),
+                pre1=pre1.float().cpu().numpy(), pre3=pre3.float().cpu().numpy(),
+                hid=hid.float().cpu().numpy(), f=f.float().cpu().numpy(),
+                dL_df=g.float().cpu().numpy(), dL_dh=gh.float().cpu().numpy(), y=y.cpu().numpy(),
+                h_ctx_mean=ctx_h.mean(0).float().cpu().numpy(), h_ctx_std=ctx_h.std(0, unbiased=False).float().cpu().numpy(),
+                row_zmax=rowz.cpu().numpy(), row_zmax_key=rowzkey.cpu().numpy(),
+                row_live=rowlive.cpu().numpy(), row_attn_max=rowattn.cpu().numpy(),
+                w2_grad=grads["w2.weight"].float().cpu().numpy(),
+                n_ctx=np.array(n_ctx),
+            )
         (out / f"step{step}.json").write_text(json.dumps(rec, indent=1))
         log(
             f"step {step} {s['task']}: grad_norm {rec['grad_norm']:.4g} (logged {s['logged_grad_norm']}) loss {rec['loss']:.4f} "
