@@ -187,6 +187,7 @@ def main(
     resume_save_mins: float,
     spike_dump_gnorm: float | None,
     dedup_ctx: bool,
+    grad_accum: int,
     seed: int,
     run_id: str,
     run_name: str,
@@ -320,6 +321,8 @@ def main(
     with torch.cuda.device(dev1):
         ests = make_ests(tabpfn_dir, dev1, seed, n_queries, tabpfn_precision)
 
+    acc = [torch.zeros_like(p) for p in head.parameters()]
+    acc_n = {"n": 0}
     resume_path = out / "resume.pt"
     start_step = 0
     counts = {"skipped": 0, "dropped": 0, "substituted": 0}
@@ -331,7 +334,12 @@ def main(
         swa.load_state_dict(ck["swa"])
         init_flat = ck["init_flat"].to(dev0)
         start_step, counts, elapsed = ck["step"], ck["counts"], ck["elapsed"]
-        log(f"resumed from {resume_path} at step {start_step}, swa n {swa.n}")
+        assert grad_accum == 1 or "acc" in ck, "resume.pt has no gradient accumulator"
+        if "acc" in ck:
+            for a, v in zip(acc, ck["acc"]):
+                a.copy_(v.to(dev0))
+            acc_n["n"] = ck["acc_n"]
+        log(f"resumed from {resume_path} at step {start_step}, swa n {swa.n}, accumulated {acc_n['n']}")
 
     def lr_at(step):
         if step < warmup_steps:
@@ -350,6 +358,8 @@ def main(
                     "swa": swa.state_dict(),
                     "init_flat": init_flat.detach().cpu(),
                     "counts": counts,
+                    "acc": [a.detach().cpu() for a in acc],
+                    "acc_n": acc_n["n"],
                     "elapsed": elapsed + time.time() - t_start,
                 },
                 f,
@@ -573,13 +583,27 @@ def main(
                     log(f"step {step:>5} spike dump: pre-clip gnorm {pre:.4g} > {spike_dump_gnorm}")
             if ok:
                 cur["busy"] = True
-                gnorm = float(torch.nn.utils.clip_grad_norm_(head.parameters(), grad_norm_max))
-                opt.step()
-                swa.update(head.named_parameters())
-                settle(step + 1)
+                gnorm = float(torch.stack([p.grad.detach().norm() for p in head.parameters()]).norm())
+                for a, p in zip(acc, head.parameters()):
+                    a.add_(p.grad)
+                acc_n["n"] += 1
             else:
                 counts["dropped"] += 1
                 log(f"step {step:>5} {e['db']}/{e['task']} non-finite, dropped")
+
+        agnorm = None
+        if ((step + 1) % grad_accum == 0 or step == total_steps - 1) and acc_n["n"] > 0:
+            cur["busy"] = True
+            for a, p in zip(acc, head.parameters()):
+                p.grad = a / acc_n["n"]
+            agnorm = float(torch.nn.utils.clip_grad_norm_(head.parameters(), grad_norm_max))
+            opt.step()
+            swa.update(head.named_parameters())
+            for a in acc:
+                a.zero_()
+            acc_n["n"] = 0
+        if cur["busy"]:
+            settle(step + 1)
 
         flat = torch.cat([p.detach().flatten() for p in head.parameters()])
         drift = float((flat - init_flat).norm())
@@ -601,12 +625,14 @@ def main(
                     "train/loss": float(loss),
                     f"train/loss/{e['kind']}": float(loss),
                     "train/grad_norm": gnorm,
-                    "train/clipped": float(gnorm > grad_norm_max),
                 }
             )
+        if agnorm is not None:
+            rec.update({"train/grad_norm_update": agnorm, "train/clipped": float(agnorm > grad_norm_max)})
         log(
             f"step {step:>5} {e['kind']} {e['db']}/{e['task']} "
             + (f"loss {float(loss):.4f} gnorm {gnorm:.4g} " if gnorm is not None else "")
+            + (f"update gnorm {agnorm:.4g} " if agnorm is not None and grad_accum > 1 else "")
             + f"drift {drift:.4f} lr {rec['train/lr']:.2e} sub {n_sub} "
             + f"peak {rec['train/peak_gib_dev1']:.1f}GiB "
             + " ".join(f"{k} {v:.1f}" for k, v in tm.items())

@@ -20,7 +20,8 @@ REPO_ROOT = str(Path(__file__).resolve().parents[3])
 # RUN = "pool-v10-fp32-half-ctxnorm-colnorm-signsoftmax-t10"
 # RUN = "pool-v11-fp32-half-ctxnorm-colnorm-signsoftmax-t10-tanh3-livescale"
 # RUN = "pool-v12-fp32-half-ctxnorm-colnorm-signsoftmax-t10-tanh3-livescale-dedup"
-RUN = "pool-v13-fp32-half-ctxnorm-colnorm-signsoftmax-t10-tanh3-livescale-dedup-ssdim"
+# RUN = "pool-v13-fp32-half-ctxnorm-colnorm-signsoftmax-t10-tanh3-livescale-dedup-ssdim"
+RUN = "pool-v14-fp32-half-ctxnorm-colnorm-signsoftmax-t10-tanh3-livescale-dedup-ssdim-accum16-lr1e-3"
 
 submit(
     "expts.repaper.adapter.train_pool:main",
@@ -64,13 +65,15 @@ submit(
         offload_cells=True,
         # total_steps=5,
         total_steps=2500,
-        lr=3e-4,
+        # lr=3e-4,
+        lr=1e-3,
         lr_min=1e-5,
         wd=0.0,
         # warmup_steps=1,
         warmup_steps=100,
         grad_norm_max=10.0,
-        swa_momentum=0.9995,
+        # swa_momentum=0.9995,
+        swa_momentum=0.9995**16,
         # eval_every=2,
         eval_every=250,
         # save_every=2,
@@ -80,6 +83,8 @@ submit(
         # spike_dump_gnorm=None,
         # dedup_ctx=False,
         dedup_ctx=True,
+        grad_accum=16,
+        # grad_accum=1,
 
         seed=0,
         run_name=f"adapter-{RUN}",
