@@ -23,7 +23,8 @@ REPO_ROOT = str(Path(__file__).resolve().parents[3])
 # RUN = "pool-v13-fp32-half-ctxnorm-colnorm-signsoftmax-t10-tanh3-livescale-dedup-ssdim"
 # RUN = "pool-v14-fp32-half-ctxnorm-colnorm-signsoftmax-t10-tanh3-livescale-dedup-ssdim-accum16-lr1e-3"
 # RUN = "pool-smoke-b1-v13cfg"
-RUN = "pool-smoke-b8"
+# RUN = "pool-smoke-b8"
+RUN = "pool-v15-fp32-small-b8-accum16-dedup-ssdim-lr1e-3"
 
 submit(
     "expts.repaper.adapter.train_pool:main",
@@ -45,8 +46,8 @@ submit(
         # n_query=2**13,
         n_query=2**10,
         # n_query=2**14,
-        relbench_n_ctx=2**10,
-        relbench_n_query=2**8,
+        relbench_n_ctx=2**16,
+        relbench_n_query=2**14,
         n_queries=64,
         swiglu_norm="context",
         input_norm="col_context_signsoftmax",
@@ -68,7 +69,7 @@ submit(
         # tabpfn_precision="bf16",
         offload_cells=True,
         # total_steps=5,
-        total_steps=4,
+        total_steps=157 * 16,
         # lr=3e-4,
         lr=1e-3,
         lr_min=1e-5,
@@ -79,15 +80,15 @@ submit(
         # swa_momentum=0.9995,
         swa_momentum=0.9995**128,
         # eval_every=2,
-        eval_every=0,
+        eval_every=250,
         # save_every=2,
-        save_every=0,
+        save_every=50,
         resume_save_mins=5.0,
-        spike_dump_gnorm=1.0,
+        spike_dump_gnorm=100.0,
         # spike_dump_gnorm=None,
         # dedup_ctx=False,
         dedup_ctx=True,
-        grad_accum=2,
+        grad_accum=16,
         task_batch=8,
         # grad_accum=1,
 
@@ -95,14 +96,14 @@ submit(
         run_name=f"adapter-{RUN}",
         project=project("adapter"),
         entity="rtv2",
-        wandb_disabled=True,
+        wandb_disabled=False,
     ),
     resources=Resources(
         partition="il",
         account="infolab",
         qos="il-lo",
         # time="3:00:00",
-        time="1:00:00",
+        time="5-00:00:00",
         gpus="b200:1",
         cpus_per_task=32,
         ntasks=1,
