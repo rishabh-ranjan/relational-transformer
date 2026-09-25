@@ -58,7 +58,7 @@ class PoolHead(nn.Module):
     def __init__(
         self, d_model: int, n_queries: int, swiglu_norm: str, mean=None, scale=None,
         input_norm: str = "fixed", signsoftmax_temp: float = 1.0,
-        colnorm_tau: float | None = None, live_scale: bool = False,
+        colnorm_tau: float | None = None, live_scale: bool = False, signsoftmax_scale_by_dim: bool = False,
     ):
         super().__init__()
         assert input_norm in ("fixed", "col_context", "col_context_signsoftmax"), input_norm
@@ -67,6 +67,8 @@ class PoolHead(nn.Module):
         self.signsoftmax_temp = signsoftmax_temp
         self.colnorm_tau = colnorm_tau
         self.live_scale = live_scale
+        assert not signsoftmax_scale_by_dim or input_norm == "col_context_signsoftmax", (signsoftmax_scale_by_dim, input_norm)
+        self.signsoftmax_scale_by_dim = signsoftmax_scale_by_dim
         self.register_buffer(
             "mean", torch.zeros(d_model) if mean is None else torch.as_tensor(mean).float()
         )
@@ -106,6 +108,8 @@ class PoolHead(nn.Module):
             else:
                 rms = xf.pow(2).mean(dim=-1, keepdim=True).sqrt().clamp_min(1e-12)
                 second = xf.sign() * torch.softmax(xf.abs() / (self.signsoftmax_temp * rms), dim=-1)
+                if self.signsoftmax_scale_by_dim:
+                    second = second * xf.shape[-1]
             first = (xf - col_mean[idx]) / col_std[idx]
             if self.colnorm_tau is not None:
                 first = self.colnorm_tau * torch.tanh(first / self.colnorm_tau)

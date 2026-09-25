@@ -19,7 +19,8 @@ REPO_ROOT = str(Path(__file__).resolve().parents[3])
 # RUN = "pool-v9-fp32-half-ctxnorm-colnorm-signsoftmax"
 # RUN = "pool-v10-fp32-half-ctxnorm-colnorm-signsoftmax-t10"
 # RUN = "pool-v11-fp32-half-ctxnorm-colnorm-signsoftmax-t10-tanh3-livescale"
-RUN = "pool-v12-fp32-half-ctxnorm-colnorm-signsoftmax-t10-tanh3-livescale-dedup"
+# RUN = "pool-v12-fp32-half-ctxnorm-colnorm-signsoftmax-t10-tanh3-livescale-dedup"
+RUN = "pool-v13-fp32-half-ctxnorm-colnorm-signsoftmax-t10-tanh3-livescale-dedup-ssdim"
 
 submit(
     "expts.repaper.adapter.train_pool:main",
@@ -49,6 +50,8 @@ submit(
         colnorm_tau=3.0,
         # colnorm_tau=None,
         live_scale=True,
+        signsoftmax_scale_by_dim=True,
+        # signsoftmax_scale_by_dim=False,
         # live_scale=False,
         # input_norm="col_context",
         # input_norm="fixed",

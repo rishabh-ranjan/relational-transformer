@@ -170,6 +170,7 @@ def main(
     signsoftmax_temp: float,
     colnorm_tau: float | None,
     live_scale: bool,
+    signsoftmax_scale_by_dim: bool,
     head_chunk: int,
     tabpfn_device: str,
     tabpfn_precision: str,
@@ -294,7 +295,7 @@ def main(
     st = np.load(Path(stats_path).expanduser())
     seed_everything(seed)
     with torch.cuda.device(dev0):
-        head = PoolHead(d_model, n_queries, swiglu_norm, mean=st["mean"], scale=st["scale"], input_norm=input_norm, signsoftmax_temp=signsoftmax_temp, colnorm_tau=colnorm_tau, live_scale=live_scale).to(dev0)
+        head = PoolHead(d_model, n_queries, swiglu_norm, mean=st["mean"], scale=st["scale"], input_norm=input_norm, signsoftmax_temp=signsoftmax_temp, colnorm_tau=colnorm_tau, live_scale=live_scale, signsoftmax_scale_by_dim=signsoftmax_scale_by_dim).to(dev0)
         swa_head = copy.deepcopy(head)
         for p in swa_head.parameters():
             p.requires_grad_(False)
@@ -368,6 +369,7 @@ def main(
                 "signsoftmax_temp": signsoftmax_temp,
                 "colnorm_tau": colnorm_tau,
                 "live_scale": live_scale,
+                "signsoftmax_scale_by_dim": signsoftmax_scale_by_dim,
                 "stats_path": stats_path,
                 "state_dict": head.state_dict(),
                 "swa_state_dict": swa_head.state_dict(),

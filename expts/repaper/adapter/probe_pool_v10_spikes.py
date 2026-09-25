@@ -31,6 +31,8 @@ def z_halves(head, x, pad, cn):
     xf = x.float()
     rms = xf.pow(2).mean(dim=-1, keepdim=True).sqrt().clamp_min(1e-12)
     second = xf.sign() * torch.softmax(xf.abs() / (head.signsoftmax_temp * rms), dim=-1)
+    if head.signsoftmax_scale_by_dim:
+        second = second * xf.shape[-1]
     first = (xf - col_mean[idx]) / col_std[idx]
     live = ~pad
     return first.abs()[live], second.abs()[live]
@@ -44,6 +46,8 @@ def pool_z(head, xf, col_mean, col_std):
         first = head.colnorm_tau * torch.tanh(first / head.colnorm_tau)
     rms = xf.pow(2).mean(dim=-1, keepdim=True).sqrt().clamp_min(1e-12)
     second = xf.sign() * torch.softmax(xf.abs() / (head.signsoftmax_temp * rms), dim=-1)
+    if head.signsoftmax_scale_by_dim:
+        second = second * xf.shape[-1]
     return torch.cat([first, second], dim=-1)
 
 
@@ -133,7 +137,7 @@ def main(
         assert ck["n_queries"] == n_queries
         head = PoolHead(
             d_model, n_queries, ck["swiglu_norm"], input_norm=ck["input_norm"], signsoftmax_temp=ck["signsoftmax_temp"],
-            colnorm_tau=colnorm_tau, live_scale=live_scale,
+            colnorm_tau=colnorm_tau, live_scale=live_scale, signsoftmax_scale_by_dim=ck.get("signsoftmax_scale_by_dim", False),
         ).to(dev)
         head.load_state_dict(ck["state_dict"])
         assert (ck.get("colnorm_tau"), ck.get("live_scale", False)) in ((colnorm_tau, live_scale), (None, False)), (ck.get("colnorm_tau"), ck.get("live_scale"), colnorm_tau, live_scale)
