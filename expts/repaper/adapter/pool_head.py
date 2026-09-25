@@ -58,11 +58,15 @@ class PoolHead(nn.Module):
     def __init__(
         self, d_model: int, n_queries: int, swiglu_norm: str, mean=None, scale=None,
         input_norm: str = "fixed", signsoftmax_temp: float = 1.0,
+        colnorm_tau: float | None = None, live_scale: bool = False,
     ):
         super().__init__()
         assert input_norm in ("fixed", "col_context", "col_context_signsoftmax"), input_norm
+        assert colnorm_tau is None or input_norm != "fixed", (colnorm_tau, input_norm)
         self.input_norm = input_norm
         self.signsoftmax_temp = signsoftmax_temp
+        self.colnorm_tau = colnorm_tau
+        self.live_scale = live_scale
         self.register_buffer(
             "mean", torch.zeros(d_model) if mean is None else torch.as_tensor(mean).float()
         )
@@ -102,13 +106,20 @@ class PoolHead(nn.Module):
             else:
                 rms = xf.pow(2).mean(dim=-1, keepdim=True).sqrt().clamp_min(1e-12)
                 second = xf.sign() * torch.softmax(xf.abs() / (self.signsoftmax_temp * rms), dim=-1)
-            z = torch.cat([(xf - col_mean[idx]) / col_std[idx], second], dim=-1)
+            first = (xf - col_mean[idx]) / col_std[idx]
+            if self.colnorm_tau is not None:
+                first = self.colnorm_tau * torch.tanh(first / self.colnorm_tau)
+            z = torch.cat([first, second], dim=-1)
         qk = self.wk.weight.t() @ self.q.t()
         logits = (z @ qk) / math.sqrt(self.d_model)
         logits = logits.masked_fill(is_padding[..., None], float("-inf"))
         attn = logits.softmax(dim=1)
         v = self.wv(z)
-        return (attn * v).sum(dim=1)
+        h = (attn * v).sum(dim=1)
+        if self.live_scale:
+            n_live = (~is_padding).sum(dim=1, keepdim=True).to(h.dtype)
+            h = h * torch.sqrt(n_live / is_padding.shape[1])
+        return h
 
     def mix(self, h: torch.Tensor, n_ctx: int | None) -> torch.Tensor:
         if self.swiglu_norm == "context":

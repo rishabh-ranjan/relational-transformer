@@ -53,6 +53,8 @@ def main(
     seed: int,
     dump: bool = False,
     cell_dump: bool = False,
+    colnorm_tau: float | None = None,
+    live_scale: bool = False,
 ) -> None:
     os.environ.setdefault("PYTORCH_CUDA_ALLOC_CONF", "expandable_segments:True")
 
@@ -76,6 +78,7 @@ def main(
 
     out = Path(out_dir).expanduser()
     out.mkdir(parents=True, exist_ok=True)
+    assert not (cell_dump and (colnorm_tau is not None or live_scale)), "cell_dump recomputes the pool without the fixes"
     todo = [s for s in spikes if not (out / f"step{s['step']}{'_cells.npz' if cell_dump else '.json'}").exists()]
     log(f"todo {[s['step'] for s in todo]}")
     if not todo:
@@ -119,10 +122,11 @@ def main(
         ck = torch.load(ck_dir / f"pool_step{s['ckpt_step']}.pt", map_location="cpu", weights_only=True)
         assert ck["n_queries"] == n_queries
         head = PoolHead(
-            d_model, n_queries, ck["swiglu_norm"], input_norm=ck["input_norm"], signsoftmax_temp=ck["signsoftmax_temp"]
+            d_model, n_queries, ck["swiglu_norm"], input_norm=ck["input_norm"], signsoftmax_temp=ck["signsoftmax_temp"],
+            colnorm_tau=colnorm_tau, live_scale=live_scale,
         ).to(dev)
         head.load_state_dict(ck["state_dict"])
-        log(f"step {step}: head from pool_step{s['ckpt_step']}.pt ({ck['swiglu_norm']}, {ck['input_norm']}, T={ck['signsoftmax_temp']})")
+        log(f"step {step}: head from pool_step{s['ckpt_step']}.pt ({ck['swiglu_norm']}, {ck['input_norm']}, T={ck['signsoftmax_temp']}, tau={colnorm_tau}, live_scale={live_scale})")
 
         if buf["tokens"] is None:
             buf["tokens"] = torch.empty(need, LOCAL_CTX, d_model, dtype=torch.bfloat16, device=dev)
