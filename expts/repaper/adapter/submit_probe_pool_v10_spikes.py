@@ -53,7 +53,7 @@ submit(
         qos="il-lo",
         time="1:00:00",
         gpus="b200:1",
-        cpus_per_task=8,
+        cpus_per_task=4,
         ntasks=1,
         exclusive=False,
         mem="120G",
