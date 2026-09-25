@@ -27,12 +27,12 @@ POOL_CKPT = f"{OUT_ROOT}/adapter/{POOL}/pool_final.pt"
 POOL_SHA256 = "43a10b05677352a4dda9632d95e0f4fa4f3e69a042ab6cf93cdda7e197ccbded"
 VARIANT = "head"
 N_ESTIMATORS = 8
-CONTEXT_ROWS = 262144
-# CONTEXT_ROWS = 32768
+# CONTEXT_ROWS = 262144
+CONTEXT_ROWS = 32768
 ARM = f"rtpool-{POOL}-{VARIANT}-tabpfn{N_ESTIMATORS}-n{CONTEXT_ROWS}"
 METHOD = f"rtpool{VARIANT}_tabpfn"
-FEATURES_ROOT = f"{SHARE}/features_rt-j-pool/{POOL}"
-# FEATURES_ROOT = f"{SHARE}/features_rt-j-pool/{POOL}/n{CONTEXT_ROWS}"
+# FEATURES_ROOT = f"{SHARE}/features_rt-j-pool/{POOL}"
+FEATURES_ROOT = f"{SHARE}/features_rt-j-pool/{POOL}/n{CONTEXT_ROWS}"
 
 DB_TASK_LIST = f"{PRE_DIR}/db-task-lists/forecast.json"
 TASKS = [tuple(p) for p in json.loads(Path(DB_TASK_LIST).expanduser().read_text())]
