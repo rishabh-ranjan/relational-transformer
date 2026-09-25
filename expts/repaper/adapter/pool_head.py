@@ -55,10 +55,14 @@ def column_stats(tokens, keys, n_rows, n_ctx, chunk, eps=1e-8):
 
 
 class PoolHead(nn.Module):
-    def __init__(self, d_model: int, n_queries: int, swiglu_norm: str, mean=None, scale=None, input_norm: str = "fixed"):
+    def __init__(
+        self, d_model: int, n_queries: int, swiglu_norm: str, mean=None, scale=None,
+        input_norm: str = "fixed", signsoftmax_temp: float = 1.0,
+    ):
         super().__init__()
         assert input_norm in ("fixed", "col_context", "col_context_signsoftmax"), input_norm
         self.input_norm = input_norm
+        self.signsoftmax_temp = signsoftmax_temp
         self.register_buffer(
             "mean", torch.zeros(d_model) if mean is None else torch.as_tensor(mean).float()
         )
@@ -97,7 +101,7 @@ class PoolHead(nn.Module):
                 second = self.rms(xf)
             else:
                 rms = xf.pow(2).mean(dim=-1, keepdim=True).sqrt().clamp_min(1e-12)
-                second = xf.sign() * torch.softmax(xf.abs() / rms, dim=-1)
+                second = xf.sign() * torch.softmax(xf.abs() / (self.signsoftmax_temp * rms), dim=-1)
             z = torch.cat([(xf - col_mean[idx]) / col_std[idx], second], dim=-1)
         qk = self.wk.weight.t() @ self.q.t()
         logits = (z @ qk) / math.sqrt(self.d_model)
