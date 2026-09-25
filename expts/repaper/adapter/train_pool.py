@@ -355,7 +355,7 @@ def main(
                 nq, s2, _a, _b = embed_rows(
                     net, ev["ds"], ev["didx"], ev["query"], tokens[nc:], pad[nc:], labels[nc:], keys[nc:], len(ev["query"]), dev0
                 )
-                cn = column_stats(tokens, keys, nc + nq, nc, 512)[:3] if input_norm == "col_context" else None
+                cn = column_stats(tokens, keys, nc + nq, nc, 512)[:3] if input_norm != "fixed" else None
             n_sub += s1 + s2
             y = labels[: nc + nq].clone()
             for key, h in (("head", head), ("swa", swa_head)):
@@ -451,7 +451,7 @@ def main(
                 net, e["ds"], e["didx"], cand, tokens, pad, labels, keys, need_t, dev0
             )
             cn = None
-            if input_norm == "col_context" and filled == need_t:
+            if input_norm != "fixed" and filled == need_t:
                 t = time.perf_counter()
                 *cn, tm["qonly_cols"] = column_stats(tokens, keys, need_t, nctx_t, 512)
                 tm["colstats_s"] = time.perf_counter() - t
