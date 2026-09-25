@@ -9,7 +9,7 @@ from pathlib import Path
 CHUNK = 1024
 
 
-def embed_rows(net, ds, didx, nodes, tokens, pad, labels, keys, need, device):
+def embed_rows(net, ds, didx, nodes, tokens, pad, labels, colkeys, need, device):
     import numpy as np
     import torch
 
@@ -53,7 +53,7 @@ def embed_rows(net, ds, didx, nodes, tokens, pad, labels, keys, need, device):
         tokens[filled : filled + take] = x[keep]
         pad[filled : filled + take] = batch["is_padding"].gather(1, si)[keep]
         labels[filled : filled + take] = lab[keep]
-        keys[filled : filled + take] = cell_keys(
+        colkeys[filled : filled + take] = cell_keys(
             batch["col_name_idxs"].gather(1, si),
             batch["table_name_idxs"].gather(1, si),
             is_t,
