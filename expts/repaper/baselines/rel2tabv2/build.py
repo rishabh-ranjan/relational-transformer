@@ -63,6 +63,7 @@ def build_rel2tab(
         or tap_unit in (1, 4, 8, 12)
         or adapter_name is not None
         or pool_variant is not None
+        or family == "rtrows"
     ), f"unknown feature family {family!r} in method {method!r}"
     assert predictor_name in (
         "lgbm",
@@ -73,7 +74,11 @@ def build_rel2tab(
         "tabpfn",
     ), f"unknown predictor {predictor_name!r} in method {method!r}"
 
-    if pool_variant is not None:
+    if family == "rtrows":
+        from expts.repaper.baselines.rel2tabv2.rtj_rows import RowsFeaturizer
+
+        featurizer = RowsFeaturizer(features_root, [(db, table)])
+    elif pool_variant is not None:
         from expts.repaper.baselines.rel2tabv2.pool_features import PoolFeaturizer
 
         featurizer = PoolFeaturizer(features_root, [(db, table)], pool_variant)
