@@ -74,6 +74,8 @@ submit(
         resume_save_mins=5.0,
         spike_dump_gnorm=100.0,
         # spike_dump_gnorm=None,
+        dedup_ctx=False,
+        # dedup_ctx=True,
         seed=0,
         run_name=f"adapter-{RUN}",
         project=project("adapter"),

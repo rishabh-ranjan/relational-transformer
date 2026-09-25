@@ -88,6 +88,17 @@ def dump_spike(path, head, h, g, gh, y, pad, n_ctx, meta):
     np.savez_compressed(path, **arrs, **grads, w2_grad=grads["grad/w2.weight"], n_ctx=np.array(n_ctx), meta=np.array(json.dumps(meta)))
 
 
+def dedup_context(h, y, n_ctx):
+    import torch
+
+    key = torch.cat([h[:n_ctx].float().contiguous().view(torch.int32), y[:n_ctx, None].float().contiguous().view(torch.int32)], dim=1)
+    _, inv = torch.unique(key, dim=0, return_inverse=True)
+    first = torch.full((int(inv.max()) + 1,), n_ctx, dtype=torch.long, device=h.device)
+    first.scatter_reduce_(0, inv, torch.arange(n_ctx, device=h.device), reduce="amin")
+    kept = first.sort().values
+    return torch.cat([kept, torch.arange(n_ctx, len(h), device=h.device)]), len(kept)
+
+
 def head_features(head, tokens, pad, n, n_ctx, chunk, cn):
     import torch
 
@@ -174,6 +185,7 @@ def main(
     save_every: int,
     resume_save_mins: float,
     spike_dump_gnorm: float | None,
+    dedup_ctx: bool,
     seed: int,
     run_id: str,
     run_name: str,
@@ -511,15 +523,20 @@ def main(
                 del tokens
                 buf["tokens"] = None
                 tm["offload_s"] = time.perf_counter() - t
+            sel, nctx_tp = (dedup_context(hp, y, nctx_t) if dedup_ctx else (None, nctx_t))
+            tm["dedup_dropped"] = float(nctx_t - nctx_tp)
             t = time.perf_counter()
             with torch.cuda.device(dev1):
                 torch.cuda.reset_peak_memory_stats(dev1)
-                leaf = f.to(dev1).requires_grad_(True)
-                loss, _p, _t = batched_outputs(ests[e["kind"]], e["kind"], [leaf], [y.to(dev1)], nctx_t, dev1)
+                leaf = (f if sel is None else f[sel]).to(dev1).requires_grad_(True)
+                yt = (y if sel is None else y[sel]).to(dev1)
+                loss, _p, _t = batched_outputs(ests[e["kind"]], e["kind"], [leaf], [yt], nctx_tp, dev1)
                 ok = bool(torch.isfinite(loss))
                 if ok:
                     loss.backward()
                     g = leaf.grad.to(dev0)
+                    if sel is not None:
+                        g = torch.zeros_like(f).index_copy_(0, sel, g)
                     ok = bool(torch.isfinite(g).all())
                 torch.cuda.synchronize(dev1)
             tm["tabpfn_s"] = time.perf_counter() - t
