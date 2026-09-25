@@ -142,6 +142,16 @@ class PoolFeaturizer:
         return vec[torch.from_numpy(pos)].to(device)
 
 
+class ConcatFeaturizer:
+    def __init__(self, parts):
+        self.parts = parts
+
+    def compute_features(self, task, node_idxs, device):
+        feats = [p.compute_features(task, node_idxs, device) for p in self.parts]
+        assert len({f.shape[0] for f in feats}) == 1, [tuple(f.shape) for f in feats]
+        return torch.cat([f.float() for f in feats], dim=1)
+
+
 def main(*, featurize: dict, run: dict) -> None:
     from expts.repaper.baselines.rel2tabv2.run import main as run_main
 

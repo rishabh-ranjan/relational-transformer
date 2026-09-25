@@ -47,8 +47,9 @@ def build_rel2tab(
     # method string like the taps family and run.main's signature is unchanged.
     adapter_spec = re.fullmatch(r"rtadapter([A-Za-z0-9_-]+)", family)
     adapter_name = adapter_spec.group(1) if adapter_spec else None
-    pool_spec = re.fullmatch(r"rtpool(head|swa)", family)
-    pool_variant = pool_spec.group(1) if pool_spec else None
+    pool_spec = re.fullmatch(r"rtpool(cat)?(head|swa)", family)
+    pool_variant = pool_spec.group(2) if pool_spec else None
+    pool_concat = bool(pool_spec and pool_spec.group(1))
     assert (
         family
         in (
@@ -82,6 +83,13 @@ def build_rel2tab(
         from expts.repaper.baselines.rel2tabv2.pool_features import PoolFeaturizer
 
         featurizer = PoolFeaturizer(features_root, [(db, table)], pool_variant)
+        if pool_concat:
+            from expts.repaper.baselines.rel2tabv2.pool_features import ConcatFeaturizer
+            from expts.repaper.config import SHARE
+
+            featurizer = ConcatFeaturizer(
+                [PrecomputedFeaturizer(f"{SHARE}/features_rt-j", "rt_features", [(db, table)]), featurizer]
+            )
     elif adapter_name is not None:
         from expts.repaper.baselines.rel2tabv2.adapter import AdapterFeaturizer
         from expts.repaper.config import SHARE
