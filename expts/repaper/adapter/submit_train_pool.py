@@ -114,8 +114,8 @@ submit(
     resources=Resources(
         partition="il",
         account="infolab",
-        # qos="il-lo",
-        qos="il",
+        qos="il-lo",
+        # qos="il",
         # time="3:00:00",
         time="5-00:00:00",
         gpus="b200:1",
