@@ -26,7 +26,8 @@ REPO_ROOT = str(Path(__file__).resolve().parents[3])
 # RUN = "pool-smoke-b8"
 # RUN = "pool-v15-fp32-small-b8-accum16-dedup-ssdim-lr1e-3"
 # RUN = "pool-v16-fp32-half-ctxnorm-colnorm-signsoftmax-t10-tanh3-livescale-dedup-ssdim-huber"
-RUN = "pool-v17-fp32-half-ctxnorm-huber"
+# RUN = "pool-v17-fp32-half-ctxnorm-huber"
+RUN = "pool-v18-fp32-half-ctxnorm-colnorm-signsoftmax-t10-tanh3-livescale-dedup-ssdim-huber-lr1e-3"
 
 submit(
     "expts.repaper.adapter.train_pool:main",
@@ -52,17 +53,17 @@ submit(
         relbench_n_query=2**14,
         n_queries=64,
         swiglu_norm="context",
-        # input_norm="col_context_signsoftmax",
+        input_norm="col_context_signsoftmax",
         signsoftmax_temp=10.0,
         # signsoftmax_temp=1.0,
-        # colnorm_tau=3.0,
-        colnorm_tau=None,
-        # live_scale=True,
-        # signsoftmax_scale_by_dim=True,
-        signsoftmax_scale_by_dim=False,
-        live_scale=False,
+        colnorm_tau=3.0,
+        # colnorm_tau=None,
+        live_scale=True,
+        signsoftmax_scale_by_dim=True,
+        # signsoftmax_scale_by_dim=False,
+        # live_scale=False,
         # input_norm="col_context",
-        input_norm="fixed",
+        # input_norm="fixed",
         # swiglu_norm="layer",
         # swiglu_norm="none",
         head_chunk=2048,
@@ -74,8 +75,8 @@ submit(
         total_steps=2500,
         # total_steps=157 * 16,
         # lr=3e-4,
-        lr=3e-4,
-        # lr=1e-3,
+        # lr=3e-4,
+        lr=1e-3,
         lr_min=1e-5,
         wd=0.0,
         # warmup_steps=1,
@@ -91,8 +92,8 @@ submit(
         resume_save_mins=5.0,
         spike_dump_gnorm=100.0,
         # spike_dump_gnorm=None,
-        dedup_ctx=False,
-        # dedup_ctx=True,
+        # dedup_ctx=False,
+        dedup_ctx=True,
         grad_accum=1,
         # grad_accum=16,
         task_batch=1,
