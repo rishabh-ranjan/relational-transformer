@@ -27,7 +27,8 @@ REPO_ROOT = str(Path(__file__).resolve().parents[3])
 # RUN = "pool-v15-fp32-small-b8-accum16-dedup-ssdim-lr1e-3"
 # RUN = "pool-v16-fp32-half-ctxnorm-colnorm-signsoftmax-t10-tanh3-livescale-dedup-ssdim-huber"
 # RUN = "pool-v17-fp32-half-ctxnorm-huber"
-RUN = "pool-v18-fp32-half-ctxnorm-colnorm-signsoftmax-t10-tanh3-livescale-dedup-ssdim-huber-lr1e-3"
+# RUN = "pool-v18-fp32-half-ctxnorm-colnorm-signsoftmax-t10-tanh3-livescale-dedup-ssdim-huber-lr1e-3"
+RUN = "pool-v19-fp32-half-ctxnorm-colnorm-signsoftmax-t10-tanh3-livescale-dedup-ssdim-huber-lr3e-3"
 
 submit(
     "expts.repaper.adapter.train_pool:main",
@@ -76,7 +77,8 @@ submit(
         # total_steps=157 * 16,
         # lr=3e-4,
         # lr=3e-4,
-        lr=1e-3,
+        # lr=1e-3,
+        lr=3e-3,
         lr_min=1e-5,
         wd=0.0,
         # warmup_steps=1,
@@ -112,7 +114,8 @@ submit(
     resources=Resources(
         partition="il",
         account="infolab",
-        qos="il-lo",
+        # qos="il-lo",
+        qos="il",
         # time="3:00:00",
         time="5-00:00:00",
         gpus="b200:1",
